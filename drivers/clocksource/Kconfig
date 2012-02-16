@@ -64,5 +64,6 @@ config CLKSRC_ARM_GENERIC
 
 config CLKSRC_EXYNOS_MCT
 	def_bool y if ARCH_EXYNOS
+	select HAVE_SCHED_CLOCK
 	help
 	  Support for Multi Core Timer controller on Exynos SoCs.
