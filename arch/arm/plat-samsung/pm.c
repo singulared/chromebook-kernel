@@ -18,6 +18,8 @@
 #include <linux/delay.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
+#include <linux/console.h>
+#include <linux/power/charger-manager.h>
 
 #include <asm/cacheflush.h>
 #include <asm/suspend.h>
@@ -356,11 +358,47 @@ static void s3c_pm_finish(void)
 	s3c_pm_check_cleanup();
 }
 
+struct device **s3c_cm_devices;
+bool s3c_cm_resume_console;
+#ifdef CONFIG_CHARGER_MANAGER
+static bool s3c_cm_suspend_again(void)
+{
+	bool ret;
+	int i = 0;
+
+	if (!is_charger_manager_active())
+		return false;
+
+	while (s3c_cm_devices && s3c_cm_devices[i]) {
+		pm_generic_resume(s3c_cm_devices[i]);
+		i++;
+	}
+
+	if (s3c_cm_resume_console)
+		resume_console();
+
+	ret = cm_suspend_again();
+
+	if (s3c_cm_resume_console)
+		suspend_console();
+
+	while (i > 0) {
+		i--;
+		pm_generic_suspend(s3c_cm_devices[i]);
+	}
+
+	return ret;
+}
+#else
+#define s3c_cm_suspend_again	NULL
+#endif
+
 static const struct platform_suspend_ops s3c_pm_ops = {
 	.enter		= s3c_pm_enter,
 	.prepare	= s3c_pm_prepare,
 	.finish		= s3c_pm_finish,
 	.valid		= suspend_valid_only_mem,
+	.suspend_again	= s3c_cm_suspend_again,
 };
 
 /* s3c_pm_init

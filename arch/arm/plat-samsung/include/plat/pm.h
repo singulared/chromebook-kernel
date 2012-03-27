@@ -50,6 +50,10 @@ extern unsigned long s3c_irqwake_eintallow;
 extern void (*pm_cpu_prep)(void);
 extern int (*pm_cpu_sleep)(unsigned long);
 
+/* Support for Charger-Manager's suspend-again */
+extern struct device **s3c_cm_devices; /* Ending with NULL */
+extern bool s3c_cm_resume_console;
+
 /* Flags for PM Control */
 
 extern unsigned long s3c_pm_flags;
