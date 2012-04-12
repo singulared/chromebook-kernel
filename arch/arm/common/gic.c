@@ -927,6 +927,30 @@ void gic_migrate_target(unsigned int new_cpu_id)
 	}
 
 	raw_spin_unlock(&irq_controller_lock);
+
+	/*
+	 * Now let's migrate and clear any potential SGIs that might be
+	 * pending for us (old_cpu_id).  Since GIC_DIST_SGI_PENDING_SET
+	 * is a banked register, we can only forward the SGI using
+	 * GIC_DIST_SOFTINT.  The original SGI source is lost but Linux
+	 * doesn't use that information anyway.
+	 *
+	 * For the same reason we do not adjust SGI source information
+	 * for previously sent SGIs by us to other CPUs either.
+	 */
+	for (i = 0; i < 16; i += 4) {
+		int j;
+		val = readl_relaxed(dist_base + GIC_DIST_SGI_PENDING_SET + i);
+		if (!val)
+			continue;
+		writel_relaxed(val, dist_base + GIC_DIST_SGI_PENDING_CLEAR + i);
+		for (j = i; j < i + 4; j++) {
+			if (val & 0xff)
+				writel_relaxed((1 << (new_cpu_id + 16)) | j,
+						dist_base + GIC_DIST_SOFTINT);
+			val >>= 8;
+		}
+	}
 }
 
 /*
