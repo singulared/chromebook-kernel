@@ -42,6 +42,7 @@ enum {
 
 static unsigned long clk_rate;
 static unsigned int mct_int_type;
+static cycle_t time_suspended;
 
 struct mct_clock_event_device {
 	struct clock_event_device *evt;
@@ -148,9 +149,18 @@ static cycle_t exynos4_frc_read(struct clocksource *cs)
 	return ((cycle_t)hi << 32) | lo;
 }
 
+static int  exynos4_frc_suspend(void)
+{
+	time_suspended = exynos4_frc_read(NULL);
+
+	return 0;
+};
+
 static void exynos4_frc_resume(void)
 {
-	exynos4_mct_frc_start(0, 0);
+	exynos4_mct_frc_start((u32)(time_suspended >> 32), (u32)time_suspended);
+
+	exynos4_mct_write(0x1, EXYNOS4_MCT_L_BASE(0) + MCT_L_TCNTB_OFFSET);
 }
 
 struct clocksource mct_frc = {
@@ -162,6 +172,7 @@ struct clocksource mct_frc = {
 };
 
 struct syscore_ops mct_frc_core = {
+	.suspend	= exynos4_frc_suspend,
 	.resume		= exynos4_frc_resume,
 };
 
