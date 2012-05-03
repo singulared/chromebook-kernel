@@ -12,6 +12,8 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/bug.h>
+#include <linux/delay.h>
+#include <linux/pm.h>
 
 #include <mach/regs-clock.h>
 #include <mach/pmu.h>
@@ -335,6 +337,23 @@ static void __iomem *exynos5_list_diable_wfi_wfe[] = {
 	EXYNOS5_ISP_ARM_OPTION,
 };
 
+static void exynos5_power_off(void)
+{
+	unsigned int tmp;
+
+	pr_info("Power down.\n");
+	tmp = __raw_readl(EXYNOS5_PS_HOLD_CONTROL);
+	tmp &= ~(1 << 8);
+	__raw_writel(tmp, EXYNOS5_PS_HOLD_CONTROL);
+
+	/* Wait a little so we don't give a false warning below */
+	mdelay(100);
+
+	pr_err("Power down failed, please power off system manually.\n");
+	while (1)
+		;
+}
+
 static void exynos5_init_pmu(void)
 {
 	unsigned int i;
@@ -414,6 +433,7 @@ static int __init exynos_pmu_init(void)
 		__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
 
 		exynos_pmu_config = exynos5250_pmu_config;
+		pm_power_off = exynos5_power_off;
 		pr_info("EXYNOS5250 PMU Initialize\n");
 	} else {
 		pr_info("EXYNOS: PMU not supported\n");
