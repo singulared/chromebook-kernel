@@ -1498,6 +1498,7 @@ struct xhci_hcd {
 #define XHCI_RESET_ON_RESUME	(1 << 7)
 #define	XHCI_SW_BW_CHECKING	(1 << 8)
 #define XHCI_AMD_0x96_HOST	(1 << 9)
+#define XHCI_TRUST_TX_LENGTH	(1 << 10)
 #define XHCI_AVOID_BEI		(1 << 15)
 	unsigned int		num_active_eps;
 	unsigned int		limit_active_eps;
