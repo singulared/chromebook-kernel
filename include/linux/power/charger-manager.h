@@ -171,11 +171,14 @@ extern int setup_charger_manager(struct charger_global_desc *gd);
 extern bool cm_suspend_again(void);
 extern void cm_notify_event(struct power_supply *psy,
 				enum cm_event_types type, char *msg);
+
+extern bool is_charger_manager_active(void);
 #else
 static inline int setup_charger_manager(struct charger_global_desc *gd)
 { return 0; }
 static inline bool cm_suspend_again(void) { return false; }
 static inline void cm_notify_event(struct power_supply *psy,
 				enum cm_event_types type, char *msg) { }
+static inline bool is_charger_manager_active(void) { return false; }
 #endif
 #endif /* _CHARGER_MANAGER_H */

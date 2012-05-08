@@ -994,6 +994,18 @@ int setup_charger_manager(struct charger_global_desc *gd)
 }
 EXPORT_SYMBOL_GPL(setup_charger_manager);
 
+bool is_charger_manager_active(void)
+{
+	if (!g_desc)
+		return false;
+
+	if (list_empty(&cm_list))
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL_GPL(is_charger_manager_active);
+
 static int charger_manager_probe(struct platform_device *pdev)
 {
 	struct charger_desc *desc = dev_get_platdata(&pdev->dev);
