@@ -330,6 +330,19 @@ void __init exynos_init_late(void)
 	exynos_pm_late_initcall();
 }
 
+static void wdt_reset_init(void)
+{
+	unsigned int value;
+
+	value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
+	value &= ~EXYNOS5_SYS_WDTRESET;
+	__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
+
+	value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
+	value &= ~EXYNOS5_SYS_WDTRESET;
+	__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
+}
+
 /*
  * exynos_map_io
  *
@@ -359,6 +372,9 @@ void __init exynos_init_io(struct map_desc *mach_desc, int size)
 	s5p_init_cpu(S5P_VA_CHIPID);
 
 	s3c_init_cpu(samsung_cpu_id, cpu_ids, ARRAY_SIZE(cpu_ids));
+
+	/* TO support Watch dog reset */
+	wdt_reset_init();
 }
 
 static void __init exynos4_map_io(void)
