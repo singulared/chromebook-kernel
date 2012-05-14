@@ -20,6 +20,7 @@
 #include <linux/cpumask.h>
 #include <linux/kthread.h>
 #include <linux/wait.h>
+#include <linux/time.h>
 #include <linux/clockchips.h>
 #include <linux/hrtimer.h>
 #include <linux/tick.h>
@@ -33,10 +34,14 @@
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
+#include <asm/cputype.h>
 #include <asm/suspend.h>
 #include <asm/mcpm.h>
 #include <asm/bL_switcher.h>
 #include <asm/hardware/gic.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/power_cpu_migrate.h>
 
 
 /*
@@ -50,6 +55,16 @@ static int read_mpidr(void)
 	unsigned int id;
 	asm volatile ("mrc\tp15, 0, %0, c0, c0, 5" : "=r" (id));
 	return id & MPIDR_HWID_BITMASK;
+}
+
+/*
+ * Get a global nanosecond time stamp for tracing.
+ */
+static s64 get_ns(void)
+{
+	struct timespec ts;
+	getnstimeofday(&ts);
+	return timespec_to_ns(&ts);
 }
 
 /*
@@ -203,6 +218,7 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	 */
 	local_irq_disable();
 	local_fiq_disable();
+	trace_cpu_migrate_begin(get_ns(), mpidr & MPIDR_HWID_BITMASK);
 
 	this_cpu = smp_processor_id();
 
@@ -254,6 +270,7 @@ static int bL_switch_to(unsigned int new_cluster_id)
 					  tdev->evtdev->next_event, 1);
 	}
 
+	trace_cpu_migrate_finish(get_ns(), mpidr & MPIDR_HWID_BITMASK);
 	local_fiq_enable();
 	local_irq_enable();
 
