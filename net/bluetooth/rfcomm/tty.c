@@ -31,11 +31,6 @@
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 
-#include <linux/capability.h>
-#include <linux/slab.h>
-#include <linux/skbuff.h>
-#include <linux/workqueue.h>
-
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 #include <net/bluetooth/rfcomm.h>
@@ -142,7 +137,7 @@ static struct rfcomm_dev *__rfcomm_dev_get(int id)
 	return NULL;
 }
 
-static inline struct rfcomm_dev *rfcomm_dev_get(int id)
+static struct rfcomm_dev *rfcomm_dev_get(int id)
 {
 	struct rfcomm_dev *dev;
 
@@ -181,7 +176,7 @@ static struct device *rfcomm_get_device(struct rfcomm_dev *dev)
 static ssize_t show_address(struct device *tty_dev, struct device_attribute *attr, char *buf)
 {
 	struct rfcomm_dev *dev = dev_get_drvdata(tty_dev);
-	return sprintf(buf, "%s\n", batostr(&dev->dst));
+	return sprintf(buf, "%pMR\n", &dev->dst);
 }
 
 static ssize_t show_channel(struct device *tty_dev, struct device_attribute *attr, char *buf)
@@ -351,7 +346,7 @@ static void rfcomm_wfree(struct sk_buff *skb)
 	rfcomm_dev_put(dev);
 }
 
-static inline void rfcomm_set_owner_w(struct sk_buff *skb, struct rfcomm_dev *dev)
+static void rfcomm_set_owner_w(struct sk_buff *skb, struct rfcomm_dev *dev)
 {
 	rfcomm_dev_hold(dev);
 	atomic_add(skb->truesize, &dev->wmem_alloc);
@@ -467,7 +462,7 @@ static int rfcomm_get_dev_list(void __user *arg)
 
 	size = sizeof(*dl) + dev_num * sizeof(*di);
 
-	dl = kmalloc(size, GFP_KERNEL);
+	dl = kzalloc(size, GFP_KERNEL);
 	if (!dl)
 		return -ENOMEM;
 
@@ -685,7 +680,7 @@ static int rfcomm_tty_open(struct tty_struct *tty, struct file *filp)
 	if (!dev)
 		return -ENODEV;
 
-	BT_DBG("dev %p dst %s channel %d opened %d", dev, batostr(&dev->dst),
+	BT_DBG("dev %p dst %pMR channel %d opened %d", dev, &dev->dst,
 				dev->channel, atomic_read(&dev->opened));
 
 	if (atomic_inc_return(&dev->opened) > 1)

@@ -21,27 +21,8 @@
 */
 
 #include <linux/module.h>
-
-#include <linux/types.h>
-#include <linux/errno.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/poll.h>
-#include <linux/freezer.h>
-#include <linux/fcntl.h>
-#include <linux/skbuff.h>
-#include <linux/socket.h>
-#include <linux/ioctl.h>
 #include <linux/file.h>
-#include <linux/init.h>
-#include <linux/wait.h>
-#include <linux/mutex.h>
 #include <linux/kthread.h>
-#include <net/sock.h>
-
-#include <linux/input.h>
-#include <linux/hid.h>
 #include <linux/hidraw.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -244,7 +225,8 @@ static void hidp_input_report(struct hidp_session *session, struct sk_buff *skb)
 }
 
 static int __hidp_send_ctrl_message(struct hidp_session *session,
-			unsigned char hdr, unsigned char *data, int size)
+				    unsigned char hdr, unsigned char *data,
+				    int size)
 {
 	struct sk_buff *skb;
 
@@ -268,7 +250,7 @@ static int __hidp_send_ctrl_message(struct hidp_session *session,
 	return 0;
 }
 
-static inline int hidp_send_ctrl_message(struct hidp_session *session,
+static int hidp_send_ctrl_message(struct hidp_session *session,
 			unsigned char hdr, unsigned char *data, int size)
 {
 	int err;
@@ -471,7 +453,7 @@ static void hidp_set_timer(struct hidp_session *session)
 		mod_timer(&session->timer, jiffies + HZ * session->idle_to);
 }
 
-static inline void hidp_del_timer(struct hidp_session *session)
+static void hidp_del_timer(struct hidp_session *session)
 {
 	if (session->idle_to > 0)
 		del_timer(&session->timer);
@@ -949,15 +931,26 @@ static int hidp_setup_hid(struct hidp_session *session,
 	hid->version = req->version;
 	hid->country = req->country;
 
-	strncpy(hid->name, req->name, 128);
-	strncpy(hid->phys, batostr(&bt_sk(session->ctrl_sock->sk)->src), 64);
-	strncpy(hid->uniq, batostr(&bt_sk(session->ctrl_sock->sk)->dst), 64);
+	strncpy(hid->name, req->name, sizeof(req->name) - 1);
+
+	snprintf(hid->phys, sizeof(hid->phys), "%pMR",
+		 &bt_sk(session->ctrl_sock->sk)->src);
+
+	snprintf(hid->uniq, sizeof(hid->uniq), "%pMR",
+		 &bt_sk(session->ctrl_sock->sk)->dst);
 
 	hid->dev.parent = &session->conn->dev;
 	hid->ll_driver = &hidp_hid_driver;
 
 	hid->hid_get_raw_report = hidp_get_raw_report;
 	hid->hid_output_raw_report = hidp_output_raw_report;
+
+	/* True if device is blacklisted in drivers/hid/hid-core.c */
+	if (hid_ignore(hid)) {
+		hid_destroy_device(session->hid);
+		session->hid = NULL;
+		return -ENODEV;
+	}
 
 	return 0;
 
@@ -1031,7 +1024,7 @@ int hidp_add_connection(struct hidp_connadd_req *req, struct socket *ctrl_sock, 
 
 	if (req->rd_size > 0) {
 		err = hidp_setup_hid(session, req);
-		if (err)
+		if (err && err != -ENODEV)
 			goto purge;
 	}
 

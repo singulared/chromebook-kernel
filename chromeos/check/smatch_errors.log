@@ -622,6 +622,7 @@ mm/rmap.c:654 __page_check_address() error: potential NULL dereference 'pte'.
 mm/shmem.c:1874 shmem_xattr_set() error: potential NULL dereference 'new_xattr'.
 mm/swap.c:218 pagevec_lru_move_fn() error: calling 'spin_unlock_irqrestore()' with bogus flags
 mm/vmalloc.c:1188 vmalloc_init() error: potential null dereference 'va'.  (kzalloc returns null)
+net/bluetooth/amp.c:153:55: error: bad constant expression
 net/core/net-sysfs.c:1155 store_xps_map() error: potential NULL dereference 'map'.
 net/core/net-sysfs.c:1155 store_xps_map() error: we previously assumed 'map' could be null (see line 1125)
 net/core/rtnetlink.c:1751:41: error: bad constant expression
