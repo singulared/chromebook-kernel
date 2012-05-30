@@ -22,6 +22,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/memblock.h>
 #include <linux/of_fdt.h>
+#include <linux/spi/spi.h>
+#include <linux/platform_data/spi-s3c64xx.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -79,6 +81,25 @@ static void __init exynos5_ramoops_reserve(void)
 		pr_info("Ramoops: %08lx - %08lx\n", start, start + size - 1);
 	}
 }
+
+static struct s3c64xx_spi_csinfo spi1_csi[] = {
+	[0] = {
+		.line		= EXYNOS5_GPA2(5),
+		.fb_delay	= 0x2,
+	},
+};
+
+static struct spi_board_info spi1_board_info[] __initdata = {
+	{
+		.modalias		= "spidev",
+		.platform_data		= NULL,
+		.max_speed_hz		= 10*1000*1000,
+		.bus_num		= 1,
+		.chip_select		= 0,
+		.mode			= SPI_MODE_0,
+		.controller_data	= spi1_csi,
+	}
+};
 
 static int smdk5250_bl_notify(struct device *unused, int brightness)
 {
@@ -395,6 +416,8 @@ static void __init exynos5_dt_machine_init(void)
 								"lcd_bl_en");
 		samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
 		exynos5_fimd1_gpio_setup_24bpp();
+		spi_register_board_info(spi1_board_info,
+				ARRAY_SIZE(spi1_board_info));
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
 		platform_device_register(&smdk5250_lcd);
