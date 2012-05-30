@@ -270,6 +270,11 @@
 		gpios = <&gpb2 2 3 3 0>,
 			<&gpb2 3 3 3 0>;
 
+		light-sensor {
+			compatible = "invn,isl29018";
+			reg = <0x44>;
+		};
+
 		codec {
 			compatible = "maxim,max98095";
 			reg = <0x11>;
