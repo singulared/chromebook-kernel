@@ -414,4 +414,11 @@
 		charger-type = <3>;
 		gpio = <&gpf0 2 0 0 0>;
 	};
+
+	fixed-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "hsichub-reset-l";
+		gpio = <&gpe1 0 1 0 0>;
+		enable-active-high;
+	};
 };
