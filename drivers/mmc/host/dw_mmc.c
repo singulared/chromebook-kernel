@@ -73,6 +73,41 @@ struct idmac_desc {
 };
 #endif /* CONFIG_MMC_DW_IDMAC */
 
+
+/*
+ * Tunning patterns are from emmc4.5 spec section 6.6.7.1
+ * Figure 27 (for 8-bit) and Figure 28 (for 4bit).
+ */
+static const u8 tuning_blk_pattern_4bit[] = {
+	0xff, 0x0f, 0xff, 0x00, 0xff, 0xcc, 0xc3, 0xcc,
+	0xc3, 0x3c, 0xcc, 0xff, 0xfe, 0xff, 0xfe, 0xef,
+	0xff, 0xdf, 0xff, 0xdd, 0xff, 0xfb, 0xff, 0xfb,
+	0xbf, 0xff, 0x7f, 0xff, 0x77, 0xf7, 0xbd, 0xef,
+	0xff, 0xf0, 0xff, 0xf0, 0x0f, 0xfc, 0xcc, 0x3c,
+	0xcc, 0x33, 0xcc, 0xcf, 0xff, 0xef, 0xff, 0xee,
+	0xff, 0xfd, 0xff, 0xfd, 0xdf, 0xff, 0xbf, 0xff,
+	0xbb, 0xff, 0xf7, 0xff, 0xf7, 0x7f, 0x7b, 0xde,
+};
+
+static const u8 tuning_blk_pattern_8bit[] = {
+	0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00,
+	0xff, 0xff, 0xcc, 0xcc, 0xcc, 0x33, 0xcc, 0xcc,
+	0xcc, 0x33, 0x33, 0xcc, 0xcc, 0xcc, 0xff, 0xff,
+	0xff, 0xee, 0xff, 0xff, 0xff, 0xee, 0xee, 0xff,
+	0xff, 0xff, 0xdd, 0xff, 0xff, 0xff, 0xdd, 0xdd,
+	0xff, 0xff, 0xff, 0xbb, 0xff, 0xff, 0xff, 0xbb,
+	0xbb, 0xff, 0xff, 0xff, 0x77, 0xff, 0xff, 0xff,
+	0x77, 0x77, 0xff, 0x77, 0xbb, 0xdd, 0xee, 0xff,
+	0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0x00,
+	0x00, 0xff, 0xff, 0xcc, 0xcc, 0xcc, 0x33, 0xcc,
+	0xcc, 0xcc, 0x33, 0x33, 0xcc, 0xcc, 0xcc, 0xff,
+	0xff, 0xff, 0xee, 0xff, 0xff, 0xff, 0xee, 0xee,
+	0xff, 0xff, 0xff, 0xdd, 0xff, 0xff, 0xff, 0xdd,
+	0xdd, 0xff, 0xff, 0xff, 0xbb, 0xff, 0xff, 0xff,
+	0xbb, 0xbb, 0xff, 0xff, 0xff, 0x77, 0xff, 0xff,
+	0xff, 0x77, 0x77, 0xff, 0x77, 0xbb, 0xdd, 0xee,
+};
+
 /**
  * struct dw_mci_slot - MMC slot state
  * @mmc: The mmc_host representing this slot.
@@ -575,6 +610,16 @@ static void dw_mci_submit_data(struct dw_mci *host, struct mmc_data *data)
 	host->sg = NULL;
 	host->data = data;
 
+	/* Only enable "End-Bit error" detection if host controller supports. */
+	if (host->quirks & DW_MCI_QUIRK_NO_DETECT_EBIT) {
+		temp = mci_readl(host, INTMASK);
+		if (data->flags & MMC_DATA_READ)
+			temp &= ~SDMMC_INT_EBE;
+		else
+			temp |= SDMMC_INT_EBE;
+		mci_writel(host, INTMASK, temp);
+	}
+
 	if (data->flags & MMC_DATA_READ)
 		host->dir_status = DW_MCI_RECV_STATUS;
 	else
@@ -773,10 +818,109 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	spin_unlock_bh(&host->lock);
 }
 
+
+/* Given the desired clock speed, return appropriate clksel.
+ *
+ * "CLKSEL" doesn't exist in the v2.40 (Dec 2010) Sysnopsys design guide.
+ * Code below is based on CLKSEL description in Samsung Exynos 5250 docs.
+ *
+ * SDMMC_CLKSEL_CCLK_SAMPLE value is determined in dw_mci_execute_tuning().
+ */
+static u32 dw_mci_clksel(struct mmc_host *mmc, u32 wantclk, u32 clksel)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	u32 ciu_rate = clk_get_rate(slot->host->ciu_clk);
+	u32 divratio = SDMMC_CLKSEL_GET_DIVRATIO(clksel);
+	int clkerr = 0;
+
+	/* First try to set the upstream clock rate */
+	if (wantclk && (ciu_rate != (wantclk * divratio))) {
+		ciu_rate = wantclk * divratio;
+		clkerr = clk_set_rate(slot->host->ciu_clk, ciu_rate);
+	}
+
+	slot->host->bus_hz = ciu_rate / divratio;
+
+	/* If we wanted to and were able to change the input clock, exit
+	 * here since we won't need to touch the CLKSEL parameters.
+	 */
+	if (!clkerr)
+		return clksel;
+
+	/* Darn. Couldn't change the input clock. Frob DIVRATIO  and phase. */
+	if (ciu_rate >= (wantclk * 2)) {
+		/* phase shift */
+		u32 clksel_phs = SDMMC_CLKSEL_GET_SELCLK_DRV(clksel);
+
+		u32 newratio = (ciu_rate + wantclk - 1) / wantclk;
+		WARN_ON(newratio > 8);
+
+		/* clock isn't identical but resulting params are */
+		if (divratio == newratio)
+			return clksel;
+
+		newratio--;
+
+		clksel &= ~(SDMMC_CLKSEL_CCLK_DIVIDER(7) |
+				SDMMC_CLKSEL_CCLK_DRIVE(7));
+
+		clksel |= SDMMC_CLKSEL_CCLK_DIVIDER(newratio);
+		/*
+		 * Following code assumes Clock Phase Shift is specified
+		 * with DIVRATIO == 3 ; the default value used in
+		 * DW_MCI_DEF_SDR_TIMING and DW_MCI_DEF_DDR_TIMING.
+		 * The additional two cases have not been validated.
+		 *
+		 * See "Table A3 Test Results for Simulation-Based Host
+		 *	Controller Output Path" of Version 2.40a, Design
+		 *	Ware dwc_mobile_storage_db.pdf
+		 *   OR
+		 * See "10.6 Implementing Delay_D" of Version 2.41a, July 2011.
+		 */
+		switch (newratio) {
+		case 7:
+			/* Samsung Exynos5250 Users Guide v1.10:
+			 * "When you set DIVRATIO to higher than 3 (SDCLKIN
+			 * is divided by higher than 4), clock phase shifter
+			 * can not cover all of 360 degree."
+			 */
+			clksel_phs *= 2;
+			break;
+
+		case 3:
+			/* "When you set DIVRATIO to 3 (SDCLKIN is divided
+			 * by 4), you can use all of 8 phase shifted clocks
+			 * from 0 to 315 by 45 degree units."
+			 */
+			break;
+
+		case 1:
+			/* "If you set DIVRATIO to 1 (SDCLKIN is divided by 2),
+			 * you can use all of 4 phase shifted clocks from
+			 * 0 degree to 270 degree by 90 units. In this case,
+			 * phase 1 and phase 5 are same clocks."
+			 */
+			clksel_phs /= 2;
+			break;
+		}
+		clksel |= SDMMC_CLKSEL_CCLK_DRIVE(clksel_phs);
+	} else {
+		/* Samsung Exynos5250 Users Guide v1.10:
+		 * "If you set DIVRATIO to 0, set SelClk_drv and
+		 * SelClk_sample to 0."
+		 */
+		clksel &= ~(SDMMC_CLKSEL_CCLK_DIVIDER(7) |
+			SDMMC_CLKSEL_CCLK_DRIVE(7) |
+			SDMMC_CLKSEL_CCLK_SAMPLE(7));
+	}
+	return clksel;
+}
+
 static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct dw_mci_slot *slot = mmc_priv(mmc);
-	u32 regs;
+	u32 regs, clksel;
+	u32 wantclk = 0;
 
 	/* set default 1 bit mode */
 	slot->ctype = SDMMC_CTYPE_1BIT;
@@ -795,19 +939,28 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	regs = mci_readl(slot->host, UHS_REG);
 
-	/* DDR mode set */
+	/* Setup clksel value for SDR/DDR modes.  */
 	if (ios->timing == MMC_TIMING_UHS_DDR50) {
+		wantclk = 50 * 1000 * 1000;
+		/* exynos5250 wants 2x clock input only for DDR timing */
+		if (slot->host->drv_data->ctrl_type == DW_MCI_TYPE_EXYNOS5250)
+			wantclk *= 2;
+		clksel = slot->host->ddr_timing;
 		regs |= (0x1 << slot->id) << 16;
-		mci_writel(slot->host, CLKSEL, slot->host->ddr_timing);
-	} else {
+
+	} else if (ios->timing == MMC_TIMING_MMC_HS200) {
+		wantclk = 200 * 1000 * 1000;
+		clksel = mci_readl(slot->host, CLKSEL);
 		regs &= ~(0x1 << slot->id) << 16;
-		mci_writel(slot->host, CLKSEL, slot->host->sdr_timing);
+	} else {
+		clksel = slot->host->sdr_timing;
+		regs &= ~(0x1 << slot->id) << 16;
+		wantclk = 0;	/* do not change clocks */
 	}
 
 	if (slot->host->drv_data->ctrl_type == DW_MCI_TYPE_EXYNOS5250) {
-		slot->host->bus_hz = clk_get_rate(slot->host->ciu_clk);
-		slot->host->bus_hz /= SDMMC_CLKSEL_GET_DIVRATIO(
-					mci_readl(slot->host, CLKSEL));
+		clksel = dw_mci_clksel(mmc, wantclk, clksel);
+		mci_writel(slot->host, CLKSEL, clksel);
 	}
 
 	mci_writel(slot->host, UHS_REG, regs);
@@ -929,6 +1082,176 @@ static void dw_mci_enable_sdio_irq(struct mmc_host *mmc, int enb)
 	}
 }
 
+/* initialize the clock sample to given value */
+static void dw_mci_set_sample(struct dw_mci *host, u32 sample)
+{
+	u32 clksel;
+
+	clksel = mci_readl(host, CLKSEL);
+	clksel = (clksel & ~0x7) | SDMMC_CLKSEL_CCLK_SAMPLE(sample);
+	mci_writel(host, CLKSEL, clksel);
+}
+
+/* read current clock sample offset */
+static u32 dw_mci_get_sample(struct dw_mci *host)
+{
+	u32 clksel = mci_readl(host, CLKSEL);
+	return SDMMC_CLKSEL_CCLK_SAMPLE(clksel);
+}
+
+/*
+ * After testing all (8) possible clock sample values and using one bit for
+ * each value that works, return the "middle" bit position of any sequential
+ * 5 bits.
+ */
+static int find_median_of_5bits(unsigned int map)
+{
+	unsigned int i, testbits;
+
+	/* replicate the map so "arithimetic shift right" shifts in
+	 * the same bits "again". e.g. portable "Rotate Right" bit operation.
+	 */
+	testbits = map | (map << 8);
+
+/* Middle is bit 2. */
+#define FIVEBITS 0x1f
+
+	for (i = 2; i < (8 + 2); i++, testbits >>= 1) {
+		if ((testbits & FIVEBITS) == FIVEBITS)
+			return SDMMC_CLKSEL_CCLK_SAMPLE(i);
+	}
+
+	return -1;
+}
+
+/* Test all 8 possible "Clock in" Sample timings.
+ * Create a bitmap of which CLock sample values work and find the "median"
+ * value. Apply it and remember that we found the best value.
+ */
+static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
+	const u8 *tuning_blk_pattern;	/* data pattern we expect */
+	u8 *tuning_blk;			/* data read from device */
+	unsigned int blksz;
+	unsigned int sample_good = 0;	/* bit map of clock sample (0-7) */
+	u32 test_sample, orig_sample;
+	int best_sample;
+
+	if (opcode == MMC_SEND_TUNING_BLOCK_HS200) {
+		if (mmc->ios.bus_width == MMC_BUS_WIDTH_8) {
+			tuning_blk_pattern = tuning_blk_pattern_8bit;
+			blksz = sizeof(tuning_blk_pattern_8bit);
+		} else if (mmc->ios.bus_width == MMC_BUS_WIDTH_4) {
+			tuning_blk_pattern = tuning_blk_pattern_4bit;
+			blksz = sizeof(tuning_blk_pattern_4bit);
+		} else
+			return -EINVAL;
+	} else if (opcode == MMC_SEND_TUNING_BLOCK) {
+		tuning_blk_pattern = tuning_blk_pattern_4bit;
+		blksz = sizeof(tuning_blk_pattern_4bit);
+	} else {
+		dev_err(&mmc->class_dev,
+			"Undefined command(%d) for tuning\n",
+			opcode);
+		return -EINVAL;
+	}
+
+	/* Short circuit: don't tune again if we already did. */
+	if (host->pdata->tuned) {
+		dw_mci_set_sample(host, host->pdata->clk_smpl);
+		mci_writel(host, CDTHRCTL, host->cd_rd_thr << 16 | 1);
+		return 0;
+	}
+
+	tuning_blk = kmalloc(blksz, GFP_KERNEL);
+	if (!tuning_blk)
+		return -ENOMEM;
+
+	orig_sample = dw_mci_get_sample(host);
+	host->cd_rd_thr = 512;
+	mci_writel(host, CDTHRCTL, host->cd_rd_thr << 16 | 1);
+
+	/* eMMC 4.5 spec section 6.6.7.1 says the device is guaranteed to
+	 * complete 40 iteration of CMD21 in 150ms. So this shouldn't take
+	 * longer than about 30ms or so....at least assuming most values
+	 * work and don't time out.
+	 */
+	for (test_sample = 0; test_sample < 8; test_sample++) {
+		struct mmc_request mrq;
+		struct mmc_command cmd;
+		struct mmc_command stop;
+		struct mmc_data data;
+		struct scatterlist sg;
+
+		memset(&cmd, 0, sizeof(cmd));
+		cmd.opcode = opcode;
+		cmd.arg = 0;
+		cmd.flags = MMC_RSP_R1 | MMC_CMD_ADTC;
+		cmd.error = 0;
+		cmd.cmd_timeout_ms = 10; /* 2x * (150ms/40 + setup overhead) */
+
+		memset(&stop, 0, sizeof(stop));
+		stop.opcode = MMC_STOP_TRANSMISSION;
+		stop.arg = 0;
+		stop.flags = MMC_RSP_R1B | MMC_CMD_AC;
+		stop.error = 0;
+
+		memset(&data, 0, sizeof(data));
+		data.blksz = blksz;
+		data.blocks = 1;
+		data.flags = MMC_DATA_READ;
+		data.sg = &sg;
+		data.sg_len = 1;
+		data.error = 0;
+
+		memset(tuning_blk, ~0U, blksz);
+		sg_init_one(&sg, tuning_blk, blksz);
+
+		memset(&mrq, 0, sizeof(mrq));
+		mrq.cmd = &cmd;
+		mrq.stop = &stop;
+		mrq.data = &data;
+		host->mrq = &mrq;
+
+		dw_mci_set_sample(host, test_sample);
+		dw_mci_set_timeout(host);
+
+		mmc_wait_for_req(mmc, &mrq);
+
+		if (!cmd.error && !data.error) {
+			/* Verify the "tuning block" arrived (to host) intact.
+			 * If yes, remember this sample value works.
+			 */
+			if (!memcmp(tuning_blk_pattern, tuning_blk, blksz))
+				sample_good |= (1 << test_sample);
+		} else {
+			dev_dbg(&mmc->class_dev,
+				"Tuning error: cmd.error:%d, data.error:%d\n",
+				cmd.error, data.error);
+		}
+	}
+
+	kfree(tuning_blk);
+
+	/* See if we got at least 5 consectutive clock sample values
+	 * that worked.
+	 */
+	best_sample = find_median_of_5bits(sample_good);
+	if (best_sample >= 0) {
+		host->pdata->clk_smpl = best_sample;
+		host->pdata->tuned = true;
+		dw_mci_set_sample(host, best_sample);
+		return 0;
+	}
+
+	/* Failed. Just restore and return error */
+	mci_writel(host, CDTHRCTL, 0 << 16 | 0);
+	dw_mci_set_sample(host, orig_sample);
+	return -EIO;
+}
+
 static const struct mmc_host_ops dw_mci_ops = {
 	.request		= dw_mci_request,
 	.pre_req		= dw_mci_pre_req,
@@ -937,6 +1260,7 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.get_ro			= dw_mci_get_ro,
 	.get_cd			= dw_mci_get_cd,
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
+	.execute_tuning		= dw_mci_execute_tuning,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
@@ -1047,6 +1371,19 @@ static void dw_mci_tasklet_func(unsigned long priv)
 				goto unlock;
 			}
 
+			if (data && cmd->error &&
+					cmd != data->stop) {
+				if (host->mrq->data->stop) {
+					host->data = host->mrq->data;
+					send_stop_cmd(host, host->mrq->data);
+					state = STATE_SENDING_STOP;
+					break;
+				} else {
+					host->data = NULL;
+				}
+
+			}
+
 			if (!host->mrq->data || cmd->error) {
 				dw_mci_request_end(host, host->mrq);
 				goto unlock;
@@ -1058,7 +1395,8 @@ static void dw_mci_tasklet_func(unsigned long priv)
 		case STATE_SENDING_DATA:
 			if (test_and_clear_bit(EVENT_DATA_ERROR,
 					       &host->pending_events)) {
-				dw_mci_stop_dma(host);
+				set_bit(EVENT_XFER_COMPLETE,
+						&host->pending_events);
 				if (data->stop)
 					send_stop_cmd(host, data);
 				state = STATE_DATA_ERROR;
@@ -1141,7 +1479,18 @@ static void dw_mci_tasklet_func(unsigned long priv)
 						&host->pending_events))
 				break;
 
+			if (host->mrq->cmd->error &&
+					host->mrq->data) {
+				dw_mci_stop_dma(host);
+				sg_miter_stop(&host->sg_miter);
+				host->sg = NULL;
+				ctrl = mci_readl(host, CTRL);
+				ctrl |= SDMMC_CTRL_FIFO_RESET;
+				mci_writel(host, CTRL, ctrl);
+			}
+
 			host->cmd = NULL;
+			host->data = NULL;
 			dw_mci_command_complete(host, host->mrq->stop);
 			dw_mci_request_end(host, host->mrq);
 			goto unlock;
@@ -1150,6 +1499,9 @@ static void dw_mci_tasklet_func(unsigned long priv)
 			if (!test_and_clear_bit(EVENT_XFER_COMPLETE,
 						&host->pending_events))
 				break;
+
+			dw_mci_stop_dma(host);
+			set_bit(EVENT_XFER_COMPLETE, &host->completed_events);
 
 			state = STATE_DATA_BUSY;
 			break;
@@ -2080,12 +2432,12 @@ static struct dw_mci_of_quirks {
 } of_quriks[] = {
 	{
 		.quirk	= "supports-highspeed",
-		.id 	= DW_MCI_QUIRK_HIGHSPEED,
+		.id	= DW_MCI_QUIRK_HIGHSPEED,
 	}, {
-		.quirk 	= "card-detection-broken",
-		.id 	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
+		.quirk	= "card-detection-broken",
+		.id	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
 	}, {
-		.quirk 	= "no-write-protect",
+		.quirk	= "no-write-protect",
 		.id	= DW_MCI_QUIRK_NO_WRITE_PROTECT,
 	}, {
 		.quirk	= "disable-mmc",
@@ -2241,10 +2593,6 @@ int dw_mci_probe(struct dw_mci *host)
 	/* Put in max timeout */
 	mci_writel(host, TMOUT, 0xFFFFFFFF);
 
-	/*
-	 * FIFO threshold settings  RxMark  = fifo_size / 2 - 1,
-	 *                          Tx Mark = fifo_size / 2 DMA Size = 8
-	 */
 	if (!host->pdata->fifo_depth) {
 		/*
 		 * Power-on value of RX_WMark is FIFO_DEPTH-1, but this may
@@ -2253,13 +2601,33 @@ int dw_mci_probe(struct dw_mci *host)
 		 * should put it in the platform data.
 		 */
 		fifo_size = mci_readl(host, FIFOTH);
-		fifo_size = 1 + ((fifo_size >> 16) & 0xfff);
+		fifo_size = 1 + ((fifo_size >> SDMMC_FIFOTH_RX_WMARK) & 0xfff);
 	} else {
 		fifo_size = host->pdata->fifo_depth;
 	}
+
 	host->fifo_depth = fifo_size;
-	host->fifoth_val = ((0x2 << 28) | ((fifo_size/2 - 1) << 16) |
-			((fifo_size/2) << 0));
+
+	/*
+	 * Synopsys recommended FIFO threshold settings:
+	 *	Rx_WMark = fifo_size / 2 - 1,
+	 *      Tx_WMark = fifo_size / 2
+	 *
+	 * See sections:
+	 *	"6.2.20 FIFOTH" (FIFOTH register details)
+	 *	"7.2.14 Card Read Threshold" and in particular
+	 *	"7.2.14.2 Card Read Threshold Programming Sequence"
+	 *
+	 * Synopsys "Design Ware" dwc_mobile_storage_db.pdf document.
+	 * Version 2.40a, December 2010
+	 *
+	 * We divide by 4 to support HS200 (faster than DDR50) transfer speeds.
+	 * Just don't always have enough FIFO depth to handle HS200 burst rate
+	 * and we need to give the SoC a bit more time to move data.
+	 */
+	host->fifoth_val = ((0x4 << SDMMC_FIFOTH_DMA_MULTI_TRANS_SIZE) |
+				((fifo_size/4 - 1) << SDMMC_FIFOTH_RX_WMARK) |
+				((fifo_size/2) << 0));
 	mci_writel(host, FIFOTH, host->fifoth_val);
 
 	/* disable clock to CIU */
