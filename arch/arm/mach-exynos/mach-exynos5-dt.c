@@ -123,11 +123,32 @@ static void __init exynos5_dt_map_io(void)
 		s3c24xx_init_clocks(24000000);
 }
 
+#define S5P_PMU_DEBUG				S5P_PMUREG(0x0A00)
+/* PMU_DEBUG bits [12:8] = 0x10000 selects XXTI clock source */
+#define PMU_DEBUG_XXTI				(0x10 << 8)
+/* Mask bit[12:8] for xxti clock selection */
+#define PMU_DEBUG_CLKOUT_SEL_MASK		0x1f00
+
+static void __init enable_xclkout(void)
+{
+       unsigned int tmp;
+
+       tmp = readl(S5P_PMU_DEBUG);
+       tmp &= ~PMU_DEBUG_CLKOUT_SEL_MASK;
+       tmp |= PMU_DEBUG_XXTI;
+       writel(tmp, S5P_PMU_DEBUG);
+}
+
 static void __init exynos5_dt_machine_init(void)
 {
 	struct device_node *i2c_np;
 	const char *i2c_compat = "samsung,s3c2440-i2c";
 	unsigned int tmp;
+
+	/* XCLKOUT needs to be moved over to the clock interface, but enable it
+	 * here for now.
+	 */
+	enable_xclkout();
 
 	/*
 	 * Exynos5's legacy i2c controller and new high speed i2c
