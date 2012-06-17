@@ -1,0 +1,78 @@
+SBS sbs-battery
+~~~~~~~~~~
+
+Required properties :
+ - compatible = "google,battery-system";
+ - google,polling-interval-ms : Interval between polling of the battery (ms)
+ - google,polling-mode : when to poll the battery:
+	"disable" : never poll
+	"always" : always poll
+	"external-power" : poll when external power is connected
+	"charging" : poll when charging
+ - google.fullbattery-uv : Number of microvolts expected when all batteries
+	are full
+ - google,battery-present : How to determine whether battery is present:
+	"no" : Battery is never present
+	"always" : Battery is always present
+	"fuel-guage" : Ask the fuel guage
+	"charger" : Ask the charger
+ - google,regulators : List of regulators that control power to the battery.
+	These will be turned on when charging is required.
+ - google,fuel_guage : Fuel guage to use for checking battery system charge
+	level
+ - google,temperature-high : Maximum temperature to permit charging, in
+	millidegrees celsius. Above this, charging is terminated.
+ - google,temperature-high-recovery : If temperature drops back down to this
+	level, we resume charging.
+ - google,temperature-low : Lowest temperature to permit charging - after
+	this we disable charging
+ - google,temperature-low-recovery : If temperature rises to this level, we
+	resume charging
+
+Optional properties :
+ - google,voltage-drop-ms : time to wait for voltage drop (ms)
+ - google,voltage-drop-uv = <100000>;
+	Charger Manager checks voltage drop after the battery
+	"FULL" event. First it waits for the given number of milliseconds,
+	then it checks whether the voltage has dropped more than
+	the given number of microvolts. If so, charging is started.
+ - google,battery-knows-temperature : Get temperature from the battery
+	pack itself (sbs-specification)
+ - google,battery-knows-online : Get online state from the battery. Normally
+	we would ask the charger (regulator) but if it does not know, then
+	in extremis we can ask the battery (sbs-specification)
+ - google,assume-online : Include this boolean property if there is no way
+	to determine whether the charger is online (plugged into an external
+	power source). This can happen with some broken systems.
+
+Example:
+
+battery-system {
+	compatible = "google,battery-system";
+	google,polling-interval-ms = <30000>;
+	google,polling-mode = "always";
+	google,voltage-drop-ms = <30000>;
+	google,voltage-drop-uv = <100000>;
+	google.fullbattery-uv = <42000000>;
+	google,battery-present = "fuel-guage";
+	google,regulators = <&tps65090_charger>;
+	google,fuel_guage = <&battery>;
+	google,temperature-high = <63000>;
+	google,temperature-high-recovery = <58000>;
+	google,temperature-low = <-5000>;
+	google,temperature-low-recovery = <0>;
+	google,battery-knows-temperature;
+	google,battery-knows-online;
+	google,assume-online;
+};
+
+battery : sbs-battery@b {
+	compatible = "sbs,sbs-battery";
+	reg = <0xb>;
+	sbs,poll-retry-count = <3>;
+};
+
+tps65090_charger : charger {
+	tps65090-control-reg-offset = <4>;
+	regulator-name = "vinchg";
+};
