@@ -93,6 +93,8 @@ struct charger_global_desc {
  * @measure_battery_temp:
  *	true: measure battery temperature
  *	false: measure ambient temperature
+ * @battery_has_temp: get temperature from battery before calling
+ *	temperature_out_of_range()
  */
 struct charger_desc {
 	char *psy_name;
@@ -115,6 +117,7 @@ struct charger_desc {
 
 	int (*temperature_out_of_range)(int *mC);
 	bool measure_battery_temp;
+	bool battery_knows_temp;
 };
 
 #define PSY_NAME_MAX	30

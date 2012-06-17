@@ -417,6 +417,36 @@ static void fullbatt_vchk(struct work_struct *work)
 	}
 }
 
+static int temperature_out_of_range(struct charger_manager *cm, int *temp_mC)
+{
+	union power_supply_propval val;
+	int ret;
+
+	/* If the battery knows the temperature, read this first */
+	if (cm->desc->battery_knows_temp) {
+		ret = cm->fuel_gauge->get_property(cm->fuel_gauge,
+				POWER_SUPPLY_PROP_TEMP, &val);
+
+		/*
+		 * If any error, return no information.
+		 *
+		 * TODO(sjg@chromium.org): This mostly happens when there is
+		 * actually no battery connected. In that case there is no
+		 * point in doing anything. But if the battery is connected
+		 * but we cannot talk to it, then we we should consider
+		 * turning off charging. But if that i2c bus is broken it is
+		 * the same one as the charger, on daisy.
+		 */
+		if (ret)
+			return 0;
+
+		/* Convert from 0.1 degrees C to mC */
+		*temp_mC = val.intval * 100;
+	}
+
+	return cm->desc->temperature_out_of_range(temp_mC);
+}
+
 enum cm_state_t {
 	CM_CHANGE_NONE,
 	CM_CHANGE_COLD,
@@ -440,7 +470,7 @@ static const char * const cm_state_name[] = {
  */
 static bool _cm_monitor(struct charger_manager *cm)
 {
-	int temp = cm->desc->temperature_out_of_range(&cm->last_temp_mC);
+	int temp = temperature_out_of_range(cm, &cm->last_temp_mC);
 	enum cm_state_t state;
 	int err = 0;
 
@@ -660,7 +690,7 @@ static int charger_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		/* in thenth of centigrade */
 		if (cm->last_temp_mC == INT_MIN)
-			desc->temperature_out_of_range(&cm->last_temp_mC);
+			temperature_out_of_range(cm, &cm->last_temp_mC);
 		val->intval = cm->last_temp_mC / 100;
 		if (!desc->measure_battery_temp)
 			ret = -ENODEV;
@@ -668,7 +698,7 @@ static int charger_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP_AMBIENT:
 		/* in thenth of centigrade */
 		if (cm->last_temp_mC == INT_MIN)
-			desc->temperature_out_of_range(&cm->last_temp_mC);
+			temperature_out_of_range(cm, &cm->last_temp_mC);
 		val->intval = cm->last_temp_mC / 100;
 		if (desc->measure_battery_temp)
 			ret = -ENODEV;
