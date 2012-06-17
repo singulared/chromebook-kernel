@@ -306,7 +306,7 @@ config CHARGER_TPS65090
 	depends on MFD_TPS65090
 	help
 	  Say Y to include support for the battery charging function of the
-	  TI TPS65090 PMIC.  This is used to detect AC status and determine
+	  TI TPS65090 PMIC.  This is used to detect AC status and control
 	  charging/discharging state.
 
 config AB8500_BM

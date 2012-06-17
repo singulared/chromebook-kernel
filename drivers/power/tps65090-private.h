@@ -42,4 +42,8 @@ enum {
 	TPS65090_IRQ1_CGCPL_MASK	= 1 << 5,
 };
 
+enum {
+	TPS65090_CG_CTRL0_ENC		= 1 << 0,
+};
+
 #endif /*__LINUX_MFD_TPS65090_PRIVATE_H */

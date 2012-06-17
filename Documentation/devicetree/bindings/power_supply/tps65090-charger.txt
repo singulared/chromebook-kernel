@@ -1,0 +1,25 @@
+TI TPS65090 Charger
+===================
+
+Regulator information exists as a subnode within the mfd node for the main
+TPS65090 device.
+
+The TPS65090 regulator subnode should be called "charger".
+
+The required properties for the individual regulator nodes are as for
+regulator.txt, with the following additions / changes:
+
+Optional properties:
+  - regulator-name : If given then a regulator is created for the charger
+       control. If omitted then the regulator is not created and the driver
+       operates entirely passively.
+
+Example:
+
+power-regulator {
+	compatible = "ti,tps65090";
+	reg = <0x48>;
+	charger {
+		regulator-name = "vinchg";
+	};
+};

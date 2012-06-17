@@ -26,13 +26,19 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/regulator/driver.h>
+#include <linux/regulator/of_regulator.h>
+#include <linux/regulator/machine.h>
 #include <linux/slab.h>
 
 #include "tps65090-private.h"
 
 struct charger_data {
 	struct device *dev;
-	struct power_supply charger;
+	struct power_supply *charger;
+	/* used by regulator core */
+	struct regulator_desc desc;
+	struct regulator_dev *rdev;
 };
 
 static enum power_supply_property tps65090_charger_props[] = {
@@ -50,8 +56,8 @@ static int tps65090_charger_get_property(struct power_supply *psy,
 					 enum power_supply_property psp,
 					 union power_supply_propval *val)
 {
-	struct charger_data *charger_data = container_of(psy,
-			struct charger_data, charger);
+	struct platform_device *pdev = to_platform_device(psy->dev->parent);
+	struct charger_data *charger_data = platform_get_drvdata(pdev);
 	struct device *parent = to_tps65090_dev(charger_data);
 	int ret;
 	u8 reg;
@@ -86,43 +92,152 @@ static int tps65090_charger_get_property(struct power_supply *psy,
 	return 0;
 }
 
+static struct power_supply tps65090_charger = {
+	.name = "tps65090-charger",
+	.type = POWER_SUPPLY_TYPE_MAINS,
+	.get_property = tps65090_charger_get_property,
+	.properties = tps65090_charger_props,
+	.num_properties = ARRAY_SIZE(tps65090_charger_props),
+};
+
 static const struct of_device_id charger_data_match[] = {
 	{ .compatible = "ti,tps65090" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, charger_data_match);
 
-static __devinit int tps65090_charger_probe(struct platform_device *pdev)
+static int tps65090_charger_is_enabled(struct regulator_dev *rdev)
 {
-	struct charger_data *charger_data;
-	int ret = 0;
+	struct charger_data *cd = rdev_get_drvdata(rdev);
+	struct device *parent = to_tps65090_dev(cd);
+	uint8_t control;
+	int ret;
 
-	charger_data = kzalloc(sizeof(struct charger_data), GFP_KERNEL);
-	if (!charger_data) {
-		dev_err(&pdev->dev, "Failed to alloc driver structure\n");
-		return -ENOMEM;
+	ret = tps65090_read(parent, TPS65090_REG_CG_CTRL0, &control);
+	if (ret < 0) {
+		dev_err(&rdev->dev, "Error in checking charge state\n");
+		return ret;
 	}
 
-	charger_data->dev = &pdev->dev;
+	return (control & TPS65090_CG_CTRL0_ENC) != 0;
+}
 
-	charger_data->charger.name = "tps65090-charger";
-	charger_data->charger.type = POWER_SUPPLY_TYPE_MAINS;
-	charger_data->charger.get_property = tps65090_charger_get_property;
-	charger_data->charger.properties = tps65090_charger_props;
-	charger_data->charger.num_properties =
-		ARRAY_SIZE(tps65090_charger_props);
+static int tps65090_charger_enable(struct regulator_dev *rdev)
+{
+	struct charger_data *cd = rdev_get_drvdata(rdev);
+	struct device *parent = to_tps65090_dev(cd);
+	int ret;
+
+	ret = tps65090_set_bits(parent, TPS65090_REG_CG_CTRL0,
+				TPS65090_CG_CTRL0_ENC);
+	if (ret < 0) {
+		dev_err(&rdev->dev, "Error in enabling charging\n");
+		return ret;
+	}
+
+	return ret;
+}
+
+static int tps65090_charger_disable(struct regulator_dev *rdev)
+{
+	struct charger_data *cd = rdev_get_drvdata(rdev);
+	struct device *parent = to_tps65090_dev(cd);
+	int ret;
+
+	ret = tps65090_clr_bits(parent, TPS65090_REG_CG_CTRL0,
+				TPS65090_CG_CTRL0_ENC);
+	if (ret < 0) {
+		dev_err(&rdev->dev, "Error in disabling charging\n");
+		return ret;
+	}
+
+	return ret;
+}
+
+static int tps65090_set_charger_voltage(struct regulator_dev *rdev, int min,
+				       int max, unsigned *sel)
+{
+	/*
+	 * Only needed for the core code to set constraints; the voltage
+	 * isn't actually adjustable on tps65090.
+	 */
+	return 0;
+}
+
+static struct regulator_ops tps65090_charger_ops = {
+	.enable		= tps65090_charger_enable,
+	.disable	= tps65090_charger_disable,
+	.set_voltage	= tps65090_set_charger_voltage,
+	.is_enabled	= tps65090_charger_is_enabled,
+};
+
+static __devinit int tps65090_charger_probe(struct platform_device *pdev)
+{
+	struct device_node *mfd_node, *np;
+	struct charger_data *charger_data;
+	struct regulator_init_data *ri;
+	int ret = 0;
+
+	mfd_node = pdev->dev.parent->of_node;
+	if (!mfd_node) {
+		dev_err(&pdev->dev, "no device tree data available\n");
+		return -EINVAL;
+	}
+
+	np = of_find_node_by_name(mfd_node, "charger");
+	if (!np) {
+		dev_err(&pdev->dev, "no OF charger data found at %s\n",
+			mfd_node->full_name);
+		return -EINVAL;
+	}
+
+	charger_data = devm_kzalloc(&pdev->dev, sizeof(struct charger_data),
+				    GFP_KERNEL);
+	if (!charger_data) {
+		dev_err(&pdev->dev, "Failed to alloc driver structure\n");
+		ret = -ENOMEM;
+		goto err_nomem;
+	}
 
 	/* Register the driver. */
-	ret = power_supply_register(charger_data->dev, &charger_data->charger);
+	charger_data->dev = &pdev->dev;
+	charger_data->charger = &tps65090_charger;
+	platform_set_drvdata(pdev, charger_data);
+	pdev->dev.of_node = np;
+	ret = power_supply_register(&pdev->dev, &tps65090_charger);
 	if (ret) {
 		dev_err(charger_data->dev, "failed: power supply register\n");
 		goto err;
 	}
 
-	platform_set_drvdata(pdev, charger_data);
+	ri = of_get_regulator_init_data(&pdev->dev, np);
+	if (!ri) {
+		dev_err(&pdev->dev, "regulator_init_data failed for %s\n",
+			np->full_name);
+		goto err_reg;
+	}
+
+	if (ri->constraints.name) {
+		charger_data->desc.name = ri->constraints.name;
+		charger_data->desc.id = 0;
+		charger_data->desc.ops = &tps65090_charger_ops;
+		charger_data->desc.type = REGULATOR_VOLTAGE;
+		charger_data->desc.owner = THIS_MODULE;
+		charger_data->rdev = regulator_register(&charger_data->desc,
+					&pdev->dev, ri, charger_data, np);
+		if (IS_ERR(charger_data->rdev)) {
+			dev_err(&pdev->dev, "Unable to regsister regulator\n");
+			goto err_reg;
+		}
+	}
+
+	of_node_put(np);
 	return 0;
+err_reg:
+	power_supply_unregister(charger_data->charger);
 err:
-	kfree(charger_data);
+err_nomem:
+	of_node_put(np);
 	return ret;
 }
 
@@ -130,9 +245,9 @@ static int __devexit tps65090_charger_remove(struct platform_device *pdev)
 {
 	struct charger_data *charger_data = platform_get_drvdata(pdev);
 
-	power_supply_unregister(&charger_data->charger);
+	power_supply_unregister(charger_data->charger);
+	regulator_unregister(charger_data->rdev);
 	platform_set_drvdata(pdev, NULL);
-	kfree(charger_data);
 
 	return 0;
 }
@@ -143,7 +258,7 @@ static int tps65090_charger_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct charger_data *charger_data = platform_get_drvdata(pdev);
 
-	power_supply_changed(&charger_data->charger);
+	power_supply_changed(charger_data->charger);
 
 	return 0;
 }
