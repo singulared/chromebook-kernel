@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
@@ -1197,6 +1198,21 @@ static int charger_manager_probe(struct platform_device *pdev)
 	struct charger_manager *cm;
 	int ret = 0, i = 0;
 	union power_supply_propval val;
+	struct device_node *of_node;
+
+	of_node = of_find_compatible_node(NULL, NULL, "google,battery-system");
+	if (!of_node) {
+		pr_warn("%s: No fdt node found\n", __func__);
+		goto err_no_node;
+	}
+
+	if (!of_device_is_available(of_node)) {
+		pr_warn("%s: Disabled by fdt\n", __func__);
+		goto err_not_enabled;
+	}
+
+	/* TODO(sjg@chromium.org): Read parameters from fdt node */
+	of_node_put(of_node);
 
 	if (g_desc && !rtc_dev && g_desc->rtc_name) {
 		rtc_dev = rtc_class_open(g_desc->rtc_name);
@@ -1398,6 +1414,9 @@ err_no_charger:
 err_alloc_desc:
 	kfree(cm);
 err_alloc:
+err_not_enabled:
+	of_node_put(of_node);
+err_no_node:
 	return ret;
 }
 
