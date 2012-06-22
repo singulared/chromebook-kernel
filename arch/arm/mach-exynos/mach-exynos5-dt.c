@@ -416,8 +416,17 @@ static void __init exynos5_dt_machine_init(void)
 								"lcd_bl_en");
 		samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
 		exynos5_fimd1_gpio_setup_24bpp();
-		spi_register_board_info(spi1_board_info,
-				ARRAY_SIZE(spi1_board_info));
+		if (gpio_request_one(EXYNOS5_GPA2(5),
+			GPIOF_OUT_INIT_HIGH, "SPI1_CS")) {
+			printk(KERN_ERR "Spidev ChipSelect unavailable\n");
+		} else {
+			s3c_gpio_cfgpin(EXYNOS5_GPA2(5), S3C_GPIO_SFN(0x1));
+			s3c_gpio_setpull(EXYNOS5_GPA2(5), S3C_GPIO_PULL_NONE);
+			s5p_gpio_set_drvstr(EXYNOS5_GPA2(5),
+					S5P_GPIO_DRVSTR_LV4);
+			spi_register_board_info(spi1_board_info,
+						ARRAY_SIZE(spi1_board_info));
+		}
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
 		platform_device_register(&smdk5250_lcd);
