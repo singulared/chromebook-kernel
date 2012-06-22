@@ -129,6 +129,13 @@
 		};
 	};
 
+	pmu {
+		compatible = "arm,cortex-a15-pmu";
+		interrupts = <1 2>,
+			     <22 4>;
+		interrupt-parent = <&combiner>;
+	};
+
 	pinctrl_0: pinctrl@11400000 {
 		compatible = "samsung,exynos5250-pinctrl";
 		reg = <0x11400000 0x1000>;
@@ -139,6 +146,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <0 32 0>;
 		};
+
 	};
 
 	pinctrl_1: pinctrl@13400000 {
