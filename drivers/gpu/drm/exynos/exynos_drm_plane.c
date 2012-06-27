@@ -101,11 +101,51 @@ static void exynos_plane_destroy(struct drm_plane *plane)
 	kfree(exynos_plane);
 }
 
+static int exynos_plane_set_property(struct drm_plane *plane,
+				     struct drm_property *property,
+				     uint64_t val)
+{
+	struct drm_device *dev = plane->dev;
+	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_drm_private *dev_priv = dev->dev_private;
+
+	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+
+	if (property == dev_priv->plane_zpos_property) {
+		exynos_plane->overlay.zpos = val;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static struct drm_plane_funcs exynos_plane_funcs = {
 	.update_plane	= exynos_update_plane,
 	.disable_plane	= exynos_disable_plane,
 	.destroy	= exynos_plane_destroy,
+	.set_property	= exynos_plane_set_property,
 };
+
+static void exynos_plane_attach_zpos_property(struct drm_plane *plane)
+{
+	struct drm_device *dev = plane->dev;
+	struct exynos_drm_private *dev_priv = dev->dev_private;
+	struct drm_property *prop;
+
+	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+
+	prop = dev_priv->plane_zpos_property;
+	if (!prop) {
+		prop = drm_property_create_range(dev, 0, "zpos", 0,
+						 MAX_PLANE - 1);
+		if (!prop)
+			return;
+
+		dev_priv->plane_zpos_property = prop;
+	}
+
+	drm_object_attach_property(&plane->base, prop, 0);
+}
 
 struct drm_plane *exynos_plane_init(struct drm_device *dev,
 				    unsigned int possible_crtcs, bool priv)
@@ -121,8 +161,6 @@ struct drm_plane *exynos_plane_init(struct drm_device *dev,
 		return NULL;
 	}
 
-	exynos_plane->overlay.zpos = DEFAULT_ZPOS;
-
 	err = drm_plane_init(dev, &exynos_plane->base, possible_crtcs,
 			      &exynos_plane_funcs, formats, ARRAY_SIZE(formats),
 			      priv);
@@ -132,50 +170,12 @@ struct drm_plane *exynos_plane_init(struct drm_device *dev,
 		return NULL;
 	}
 
+	if (priv)
+		exynos_plane->overlay.zpos = DEFAULT_ZPOS;
+	else
+		exynos_plane_attach_zpos_property(&exynos_plane->base);
+
 	return &exynos_plane->base;
-}
-
-int exynos_plane_set_zpos_ioctl(struct drm_device *dev, void *data,
-				struct drm_file *file_priv)
-{
-	struct drm_exynos_plane_set_zpos *zpos_req = data;
-	struct drm_mode_object *obj;
-	struct drm_plane *plane;
-	struct exynos_plane *exynos_plane;
-	int ret = 0;
-
-	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return -EINVAL;
-
-	DRM_DEBUG_KMS("[DEV:%s] [PLANE:%d] zpos: %d\n", dev->devname,
-			zpos_req->plane_id, zpos_req->zpos);
-
-	if (zpos_req->zpos < 0 || zpos_req->zpos >= MAX_PLANE) {
-		if (zpos_req->zpos != DEFAULT_ZPOS) {
-			DRM_ERROR("zpos not within limits\n");
-			return -EINVAL;
-		}
-	}
-
-	mutex_lock(&dev->mode_config.mutex);
-
-	obj = drm_mode_object_find(dev, zpos_req->plane_id,
-			DRM_MODE_OBJECT_PLANE);
-	if (!obj) {
-		DRM_DEBUG_KMS("Unknown plane ID %d\n",
-			      zpos_req->plane_id);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	plane = obj_to_plane(obj);
-	exynos_plane = container_of(plane, struct exynos_plane, base);
-
-	exynos_plane->overlay.zpos = zpos_req->zpos;
-
-out:
-	mutex_unlock(&dev->mode_config.mutex);
-	return ret;
 }
 
 struct exynos_drm_overlay *get_exynos_drm_overlay(struct drm_plane *plane)
