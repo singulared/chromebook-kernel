@@ -134,8 +134,12 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	}
 
 	for (nr = 0; nr < MAX_PLANE; nr++) {
-		ret = exynos_plane_init(dev, nr);
-		if (ret)
+		struct drm_plane *plane;
+		unsigned int possible_crtcs =
+			(1 << EXYNOS_DRM_DISPLAY_NUM_DISPLAYS) - 1;
+
+		plane = exynos_plane_init(dev, possible_crtcs, false);
+		if (!plane)
 			goto err_crtc;
 	}
 

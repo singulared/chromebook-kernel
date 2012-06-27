@@ -38,6 +38,7 @@
 #include "exynos_drm_display.h"
 #include "exynos_drm_gem.h"
 #include "exynos_trace.h"
+#include "exynos_drm_plane.h"
 
 #define KDS_WAITALL_MAX_TRIES 15
 
@@ -52,10 +53,9 @@ struct exynos_drm_flip_desc {
  * Exynos specific crtc structure.
  *
  * @drm_crtc: crtc object.
- * @overlay: contain information common to display controller and hdmi and
- *	contents of this overlay object would be copied to sub driver size.
  * @current_fb: current fb that is being scanned out
  * @event: vblank event that is currently queued for flip
+ * @plane: pointer of private plane object for this crtc
  * @pipe: a crtc index created at load() with a new crtc object creation
  *	and the crtc object would be set to private->crtc array
  *	to get a crtc object corresponding to this pipe from private->crtc
@@ -67,11 +67,11 @@ struct exynos_drm_flip_desc {
  */
 struct exynos_drm_crtc {
 	struct drm_crtc			drm_crtc;
-	struct exynos_drm_overlay	overlay;
 	struct drm_pending_vblank_event *event;
 	DECLARE_KFIFO(flip_fifo, struct exynos_drm_flip_desc, 2);
 	struct exynos_drm_flip_desc	scanout_desc;
 	struct exynos_drm_display	*display;
+	struct drm_plane		*plane;
 	unsigned int			pipe;
 	atomic_t			flip_pending;
 };
@@ -169,7 +169,7 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 	struct drm_display_mode *mode = &crtc->mode;
 
 	exynos_crtc = to_exynos_crtc(crtc);
-	overlay = &exynos_crtc->overlay;
+	overlay = get_exynos_drm_overlay(exynos_crtc->plane);
 
 	memset(&pos, 0, sizeof(struct exynos_drm_crtc_pos));
 
@@ -297,7 +297,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 
 	to_exynos_fb(next_desc.fb)->rendered = true;
 	exynos_drm_crtc_update(crtc, next_desc.fb);
-	exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
+	exynos_drm_crtc_apply(crtc, get_exynos_drm_overlay(exynos_crtc->plane));
 	to_exynos_fb(next_desc.fb)->prepared = true;
 
 	if (exynos_crtc->event) {
@@ -408,7 +408,7 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 
 	if (display->controller_ops && display->controller_ops->mode_set)
 		display->controller_ops->mode_set(display->controller_ctx,
-				&exynos_crtc->overlay);
+				get_exynos_drm_overlay(exynos_crtc->plane));
 
 	return 0;
 }
@@ -477,8 +477,11 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 	to_exynos_fb(fb)->rendered = true;
 
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
+		struct exynos_drm_overlay *overlay;
+
+		overlay = get_exynos_drm_overlay(exynos_crtc->plane);
 		exynos_drm_crtc_update(crtc, fb);
-		exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
+		exynos_drm_crtc_apply(crtc, overlay);
 		to_exynos_fb(fb)->prepared = true;
 	}
 }
@@ -627,8 +630,11 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	if (kfifo_peek(&exynos_crtc->flip_fifo, &next_desc)) {
 		if (unlikely(to_exynos_fb(next_desc.fb)->rendered) &&
 		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
+			struct exynos_drm_overlay *overlay;
+
+			overlay = get_exynos_drm_overlay(exynos_crtc->plane);
 			exynos_drm_crtc_update(crtc, next_desc.fb);
-			exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
+			exynos_drm_crtc_apply(crtc, overlay);
 			to_exynos_fb(next_desc.fb)->prepared = true;
 		}
 	}
@@ -673,7 +679,13 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr,
 	INIT_KFIFO(exynos_crtc->flip_fifo);
 	exynos_crtc->pipe = nr;
 	exynos_crtc->display = display;
-	exynos_crtc->overlay.zpos = DEFAULT_ZPOS;
+
+	exynos_crtc->plane = exynos_plane_init(dev, 1 << nr, true);
+	if (!exynos_crtc->plane) {
+		kfree(exynos_crtc);
+		return -ENOMEM;
+	}
+
 	crtc = &exynos_crtc->drm_crtc;
 
 	private->crtc[nr] = crtc;
