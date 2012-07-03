@@ -527,6 +527,41 @@ mwifiex_cfg80211_set_channel(struct wiphy *wiphy, struct net_device *dev,
 	return mwifiex_set_rf_channel(priv, chan, channel_type);
 }
 
+static int
+mwifiex_cfg80211_set_antenna(struct wiphy *wiphy, u32 tx_ant, u32 rx_ant)
+{
+	struct mwifiex_private *priv = mwifiex_cfg80211_get_priv(wiphy);
+	struct mwifiex_adapter *adapter = priv->adapter;
+	struct mwifiex_ds_ant_cfg ant_cfg;
+
+	if (!tx_ant || !rx_ant)
+		return -EOPNOTSUPP;
+
+	if (adapter->hw_dev_mcs_support != HT_STREAM_2X2) {
+		/* Not a MIMO chip. User should provide specific antenna number
+		 * for Tx/Rx path or enable all antennas for diversity
+		 */
+		if (tx_ant != rx_ant)
+			return -EOPNOTSUPP;
+
+		if ((tx_ant & (tx_ant - 1)) &&
+		    (tx_ant != BIT(adapter->number_of_antenna) - 1))
+			return -EOPNOTSUPP;
+
+		if ((tx_ant == BIT(adapter->number_of_antenna) - 1) &&
+		    (priv->adapter->number_of_antenna > 1)) {
+			tx_ant = RF_ANTENNA_AUTO;
+			rx_ant = RF_ANTENNA_AUTO;
+		}
+	}
+
+	ant_cfg.tx_ant = tx_ant;
+	ant_cfg.rx_ant = rx_ant;
+
+	return mwifiex_send_cmd_sync(priv, HostCmd_CMD_RF_ANTENNA,
+				     HostCmd_ACT_GEN_SET, 0, &ant_cfg);
+}
+
 /*
  * This function sets the fragmentation threshold.
  *
@@ -1613,6 +1648,7 @@ static struct cfg80211_ops mwifiex_cfg80211_ops = {
 	.set_tx_power = mwifiex_cfg80211_set_tx_power,
 	.set_bitrate_mask = mwifiex_cfg80211_set_bitrate_mask,
 	.set_cqm_rssi_config = mwifiex_cfg80211_set_cqm_rssi_config,
+	.set_antenna = mwifiex_cfg80211_set_antenna,
 };
 
 /*
@@ -1678,6 +1714,11 @@ int mwifiex_register_cfg80211(struct mwifiex_private *priv)
 
 	wiphy_apply_custom_regulatory(wdev->wiphy,
 				      &mwifiex_world_regdom_custom);
+
+	wdev->wiphy->available_antennas_tx =
+		BIT(priv->adapter->number_of_antenna) - 1;
+	wdev->wiphy->available_antennas_rx =
+		BIT(priv->adapter->number_of_antenna) - 1;
 
 	/* Reserve space for mwifiex specific private data for BSS */
 	wdev->wiphy->bss_priv_size = sizeof(struct mwifiex_bss_priv);

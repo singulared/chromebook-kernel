@@ -188,6 +188,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define HostCmd_CMD_RF_REG_ACCESS                     0x001b
 #define HostCmd_CMD_PMIC_REG_ACCESS                   0x00ad
 #define HostCmd_CMD_802_11_RF_CHANNEL                 0x001d
+#define HostCmd_CMD_RF_ANTENNA                        0x0020
 #define HostCmd_CMD_802_11_DEAUTHENTICATE             0x0024
 #define HostCmd_CMD_MAC_CONTROL                       0x0028
 #define HostCmd_CMD_802_11_AD_HOC_START               0x002b
@@ -270,6 +271,12 @@ enum ENH_PS_MODES {
 #define HostCmd_BSS_NUM_MASK            0x0f00
 
 #define HostCmd_BSS_TYPE_MASK           0xf000
+
+#define HostCmd_ACT_SET_RX              0x0001
+#define HostCmd_ACT_SET_TX              0x0002
+#define HostCmd_ACT_SET_BOTH            0x0003
+
+#define RF_ANTENNA_AUTO                 0xFFFF
 
 #define HostCmd_SET_SEQ_NO_BSS_INFO(seq, num, type) {   \
 	(((seq) & 0x00ff) |                             \
@@ -1112,6 +1119,18 @@ struct host_cmd_ds_802_11_rf_channel {
 	u8 reserved_1[32];
 } __packed;
 
+struct host_cmd_ds_rf_ant_mimo {
+	__le16 action_tx;
+	__le16 tx_ant_mode;
+	__le16 action_rx;
+	__le16 rx_ant_mode;
+};
+
+struct host_cmd_ds_rf_ant_siso {
+	__le16 action;
+	__le16 ant_mode;
+};
+
 struct host_cmd_ds_version_ext {
 	u8 version_str_sel;
 	char version_str[128];
@@ -1188,6 +1207,8 @@ struct host_cmd_ds_command {
 		struct host_cmd_ds_802_11_rssi_info_rsp rssi_info_rsp;
 		struct host_cmd_ds_802_11_snmp_mib smib;
 		struct host_cmd_ds_802_11_rf_channel rf_channel;
+		struct host_cmd_ds_rf_ant_mimo ant_mimo;
+		struct host_cmd_ds_rf_ant_siso ant_siso;
 		struct host_cmd_ds_tx_rate_query tx_rate;
 		struct host_cmd_ds_tx_rate_cfg tx_rate_cfg;
 		struct host_cmd_ds_txpwr_cfg txp_cfg;
