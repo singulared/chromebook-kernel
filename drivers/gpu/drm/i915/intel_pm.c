@@ -2611,8 +2611,8 @@ static void gen6_enable_rps(struct drm_device *dev)
 		   dev_priv->rps.max_delay << 24 |
 		   dev_priv->rps.min_delay << 16);
 
-	I915_WRITE(GEN6_RP_UP_THRESHOLD, 59400);
-	I915_WRITE(GEN6_RP_DOWN_THRESHOLD, 100000);
+	I915_WRITE(GEN6_RP_UP_THRESHOLD, 0x4000);
+	I915_WRITE(GEN6_RP_DOWN_THRESHOLD, 0x4000);
 	I915_WRITE(GEN6_RP_UP_EI, 66000);
 	I915_WRITE(GEN6_RP_DOWN_EI, 350000);
 
