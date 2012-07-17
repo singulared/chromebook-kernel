@@ -124,6 +124,51 @@ static struct platform_pwm_backlight_data smdk5250_bl_data = {
 	.notify		= smdk5250_bl_notify,
 };
 
+/*
+ * Hack to do power-on sequence after the 32khz SLP_CLK is
+ * running as doing this entirely in the DT is problematic.
+ * We attach an auxdata record to dw_mmc2 with a set_power
+ * method that frobs the regulators.  This work is not board
+ * specific but must be done before the device is recognized
+ * so cannot go in the driver.
+ */
+static bool enable_mwi87xx(void)
+{
+	struct regulator *wifi_en, *wifi_rst;
+	bool ok;
+
+	wifi_en = regulator_get(NULL, "wifi-en");
+	wifi_rst = regulator_get(NULL, "wifi-rst-l");
+	ok = !IS_ERR(wifi_en) && !IS_ERR(wifi_rst);
+	if (ok) {
+		/*
+		 * This assumes SLP_CLK is enabled and stable by the
+		 * time we get here.  Also any delay required between
+		 * RESETn and PDn should be set in startup-delay-us
+		 * in the DT.
+		 */
+		regulator_enable(wifi_rst);
+		regulator_enable(wifi_en);
+	}
+
+	if (!IS_ERR(wifi_rst))
+		regulator_put(wifi_rst);
+	if (!IS_ERR(wifi_en))
+		regulator_put(wifi_en);
+	return ok;
+}
+
+static void exynos_wifi_bt_set_power(u32 slot_id, u32 volt)
+{
+	if (volt == 0 || (!of_machine_is_compatible("google,snow") &&
+			  !of_machine_is_compatible("google,spring") &&
+			  !of_machine_is_compatible("google,daisy")))
+		return;
+	if (!enable_mwi87xx())
+		pr_err("%s: problem enabling WiFi+BT\n", __func__);
+	/* NB: bt-reset-l is tied to wifi-rst-l so BT should be ready too */
+}
+
 static void lcd_set_power(struct plat_lcd_data *pd,
 			unsigned int power)
 {
@@ -152,6 +197,8 @@ static void lcd_set_power(struct plat_lcd_data *pd,
 	}
 	/* Wait 10 ms between regulator on and PWM start per spec */
 	mdelay(10);
+
+	exynos_wifi_bt_set_power(0, power);	/* TODO(sleffler) hack */
 }
 
 static struct plat_lcd_data smdk5250_lcd_data = {
