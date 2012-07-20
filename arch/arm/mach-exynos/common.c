@@ -23,6 +23,7 @@
 #include <linux/export.h>
 #include <linux/irqdomain.h>
 #include <linux/of_address.h>
+#include <linux/cpu_pm.h>
 
 #include <asm/proc-fns.h>
 #include <asm/exception.h>
@@ -469,10 +470,14 @@ struct combiner_chip_data {
 	unsigned int irq_offset;
 	unsigned int irq_mask;
 	void __iomem *base;
+#ifdef CONFIG_PM
+	bool saved_on;
+#endif
 };
 
 static struct irq_domain *combiner_irq_domain;
 static struct combiner_chip_data combiner_data[MAX_COMBINER_NR];
+static unsigned int max_nr;
 
 static inline void __iomem *combiner_base(struct irq_data *data)
 {
@@ -599,6 +604,55 @@ static int combiner_irq_domain_map(struct irq_domain *d, unsigned int irq,
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static void combiner_save(void)
+{
+	int i;
+
+	for (i = 0; i < max_nr; i++) {
+		if (combiner_data[i].irq_mask &
+		    __raw_readl(combiner_data[i].base + COMBINER_ENABLE_SET)) {
+			combiner_data[i].saved_on = true;
+		} else {
+			combiner_data[i].saved_on = false;
+		}
+	}
+}
+
+static void combiner_restore(void)
+{
+	int i;
+
+	for (i = 0; i < max_nr; i++) {
+		if (!combiner_data[i].saved_on)
+			continue;
+
+		__raw_writel(combiner_data[i].irq_mask,
+			     combiner_data[i].base + COMBINER_ENABLE_SET);
+	}
+}
+
+
+static int combiner_notifier(struct notifier_block *self, unsigned long cmd,
+			     void *v)
+{
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		combiner_save();
+		break;
+	case CPU_PM_EXIT:
+		combiner_restore();
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block combiner_notifier_block = {
+	.notifier_call = combiner_notifier,
+};
+#endif
+
 static struct irq_domain_ops combiner_irq_domain_ops = {
 	.xlate	= combiner_irq_domain_xlate,
 	.map	= combiner_irq_domain_map,
@@ -608,7 +662,7 @@ static void __init combiner_init(void __iomem *combiner_base,
 				 struct device_node *np)
 {
 	int i, irq, irq_base;
-	unsigned int max_nr, nr_irq;
+	unsigned int nr_irq;
 
 	if (np) {
 		if (of_property_read_u32(np, "samsung,combiner-nr", &max_nr)) {
@@ -645,6 +699,11 @@ static void __init combiner_init(void __iomem *combiner_base,
 #endif
 		combiner_cascade_irq(i, irq);
 	}
+
+#ifdef CONFIG_PM
+	/* Setup suspend/resume combiner saving */
+	cpu_pm_register_notifier(&combiner_notifier_block);
+#endif
 }
 
 #ifdef CONFIG_OF
