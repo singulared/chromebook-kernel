@@ -1054,6 +1054,17 @@ static int iommu_init(struct platform_device *pdev,
 
 	return 0;
 }
+
+static void iommu_deinit(struct device *mfc_l, struct device *mfc_r)
+{
+	s5p_destroy_iommu_mapping(mfc_l);
+	printk(KERN_INFO"released the IOMMU mapping for MFC_L\n");
+
+	s5p_destroy_iommu_mapping(mfc_r);
+	printk(KERN_INFO"released the IOMMU mapping for MFC_R\n");
+
+	return;
+}
 #endif
 
 static void *mfc_get_drv_data(struct platform_device *pdev);
@@ -1188,7 +1199,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(dev->mem_dev_l);
 	if (IS_ERR(dev->alloc_ctx[0])) {
 		ret = PTR_ERR(dev->alloc_ctx[0]);
-		goto err_res;
+		goto err_mem_init_ctx_0;
 	}
 	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx(dev->mem_dev_r);
 	if (IS_ERR(dev->alloc_ctx[1])) {
@@ -1286,6 +1297,10 @@ err_alloc_fw:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
 err_mem_init_ctx_1:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
+err_mem_init_ctx_0:
+#if defined(S5P_MFC_USE_34_BACKPORT) && defined (CONFIG_EXYNOS_IOMMU)
+	iommu_deinit(dev->mem_dev_r, dev->mem_dev_l);
+#endif
 err_res:
 	s5p_mfc_final_pm(dev);
 
@@ -1312,6 +1327,9 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
 
+#if defined(S5P_MFC_USE_34_BACKPORT) && defined(CONFIG_EXYNOS_IOMMU)
+	iommu_deinit(dev->mem_dev_r, dev->mem_dev_l);
+#endif
 	s5p_mfc_final_pm(dev);
 	return 0;
 }
