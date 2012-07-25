@@ -662,6 +662,13 @@
 		interrupts = <0 94 0>;
 	};
 
+	fimd: fimd {
+		compatible = "samsung,exynos5-fimd";
+		interrupt-parent = <&combiner>;
+		reg = <0x14400000 0x40000>;
+		interrupts = <18 5>, <18 4>, <18 6>;
+	};
+
 	sysmmu-mfc-l {
 		mmuname = "mfc_l";
 		reg = <0x11210000 0x1000>;
@@ -731,6 +738,7 @@
 		compatible = "samsung,exynos-sysmmu";
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
+		mmu-master = <&fimd>;
 	};
 
 	sysmmu-rotator {
