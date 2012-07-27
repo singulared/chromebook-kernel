@@ -200,6 +200,12 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
+	/* The event flag is optional but exynos requires it. */
+	if (!event) {
+		DRM_ERROR("called page_flip with empty event flag\n");
+		return -EINVAL;
+	}
+
 	/* when the page flip is requested, crtc's dpms should be on */
 	if (exynos_crtc->dpms > DRM_MODE_DPMS_ON) {
 		DRM_ERROR("failed page flip request.\n");
@@ -208,23 +214,21 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	mutex_lock(&dev->struct_mutex);
 
-	if (event) {
-		/*
-		 * the pipe from user always is 0 so we can set pipe number
-		 * of current owner to event.
-		 */
-		event->pipe = exynos_crtc->pipe;
+	/*
+	 * the pipe from user always is 0 so we can set pipe number
+	 * of current owner to event.
+	 */
+	event->pipe = exynos_crtc->pipe;
 
-		ret = drm_vblank_get(dev, exynos_crtc->pipe);
-		if (ret) {
-			DRM_DEBUG("failed to acquire vblank counter\n");
-			goto out;
-		}
-
-		crtc->fb = fb;
-		exynos_drm_crtc_update(crtc, fb);
-		exynos_crtc->event = event;
+	ret = drm_vblank_get(dev, exynos_crtc->pipe);
+	if (ret) {
+		DRM_DEBUG("failed to acquire vblank counter\n");
+		goto out;
 	}
+
+	crtc->fb = fb;
+	exynos_drm_crtc_update(crtc, fb);
+	exynos_crtc->event = event;
 out:
 	mutex_unlock(&dev->struct_mutex);
 	return ret;
