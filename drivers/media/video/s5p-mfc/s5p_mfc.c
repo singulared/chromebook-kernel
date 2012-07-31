@@ -22,6 +22,7 @@
 #include <media/v4l2-event.h>
 #include <linux/workqueue.h>
 #include <linux/of.h>
+#include <linux/pm_domain.h>
 #include <media/videobuf2-core.h>
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_ctrl.h"
@@ -1093,6 +1094,10 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 
 	dev->variant = mfc_get_drv_data(pdev);
+
+	if (pm_genpd_of_add_device_by_name(pdev->dev.of_node, &pdev->dev,
+								"samsung,pd"))
+		dev_err(&pdev->dev, "failed to add to genpd\n");
 
 	ret = s5p_mfc_init_pm(dev);
 	if (ret < 0) {
