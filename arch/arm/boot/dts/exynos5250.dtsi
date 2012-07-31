@@ -121,6 +121,7 @@
 		compatible = "samsung,mfc-v6";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	rtc {
@@ -735,24 +736,28 @@
 		compatible = "samsung,exynos5-gsc";
 		reg = <0x13e00000 0x1000>;
 		interrupts = <0 85 0>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	gsc_1:  gsc@0x13e10000 {
 		compatible = "samsung,exynos5-gsc";
 		reg = <0x13e10000 0x1000>;
 		interrupts = <0 86 0>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	gsc_2:  gsc@0x13e20000 {
 		compatible = "samsung,exynos5-gsc";
 		reg = <0x13e20000 0x1000>;
 		interrupts = <0 87 0>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	gsc_3:  gsc@0x13e30000 {
 		compatible = "samsung,exynos5-gsc";
 		reg = <0x13e30000 0x1000>;
 		interrupts = <0 88 0>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	hdmi {
@@ -781,6 +786,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <8 5>;
 		mmu-master = <&mfc>;
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-r {
@@ -790,6 +796,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <6 2>;
 		mmu-master = <&mfc>;
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-tv {
@@ -808,6 +815,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 0>;
 		mmu-master = <&gsc_0>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	sysmmu-gsc1 {
@@ -817,6 +825,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 2>;
 		mmu-master = <&gsc_1>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	sysmmu-gsc2 {
@@ -826,6 +835,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 4>;
 		mmu-master = <&gsc_2>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	sysmmu-gsc3 {
@@ -835,6 +845,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 6>;
 		mmu-master = <&gsc_3>;
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	sysmmu-fimd1 {
