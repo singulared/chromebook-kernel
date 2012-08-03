@@ -85,4 +85,9 @@
 		samsung,link-rate = <0x0a>;
 		samsung,lane-count = <2>;
 	};
+
+	sound {
+		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
+		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
+	};
 };
