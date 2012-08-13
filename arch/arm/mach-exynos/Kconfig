@@ -424,6 +424,7 @@ config MACH_EXYNOS5_DT
 	select ARM_AMBA
 	select USE_OF
 	select ARM_DMA_USE_IOMMU
+	select PM_GENERIC_DOMAINS if PM
 	help
 	  Machine support for Samsung EXYNOS5 machine with device tree enabled.
 	  Select this if a fdt blob is available for the EXYNOS5 SoC based board.
