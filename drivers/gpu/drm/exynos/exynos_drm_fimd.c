@@ -870,12 +870,77 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *disp_np;
+	struct exynos_drm_fimd_pdata *pd;
+	u32 data[4];
+
+	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	if (!pd) {
+		dev_err(dev, "memory allocation for pdata failed\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (of_get_property(np, "samsung,fimd-vidout-rgb", NULL))
+		pd->vidcon0 |= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB;
+	if (of_get_property(np, "samsung,fimd-inv-hsync", NULL))
+		pd->vidcon1 |= VIDCON1_INV_HSYNC;
+	if (of_get_property(np, "samsung,fimd-inv-vsync", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VSYNC;
+	if (of_get_property(np, "samsung,fimd-inv-vclk", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VCLK;
+	if (of_get_property(np, "samsung,fimd-inv-vden", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VDEN;
+
+	disp_np = of_parse_phandle(np, "samsung,fimd-display", 0);
+	if (!disp_np) {
+		dev_err(dev, "unable to find display panel info\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (of_property_read_u32_array(disp_np, "lcd-htiming", data, 4)) {
+		dev_err(dev, "invalid horizontal timing\n");
+		return ERR_PTR(-EINVAL);
+	}
+	pd->panel.timing.left_margin = data[0];
+	pd->panel.timing.right_margin = data[1];
+	pd->panel.timing.hsync_len = data[2];
+	pd->panel.timing.xres = data[3];
+
+	if (of_property_read_u32_array(disp_np, "lcd-vtiming", data, 4)) {
+		dev_err(dev, "invalid vertical timing\n");
+		return ERR_PTR(-EINVAL);
+	}
+	pd->panel.timing.upper_margin = data[0];
+	pd->panel.timing.lower_margin = data[1];
+	pd->panel.timing.vsync_len = data[2];
+	pd->panel.timing.yres = data[3];
+
+	of_property_read_u32(np, "samsung,fimd-frame-rate",
+				&pd->panel.timing.refresh);
+
+	of_property_read_u32(np, "samsung,default-window", &pd->default_win);
+
+	of_property_read_u32(np, "samsung,fimd-win-bpp", &pd->bpp);
+
+	return pd;
+}
+#else
+static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
+{
+	return NULL;
+}
+#endif /* CONFIG_OF */
+
 static int fimd_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fimd_context *ctx;
 	struct exynos_drm_subdrv *subdrv;
-	struct exynos_drm_fimd_pdata *pdata;
+	struct exynos_drm_fimd_pdata *pdata = pdev->dev.platform_data;
 	struct exynos_drm_panel_info *panel;
 	struct resource *res;
 	int win;
@@ -883,7 +948,11 @@ static int fimd_probe(struct platform_device *pdev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	pdata = pdev->dev.platform_data;
+	if (pdev->dev.of_node) {
+		pdata = drm_fimd_dt_parse_pdata(&pdev->dev);
+		if (IS_ERR(pdata))
+			return PTR_ERR(pdata);
+	}
 	if (!pdata) {
 		dev_err(dev, "no platform data specified\n");
 		return -EINVAL;
@@ -1069,6 +1138,17 @@ static struct platform_device_id fimd_driver_ids[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(platform, fimd_driver_ids);
+
+#ifdef CONFIG_OF
+static const struct of_device_id fimd_dt_match[] = {
+	{ .compatible = "samsung,exynos5-fimd",
+	  .data	= &exynos5_fimd_driver_data },
+	{ .compatible = "samsung,exynos4-fimd",
+	  .data = &exynos4_fimd_driver_data },
+	{},
+};
+MODULE_DEVICE_TABLE(of, fimd_dt_match);
+#endif
 
 static const struct dev_pm_ops fimd_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(fimd_suspend, fimd_resume)
