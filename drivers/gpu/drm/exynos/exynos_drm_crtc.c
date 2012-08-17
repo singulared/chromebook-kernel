@@ -32,6 +32,7 @@ enum exynos_crtc_mode {
  *
  * @drm_crtc: crtc object.
  * @drm_plane: pointer of private plane object for this crtc
+ * @event: vblank event that is currently queued for flip
  * @pipe: a crtc index created at load() with a new crtc object creation
  *	and the crtc object would be set to private->crtc array
  *	to get a crtc object corresponding to this pipe from private->crtc
@@ -45,6 +46,7 @@ enum exynos_crtc_mode {
 struct exynos_drm_crtc {
 	struct drm_crtc			drm_crtc;
 	struct drm_plane		*plane;
+	struct drm_pending_vblank_event *event;
 	unsigned int			pipe;
 	unsigned int			dpms;
 	enum exynos_crtc_mode		mode;
@@ -191,7 +193,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 				      struct drm_pending_vblank_event *event)
 {
 	struct drm_device *dev = crtc->dev;
-	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_framebuffer *old_fb = crtc->fb;
 	int ret = -EINVAL;
@@ -216,15 +217,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		ret = drm_vblank_get(dev, exynos_crtc->pipe);
 		if (ret) {
 			DRM_DEBUG("failed to acquire vblank counter\n");
-			list_del(&event->base.link);
-
 			goto out;
 		}
-
-		spin_lock_irq(&dev->event_lock);
-		list_add_tail(&event->base.link,
-				&dev_priv->pageflip_event_list);
-		spin_unlock_irq(&dev->event_lock);
 
 		crtc->fb = fb;
 		ret = exynos_drm_crtc_mode_set_base(crtc, crtc->x, crtc->y,
@@ -232,13 +226,12 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		if (ret) {
 			crtc->fb = old_fb;
 
-			spin_lock_irq(&dev->event_lock);
 			drm_vblank_put(dev, exynos_crtc->pipe);
-			list_del(&event->base.link);
-			spin_unlock_irq(&dev->event_lock);
 
 			goto out;
 		}
+
+		exynos_crtc->event = event;
 	}
 out:
 	mutex_unlock(&dev->struct_mutex);
@@ -393,31 +386,32 @@ void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc)
 			exynos_drm_disable_vblank);
 }
 
-void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc)
+void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc_idx)
 {
 	struct exynos_drm_private *dev_priv = dev->dev_private;
-	struct drm_pending_vblank_event *e, *t;
-	struct timeval now;
+	struct drm_crtc *crtc = dev_priv->crtc[crtc_idx];
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	unsigned long flags;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 
-	list_for_each_entry_safe(e, t, &dev_priv->pageflip_event_list,
-			base.link) {
-		/* if event's pipe isn't same as crtc then ignore it. */
-		if (crtc != e->pipe)
-			continue;
+
+	if (exynos_crtc->event) {
+		struct drm_pending_vblank_event *e = exynos_crtc->event;
+		struct timeval now;
+
+		exynos_crtc->event = NULL;
 
 		do_gettimeofday(&now);
 		e->event.sequence = 0;
 		e->event.tv_sec = now.tv_sec;
 		e->event.tv_usec = now.tv_usec;
 
-		list_move_tail(&e->base.link, &e->base.file_priv->event_list);
+		list_add_tail(&e->base.link, &e->base.file_priv->event_list);
 		wake_up_interruptible(&e->base.file_priv->event_wait);
-		drm_vblank_put(dev, crtc);
+		drm_vblank_put(dev, crtc_idx);
 	}
 
 	spin_unlock_irqrestore(&dev->event_lock, flags);

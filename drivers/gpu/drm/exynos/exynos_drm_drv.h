@@ -244,9 +244,6 @@ struct drm_exynos_file_private {
 struct exynos_drm_private {
 	struct drm_fb_helper *fb_helper;
 
-	/* list head for new event to be added. */
-	struct list_head pageflip_event_list;
-
 	/*
 	 * created crtc object would be contained at this array and
 	 * this array is used to be aware of which crtc did it request vblank.
