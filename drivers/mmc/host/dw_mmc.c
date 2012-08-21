@@ -1966,6 +1966,9 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 	if (host->pdata->quirks & DW_MCI_QUIRK_HIGHSPEED)
 		mmc->caps |= MMC_CAP_SD_HIGHSPEED | MMC_CAP_MMC_HIGHSPEED;
 
+	if (host->pdata->quirks & DW_MCI_QUIRK_DISABLE_MMC)
+		mmc->caps2 |= MMC_CAP2_NO_MMC;
+
 	if (host->pdata->blk_settings) {
 		mmc->max_segs = host->pdata->blk_settings->max_segs;
 		mmc->max_blk_size = host->pdata->blk_settings->max_blk_size;
@@ -2115,6 +2118,9 @@ static struct dw_mci_of_quirks {
 	}, {
 		.quirk	= "bypass-smu",
 		.id	= DW_MCI_QUIRK_BYPASS_SMU,
+	}, {
+		.quirk	= "disable-mmc",
+		.id	= DW_MCI_QUIRK_DISABLE_MMC,
 	},
 };
 
