@@ -2192,6 +2192,9 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 	}
 
+	if (host->pdata->quirks & DW_MCI_QUIRK_DISABLE_MMC)
+		mmc->caps2 |= MMC_CAP2_NO_MMC;
+
 	if (host->pdata->blk_settings) {
 		mmc->max_segs = host->pdata->blk_settings->max_segs;
 		mmc->max_blk_size = host->pdata->blk_settings->max_blk_size;
@@ -2346,6 +2349,9 @@ static struct dw_mci_of_quirks {
 	{
 		.quirk	= "broken-cd",
 		.id	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
+	}, {
+		.quirk	= "disable-mmc",
+		.id	= DW_MCI_QUIRK_DISABLE_MMC,
 	},
 };
 
