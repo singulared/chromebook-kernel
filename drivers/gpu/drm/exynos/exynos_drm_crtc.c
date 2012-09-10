@@ -18,6 +18,7 @@
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/dma-buf.h>
 #include <linux/kds.h>
+#include <linux/kfifo.h>
 #endif
 
 #include "exynos_drm_drv.h"
@@ -35,6 +36,13 @@ enum exynos_crtc_mode {
 	CRTC_MODE_NORMAL,	/* normal mode */
 	CRTC_MODE_BLANK,	/* The private plane of crtc is blank */
 };
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+struct exynos_drm_flip_desc {
+        struct drm_framebuffer  *fb;
+        struct kds_resource_set *kds;
+};
+#endif
 
 /*
  * Exynos specific crtc structure.
@@ -61,7 +69,8 @@ struct exynos_drm_crtc {
 	enum exynos_crtc_mode		mode;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	atomic_t			flip_pending;
-	struct kds_resource_set		*kds;
+	DECLARE_KFIFO(flip_fifo, struct exynos_drm_flip_desc, 2);
+	struct exynos_drm_flip_desc	scanout_desc;
 #endif
 };
 
@@ -195,6 +204,22 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.disable	= exynos_drm_crtc_disable,
 };
 
+static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
+                                          struct drm_pending_vblank_event *e)
+{
+	struct timeval now;
+	unsigned long flags;
+
+	do_gettimeofday(&now);
+	e->event.sequence = 0;
+	e->event.tv_sec = now.tv_sec;
+	e->event.tv_usec = now.tv_usec;
+	spin_lock_irqsave(&dev->event_lock, flags);
+	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+	wake_up_interruptible(&e->base.file_priv->event_wait);
+}
+
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 void exynos_drm_kds_callback(void *callback_parameter,
 			     void *callback_extra_parameter)
@@ -202,13 +227,13 @@ void exynos_drm_kds_callback(void *callback_parameter,
 	struct drm_framebuffer *fb = callback_parameter;
 	struct drm_crtc *crtc = callback_extra_parameter;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+
+	exynos_fb->rendered = true;
 
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
-		if (exynos_crtc->kds)
-			kds_resource_set_release(&exynos_crtc->kds);
 		exynos_drm_crtc_update(crtc, fb);
-	} else {
-		BUG();
+		exynos_fb->prepared = true;
 	}
 }
 #endif
@@ -221,6 +246,9 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_drm_fb_obj(fb, 0);
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_flip_desc flip_desc;
+	bool send_event = false;
 #endif
 	int ret = -EINVAL;
 
@@ -238,8 +266,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
-	mutex_lock(&dev->struct_mutex);
-
 	/*
 	 * the pipe from user always is 0 so we can set pipe number
 	 * of current owner to event.
@@ -249,13 +275,24 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	ret = drm_vblank_get(dev, exynos_crtc->pipe);
 	if (ret) {
 		DRM_DEBUG("failed to acquire vblank counter\n");
-		goto out;
+		return ret;
 	}
 
-	crtc->fb = fb;
-	exynos_crtc->event = event;
-
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	flip_desc.fb = fb;
+	exynos_fb->rendered = false;
+	exynos_fb->prepared = false;
+	if (kfifo_is_full(&exynos_crtc->flip_fifo)) {
+		DRM_ERROR("flip queue: crtc already busy\n");
+		ret = -EBUSY;
+		goto fail_queue_full;
+	}
+
+	/* Send flip event if no flips pending. */
+	BUG_ON(exynos_crtc->event);
+	if (kfifo_is_empty(&exynos_crtc->flip_fifo))
+		send_event = true;
+
 	if (exynos_gem_obj->base.export_dma_buf) {
 		struct dma_buf *buf = exynos_gem_obj->base.export_dma_buf;
 		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
@@ -265,23 +302,38 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		exynos_drm_fb_attach_dma_buf(fb, buf);
 
 		/* Waiting for the KDS resource*/
-		ret = kds_async_waitall(&exynos_crtc->kds, KDS_FLAG_LOCKED_WAIT,
+		ret = kds_async_waitall(&flip_desc.kds, KDS_FLAG_LOCKED_WAIT,
 					&dev_priv->kds_cb, fb, crtc, 1,
 					&shared, &res_list);
 		if (ret) {
 			DRM_ERROR("kds_async_waitall failed: %d\n", ret);
-			goto out;
+			goto fail_kds;
 		}
 	} else {
+		flip_desc.kds = NULL;
 		exynos_drm_kds_callback(fb, crtc);
 	}
-#else
-	exynos_drm_crtc_update(crtc, fb);
-#endif
 
-out:
-	mutex_unlock(&dev->struct_mutex);
+	if (send_event)
+		exynos_drm_crtc_flip_complete(dev, event);
+	else
+		exynos_crtc->event = event;
+
+	kfifo_put(&exynos_crtc->flip_fifo, &flip_desc);
+	crtc->fb = fb;
+
+	return 0;
+
+fail_kds:
+fail_queue_full:
+	drm_vblank_put(dev, exynos_crtc->pipe);
 	return ret;
+#else
+	crtc->fb = fb;
+	exynos_crtc->event = event;
+	exynos_drm_crtc_update(crtc, fb);
+	return 0;
+#endif
 }
 
 static void exynos_drm_crtc_destroy(struct drm_crtc *crtc)
@@ -380,6 +432,9 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 		return -ENOMEM;
 	}
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	INIT_KFIFO(exynos_crtc->flip_fifo);
+#endif
 	exynos_crtc->pipe = nr;
 	exynos_crtc->dpms = DRM_MODE_DPMS_OFF;
 	exynos_crtc->plane = exynos_plane_init(dev, 1 << nr, true);
@@ -437,32 +492,41 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc_idx)
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc = dev_priv->crtc[crtc_idx];
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	unsigned long flags;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct exynos_drm_flip_desc *cur_descp = &exynos_crtc->scanout_desc;
+	struct exynos_drm_flip_desc next_desc;
+#endif
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (!kfifo_peek(&exynos_crtc->flip_fifo, &next_desc))
+		return;
+	if (!to_exynos_fb(next_desc.fb)->prepared)
+		return;
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
 		return;
+
+	if (cur_descp->kds)
+		kds_resource_set_release(&cur_descp->kds);
+	*cur_descp = next_desc;
+	kfifo_skip(&exynos_crtc->flip_fifo);
+
+	/*
+	 * exynos_drm_kds_callback can't update the shadow registers if there
+	 * is a pending flip ahead. So we do the update here.
+	 */
+	if (kfifo_peek(&exynos_crtc->flip_fifo, &next_desc)) {
+		if (unlikely(to_exynos_fb(next_desc.fb)->rendered) &&
+		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
+			exynos_drm_crtc_update(crtc, next_desc.fb);
+			to_exynos_fb(next_desc.fb)->prepared = true;
+		}
+	}
 #endif
 
-	spin_lock_irqsave(&dev->event_lock, flags);
-
 	if (exynos_crtc->event) {
-		struct drm_pending_vblank_event *e = exynos_crtc->event;
-		struct timeval now;
-
+		exynos_drm_crtc_flip_complete(dev, exynos_crtc->event);
 		exynos_crtc->event = NULL;
-
-		do_gettimeofday(&now);
-		e->event.sequence = 0;
-		e->event.tv_sec = now.tv_sec;
-		e->event.tv_usec = now.tv_usec;
-
-		list_add_tail(&e->base.link, &e->base.file_priv->event_list);
-		wake_up_interruptible(&e->base.file_priv->event_wait);
-		drm_vblank_put(dev, crtc_idx);
 	}
-
-	spin_unlock_irqrestore(&dev->event_lock, flags);
 }

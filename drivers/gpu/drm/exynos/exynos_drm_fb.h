@@ -14,6 +14,26 @@
 #ifndef _EXYNOS_DRM_FB_H_
 #define _EXYNOS_DRM_FB_H
 
+#define to_exynos_fb(x)	container_of(x, struct exynos_drm_fb, fb)
+
+/*
+ * exynos specific framebuffer structure.
+ *
+ * @fb: drm framebuffer object.
+ * @buf_cnt: a buffer count to drm framebuffer.
+ * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
+ */
+struct exynos_drm_fb {
+	struct drm_framebuffer		fb;
+	unsigned int			buf_cnt;
+	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct dma_buf			*dma_buf;
+	bool				rendered;
+	bool				prepared;
+#endif
+};
+
 struct drm_framebuffer *
 exynos_drm_framebuffer_init(struct drm_device *dev,
 			    struct drm_mode_fb_cmd2 *mode_cmd,
