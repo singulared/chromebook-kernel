@@ -823,7 +823,9 @@ static void anx7808_update_hdcp_property(struct anx7808_data *anx7808,
 		val = DRM_MODE_CONTENT_PROTECTION_DESIRED;
 
 	drm_object_property_set_value(&anx7808->connector.base,
-			dev->mode_config.content_protection_property, val);
+			&anx7808->connector.propvals,
+			dev->mode_config.content_protection_property,
+			val, NULL);
 }
 
 static int anx7808_power_on_hdcp(struct anx7808_data *anx7808)
@@ -1633,8 +1635,9 @@ void anx7808_disable(struct drm_bridge *bridge)
 	anx7808_stop_hdcp(anx7808);
 
 	ret = drm_object_property_set_value(&anx7808->encoder->base,
+			&anx7808->encoder->propvals,
 			mode_config->content_protection_property,
-			DRM_MODE_CONTENT_PROTECTION_OFF);
+			DRM_MODE_CONTENT_PROTECTION_OFF, NULL);
 	if (ret)
 		DRM_ERROR("Failed to disable encoder hdcp\n");
 
@@ -1681,8 +1684,9 @@ static void anx7808_hdcp_en_work(struct work_struct *work)
 
 	mutex_lock(&anx7808->dev->mode_config.mutex);
 	ret = drm_object_property_set_value(&anx7808->encoder->base,
+			&anx7808->encoder->propvals,
 			anx7808->dev->mode_config.content_protection_property,
-			DRM_MODE_CONTENT_PROTECTION_DESIRED);
+			DRM_MODE_CONTENT_PROTECTION_DESIRED, NULL);
 	mutex_unlock(&anx7808->dev->mode_config.mutex);
 	if (ret)
 		DRM_ERROR("Failed to re-enable HDCP\n");
