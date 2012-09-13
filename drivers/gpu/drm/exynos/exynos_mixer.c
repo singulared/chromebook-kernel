@@ -59,6 +59,7 @@ struct hdmi_win_data {
 	unsigned int		mode_width;
 	unsigned int		mode_height;
 	unsigned int		scan_flags;
+	bool			updated;
 	bool			enabled;
 	bool			resume;
 };
@@ -487,16 +488,21 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	vp_regs_dump(ctx);
 }
 
-static void mixer_layer_update(struct mixer_context *ctx)
+static int mixer_get_layer_update_count(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val;
 
 	val = mixer_reg_read(res, MXR_CFG);
 
-	/* allow one update per vsync only */
-	if (!(val & MXR_CFG_LAYER_UPDATE_COUNT_MASK))
-		mixer_reg_writemask(res, MXR_CFG, ~0, MXR_CFG_LAYER_UPDATE);
+	return (val & MXR_CFG_LAYER_UPDATE_COUNT_MASK) >>
+			MXR_CFG_LAYER_UPDATE_COUNT0;
+}
+
+static void mixer_layer_update(struct mixer_context *ctx)
+{
+	struct mixer_resources *res = &ctx->mixer_res;
+	mixer_reg_writemask(res, MXR_CFG, ~0, MXR_CFG_LAYER_UPDATE);
 }
 
 static void mixer_graph_buffer(struct mixer_context *ctx, int win)
@@ -548,6 +554,11 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 		ctx->interlace = false;
 
 	spin_lock_irqsave(&res->reg_slock, flags);
+
+	/* Only allow one update per vsync */
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0 && win_data->updated)
+		goto end;
+
 	mixer_vsync_set_update(ctx, false);
 
 	/* setup format */
@@ -581,12 +592,15 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	mixer_cfg_layer(ctx, win, true);
 
 	/* layer update mandatory for mixer 16.0.33.0 */
-	if (ctx->mxr_ver == MXR_VER_16_0_33_0)
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
 		mixer_layer_update(ctx);
+		win_data->updated = true;
+	}
 
 	mixer_run(ctx);
 
 	mixer_vsync_set_update(ctx, true);
+end:
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 }
 
@@ -979,6 +993,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	struct mixer_context *ctx = drm_hdmi_ctx->ctx;
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val, base, shadow;
+	int i;
 
 	spin_lock(&res->reg_slock);
 
@@ -1001,6 +1016,16 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 		}
 
 		drm_handle_vblank(drm_hdmi_ctx->drm_dev, ctx->pipe);
+
+		if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
+			/* Bail out if a layer update is pending */
+			if (mixer_get_layer_update_count(ctx))
+				goto out;
+
+			for (i = 0; i < MIXER_WIN_NR; i++)
+				ctx->win_data[i].updated = false;
+		}
+
 		exynos_drm_crtc_finish_pageflip(drm_hdmi_ctx->drm_dev,
 				ctx->pipe);
 

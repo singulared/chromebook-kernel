@@ -79,6 +79,7 @@
 
 /* bits for MXR_CFG */
 #define MXR_CFG_LAYER_UPDATE		(1 << 31)
+#define MXR_CFG_LAYER_UPDATE_COUNT0	29
 #define MXR_CFG_LAYER_UPDATE_COUNT_MASK (3 << 29)
 #define MXR_CFG_RGB601_0_255		(0 << 9)
 #define MXR_CFG_RGB601_16_235		(1 << 9)
