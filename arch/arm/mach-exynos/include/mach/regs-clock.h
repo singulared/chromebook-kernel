@@ -407,6 +407,14 @@
 #define PWR_CTRL2_CORE2_UP_RATIO		(1 << 4)
 #define PWR_CTRL2_CORE1_UP_RATIO		(1 << 0)
 
+/* Clock for Audio Sub System  */
+
+#define EXYNOS_AUDSSREG(x)		(S5P_VA_AUDSS + (x))
+
+#define EXYNOS_CLKSRC_AUDSS		EXYNOS_AUDSSREG(0x0)
+#define EXYNOS_CLKDIV_AUDSS		EXYNOS_AUDSSREG(0x4)
+#define EXYNOS_CLKGATE_AUDSS		EXYNOS_AUDSSREG(0x8)
+
 /* Compatibility defines and inclusion */
 
 #include <mach/regs-pmu.h>
