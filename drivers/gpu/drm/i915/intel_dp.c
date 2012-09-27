@@ -491,6 +491,7 @@ intel_dp_aux_native_write(struct intel_dp *intel_dp,
 	uint8_t	msg[20];
 	int msg_bytes;
 	uint8_t	ack;
+	int try;
 
 	intel_dp_check_edp(intel_dp);
 	if (send_bytes > 16)
@@ -501,7 +502,7 @@ intel_dp_aux_native_write(struct intel_dp *intel_dp,
 	msg[3] = send_bytes - 1;
 	memcpy(&msg[4], send, send_bytes);
 	msg_bytes = send_bytes + 4;
-	for (;;) {
+	for (try = 0; try < 100; try++) {
 		ret = intel_dp_aux_ch(intel_dp, msg, msg_bytes, &ack, 1);
 		if (ret < 0)
 			return ret;
@@ -511,6 +512,10 @@ intel_dp_aux_native_write(struct intel_dp *intel_dp,
 			udelay(100);
 		else
 			return -EIO;
+	}
+	if (try == 100) {
+		DRM_ERROR("too many retries, giving up\n");
+		return -EREMOTEIO;
 	}
 	return send_bytes;
 }
