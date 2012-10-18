@@ -319,6 +319,8 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	dev_priv->backlight_level = level;
+	if (level > 0)
+		dev_priv->backlight_level_has_been_set = true;
 	if (dev_priv->backlight_enabled)
 		intel_panel_actually_set_backlight(dev, level);
 }
@@ -350,7 +352,11 @@ static void intel_panel_enable_backlight(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	if (dev_priv->backlight_level == 0)
+	/* Increase the level from 0 unless someone in userspace has requested a
+	 * nonzero level at least once already -- in that case, we assume that
+	 * they know what they're doing and will raise the level themselves. */
+	if (dev_priv->backlight_level == 0 &&
+	    !dev_priv->backlight_level_has_been_set)
 		dev_priv->backlight_level = dev_priv->get_max_backlight(dev);
 
 	if (INTEL_INFO(dev)->gen >= 4) {
@@ -424,6 +430,7 @@ static void intel_panel_init_backlight(struct drm_device *dev)
 	dev_priv->enable_backlight = intel_panel_enable_backlight;
 
 	dev_priv->backlight_level = dev_priv->get_backlight(dev);
+	dev_priv->backlight_level_has_been_set = false;
 	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
 
 	if (dmi_check_system(link_dmi_table)) {
