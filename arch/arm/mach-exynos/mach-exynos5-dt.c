@@ -119,6 +119,8 @@ static struct samsung_bl_gpio_info smdk5250_bl_gpio_info = {
 };
 
 static struct platform_pwm_backlight_data smdk5250_bl_data = {
+	.max_brightness = 2800,
+	.dft_brightness = 2800,
 	.pwm_period_ns	= 1000000,
 	.notify		= smdk5250_bl_notify,
 };
