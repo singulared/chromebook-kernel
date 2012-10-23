@@ -1196,7 +1196,7 @@ void ironlake_edp_backlight_on(struct intel_dp *intel_dp)
 	I915_WRITE(PCH_PP_CONTROL, pp);
 	POSTING_READ(PCH_PP_CONTROL);
 
-	intel_panel_enable_backlight(dev, pipe);
+	dev_priv->enable_backlight(dev, pipe);
 }
 
 void ironlake_edp_backlight_off(struct intel_dp *intel_dp)
@@ -1208,7 +1208,7 @@ void ironlake_edp_backlight_off(struct intel_dp *intel_dp)
 	if (!is_edp(intel_dp))
 		return;
 
-	intel_panel_disable_backlight(dev);
+	dev_priv->disable_backlight(dev);
 
 	DRM_DEBUG_KMS("\n");
 	pp = ironlake_get_pp_control(dev_priv);
