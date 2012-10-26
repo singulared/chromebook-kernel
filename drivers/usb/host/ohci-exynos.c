@@ -204,6 +204,18 @@ static void exynos_ohci_shutdown(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
+static int exynos_ohci_halted(struct ohci_hcd *ohci)
+{
+	int ret;
+	unsigned long flags;
+	spin_lock_irqsave(&ohci->lock, flags);
+	ret = (ohci->rh_state == OHCI_RH_SUSPENDED
+	       || ohci->rh_state == OHCI_RH_HALTED);
+	spin_unlock_irqrestore(&ohci->lock, flags);
+	return ret;
+}
+
+
 static int exynos_ohci_suspend(struct device *dev)
 {
 	struct exynos_ohci_hcd *exynos_ohci = dev_get_drvdata(dev);
@@ -211,32 +223,24 @@ static int exynos_ohci_suspend(struct device *dev)
 	struct ohci_hcd *ohci = hcd_to_ohci(hcd);
 	struct platform_device *pdev = to_platform_device(dev);
 	struct exynos4_ohci_platdata *pdata = pdev->dev.platform_data;
-	unsigned long flags;
-	int rc = 0;
 
 	/*
 	 * Root hub was already suspended. Disable irq emission and
 	 * mark HW unaccessible, bail out if RH has been resumed. Use
-	 * the spinlock to properly synchronize with possible pending
+	 * exynos_ohci_halted to properly synchronize with possible pending
 	 * RH suspend or resume activity.
 	 */
-	spin_lock_irqsave(&ohci->lock, flags);
-	if (ohci->rh_state != OHCI_RH_SUSPENDED &&
-			ohci->rh_state != OHCI_RH_HALTED) {
-		rc = -EINVAL;
-		goto fail;
-	}
+	if (!exynos_ohci_halted(ohci))
+		return -EINVAL;
 
 	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 
 	if (pdata && pdata->phy_exit)
 		pdata->phy_exit(pdev, S5P_USB_PHY_HOST);
-fail:
-	spin_unlock_irqrestore(&ohci->lock, flags);
 
 	clk_disable(exynos_ohci->clk);
 
-	return rc;
+	return 0;
 }
 
 static int exynos_ohci_resume(struct device *dev)
