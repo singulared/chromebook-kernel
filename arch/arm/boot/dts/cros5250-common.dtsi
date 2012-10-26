@@ -502,7 +502,6 @@
 		regulator-name = "hsichub-reset-l";
 		gpio = <&gpe1 0 1 0 0>;
 		enable-active-high;
-		regulator-always-on;
 	};
 
 	// NB: nodes must be at root for regulator-fixed to probe

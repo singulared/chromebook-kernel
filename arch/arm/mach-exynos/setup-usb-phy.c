@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <mach/regs-pmu.h>
 #include <mach/regs-usb-phy.h>
 #include <plat/cpu.h>
@@ -345,6 +346,7 @@ static int exynos5_usb_phy20_init(struct platform_device *pdev)
 	u32 refclk_freq;
 	u32 hostphy_ctrl0, otgphy_sys, hsic_ctrl, ehcictrl;
 	struct clk *host_clk = NULL;
+	struct regulator *hub_reset;
 
 	atomic_inc(&host_usage);
 
@@ -401,6 +403,20 @@ static int exynos5_usb_phy20_init(struct platform_device *pdev)
 	writel(hostphy_ctrl0, EXYNOS5_PHY_HOST_CTRL0);
 
 	/* HSIC phy reset */
+	hub_reset = regulator_get(NULL, "hsichub-reset-l");
+	if (!IS_ERR(hub_reset)) {
+		/*
+		 * toggle the reset line of the HSIC hub chip.
+		 */
+		regulator_force_disable(hub_reset);
+		/* keep reset active during 100 us */
+		udelay(100);
+		regulator_enable(hub_reset);
+		regulator_put(hub_reset);
+		/* Hub init phase takes up to 4 ms */
+		usleep_range(4000, 10000);
+	}
+
 	hsic_ctrl = (HSIC_CTRL_REFCLKDIV(0x24) | HSIC_CTRL_REFCLKSEL(0x2)
 						| HSIC_CTRL_PHYSWRST);
 	writel(hsic_ctrl, EXYNOS5_PHY_HSIC_CTRL1);
