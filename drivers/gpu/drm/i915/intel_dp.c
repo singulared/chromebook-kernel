@@ -1277,8 +1277,13 @@ static void intel_dp_prepare(struct drm_encoder *encoder)
 {
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 
-	ironlake_edp_backlight_off(intel_dp);
-	ironlake_edp_panel_off(intel_dp);
+	/*
+	 * We don't call edp_backlight off and edp_panel off
+	 * since it's only cosmetic, and we know that dp_commit
+	 * will turn them back on
+	 * ironlake_edp_backlight_off(intel_dp);
+	 * ironlake_edp_panel_off(intel_dp);
+	 */
 
 	/* Wake up the sink first */
 	ironlake_edp_panel_vdd_on(intel_dp);
