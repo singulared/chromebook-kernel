@@ -103,6 +103,7 @@ static const struct of_dev_auxdata exynos5250_auxdata_lookup[] __initconst = {
 				"exynos5-mixer", NULL),
 	OF_DEV_AUXDATA("samsung,exynos5-fimd", 0x14400000,
 				"exynos5-fb.1", NULL),
+	OF_DEV_AUXDATA("samsung,exynos5-dp", EXYNOS5_PA_DP, "exynos-dp", NULL),
 	OF_DEV_AUXDATA("samsung,mfc-v6", 0x11000000, "s5p-mfc-v6", NULL),
 	OF_DEV_AUXDATA("samsung,exynos5250-tmu", 0x10060000,
 				"exynos-tmu", NULL),
