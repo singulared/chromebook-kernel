@@ -100,27 +100,6 @@ static int exynos_drm_fb_unmap(struct drm_framebuffer *fb)
 	return 0;
 }
 
-void exynos_drm_wait_for_vsync(struct drm_device *drm_dev)
-{
-	struct exynos_drm_private *dev_priv = drm_dev->dev_private;
-
-	atomic_set(&dev_priv->wait_vsync_event, 1);
-
-	/*
-	 * wait for FIMD to signal VSYNC interrupt or return after
-	 * timeout which is set to 50ms (refresh rate of 20)
-	 * Cannot use DRM_WAIT_ON or wait_event_interruptible_timeout
-	 * here since they exit if there is a signal pending. This
-	 * happens when X is killed and DRM release is called which
-	 * makes these functions return without waiting.
-	 */
-	wait_event_timeout(dev_priv->wait_vsync_queue,
-				!atomic_read(&dev_priv->wait_vsync_event),
-				DRM_HZ/20);
-
-	/* TODO: Add wait for vsync for HDMI*/
-}
-
 void exynos_drm_fb_release(struct kref *kref)
 {
 	struct exynos_drm_fb *exynos_fb;
@@ -143,18 +122,6 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 	dev_priv = fb->dev->dev_private;
 
 	drm_framebuffer_cleanup(fb);
-
-	/*
-	 * We need to wait for non-kds buffers (i.e. some mode-set cases).
-	 * Otherwise, we risk umapping a buffer that is being scanned-out.
-	 * The wait below is actually incorrect in that it only waits for
-	 * a fimd vblank (so is wrong for hdmi).
-	 * TODO(msb) fix this.
-	 */
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	if (!exynos_fb->dma_buf)
-#endif
-		exynos_drm_wait_for_vsync(fb->dev);
 
 	if (exynos_drm_fb_unmap(fb))
 		DRM_ERROR("Couldn't unmap buffer\n");

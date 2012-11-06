@@ -132,13 +132,7 @@ struct exynos_drm_overlay {
 struct exynos_drm_private {
 	struct drm_fb_helper *fb_helper;
 
-	/*
-	 * wait_vsync_event is set to zero by crtc whenever a VSYNC interrupt
-	 * is received. After setting wait_vsync_event to 0, wait_vsync_queue
-	 * is woken up.
-	 */
 	wait_queue_head_t wait_vsync_queue;
-	atomic_t wait_vsync_event;
 
 	/*
 	 * created crtc object would be contained at this array and

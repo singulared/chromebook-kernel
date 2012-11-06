@@ -74,7 +74,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 #endif
 
 	DRM_INIT_WAITQUEUE(&private->wait_vsync_queue);
-	atomic_set(&private->wait_vsync_event, 0);
 
 	dev->dev_private = (void *)private;
 

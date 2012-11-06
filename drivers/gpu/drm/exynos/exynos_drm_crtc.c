@@ -490,8 +490,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	struct drm_framebuffer *fb;
 	unsigned long flags;
 
-	/* set wait vsync event to zero and wake up queue. */
-	atomic_set(&dev_priv->wait_vsync_event, 0);
+	/* set wait vsync wake up queue. */
 	DRM_WAKEUP(&dev_priv->wait_vsync_queue);
 
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
