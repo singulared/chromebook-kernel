@@ -121,6 +121,11 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 	fb = &exynos_fb->fb;
 	dev_priv = fb->dev->dev_private;
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_fb->dma_buf)
+		dma_buf_put(exynos_fb->dma_buf);
+#endif
+
 	drm_framebuffer_cleanup(fb);
 
 	if (exynos_drm_fb_unmap(fb))
