@@ -1590,8 +1590,8 @@ EXPORT_SYMBOL_GPL(usbnet_resume);
 
 
 /*-------------------------------------------------------------------------*/
-int usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
-		    u16 value, u16 index, void *data, u16 size)
+static int __usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
+			     u16 value, u16 index, void *data, u16 size)
 {
 	void *buf = NULL;
 	int err = -ENOMEM;
@@ -1615,10 +1615,10 @@ int usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
 out:
 	return err;
 }
-EXPORT_SYMBOL_GPL(usbnet_read_cmd);
 
-int usbnet_write_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
-		     u16 value, u16 index, const void *data, u16 size)
+static int __usbnet_write_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
+			      u16 value, u16 index, const void *data,
+			      u16 size)
 {
 	void *buf = NULL;
 	int err = -ENOMEM;
@@ -1641,7 +1641,55 @@ int usbnet_write_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
 out:
 	return err;
 }
+
+/*
+ * The function can't be called inside suspend/resume callback,
+ * otherwise deadlock will be caused.
+ */
+int usbnet_read_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
+		    u16 value, u16 index, void *data, u16 size)
+{
+	return __usbnet_read_cmd(dev, cmd, reqtype, value, index,
+				 data, size);
+}
+EXPORT_SYMBOL_GPL(usbnet_read_cmd);
+
+/*
+ * The function can't be called inside suspend/resume callback,
+ * otherwise deadlock will be caused.
+ */
+int usbnet_write_cmd(struct usbnet *dev, u8 cmd, u8 reqtype,
+		     u16 value, u16 index, const void *data, u16 size)
+{
+	return __usbnet_write_cmd(dev, cmd, reqtype, value, index,
+				  data, size);
+}
 EXPORT_SYMBOL_GPL(usbnet_write_cmd);
+
+/*
+ * The function can be called inside suspend/resume callback safely
+ * and should only be called by suspend/resume callback generally.
+ */
+int usbnet_read_cmd_nopm(struct usbnet *dev, u8 cmd, u8 reqtype,
+			  u16 value, u16 index, void *data, u16 size)
+{
+	return __usbnet_read_cmd(dev, cmd, reqtype, value, index,
+				 data, size);
+}
+EXPORT_SYMBOL_GPL(usbnet_read_cmd_nopm);
+
+/*
+ * The function can be called inside suspend/resume callback safely
+ * and should only be called by suspend/resume callback generally.
+ */
+int usbnet_write_cmd_nopm(struct usbnet *dev, u8 cmd, u8 reqtype,
+			  u16 value, u16 index, const void *data,
+			  u16 size)
+{
+	return __usbnet_write_cmd(dev, cmd, reqtype, value, index,
+				  data, size);
+}
+EXPORT_SYMBOL_GPL(usbnet_write_cmd_nopm);
 
 static void usbnet_async_cmd_cb(struct urb *urb)
 {
@@ -1656,6 +1704,10 @@ static void usbnet_async_cmd_cb(struct urb *urb)
 	usb_free_urb(urb);
 }
 
+/*
+ * The caller must make sure that device can't be put into suspend
+ * state until the control URB completes.
+ */
 int usbnet_write_cmd_async(struct usbnet *dev, u8 cmd, u8 reqtype,
 			   u16 value, u16 index, const void *data, u16 size)
 {
