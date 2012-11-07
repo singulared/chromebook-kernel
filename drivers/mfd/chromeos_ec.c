@@ -133,6 +133,15 @@ static struct mfd_cell cros_devs[] = {
 		.name = "cros_ec-i2c",
 		.id = 3,
 	},
+	/*
+	 * TODO(clchiou): We should look for EC specification in device tree
+	 * and add this mfd sub-device optionally.  But for now, this should
+	 * be fine.
+	 */
+	{
+		.name = "chromeos_vbc_ec",
+		.id = 4,
+	},
 };
 
 int __devinit cros_ec_register(struct chromeos_ec_device *ec_dev)

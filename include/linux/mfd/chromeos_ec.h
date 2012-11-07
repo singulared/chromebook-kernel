@@ -24,7 +24,9 @@
 
 struct i2c_msg;
 
+#include <linux/init.h>
 #include <linux/mfd/chromeos_ec_commands.h>
+#include <linux/notifier.h>
 
 /*
  * Command interface between EC and AP, for LPC, I2C and SPI interfaces.

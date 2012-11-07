@@ -45,6 +45,7 @@
 			write-protect-gpio = <&gpd1 6 0 0x10000 0>;
 			nonvolatile-context-storage = "disk";
 			chromeos-vbc-blk = <&mshc_0 0 0 16>;
+			chromeos-vbc-ec = <&ec>;
 		};
 	};
 
@@ -340,7 +341,7 @@
 			};
 		};
 
-                ec {
+                ec: chromeos-ec@0 {
 			compatible = "google,chromeos-ec-i2c";
                         reg = <0x1e>;
                         interrupts = <14 0>;
