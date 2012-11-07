@@ -182,9 +182,14 @@ static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
 	/* drm framework doesn't check NULL. */
 }
 
+static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
+				     struct drm_framebuffer *fb,
+				     struct drm_pending_vblank_event *event);
+
 static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -216,8 +221,9 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 					exynos_drm_encoder_dpms_from_crtc);
 	}
 
-	exynos_drm_fn_encoder(crtc, &exynos_crtc->pipe,
-			exynos_drm_encoder_crtc_commit);
+	ret = exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
+	if (ret)
+		DRM_ERROR("page_flip failed\n");
 }
 
 static bool
@@ -236,7 +242,10 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 			  struct drm_display_mode *adjusted_mode, int x, int y,
 			  struct drm_framebuffer *old_fb)
 {
+	struct exynos_drm_private *dev_priv = crtc->dev->dev_private;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_framebuffer *fb = crtc->fb;
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -249,6 +258,13 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	 */
 	memcpy(&crtc->mode, adjusted_mode, sizeof(*adjusted_mode));
 
+	/* We should never timeout here. */
+	ret = wait_event_timeout(dev_priv->wait_vsync_queue,
+				 !exynos_crtc->flip_in_flight,
+				 DRM_HZ/20);
+	if (!ret)
+		DRM_ERROR("Timed out waiting for flips to complete\n");
+
 	exynos_drm_crtc_update(crtc, fb);
 
 	return 0;
@@ -257,17 +273,29 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
+	struct exynos_drm_private *dev_priv = crtc->dev->dev_private;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_framebuffer *fb = crtc->fb;
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	if (!fb)
 		return -EINVAL;
 
-	exynos_drm_crtc_update(crtc, fb);
-	exynos_drm_crtc_apply(crtc);
+	/* We should never timeout here. */
+	ret = wait_event_timeout(dev_priv->wait_vsync_queue,
+				 !exynos_crtc->flip_in_flight,
+				 DRM_HZ/20);
+	if (!ret)
+		DRM_ERROR("Timed out waiting for flips to complete\n");
 
-	return 0;
+
+	ret = exynos_drm_crtc_page_flip(crtc, fb, NULL);
+	if (ret)
+		DRM_ERROR("page_flip failed\n");
+
+	return ret;
 }
 
 static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
