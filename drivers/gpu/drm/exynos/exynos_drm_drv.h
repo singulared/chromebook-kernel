@@ -150,6 +150,15 @@ struct exynos_drm_private {
 };
 
 /*
+ * Exynos drm_file private structure.
+ *
+ * @gem_cpu_acquire_list: list of GEM objects we hold acquires on
+ */
+struct exynos_drm_file_private {
+	struct list_head gem_cpu_acquire_list;
+};
+
+/*
  * Exynos drm sub driver structure.
  *
  * @list: sub driver has its own list object to register to exynos drm driver.

@@ -168,7 +168,18 @@ static int exynos_drm_unload(struct drm_device *dev)
 
 static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
+	struct exynos_drm_file_private *file_private;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
+	file_private = kzalloc(sizeof(*file_private), GFP_KERNEL);
+	if (!file_private) {
+		DRM_ERROR("failed to allocate exynos_drm_file_private\n");
+		return -ENOMEM;
+	}
+	INIT_LIST_HEAD(&file_private->gem_cpu_acquire_list);
+
+	file->driver_priv = file_private;
 
 	return exynos_drm_subdrv_open(dev, file);
 }
@@ -176,7 +187,24 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 static void exynos_drm_preclose(struct drm_device *dev,
 					struct drm_file *file)
 {
+	struct exynos_drm_file_private *file_private = file->driver_priv;
+	struct exynos_drm_gem_obj_node *cur, *d;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
+	mutex_lock(&dev->struct_mutex);
+	/* release kds resource sets for outstanding GEM object acquires */
+	list_for_each_entry_safe(cur, d,
+			&file_private->gem_cpu_acquire_list, list) {
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+		BUG_ON(cur->exynos_gem_obj->resource_set == NULL);
+		kds_resource_set_release(&cur->exynos_gem_obj->resource_set);
+#endif
+		drm_gem_object_unreference(&cur->exynos_gem_obj->base);
+		kfree(cur);
+	}
+	mutex_unlock(&dev->struct_mutex);
+	INIT_LIST_HEAD(&file_private->gem_cpu_acquire_list);
 
 	exynos_drm_subdrv_close(dev, file);
 }
@@ -217,6 +245,12 @@ static struct drm_ioctl_desc exynos_ioctls[] = {
 			DRM_UNLOCKED | DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(EXYNOS_VIDI_CONNECTION,
 			vidi_connection_ioctl, DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_GEM_CPU_ACQUIRE,
+			exynos_drm_gem_cpu_acquire_ioctl,
+			DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_GEM_CPU_RELEASE,
+			exynos_drm_gem_cpu_release_ioctl,
+			DRM_UNLOCKED | DRM_AUTH),
 };
 
 static const struct file_operations exynos_drm_driver_fops = {

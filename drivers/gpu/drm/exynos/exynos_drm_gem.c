@@ -26,6 +26,8 @@
 #include "drmP.h"
 #include "drm.h"
 
+#include <linux/completion.h>
+#include <linux/kds.h>
 #include <linux/shmem_fs.h>
 #include <drm/exynos_drm.h>
 
@@ -285,6 +287,11 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 	obj = &exynos_gem_obj->base;
 
 	DRM_DEBUG_KMS("handle count = %d\n", atomic_read(&obj->handle_count));
+
+	if (exynos_gem_obj->resource_set != NULL) {
+		/* kds_resource_set_release NULLs the pointer */
+		kds_resource_set_release(&exynos_gem_obj->resource_set);
+	}
 
 	if ((exynos_gem_obj->flags & EXYNOS_BO_NONCONTIG) &&
 			exynos_gem_obj->buffer->pages)
@@ -598,6 +605,177 @@ int exynos_drm_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	DRM_DEBUG_KMS("mapped = 0x%lx\n", (unsigned long)args->mapped);
 
 	return 0;
+}
+
+static void cpu_acquire_kds_cb_fn(void *param1, void *param2)
+{
+	struct completion* completion = (struct completion *)param1;
+	complete(completion);
+}
+
+int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file)
+{
+	struct drm_exynos_gem_cpu_acquire *args = data;
+	struct exynos_drm_file_private *file_priv = file->driver_priv;
+	struct drm_gem_object *obj;
+	struct exynos_drm_gem_obj *exynos_gem_obj;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct kds_resource *kds;
+	struct kds_resource_set *rset;
+	unsigned long exclusive;
+	struct kds_callback callback;
+	DECLARE_COMPLETION_ONSTACK(completion);
+#endif
+	struct exynos_drm_gem_obj_node *gem_node;
+	int ret = 0;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	mutex_lock(&dev->struct_mutex);
+
+	if (!(dev->driver->driver_features & DRIVER_GEM)) {
+		DRM_ERROR("does not support GEM.\n");
+		ret = -ENODEV;
+		goto unlock;
+	}
+
+	obj = drm_gem_object_lookup(dev, file, args->handle);
+	if (!obj) {
+		DRM_ERROR("failed to lookup gem object.\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	exynos_gem_obj = to_exynos_gem_obj(obj);
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_gem_obj->base.export_dma_buf == NULL) {
+		/* If there is no dmabuf present, there is no cross-process/
+		 * cross-device sharing and sync is unnecessary.
+		 */
+		ret = 0;
+		goto unref_obj;
+	}
+
+	exclusive = 0;
+	if ((args->flags & DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE) != 0)
+		exclusive = 1;
+	kds = &exynos_gem_obj->base.export_dma_buf->kds;
+	kds_callback_init(&callback, 1, &cpu_acquire_kds_cb_fn);
+	ret = kds_async_waitall(&rset, KDS_FLAG_LOCKED_WAIT, &callback,
+		&completion, NULL, 1, &exclusive, &kds);
+	mutex_unlock(&dev->struct_mutex);
+
+	if (!IS_ERR_VALUE(ret))
+		ret = wait_for_completion_interruptible(&completion);
+	kds_callback_term(&callback);
+
+	mutex_lock(&dev->struct_mutex);
+	if (IS_ERR_VALUE(ret))
+		goto release_rset;
+#endif
+
+	gem_node = kzalloc(sizeof(*gem_node), GFP_KERNEL);
+	if (!gem_node) {
+		DRM_ERROR("failed to allocate eyxnos_drm_gem_obj_node.\n");
+		ret = -ENOMEM;
+		goto release_rset;
+	}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	exynos_gem_obj->resource_set = rset;
+#endif
+
+	gem_node->exynos_gem_obj = exynos_gem_obj;
+	list_add(&gem_node->list, &file_priv->gem_cpu_acquire_list);
+	mutex_unlock(&dev->struct_mutex);
+	return 0;
+
+
+release_rset:
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	kds_resource_set_release_sync(&rset);
+#endif
+
+unref_obj:
+	drm_gem_object_unreference(obj);
+
+unlock:
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
+}
+
+int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
+				struct drm_file *file)
+{
+	struct drm_exynos_gem_cpu_acquire *args = data;
+	struct exynos_drm_file_private *file_priv = file->driver_priv;
+	struct drm_gem_object *obj;
+	struct exynos_drm_gem_obj *exynos_gem_obj;
+	struct list_head *cur;
+	int ret = 0;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	mutex_lock(&dev->struct_mutex);
+
+	if (!(dev->driver->driver_features & DRIVER_GEM)) {
+		DRM_ERROR("does not support GEM.\n");
+		ret = -ENODEV;
+		goto unlock;
+	}
+
+	obj = drm_gem_object_lookup(dev, file, args->handle);
+	if (!obj) {
+		DRM_ERROR("failed to lookup gem object.\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	exynos_gem_obj = to_exynos_gem_obj(obj);
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_gem_obj->base.export_dma_buf == NULL) {
+		/* If there is no dmabuf present, there is no cross-process/
+		 * cross-device sharing and sync is unnecessary.
+		 */
+		ret = 0;
+		goto unref_obj;
+	}
+#endif
+
+	list_for_each(cur, &file_priv->gem_cpu_acquire_list) {
+		struct exynos_drm_gem_obj_node *node = list_entry(
+				cur, struct exynos_drm_gem_obj_node, list);
+		if (node->exynos_gem_obj == exynos_gem_obj)
+			break;
+	}
+	if (cur == &file_priv->gem_cpu_acquire_list) {
+		DRM_ERROR("gem object not acquired for current process.\n");
+		ret = -EINVAL;
+		goto unref_obj;
+	}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	/* kds_resource_set_release NULLs the pointer */
+	BUG_ON(exynos_gem_obj->resource_set == NULL);
+	kds_resource_set_release(&exynos_gem_obj->resource_set);
+#endif
+
+	list_del(cur);
+	kfree(list_entry(cur, struct exynos_drm_gem_obj_node, list));
+	/* unreference for the reference held since cpu_acquire_ioctl */
+	drm_gem_object_unreference(obj);
+	ret = 0;
+
+unref_obj:
+	/* unreference for the reference from drm_gem_object_lookup() */
+	drm_gem_object_unreference(obj);
+
+unlock:
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
 }
 
 int exynos_drm_gem_init_object(struct drm_gem_object *obj)
