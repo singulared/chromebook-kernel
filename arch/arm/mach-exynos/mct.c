@@ -506,7 +506,7 @@ static void __init exynos4_timer_resources(void)
 #endif /* CONFIG_LOCAL_TIMERS */
 }
 
-static void __init exynos_timer_init(void)
+void __init exynos4_timer_init(void)
 {
 	if (soc_is_exynos5440()) {
 		arch_timer_of_register();
@@ -525,7 +525,3 @@ static void __init exynos_timer_init(void)
 	exynos4_clocksource_init();
 	exynos4_clockevent_init();
 }
-
-struct sys_timer exynos4_timer = {
-	.init		= exynos_timer_init,
-};
