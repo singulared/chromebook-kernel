@@ -65,12 +65,13 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
 
+	mutex_lock(&dev->struct_mutex);
+
 	if (exynos_encoder->dpms == mode) {
 		DRM_DEBUG_KMS("desired dpms mode is same as previous one.\n");
+		mutex_unlock(&dev->struct_mutex);
 		return;
 	}
-
-	mutex_lock(&dev->struct_mutex);
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
