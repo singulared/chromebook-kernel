@@ -122,21 +122,7 @@ extern struct syscore_ops s3c24xx_irq_syscore_ops;
 
 /* PM debug functions */
 
-#ifdef CONFIG_SAMSUNG_PM_DEBUG
-/**
- * s3c_pm_dbg() - low level debug function for use in suspend/resume.
- * @msg: The message to print.
- *
- * This function is used mainly to debug the resume process before the system
- * can rely on printk/console output. It uses the low-level debugging output
- * routine printascii() to do its work.
- */
-extern void s3c_pm_dbg(const char *msg, ...);
-
-#define S3C_PMDBG(fmt...) s3c_pm_dbg(fmt)
-#else
 #define S3C_PMDBG(fmt...) printk(KERN_DEBUG fmt)
-#endif
 
 #ifdef CONFIG_S3C_PM_DEBUG_LED_SMDK
 /**
