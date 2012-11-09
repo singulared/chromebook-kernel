@@ -43,19 +43,6 @@ unsigned long s3c_pm_flags;
 */
 
 #ifdef CONFIG_SAMSUNG_PM_DEBUG
-extern void printascii(const char *);
-
-void s3c_pm_dbg(const char *fmt, ...)
-{
-	va_list va;
-	char buff[256];
-
-	va_start(va, fmt);
-	vsprintf(buff, fmt, va);
-	va_end(va);
-
-	printascii(buff);
-}
 
 static inline void s3c_pm_debug_init(void)
 {
