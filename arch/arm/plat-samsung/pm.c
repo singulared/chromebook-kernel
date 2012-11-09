@@ -126,9 +126,30 @@ static void s3c_pm_restore_uarts(void)
 	for (uart = 0; uart < CONFIG_SERIAL_SAMSUNG_UARTS; uart++, save++)
 		s3c_pm_restore_uart(uart, save);
 }
+
+static void s3c_pm_drain_uart(int uart)
+{
+	void __iomem *regs = S3C_VA_UARTx(uart);
+	unsigned long ufstat;
+
+	do {
+		ufstat = __raw_readl(regs + S3C2410_UTRSTAT);
+	} while (!(ufstat & S3C2410_UTRSTAT_TXE));
+}
+
+static void s3c_pm_drain_uarts(void)
+{
+	unsigned int uart;
+	for (uart = 0; uart < CONFIG_SERIAL_SAMSUNG_UARTS; uart++)
+		s3c_pm_drain_uart(uart);
+
+	mdelay(1);
+}
+
 #else
 static void s3c_pm_save_uarts(void) { }
 static void s3c_pm_restore_uarts(void) { }
+static void s3c_pm_drain_uarts(void) { }
 #endif
 
 /* The IRQ ext-int code goes here, it is too small to currently bother
@@ -292,6 +313,8 @@ static int s3c_pm_enter(suspend_state_t state)
 	flush_cache_all();
 
 	s3c_pm_check_store();
+
+	s3c_pm_drain_uarts();
 
 	/* send the cpu to sleep... */
 
