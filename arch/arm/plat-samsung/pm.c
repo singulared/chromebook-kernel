@@ -125,6 +125,8 @@ static void s3c_pm_restore_uarts(void)
 
 	for (uart = 0; uart < CONFIG_SERIAL_SAMSUNG_UARTS; uart++, save++)
 		s3c_pm_restore_uart(uart, save);
+
+	s3c_pm_arch_restore_uarts();
 }
 
 static void s3c_pm_drain_uart(int uart)

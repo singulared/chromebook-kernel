@@ -349,6 +349,18 @@ static void exynos5_power_off(void)
 		;
 }
 
+static void exynos5_debug_enable_uart_wakeup(void)
+{
+#ifdef CONFIG_SAMSUNG_PM_DEBUG
+	unsigned int tmp;
+
+	/* Enable UART automatic wakeup for resume console output */
+	tmp = __raw_readl(S5P_PAD_RET_UART_OPTION);
+	tmp |= EXYNOS5_PAD_RET_UART_AUTOMATIC_WAKEUP;
+	__raw_writel(tmp, S5P_PAD_RET_UART_OPTION);
+#endif
+}
+
 static void exynos5_init_pmu(void)
 {
 	unsigned int i;
@@ -382,6 +394,8 @@ static void exynos5_init_pmu(void)
 			 EXYNOS5_OPTION_USE_STANDBYWFI);
 		__raw_writel(tmp, exynos5_list_diable_wfi_wfe[i]);
 	}
+
+	exynos5_debug_enable_uart_wakeup();
 }
 
 void exynos4_sys_powerdown_conf(enum sys_powerdown mode)
