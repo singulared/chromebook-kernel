@@ -44,6 +44,7 @@ struct cpufreq_interactive_cpuinfo {
 	u64 time_in_idle;
 	u64 idle_exit_time;
 	u64 timer_run_time;
+	int cpu_id;
 	int idling;
 	u64 target_set_time;
 	u64 target_set_time_in_idle;
@@ -121,8 +122,8 @@ struct cpufreq_governor cpufreq_gov_interactive = {
 
 static void rearm_idle_timer(struct cpufreq_interactive_cpuinfo *pcpu)
 {
-	pcpu->time_in_idle = get_cpu_idle_time_us(
-	    smp_processor_id(), &pcpu->idle_exit_time);
+	pcpu->time_in_idle = get_cpu_idle_time_us(pcpu->cpu_id,
+	    &pcpu->idle_exit_time);
 	mod_timer(&pcpu->cpu_timer, jiffies + usecs_to_jiffies(timer_rate));
 }
 
@@ -146,6 +147,8 @@ static void del_idle_timer(struct cpufreq_interactive_cpuinfo *pcpu)
 
 static void cpufreq_interactive_timer(unsigned long data)
 {
+	struct cpufreq_interactive_cpuinfo *pcpu = data;
+	int cpu_id = pcpu->cpu_id;
 	unsigned int delta_idle;
 	unsigned int delta_time;
 	int cpu_load;
@@ -153,8 +156,6 @@ static void cpufreq_interactive_timer(unsigned long data)
 	int need_wakeup;
 	u64 time_in_idle;
 	u64 idle_exit_time;
-	struct cpufreq_interactive_cpuinfo *pcpu =
-		&per_cpu(cpuinfo, data);
 	u64 now_idle;
 	unsigned int new_freq;
 	unsigned int index;
@@ -176,7 +177,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 */
 	time_in_idle = pcpu->time_in_idle;
 	idle_exit_time = pcpu->idle_exit_time;
-	now_idle = get_cpu_idle_time_us(data, &pcpu->timer_run_time);
+	now_idle = get_cpu_idle_time_us(cpu_id, &pcpu->timer_run_time);
 	smp_wmb();
 
 	/* If we raced with cancelling a timer, skip. */
@@ -228,9 +229,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 			    new_freq > hispeed_freq &&
 			    pcpu->timer_run_time - pcpu->hispeed_validate_time
 			    < above_hispeed_delay_val) {
-				trace_cpufreq_interactive_notyet(data, cpu_load,
-								 pcpu->target_freq,
-								 new_freq);
+				trace_cpufreq_interactive_notyet(cpu_id,
+				    cpu_load, pcpu->target_freq, new_freq);
 				goto rearm;
 			}
 		}
@@ -245,7 +245,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 					   new_freq, CPUFREQ_RELATION_H,
 					   &index)) {
 		pr_warn_once("timer %d: cpufreq_frequency_table_target error\n",
-			     (int) data);
+			     (int) cpu_id);
 		goto rearm;
 	}
 
@@ -258,7 +258,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	if (new_freq < pcpu->floor_freq) {
 		if (pcpu->timer_run_time - pcpu->floor_validate_time
 		    < min_sample_time) {
-			trace_cpufreq_interactive_notyet(data, cpu_load,
+			trace_cpufreq_interactive_notyet(cpu_id, cpu_load,
 							 pcpu->target_freq,
 							 new_freq);
 			goto rearm;
@@ -267,15 +267,15 @@ static void cpufreq_interactive_timer(unsigned long data)
 
 	spin_lock_irqsave(&updown_state_lock, flags);
 	if (pcpu->target_freq != new_freq) {
-		trace_cpufreq_interactive_target(data, cpu_load,
+		trace_cpufreq_interactive_target(cpu_id, cpu_load,
 						 pcpu->target_freq, new_freq);
 		pcpu->target_set_time_in_idle = now_idle;
 		pcpu->target_freq = new_freq;
 		pcpu->target_set_time = pcpu->timer_run_time;
-		cpumask_set_cpu(data, &updown_cpumask);
+		cpumask_set_cpu(cpu_id, &updown_cpumask);
 		need_wakeup = 1;
 	} else {
-		trace_cpufreq_interactive_already(data, cpu_load,
+		trace_cpufreq_interactive_already(cpu_id, cpu_load,
 						  pcpu->target_freq, new_freq);
 		need_wakeup = 0;
 	}
@@ -935,9 +935,10 @@ static int __init cpufreq_interactive_init(void)
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
 		pcpu = &per_cpu(cpuinfo, i);
+		pcpu->cpu_id = i;
 		init_timer(&pcpu->cpu_timer);
 		pcpu->cpu_timer.function = cpufreq_interactive_timer;
-		pcpu->cpu_timer.data = i;
+		pcpu->cpu_timer.data = pcpu;
 	}
 
 	spin_lock_init(&updown_state_lock);
