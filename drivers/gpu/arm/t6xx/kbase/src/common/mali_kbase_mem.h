@@ -578,5 +578,6 @@ mali_error kbase_alloc_phy_pages_helper(struct kbase_va_region *reg, u32 nr_page
  */
 void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages);
 
+extern atomic_t mali_memory_pages;
 
 #endif /* _KBASE_MEM_H_ */

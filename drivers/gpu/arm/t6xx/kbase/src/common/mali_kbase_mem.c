@@ -34,6 +34,8 @@
 #include <linux/mempool.h>
 #include <linux/mm.h>
 
+atomic_t mali_memory_pages;
+
 struct kbase_page_metadata
 {
 	struct list_head list;
@@ -204,7 +206,7 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, u32 nr_page
 	}
 
 	if (i == nr_pages)
-		return MALI_ERROR_NONE;
+		goto out;
 
 	for (; i < nr_pages; i++)
 	{
@@ -226,7 +228,10 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, u32 nr_page
 		pages[i] = PFN_PHYS(page_to_pfn(p));
 	}
 
+out:
+	atomic_add(nr_pages, &mali_memory_pages);
 	return MALI_ERROR_NONE;
+
 
 err_out_roll_back:
 	while (i--)
@@ -299,6 +304,8 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, osk_
 			page_count++;
 		}
 	}
+
+	atomic_sub(nr_pages, &mali_memory_pages);
 
 	mutex_lock(&allocator->free_list_lock);
 	list_splice(&new_free_list_items, &allocator->free_list_head);
