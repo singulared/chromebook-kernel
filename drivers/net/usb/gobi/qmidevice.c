@@ -1606,14 +1606,22 @@ fail:
 
 void qc_deregister(struct qcusbnet *dev)
 {
-	struct list_head *node, *tmp;
 	struct client *client;
 	int sync_flags = SYNC_TIMEOUT;
+	unsigned long flags;
+	u16 cid;
 
-	list_for_each_safe(node, tmp, &dev->qmi.clients) {
-		client = list_entry(node, struct client, node);
-		client_free(dev, client->cid, sync_flags);
+	spin_lock_irqsave(&dev->qmi.clients_lock, flags);
+	while (!list_empty(&dev->qmi.clients)) {
+		client = list_first_entry(&dev->qmi.clients, struct client,
+					  node);
+		cid = client->cid;
+
+		spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
+		client_free(dev, cid, sync_flags);
+		spin_lock_irqsave(&dev->qmi.clients_lock, flags);
 	}
+	spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
 
 	device_destroy(dev->qmi.devclass, dev->qmi.devnum);
 	cdev_del(&dev->qmi.cdev);
