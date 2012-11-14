@@ -410,6 +410,7 @@ static void s5p_mfc_handle_error(struct s5p_mfc_ctx *ctx,
 	case MFCINST_FINISHING:
 	case MFCINST_FINISHED:
 	case MFCINST_RUNNING:
+	case MFCINST_FLUSH:
 		/* It is higly probable that an error occured
 		 * while decoding a frame */
 		clear_work_bit(ctx);
@@ -611,16 +612,11 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		s5p_mfc_handle_init_buffers(ctx, reason, err);
 		break;
 	case S5P_FIMV_R2H_CMD_DPB_FLUSH_RET:
-		s5p_mfc_clear_int_flags(dev);
-		ctx->int_type = reason;
-		ctx->int_err = err;
-		ctx->int_cond = 1;
 		clear_work_bit(ctx);
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-			BUG();
-		s5p_mfc_clock_off();
+		ctx->state = MFCINST_RUNNING;
 		wake_up(&ctx->queue);
-		break;
+		goto irq_cleanup_hw;
+
 	default:
 		mfc_debug(2, "Unknown int reason\n");
 		s5p_mfc_clear_int_flags(dev);
