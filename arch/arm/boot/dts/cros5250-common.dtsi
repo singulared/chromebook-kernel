@@ -138,7 +138,7 @@
 					regulator-name = "vdd_bridge";
 					regulator-min-microvolt = <1200000>;
 					regulator-max-microvolt = <1200000>;
-					regulator-boot-on;
+					regulator-always-on;
 					reg_op_mode = <3>; /* Normal Mode */
 				};
 

@@ -20,11 +20,13 @@
 		status = "disabled";
 	};
 
-	hdmi {
-		status = "disabled";
-	};
-
-	hdmi-audio {
+	/*
+	 * always de-activate the OHCI controller else it will force turning on
+	 * the VBUS power on port 0 triggering an electrical conflict.
+	 * We can remove this workaround (and support USB1.1 peripherals)
+	 * once the next revision of hardware will modify the VBUS control.
+	 */
+	ohci {
 		status = "disabled";
 	};
 
@@ -49,7 +51,8 @@
 		 * disables it in cros5250-common.dtsi.
 		 */
 		status = "okay";
-		supports-highspeed;
+		/* high speed is currently not behaving properly */
+		//supports-highspeed;
 		card-detection-broken;
 		no-write-protect;
 		keep-power-in-suspend;
@@ -248,4 +251,11 @@
 		};
 	};
 
+	ehci {
+		/*
+		 * disable port 0 to avoid electrical conflict on VBUS
+		 * port 2 is not used
+		 */
+		samsung,port_used_bitmap = <0x2>;
+	};
 };
