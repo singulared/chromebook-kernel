@@ -179,6 +179,9 @@ struct ehci_hcd {			/* one per controller */
 	 * OTG controllers and transceivers need software interaction
 	 */
 	struct usb_phy	*transceiver;
+
+	/* if non null: bitmap of all ports in use on the root hub */
+	u32 port_used_bitmap;
 };
 
 /* convert between an HCD pointer and the corresponding EHCI_HCD */

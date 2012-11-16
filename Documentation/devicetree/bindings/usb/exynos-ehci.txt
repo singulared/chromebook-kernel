@@ -1,0 +1,22 @@
+Exynos USB EHCI controllers
+
+Required properties:
+  - compatible : should be "samsung,exynos-ehci".
+  - reg : should contain at least address and length of the standard EHCI
+    register set for the device.
+  - interrupts : one EHCI interrupt should be described here.
+
+Optional properties:
+  - samsung,vbus-gpio : OF gpio specification of the pin which needs to be
+    activated for the bus to be powered.
+  - samsung,port_used_bitmap : defined which port should be enabled on the
+    root hub.
+
+Example:
+	ehci {
+		compatible = "samsung,exynos-ehci";
+		reg = <0x12110000 0x100>;
+		interrupts = <0 71 0>;
+		samsung,vbus-gpio = <&gpx1 1 1 3 3>;
+		samsung,port_used_bitmap = <0x2>;
+	};

@@ -966,6 +966,12 @@ static int ehci_hub_control (
 		if (!wIndex || wIndex > ports)
 			goto error;
 		wIndex--;
+
+		/* test if the port is configured to be ignored */
+		if (ehci->port_used_bitmap &&
+				!(ehci->port_used_bitmap & (1 << wIndex)))
+			goto error_exit;
+
 		temp = ehci_readl(ehci, status_reg);
 		if (temp & PORT_OWNER)
 			break;

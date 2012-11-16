@@ -171,6 +171,12 @@ static int __devinit s5p_ehci_probe(struct platform_device *pdev)
 	ehci->regs = hcd->regs +
 		HC_LENGTH(ehci, readl(&ehci->caps->hc_capbase));
 
+	/* populate port enabled bitmap if provided by the device tree */
+	ehci->port_used_bitmap = -1UL;
+	if (pdev->dev.of_node)
+		of_property_read_u32(pdev->dev.of_node,
+			"samsung,port_used_bitmap", &ehci->port_used_bitmap);
+
 	/* DMA burst Enable */
 	writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
 
