@@ -43,6 +43,7 @@
 	firmware {
 		chromeos {
 			write-protect-gpio = <&gpd1 6 0 0x10000 0>;
+			chromeos-vbc-blk = <&mshc_0 0 0 16>;
 		};
 	};
 
