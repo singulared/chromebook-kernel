@@ -122,13 +122,31 @@ void snd_hda_jack_tbl_clear(struct hda_codec *codec)
 	snd_array_free(&codec->jacktbl);
 }
 
+#define get_jack_plug_state(sense) !!(sense & AC_PINSENSE_PRESENCE)
+
 /* update the cached value and notification flag if needed */
 static void jack_detect_update(struct hda_codec *codec,
 			       struct hda_jack_tbl *jack)
 {
-	if (jack->jack_dirty || !jack->jack_detect) {
-		jack->pin_sense = read_pin_sense(codec, jack->nid);
-		jack->jack_dirty = 0;
+	if (!jack->jack_dirty)
+		return;
+
+	jack->pin_sense = read_pin_sense(codec, jack->nid);
+
+	/* A gating jack indicates the jack is invalid if gating is unplugged */
+	if (jack->gating_jack && !snd_hda_jack_detect(codec, jack->gating_jack))
+		jack->pin_sense &= ~AC_PINSENSE_PRESENCE;
+
+	jack->jack_dirty = 0;
+
+	/* If a jack is gated by this one update it. */
+	if (jack->gated_jack) {
+		struct hda_jack_tbl *gated =
+			snd_hda_jack_tbl_get(codec, jack->gated_jack);
+		if (gated) {
+			gated->jack_dirty = 1;
+			jack_detect_update(codec, gated);
+		}
 	}
 }
 
@@ -168,8 +186,6 @@ u32 snd_hda_pin_sense(struct hda_codec *codec, hda_nid_t nid)
 }
 EXPORT_SYMBOL_HDA(snd_hda_pin_sense);
 
-#define get_jack_plug_state(sense) !!(sense & AC_PINSENSE_PRESENCE)
-
 /**
  * snd_hda_jack_detect - query pin Presence Detect status
  * @codec: the CODEC to sense
@@ -205,16 +221,46 @@ int snd_hda_jack_detect_enable(struct hda_codec *codec, hda_nid_t nid,
 EXPORT_SYMBOL_HDA(snd_hda_jack_detect_enable);
 
 /**
+ * snd_hda_jack_set_gating_jack - Set gating jack.
+ *
+ * Indicates the gated jack is only valid when the gating jack is plugged.
+ */
+int snd_hda_jack_set_gating_jack(struct hda_codec *codec, hda_nid_t gated_nid,
+				 hda_nid_t gating_nid)
+{
+	struct hda_jack_tbl *gated = snd_hda_jack_tbl_get(codec, gated_nid);
+	struct hda_jack_tbl *gating = snd_hda_jack_tbl_get(codec, gating_nid);
+
+	if (!gated || !gating)
+		return -EINVAL;
+
+	gated->gating_jack = gating_nid;
+	gating->gated_jack = gated_nid;
+
+	return 0;
+}
+EXPORT_SYMBOL_HDA(snd_hda_jack_set_gating_jack);
+
+/**
  * snd_hda_jack_report_sync - sync the states of all jacks and report if changed
  */
 void snd_hda_jack_report_sync(struct hda_codec *codec)
 {
-	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	struct hda_jack_tbl *jack;
 	int i, state;
 
+	/* update all jacks at first */
+	jack = codec->jacktbl.list;
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
+		if (jack->nid)
+			jack_detect_update(codec, jack);
+
+	/* report the updated jacks; it's done after updating all jacks
+	 * to make sure that all gating jacks properly have been set
+	 */
+	jack = codec->jacktbl.list;
 	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid) {
-			jack_detect_update(codec, jack);
 			if (!jack->kctl)
 				continue;
 			state = get_jack_plug_state(jack->pin_sense);

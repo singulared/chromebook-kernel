@@ -21,6 +21,8 @@ struct hda_jack_tbl {
 	unsigned int pin_sense;		/* cached pin-sense value */
 	unsigned int jack_detect:1;	/* capable of jack-detection? */
 	unsigned int jack_dirty:1;	/* needs to update? */
+	hda_nid_t gating_jack;		/* valid when gating jack plugged */
+	hda_nid_t gated_jack;		/* gated is dependent on this jack */
 	struct snd_kcontrol *kctl;	/* assigned kctl for jack-detection */
 #ifdef CONFIG_SND_HDA_INPUT_JACK
 	int type;
@@ -58,6 +60,9 @@ void snd_hda_jack_set_dirty_all(struct hda_codec *codec);
 
 int snd_hda_jack_detect_enable(struct hda_codec *codec, hda_nid_t nid,
 			       unsigned char action);
+
+int snd_hda_jack_set_gating_jack(struct hda_codec *codec, hda_nid_t gated_nid,
+				 hda_nid_t gating_nid);
 
 u32 snd_hda_pin_sense(struct hda_codec *codec, hda_nid_t nid);
 int snd_hda_jack_detect(struct hda_codec *codec, hda_nid_t nid);
