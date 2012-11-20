@@ -146,7 +146,10 @@ KBASE_EXPORT_TEST_API(kbase_pm_invoke_power_up)
 
 void kbase_pm_invoke_power_down(kbase_device *kbdev, kbase_pm_core_type type, u64 cores)
 {
+	unsigned long flags;
 	OSK_ASSERT( kbdev != NULL );
+
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
 
 	switch(type)
 	{
@@ -158,14 +161,19 @@ void kbase_pm_invoke_power_down(kbase_device *kbdev, kbase_pm_core_type type, u6
 				{
 					KBASE_TRACE_ADD( kbdev, PM_CORES_CHANGE_DESIRED_ON_POWERDOWN, NULL, NULL, 0u, (u32)kbdev->pm.desired_shader_state );
 				}
+				/* Also remove the cores from the available set to prevent job submission to
+				 * these cores before the next call to kbase_pm_check_transitions */
+				kbdev->shader_available_bitmap &= ~cores;
 			}
 			break;
 		case KBASE_PM_CORE_TILER:
 			kbdev->pm.desired_tiler_state &= ~cores;
+			kbdev->tiler_available_bitmap &= ~cores;
 			break;
 		default:
 			OSK_ASSERT(0);
 	}
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 }
 KBASE_EXPORT_TEST_API(kbase_pm_invoke_power_down)
 /** Get information about a core set

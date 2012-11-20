@@ -91,6 +91,7 @@ static int jd_run_atom(kbase_jd_atom *katom)
 
 #ifdef CONFIG_KDS
 
+
 /* Add the katom to the kds waiting list.
  * Atoms must be added to the waiting list after a successful call to kds_async_waitall.
  * The caller must hold the kbase_jd_context.lock */
@@ -117,6 +118,7 @@ static void kbase_jd_kds_waiters_remove(kbase_jd_atom *katom)
 	kctx = katom->kctx;
 	OSK_DLIST_REMOVE(&kctx->waiting_kds_resource, katom, kds_wait_item );
 }
+
 
 static void kds_dep_clear(void * callback_parameter, void * callback_extra_parameter)
 {
@@ -178,6 +180,7 @@ void kbase_cancel_kds_wait_job(kbase_jd_atom *katom)
 		}
 	}
 }
+
 #endif /* CONFIG_KDS */
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
@@ -252,7 +255,7 @@ void kbase_jd_free_external_resources(kbase_jd_atom *katom)
 		mutex_unlock(&jctx->lock);
 
 		/* Release the kds resource or cancel if zapping */
-		kds_resource_set_release_sync(&katom->kds_rset);
+		kds_resource_set_release(&katom->kds_rset);
 	}
 #endif /* CONFIG_KDS */
 }
@@ -307,6 +310,7 @@ static void kbase_jd_post_external_resources(kbase_jd_atom * katom)
 #endif /* defined(CONFIG_DMA_SHARED_BUFFER) || defined(CONFIG_MALI_DEBUG) */
 }
 
+#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_KDS)
 static void add_kds_resource(struct kds_resource *kds_res, struct kds_resource ** kds_resources, u32 *kds_res_count,
                              unsigned long * kds_access_bitmap, mali_bool exclusive)
 {
@@ -326,6 +330,7 @@ static void add_kds_resource(struct kds_resource *kds_res, struct kds_resource *
 		osk_bitarray_set_bit(*kds_res_count, kds_access_bitmap);
 	(*kds_res_count)++;
 }
+#endif /* defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_KDS) */
 
 static mali_error kbase_jd_pre_external_resources(kbase_jd_atom * katom, const base_jd_atom_v2 *user_atom)
 {
@@ -478,7 +483,6 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom * katom, const b
 	{
 		/* We have resources to wait for with kds */
 		katom->kds_dep_satisfied = MALI_FALSE;
-
 		if (kds_async_waitall(&katom->kds_rset, KDS_FLAG_LOCKED_IGNORE, &katom->kctx->jctx.kds_cb,
 		                      katom, NULL, kds_res_count, kds_access_bitmap, kds_resources))
 		{
@@ -1267,6 +1271,7 @@ static enum hrtimer_restart  zap_timeout_callback( struct hrtimer * timer )
 
 	if (kbase_prepare_to_reset_gpu(kbdev))
 	{
+		OSK_PRINT_WARN(OSK_BASE_JD, "NOTE: GPU will now be reset as a workaround for a hardware issue");
 		kbase_reset_gpu(kbdev);
 	}
 
@@ -1280,6 +1285,9 @@ out:
 
 void kbase_jd_zap_context(kbase_context *kctx)
 {
+#ifdef CONFIG_KDS
+	kbase_jd_atom *katom = NULL;
+#endif
 	kbase_device *kbdev;
 	zap_reset_data reset_data;
 	unsigned long flags;
@@ -1291,24 +1299,34 @@ void kbase_jd_zap_context(kbase_context *kctx)
 	kbase_job_zap_context(kctx);
 
 	mutex_lock(&kctx->jctx.lock);
+
 	while(!OSK_DLIST_IS_EMPTY(&kctx->waiting_soft_jobs))
 	{
 		kbase_jd_atom *katom = OSK_DLIST_POP_FRONT(&kctx->waiting_soft_jobs, kbase_jd_atom, dep_item[0]);
 
 		kbase_cancel_soft_job(katom);
 	}
+
 #ifdef CONFIG_KDS
+
+	/* For each job waiting on a kds resource, cancel the wait and force the job to
+	 * complete early, this is done so that we don't leave jobs outstanding waiting
+	 * on kds resources which may never be released when contexts are zapped, resulting
+	 * in a hang.
+	 *
+	 * Note that we can safely iterate over the list as the kbase_jd_context lock is held,
+	 * this prevents items being removed when calling job_done_nolock in kbase_cancel_kds_wait_job.
+	 */
+
+	OSK_DLIST_FOREACH( &kctx->waiting_kds_resource,
+					   kbase_jd_atom,
+					   kds_wait_item,
+					   katom )
 	{
-		kbase_jd_atom *katom = NULL;
-		OSK_DLIST_FOREACH( &kctx->waiting_kds_resource,
-						   kbase_jd_atom,
-				           kds_wait_item,
-				           katom )
-		{
-			kbase_cancel_kds_wait_job(katom);
-		}
+		kbase_cancel_kds_wait_job(katom);
 	}
 #endif
+
 	mutex_unlock(&kctx->jctx.lock);
 
 	hrtimer_init_on_stack(&reset_data.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL );
@@ -1411,7 +1429,9 @@ mali_error kbase_jd_init(kbase_context *kctx)
 
 	return MALI_ERROR_NONE;
 
+#ifdef CONFIG_KDS
 out2:
+#endif /* CONFIG_KDS */
 	destroy_workqueue(kctx->jctx.job_done_wq);
 out1:
 	return mali_err;

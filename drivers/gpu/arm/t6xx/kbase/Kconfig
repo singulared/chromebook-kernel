@@ -28,6 +28,43 @@ config MALI_GATOR_SUPPORT
 	  You will need the Gator device driver already loaded before loading this driver when enabling
 	  Streamline debug support.
 
+config MALI_T6XX_DVFS
+	bool "Enable DVFS"
+	depends on MALI_T6XX && MACH_MANTA
+	default n
+	help
+	  Choose this option to enable DVFS on MALI T6XX DDK.
+
+config MALI_T6XX_DEMAND_POLICY
+	bool "Enable demand power policy by default"
+	depends on MALI_T6XX
+	default n
+	help
+	  Sets the default power policy to "demand"
+
+config MALI_T6XX_RT_PM
+	bool "Enable Runtime power management"
+	depends on MALI_T6XX
+	depends on PM_RUNTIME
+	default n
+	help
+	  Choose this option to enable runtime power management on vithar DDK.
+
+config MALI_T6XX_ENABLE_TRACE
+       bool "Enable kbase tracing"
+       depends on MALI_T6XX
+       default n
+       help
+         Enables tracing in the kbase.  Trace log available through
+	 the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
+
+config MALI_T6XX_DEBUG_SYS
+       bool "Enable sysfs for mali t6xx"
+       depends on MALI_T6XX && SYSFS
+       default n
+       help
+         Enables sysfs for mali t6xx device. Set/Monitor Mali T6xx Device
+
 # MALI_EXPERT configuration options
 
 menuconfig MALI_EXPERT

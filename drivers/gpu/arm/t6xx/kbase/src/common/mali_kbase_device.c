@@ -123,14 +123,12 @@ mali_error kbase_device_init(kbase_device *kbdev)
 
 		kbdev->as[i].number = i;
 		kbdev->as[i].fault_addr = 0ULL;
-
 		/* Simulate failure to create the workqueue */
 		if(OSK_SIMULATE_FAILURE(OSK_BASE_CORE))
 		{
 			kbdev->as[i].pf_wq = NULL;
 			goto free_workqs;
 		}
-
 		kbdev->as[i].pf_wq = alloc_workqueue(name, 0, 1);
 		if (NULL == kbdev->as[i].pf_wq)
 		{
@@ -138,7 +136,6 @@ mali_error kbase_device_init(kbase_device *kbdev)
 		}
 
 		mutex_init(&kbdev->as[i].transaction_mutex);
-
 		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316))
 		{
 			struct hrtimer * poking_timer = &kbdev->as[i].poke_timer;
@@ -150,7 +147,6 @@ mali_error kbase_device_init(kbase_device *kbdev)
 				destroy_workqueue(kbdev->as[i].pf_wq);
 				goto free_workqs;
 			}
-
 			kbdev->as[i].poke_wq = alloc_workqueue(poke_name, 0, 1);
 			if (NULL == kbdev->as[i].poke_wq)
 			{
@@ -344,6 +340,7 @@ void kbase_device_trace_register_access(kbase_context * kctx, kbase_reg_access_t
 		/* store the trace entry at the selected offset */
 		tb[write_offset * 2 + 0] = (reg_offset & ~0x3) | ((type == REG_WRITE) ? 0x1 : 0x0);
 		tb[write_offset * 2 + 1] = reg_value;
+
 		mb();
 
 		/* new header word */
@@ -570,6 +567,7 @@ void kbasep_trace_dump(kbase_device *kbdev)
 	unsigned long flags;
 	u32 start;
 	u32 end;
+
 
 	OSK_PRINT( OSK_BASE_CORE, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
 	spin_lock_irqsave( &kbdev->trace_lock, flags);

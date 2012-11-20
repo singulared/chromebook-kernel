@@ -22,7 +22,6 @@
 /*
  * The output flags should be a combination of the following values:
  * KBASE_REG_CPU_CACHED: CPU cache should be enabled
- * KBASE_REG_GPU_CACHED: GPU cache should be enabled
  */
 u32 kbase_cache_enabled(u32 flags, u32 nr_pages)
 {
@@ -30,9 +29,9 @@ u32 kbase_cache_enabled(u32 flags, u32 nr_pages)
 
 	CSTD_UNUSED(nr_pages);
 
-	if (flags & BASE_MEM_CACHED)
+	if (flags & BASE_MEM_CACHED_CPU)
 	{
-		cache_flags |= KBASE_REG_CPU_CACHED | KBASE_REG_GPU_CACHED;
+		cache_flags |= KBASE_REG_CPU_CACHED;
 	}
 
 	return cache_flags;

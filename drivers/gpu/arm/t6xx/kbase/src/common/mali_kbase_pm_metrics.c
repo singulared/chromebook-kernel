@@ -21,6 +21,9 @@
 
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_pm.h>
+#if defined(CONFIG_MALI_T6XX_DVFS) && defined(CONFIG_MACH_MANTA)
+#include <kbase/src/platform/mali_kbase_dvfs.h>
+#endif
 
 /* When VSync is being hit aim for utilisation between 70-90% */
 #define KBASE_PM_VSYNC_MIN_UTILISATION          70

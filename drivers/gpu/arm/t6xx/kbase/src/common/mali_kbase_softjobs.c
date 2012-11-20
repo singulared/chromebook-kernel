@@ -326,7 +326,6 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom )
 		case BASE_JD_REQ_SOFT_FENCE_WAIT:
 			{
 				base_fence fence;
-				int fd;
 				if (MALI_ERROR_NONE != ukk_copy_from_user(sizeof(fence), &fence, (__user void*)(uintptr_t)katom->jc))
 				{
 					return MALI_ERROR_FUNCTION_FAILED;

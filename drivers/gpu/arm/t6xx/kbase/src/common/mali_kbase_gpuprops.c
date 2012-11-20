@@ -70,7 +70,7 @@ mali_error kbase_gpuprops_uk_get_props(kbase_context *kctx, kbase_uk_gpuprops * 
 				                   gpu_speed_khz,
 				                   kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_min,
 				                   kctx->kbdev->gpu_props.props.core_props.gpu_freq_khz_max);
-			}	
+			}
 		}
 #endif /* CONFIG_MALI_DEBUG */
 	}
