@@ -20,6 +20,7 @@
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_midg_regmap.h>
 
+#define MEMPOOL_PAGES 16384
 /**
  * @brief Create a kernel base context.
  *
@@ -29,7 +30,6 @@
 kbase_context *kbase_create_context(kbase_device *kbdev)
 {
 	kbase_context *kctx;
-	osk_error osk_err;
 	mali_error mali_err;
 
 	OSK_ASSERT(kbdev != NULL);
@@ -41,7 +41,7 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	}
 	else
 	{
-		kctx = kzalloc(sizeof(*kctx), GFP_KERNEL);
+		kctx = vzalloc(sizeof(*kctx));
 	}
 
 	if (!kctx)
@@ -57,9 +57,16 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	kctx->process_mm = NULL;
 	atomic_set(&kctx->nonmapped_pages, 0);
 
-	if (kbase_mem_usage_init(&kctx->usage, kctx->kbdev->memdev.per_process_memory_limit >> PAGE_SHIFT))
+	if (MALI_ERROR_NONE != kbase_mem_allocator_init(&kctx->osalloc, MEMPOOL_PAGES))
 	{
 		goto free_kctx;
+	}
+
+	kctx->pgd_allocator = &kctx->osalloc;
+
+	if (kbase_mem_usage_init(&kctx->usage, kctx->kbdev->memdev.per_process_memory_limit >> PAGE_SHIFT))
+	{
+		goto free_allocator;
 	}
 
 	if (kbase_jd_init(kctx))
@@ -83,15 +90,9 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	OSK_DLIST_INIT(&kctx->waiting_kds_resource);
 #endif
 
-	/* Use a new *Shared Memory* allocator for GPU page tables.
-	 * See MIDBASE-1534 for details. */
-	osk_err = osk_phy_allocator_init(&kctx->pgd_allocator, 0, 0, NULL);
-	if (OSK_ERR_NONE != osk_err)
-		goto free_event;
-
 	mali_err = kbase_mmu_init(kctx);
 	if(MALI_ERROR_NONE != mali_err)
-		goto free_phy;
+		goto free_event;
 
 	kctx->pgd = kbase_mmu_alloc_pgd(kctx);
 	if (!kctx->pgd)
@@ -112,8 +113,6 @@ free_pgd:
 	kbase_mmu_free_pgd(kctx);
 free_mmu:
 	kbase_mmu_term(kctx);
-free_phy:
-	osk_phy_allocator_term(&kctx->pgd_allocator);
 free_event:
 	kbase_event_cleanup(kctx);
 free_jd:
@@ -122,8 +121,10 @@ free_jd:
 	kbase_jd_exit(kctx);
 free_memctx:
 	kbase_mem_usage_term(&kctx->usage);
+free_allocator:
+	kbase_mem_allocator_term(&kctx->osalloc);
 free_kctx:
-	kfree(kctx);
+	vfree(kctx);
 out:
 	return NULL;
 	
@@ -167,7 +168,6 @@ void kbase_destroy_context(kbase_context *kctx)
 
 	/* MMU is disabled as part of scheduling out the context */
 	kbase_mmu_free_pgd(kctx);
-	osk_phy_allocator_term(&kctx->pgd_allocator);
 	kbase_region_tracker_term(kctx);
 	kbase_destroy_os_context(&kctx->osctx);
 	kbase_gpu_vm_unlock(kctx);
@@ -188,7 +188,9 @@ void kbase_destroy_context(kbase_context *kctx)
 		kbase_pm_context_idle(kbdev);
 	}
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
-	kfree(kctx);
+
+	kbase_mem_allocator_term(&kctx->osalloc);
+	vfree(kctx);
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context)
 
