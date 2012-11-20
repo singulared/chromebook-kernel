@@ -177,6 +177,7 @@
  * Other values indicate device is in an abnormal state and must be reset.
  */
 #define CYAPA_DEV_NORMAL  0x03
+#define CYAPA_DEV_BUSY    0x01
 
 enum cyapa_state {
 	CYAPA_STATE_OP,
@@ -578,32 +579,56 @@ static int cyapa_get_state(struct cyapa *cyapa)
 	}
 
 	if (ret != BL_STATUS_SIZE)
-		return (ret < 0) ? ret : -EAGAIN;
+		goto error;
 
 	cyapa->status[REG_OP_STATUS] = status[REG_OP_STATUS];
 	cyapa->status[REG_BL_STATUS] = status[REG_BL_STATUS];
 	cyapa->status[REG_BL_ERROR] = status[REG_BL_ERROR];
-	if ((status[REG_OP_STATUS] & OP_STATUS_DEV) == CYAPA_DEV_NORMAL) {
-		cyapa_dbg(cyapa, "device state: operational mode\n");
-		cyapa->state = CYAPA_STATE_OP;
-	} else if (status[REG_BL_STATUS] & BL_STATUS_BUSY) {
-		cyapa_dbg(cyapa, "device state: bootloader busy\n");
-		cyapa->state = CYAPA_STATE_BL_BUSY;
-	} else if (status[REG_BL_ERROR] & BL_ERROR_BOOTLOADING) {
-		cyapa_dbg(cyapa, "device state: bootloader active\n");
-		cyapa->state = CYAPA_STATE_BL_ACTIVE;
+	if ((status[REG_OP_STATUS] & OP_STATUS_SRC) == OP_STATUS_SRC) {
+		switch (status[REG_OP_STATUS] & OP_STATUS_DEV) {
+		case CYAPA_DEV_NORMAL:
+			cyapa_dbg(cyapa, "device state: operational mode\n");
+			cyapa->state = CYAPA_STATE_OP;
+			break;
+		case CYAPA_DEV_BUSY:
+			cyapa_dbg(cyapa, "device state: operational busy\n");
+			cyapa->state = CYAPA_STATE_OP;
+			break;
+		default:
+			cyapa->debug = true;
+			cyapa_dbg(cyapa, "device state: unknown\n");
+			cyapa_dbg(cyapa, "status[REG_OP_STATUS] = 0x%02x\n",
+				  status[REG_OP_STATUS]);
+			cyapa_dbg(cyapa, "status[REG_BL_STATUS] = 0x%02x\n",
+				  status[REG_BL_STATUS]);
+			cyapa_dbg(cyapa, "status[REG_BL_ERROR] = 0x%02x\n",
+				  status[REG_BL_ERROR]);
+			cyapa->state = CYAPA_STATE_NO_DEVICE;
+			ret = -EAGAIN;
+			goto error;
+		}
 	} else {
-		cyapa_dbg(cyapa, "device state: bootloader idle\n");
-		cyapa_dbg(cyapa, "status[REG_OP_STATUS] = 0x%02x\n",
-			  status[REG_OP_STATUS]);
-		cyapa_dbg(cyapa, "status[REG_BL_STATUS] = 0x%02x\n",
-			  status[REG_BL_STATUS]);
-		cyapa_dbg(cyapa, "status[REG_BL_ERROR] = 0x%02x\n",
-			  status[REG_BL_ERROR]);
-		cyapa->state = CYAPA_STATE_BL_IDLE;
+		if (status[REG_BL_STATUS] & BL_STATUS_BUSY) {
+			cyapa_dbg(cyapa, "device state: bootloader busy\n");
+			cyapa->state = CYAPA_STATE_BL_BUSY;
+		} else if (status[REG_BL_ERROR] & BL_ERROR_BOOTLOADING) {
+			cyapa_dbg(cyapa, "device state: bootloader active\n");
+			cyapa->state = CYAPA_STATE_BL_ACTIVE;
+		} else {
+			cyapa_dbg(cyapa, "device state: bootloader idle\n");
+			cyapa_dbg(cyapa, "status[REG_OP_STATUS] = 0x%02x\n",
+				  status[REG_OP_STATUS]);
+			cyapa_dbg(cyapa, "status[REG_BL_STATUS] = 0x%02x\n",
+				  status[REG_BL_STATUS]);
+			cyapa_dbg(cyapa, "status[REG_BL_ERROR] = 0x%02x\n",
+				  status[REG_BL_ERROR]);
+			cyapa->state = CYAPA_STATE_BL_IDLE;
+		}
 	}
 
 	return 0;
+error:
+	return (ret < 0) ? ret : -EAGAIN;
 }
 
 /*
