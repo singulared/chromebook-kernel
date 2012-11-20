@@ -255,7 +255,7 @@ void kbase_jd_free_external_resources(kbase_jd_atom *katom)
 		mutex_unlock(&jctx->lock);
 
 		/* Release the kds resource or cancel if zapping */
-		kds_resource_set_release(&katom->kds_rset);
+		kds_resource_set_release_sync(&katom->kds_rset);
 	}
 #endif /* CONFIG_KDS */
 }
