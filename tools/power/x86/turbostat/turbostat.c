@@ -46,6 +46,7 @@ unsigned int skip_c0;
 unsigned int skip_c1;
 unsigned int do_nhm_cstates;
 unsigned int do_snb_cstates;
+unsigned int do_ult_cstates;
 unsigned int has_aperf;
 unsigned int has_epb;
 unsigned int units = 1000000000;	/* Ghz etc */
@@ -118,6 +119,9 @@ struct pkg_data {
 	unsigned long long pc3;
 	unsigned long long pc6;
 	unsigned long long pc7;
+	unsigned long long pc8;
+	unsigned long long pc9;
+	unsigned long long pc10;
 	unsigned int package_id;
 	unsigned int energy_pkg;	/* MSR_PKG_ENERGY_STATUS */
 	unsigned int energy_dram;	/* MSR_DRAM_ENERGY_STATUS */
@@ -278,6 +282,11 @@ void print_header(void)
 		outp += sprintf(outp, "   %%pc6");
 	if (do_snb_cstates)
 		outp += sprintf(outp, "   %%pc7");
+	if (do_ult_cstates) {
+		outp += sprintf(outp, "   %%pc8");
+		outp += sprintf(outp, "   %%pc9");
+		outp += sprintf(outp, "   %%pc10");
+	}
 
 	if (do_rapl & RAPL_PKG)
 		outp += sprintf(outp, "  Pkg_W");
@@ -330,6 +339,9 @@ int dump_counters(struct thread_data *t, struct core_data *c,
 		fprintf(stderr, "pc3: %016llX\n", p->pc3);
 		fprintf(stderr, "pc6: %016llX\n", p->pc6);
 		fprintf(stderr, "pc7: %016llX\n", p->pc7);
+		fprintf(stderr, "pc8: %016llX\n", p->pc8);
+		fprintf(stderr, "pc9: %016llX\n", p->pc9);
+		fprintf(stderr, "pc10: %016llX\n", p->pc10);
 		fprintf(stderr, "Joules PKG: %0X\n", p->energy_pkg);
 		fprintf(stderr, "Joules COR: %0X\n", p->energy_cores);
 		fprintf(stderr, "Joules GFX: %0X\n", p->energy_gfx);
@@ -483,6 +495,11 @@ int format_counters(struct thread_data *t, struct core_data *c,
 	if (do_snb_cstates)
 		outp += sprintf(outp, " %6.2f", 100.0 * p->pc7/t->tsc);
 
+	if (do_ult_cstates) {
+		outp += sprintf(outp, " %6.2f", 100.0 * p->pc8/t->tsc);
+		outp += sprintf(outp, " %6.2f", 100.0 * p->pc9/t->tsc);
+		outp += sprintf(outp, " %6.2f", 100.0 * p->pc10/t->tsc);
+	}
 	/*
  	 * If measurement interval exceeds minimum RAPL Joule Counter range,
  	 * indicate that results are suspect by printing "**" in fraction place.
@@ -558,6 +575,9 @@ delta_package(struct pkg_data *new, struct pkg_data *old)
 	old->pc3 = new->pc3 - old->pc3;
 	old->pc6 = new->pc6 - old->pc6;
 	old->pc7 = new->pc7 - old->pc7;
+	old->pc8 = new->pc8 - old->pc8;
+	old->pc9 = new->pc9 - old->pc9;
+	old->pc10 = new->pc10 - old->pc10;
 	old->pkg_temp_c = new->pkg_temp_c;
 
 	DELTA_WRAP32(new->energy_pkg, old->energy_pkg);
@@ -687,6 +707,9 @@ void clear_counters(struct thread_data *t, struct core_data *c, struct pkg_data 
 	p->pc3 = 0;
 	p->pc6 = 0;
 	p->pc7 = 0;
+	p->pc8 = 0;
+	p->pc9 = 0;
+	p->pc10 = 0;
 
 	p->energy_pkg = 0;
 	p->energy_dram = 0;
@@ -725,6 +748,9 @@ int sum_counters(struct thread_data *t, struct core_data *c,
 	average.packages.pc3 += p->pc3;
 	average.packages.pc6 += p->pc6;
 	average.packages.pc7 += p->pc7;
+	average.packages.pc8 += p->pc8;
+	average.packages.pc9 += p->pc9;
+	average.packages.pc10 += p->pc10;
 
 	average.packages.energy_pkg += p->energy_pkg;
 	average.packages.energy_dram += p->energy_dram;
@@ -766,6 +792,9 @@ void compute_average(struct thread_data *t, struct core_data *c,
 	average.packages.pc3 /= topo.num_packages;
 	average.packages.pc6 /= topo.num_packages;
 	average.packages.pc7 /= topo.num_packages;
+	average.packages.pc8 /= topo.num_packages;
+	average.packages.pc9 /= topo.num_packages;
+	average.packages.pc10 /= topo.num_packages;
 }
 
 static unsigned long long rdtsc(void)
@@ -860,6 +889,15 @@ int get_counters(struct thread_data *t, struct core_data *c, struct pkg_data *p)
 		if (get_msr(cpu, MSR_PKG_C7_RESIDENCY, &p->pc7))
 			return -12;
 	}
+	if (do_ult_cstates) {
+		if (get_msr(cpu, MSR_PKG_C8_RESIDENCY, &p->pc8))
+			return -13;
+		if (get_msr(cpu, MSR_PKG_C9_RESIDENCY, &p->pc9))
+			return -14;
+		if (get_msr(cpu, MSR_PKG_C10_RESIDENCY, &p->pc10))
+			return -15;
+	}
+
 	if (do_rapl & RAPL_PKG) {
 		if (get_msr(cpu, MSR_PKG_ENERGY_STATUS, &msr))
 			return -13;
@@ -1397,6 +1435,10 @@ int has_nehalem_turbo_ratio_limit(unsigned int family, unsigned int model)
 	case 0x2D:	/* SNB Xeon */
 	case 0x3A:	/* IVB */
 	case 0x3E:	/* IVB Xeon */
+	case 0x3C:	/* Haswell Client */
+	case 0x3F:	/* Haswell Server */
+	case 0x45:	/* Haswell ULT */
+	case 0x46:	/* Crystal Well */
 		return 1;
 	case 0x2E:	/* Nehalem-EX Xeon - Beckton */
 	case 0x2F:	/* Westmere-EX Xeon - Eagleton */
@@ -1414,6 +1456,10 @@ int has_ivt_turbo_ratio_limit(unsigned int family, unsigned int model)
 
 	switch (model) {
 	case 0x3E:	/* IVB Xeon */
+	case 0x3C:	/* Haswell Client */
+	case 0x3F:	/* Haswell Server */
+	case 0x45:	/* Haswell ULT */
+	case 0x46:	/* Crystal Well */
 		return 1;
 	default:
 		return 0;
@@ -1724,6 +1770,22 @@ int is_snb(unsigned int family, unsigned int model)
 	case 0x2D:
 	case 0x3A:	/* IVB */
 	case 0x3E:	/* IVB Xeon */
+	case 0x3C:	/* Haswell Client */
+	case 0x3F:	/* Haswell Server */
+	case 0x45:	/* Haswell ULT */
+	case 0x46:	/* Crystal Well */
+		return 1;
+	}
+	return 0;
+}
+
+int is_ult(unsigned int family, unsigned int model)
+{
+	if (!genuine_intel)
+		return 0;
+
+	switch (model) {
+	case 0x45:	/* Haswell ULT */
 		return 1;
 	}
 	return 0;
@@ -1884,6 +1946,7 @@ void check_cpuid()
 	do_nehalem_platform_info = genuine_intel && has_invariant_tsc;
 	do_nhm_cstates = genuine_intel;	/* all Intel w/ non-stop TSC have NHM counters */
 	do_snb_cstates = is_snb(family, model);
+	do_ult_cstates = is_ult(family, model);
 	bclk = discover_bclk(family, model);
 
 	do_nehalem_turbo_ratio_limit = has_nehalem_turbo_ratio_limit(family, model);
@@ -2105,7 +2168,7 @@ int initialize_counters(int cpu_id)
 
 void allocate_output_buffer()
 {
-	output_buffer = calloc(1, (1 + topo.num_cpus) * 128);
+	output_buffer = calloc(1, (1 + topo.num_cpus) * 256);
 	outp = output_buffer;
 	if (outp == NULL) {
 		perror("calloc");

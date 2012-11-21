@@ -116,6 +116,9 @@
 #define MSR_CORE_C6_RESIDENCY		0x000003fd
 #define MSR_CORE_C7_RESIDENCY		0x000003fe
 #define MSR_PKG_C2_RESIDENCY		0x0000060d
+#define MSR_PKG_C8_RESIDENCY		0x00000630	/* HSW-ULT only */
+#define MSR_PKG_C9_RESIDENCY		0x00000631	/* HSW-ULT only */
+#define MSR_PKG_C10_RESIDENCY		0x00000632	/* HSW-ULT only */
 
 /* Run Time Average Power Limiting (RAPL) Interface */
 
