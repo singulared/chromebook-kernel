@@ -847,8 +847,6 @@ static void iommu_deinit(struct platform_device *pdev)
 {
 	s5p_destroy_iommu_mapping(&pdev->dev);
 	DRM_DEBUG("released the IOMMU mapping\n");
-
-	return;
 }
 #endif
 
