@@ -896,7 +896,7 @@ static struct edid *hdmi_get_edid(void *ctx, struct drm_connector *connector)
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
 	if (!hdata->ddc_port)
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
 	edid = drm_get_edid(connector, hdata->ddc_port->adapter);
 	if (!edid)
