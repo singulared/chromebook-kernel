@@ -1875,7 +1875,7 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 	}
 }
 
-static void hdmi_mode_set(void *ctx, void *mode)
+static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx;
 

@@ -39,7 +39,7 @@ struct exynos_panel_ops {
 	void (*mode_fixup)(void *ctx, struct drm_connector *connector,
 				struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
-	void (*mode_set)(void *ctx, void *mode);
+	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
 	void (*commit)(void *ctx);
 	void (*apply)(void *ctx);
 	void (*get_max_res)(void *ctx, unsigned int *width,
