@@ -481,7 +481,8 @@ struct hid_device {							/* device report descriptor */
 	unsigned country;						/* HID country */
 	struct hid_report_enum report_enum[HID_REPORT_TYPES];
 
-	struct semaphore driver_lock;					/* protects the current driver */
+	struct semaphore driver_lock;					/* protects the current driver, except during input */
+	struct semaphore driver_input_lock;				/* protects the current driver */
 	struct device dev;						/* device */
 	struct hid_driver *driver;
 	struct hid_ll_driver *ll_driver;
@@ -502,6 +503,7 @@ struct hid_device {							/* device report descriptor */
 	unsigned int status;						/* see STAT flags above */
 	unsigned claimed;						/* Claimed by hidinput, hiddev? */
 	unsigned quirks;						/* Various quirks the device can pull on us */
+	bool io_started;						/* Protected by driver_lock. If IO has started */
 
 	struct list_head inputs;					/* The list of inputs */
 	void *hiddev;							/* The hiddev structure */
@@ -622,6 +624,10 @@ struct hid_usage_id {
  * @resume: invoked on resume if device was not reset (NULL means nop)
  * @reset_resume: invoked on resume if device was reset (NULL means nop)
  *
+ * probe should return -errno on error, or 0 on success. During probe,
+ * input will not be passed to raw_event unless hid_device_io_start is
+ * called.
+ *
  * raw_event and event should return 0 on no action performed, 1 when no
  * further processing should be done and negative on error
  *
@@ -741,6 +747,44 @@ int hid_connect(struct hid_device *hid, unsigned int connect_mask);
 void hid_disconnect(struct hid_device *hid);
 const struct hid_device_id *hid_match_id(struct hid_device *hdev,
 					 const struct hid_device_id *id);
+
+/**
+ * hid_device_io_start - enable HID input during probe, remove
+ *
+ * @hid - the device
+ *
+ * This should only be called during probe or remove and only be
+ * called by the thread calling probe or remove. It will allow
+ * incoming packets to be delivered to the driver.
+ */
+static inline void hid_device_io_start(struct hid_device *hid) {
+	if (hid->io_started) {
+		dev_warn(&hid->dev, "io already started");
+		return;
+	}
+	hid->io_started = true;
+	up(&hid->driver_input_lock);
+}
+
+/**
+ * hid_device_io_stop - disable HID input during probe, remove
+ *
+ * @hid - the device
+ *
+ * Should only be called after hid_device_io_start. It will prevent
+ * incoming packets from going to the driver for the duration of
+ * probe, remove. If called during probe, packets will still go to the
+ * driver after probe is complete. This function should only be called
+ * by the thread calling probe or remove.
+ */
+static inline void hid_device_io_stop(struct hid_device *hid) {
+	if (!hid->io_started) {
+		dev_warn(&hid->dev, "io already stopped");
+		return;
+	}
+	hid->io_started = false;
+	down(&hid->driver_input_lock);
+}
 
 /**
  * hid_map_usage - map usage input bits
