@@ -190,7 +190,6 @@ static int __cpuinit tegra_boot_secondary(unsigned int cpu,
 
 static void __init tegra_smp_init_cpus(void)
 {
-	set_smp_cross_call(gic_raise_softirq);
 }
 
 static void __init tegra_smp_prepare_cpus(unsigned int max_cpus)
