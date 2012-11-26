@@ -4498,6 +4498,7 @@ static void i9xx_update_pll(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_encoder *encoder;
 	int pipe = intel_crtc->pipe;
 	u32 dpll;
 	bool is_sdvo;
@@ -4566,6 +4567,10 @@ static void i9xx_update_pll(struct drm_crtc *crtc,
 	POSTING_READ(DPLL(pipe));
 	udelay(150);
 
+	for_each_encoder_on_crtc(dev, crtc, encoder)
+		if (encoder->pre_pll_enable)
+			encoder->pre_pll_enable(encoder);
+
 	/* The LVDS pin pair needs to be on before the DPLLs are enabled.
 	 * This is an exception to the general rule that mode_set doesn't turn
 	 * things on.
@@ -4610,6 +4615,7 @@ static void i8xx_update_pll(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_encoder *encoder;
 	int pipe = intel_crtc->pipe;
 	u32 dpll;
 
@@ -4642,6 +4648,10 @@ static void i8xx_update_pll(struct drm_crtc *crtc,
 	I915_WRITE(DPLL(pipe), dpll & ~DPLL_VCO_ENABLE);
 	POSTING_READ(DPLL(pipe));
 	udelay(150);
+
+	for_each_encoder_on_crtc(dev, crtc, encoder)
+		if (encoder->pre_pll_enable)
+			encoder->pre_pll_enable(encoder);
 
 	/* The LVDS pin pair needs to be on before the DPLLs are enabled.
 	 * This is an exception to the general rule that mode_set doesn't turn
@@ -5748,6 +5758,10 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 		I915_WRITE(TRANSDPLINK_M1(pipe), 0);
 		I915_WRITE(TRANSDPLINK_N1(pipe), 0);
 	}
+
+	for_each_encoder_on_crtc(dev, crtc, encoder)
+		if (encoder->pre_pll_enable)
+			encoder->pre_pll_enable(encoder);
 
 	if (intel_crtc->pch_pll) {
 		I915_WRITE(intel_crtc->pch_pll->pll_reg, dpll);
