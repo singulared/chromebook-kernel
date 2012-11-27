@@ -43,8 +43,7 @@ static inline int exynos_drm_format_num_buffers(uint32_t format)
 
 struct drm_framebuffer *
 exynos_drm_framebuffer_init(struct drm_device *dev,
-			    struct drm_mode_fb_cmd2 *mode_cmd,
-			    struct drm_gem_object *obj);
+			    struct drm_mode_fb_cmd2 *mode_cmd);
 
 /* get memory information of a drm framebuffer */
 struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,

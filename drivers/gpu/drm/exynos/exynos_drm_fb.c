@@ -210,8 +210,7 @@ static struct drm_framebuffer_funcs exynos_drm_fb_funcs = {
 
 struct drm_framebuffer *
 exynos_drm_framebuffer_init(struct drm_device *dev,
-			    struct drm_mode_fb_cmd2 *mode_cmd,
-			    struct drm_gem_object *obj)
+			    struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct exynos_drm_fb *exynos_fb;
 	int ret;
@@ -229,7 +228,6 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 	}
 
 	drm_helper_mode_fill_fb_struct(&exynos_fb->fb, mode_cmd);
-	exynos_fb->exynos_gem_obj[0] = to_exynos_gem_obj(obj);
 
 	return &exynos_fb->fb;
 
@@ -245,33 +243,24 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 	struct drm_gem_object *obj;
 	struct drm_framebuffer *fb;
 	struct exynos_drm_fb *exynos_fb;
-	int nr;
-	int i;
+	int i, nr, ret = 0;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
-	if (!obj) {
-		DRM_ERROR("failed to lookup gem object\n");
-		return ERR_PTR(-ENOENT);
-	}
-
-	drm_gem_object_unreference_unlocked(obj);
-
-	fb = exynos_drm_framebuffer_init(dev, mode_cmd, obj);
+	fb = exynos_drm_framebuffer_init(dev, mode_cmd);
 	if (IS_ERR(fb))
 		return fb;
 
 	exynos_fb = to_exynos_fb(fb);
 	nr = exynos_drm_format_num_buffers(fb->pixel_format);
 
-	for (i = 1; i < nr; i++) {
+	for (i = 0; i < nr; i++) {
 		obj = drm_gem_object_lookup(dev, file_priv,
 				mode_cmd->handles[i]);
 		if (!obj) {
 			DRM_ERROR("failed to lookup gem object\n");
-			exynos_drm_fb_destroy(fb);
-			return ERR_PTR(-ENOENT);
+			ret = -ENOENT;
+			goto err_lookup;
 		}
 
 		drm_gem_object_unreference_unlocked(obj);
@@ -281,11 +270,16 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 
 	if (exynos_drm_fb_map(fb)) {
 		DRM_ERROR("Failed to map gem object\n");
-		exynos_drm_fb_destroy(fb);
-		return ERR_PTR(-ENOMEM);
+		ret = -ENOMEM;
+		goto err_map;
 	}
 
 	return fb;
+
+err_map:
+err_lookup:
+	exynos_drm_fb_destroy(fb);
+	return ERR_PTR(ret);
 }
 
 struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,

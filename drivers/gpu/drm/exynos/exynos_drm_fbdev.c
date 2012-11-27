@@ -150,13 +150,13 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 
 	exynos_fbdev->exynos_gem_obj = exynos_gem_obj;
 
-	helper->fb = exynos_drm_framebuffer_init(dev, &mode_cmd,
-			&exynos_gem_obj->base);
+	helper->fb = exynos_drm_framebuffer_init(dev, &mode_cmd);
 	if (IS_ERR_OR_NULL(helper->fb)) {
 		DRM_ERROR("failed to create drm framebuffer.\n");
 		ret = PTR_ERR(helper->fb);
 		goto out;
 	}
+	to_exynos_fb(helper->fb)->exynos_gem_obj[0] = exynos_gem_obj;
 
 	helper->fbdev = fbi;
 
