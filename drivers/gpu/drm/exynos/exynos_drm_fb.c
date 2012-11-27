@@ -225,13 +225,17 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
 		DRM_ERROR("failed to initialize framebuffer\n");
-		return ERR_PTR(ret);
+		goto err_init;
 	}
 
 	drm_helper_mode_fill_fb_struct(&exynos_fb->fb, mode_cmd);
 	exynos_fb->exynos_gem_obj[0] = to_exynos_gem_obj(obj);
 
 	return &exynos_fb->fb;
+
+err_init:
+	kfree(exynos_fb);
+	return ERR_PTR(ret);
 }
 
 static struct drm_framebuffer *
