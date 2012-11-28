@@ -127,6 +127,7 @@ void exynos_drm_kds_callback_rm_fb(void *callback_parameter,
 {
 	struct drm_framebuffer *fb = callback_parameter;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	int i, nr;
 
 	kds_resource_set_release(&exynos_fb->kds_res_set_rm_fb);
 
@@ -134,6 +135,15 @@ void exynos_drm_kds_callback_rm_fb(void *callback_parameter,
 
 	if (exynos_drm_fb_unmap(fb))
 		DRM_ERROR("Couldn't unmap buffer\n");
+
+	nr = exynos_drm_format_num_buffers(fb->pixel_format);
+
+	for (i = 0; i < nr; i++) {
+		struct drm_gem_object *obj;
+
+		obj = &exynos_fb->exynos_gem_obj[i]->base;
+		drm_gem_object_unreference_unlocked(obj);
+	}
 
 	kfree(exynos_fb);
 }
@@ -143,6 +153,7 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 {
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_private *dev_priv = fb->dev->dev_private;
+	int i, nr;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -174,6 +185,15 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 
 	if (exynos_drm_fb_unmap(fb))
 		DRM_ERROR("Couldn't unmap buffer\n");
+
+	nr = exynos_drm_format_num_buffers(fb->pixel_format);
+
+	for (i = 0; i < nr; i++) {
+		struct drm_gem_object *obj;
+
+		obj = &exynos_fb->exynos_gem_obj[i]->base;
+		drm_gem_object_unreference_unlocked(obj);
+	}
 
 	kfree(exynos_fb);
 }
@@ -263,7 +283,10 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 			goto err_lookup;
 		}
 
-		drm_gem_object_unreference_unlocked(obj);
+		/*
+		 * We keep the reference which came from drm_gem_object_lookup.
+		 * It is used to ensure the bo's lifetime is >= the framebuffer.
+		 */
 
 		exynos_fb->exynos_gem_obj[i] = to_exynos_gem_obj(obj);
 	}
@@ -278,7 +301,11 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 
 err_map:
 err_lookup:
-	exynos_drm_fb_destroy(fb);
+	while (--i >= 0) {
+		obj = &exynos_fb->exynos_gem_obj[i]->base;
+		drm_gem_object_unreference_unlocked(obj);
+	}
+	kfree(exynos_fb);
 	return ERR_PTR(ret);
 }
 
