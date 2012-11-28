@@ -32,10 +32,21 @@
 #include "s5p_mfc_opr.h"
 #include "s5p_mfc_cmd.h"
 #include "s5p_mfc_pm.h"
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/kref.h>
+#include <linux/of_platform.h>
+#include <asm/dma-iommu.h>
+#endif
 
 #define S5P_MFC_NAME		"s5p-mfc"
 #define S5P_MFC_DEC_NAME	"s5p-mfc-dec"
 #define S5P_MFC_ENC_NAME	"s5p-mfc-enc"
+
+#ifdef CONFIG_EXYNOS_IOMMU
+static struct dma_iommu_mapping *mapping = NULL;
+#endif
 
 int debug;
 module_param(debug, int, S_IRUGO | S_IWUSR);
@@ -819,10 +830,10 @@ static int s5p_mfc_open(struct file *file)
 	q->io_modes = VB2_MMAP;
 	q->drv_priv = &ctx->fh;
 	if (s5p_mfc_get_node_type(file) == MFCNODE_DECODER) {
-		q->io_modes = VB2_MMAP;
+		q->io_modes = VB2_MMAP | VB2_DMABUF;
 		q->ops = get_dec_queue_ops();
 	} else if (s5p_mfc_get_node_type(file) == MFCNODE_ENCODER) {
-		q->io_modes = VB2_MMAP | VB2_USERPTR;
+		q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 		q->ops = get_enc_queue_ops();
 	} else {
 		ret = -ENOENT;
@@ -1024,6 +1035,22 @@ static void *mfc_get_drv_data(struct platform_device *pdev);
 
 static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 {
+#ifdef CONFIG_EXYNOS_IOMMU
+	struct device *mdev = &dev->plat_dev->dev;
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
+			SZ_256M, 4);
+	if (mapping == NULL) {
+		mfc_err("IOMMU mapping failed\n");
+		return -EFAULT;
+	}
+	mdev->dma_parms = devm_kzalloc(&dev->plat_dev->dev,
+			sizeof(*mdev->dma_parms), GFP_KERNEL);
+	dma_set_max_seg_size(mdev, 0xffffffffu);
+	arm_iommu_attach_device(mdev, mapping);
+
+	return 0;
+#else
 	unsigned int mem_info[2];
 
 	dev->mem_dev_l = devm_kzalloc(&dev->plat_dev->dev,
@@ -1060,6 +1087,7 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 		return -ENOMEM;
 	}
 	return 0;
+#endif
 }
 
 /* MFC probe function */
@@ -1135,6 +1163,18 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 		}
 	}
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(&dev->plat_dev->dev);
+	if (IS_ERR_OR_NULL(dev->alloc_ctx[0])) {
+		ret = PTR_ERR(dev->alloc_ctx[0]);
+		goto err_res;
+	}
+	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx(&dev->plat_dev->dev);
+	if (IS_ERR_OR_NULL(dev->alloc_ctx[1])) {
+		ret = PTR_ERR(dev->alloc_ctx[1]);
+		goto err_mem_init_ctx_1;
+	}
+#else
 	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(dev->mem_dev_l);
 	if (IS_ERR_OR_NULL(dev->alloc_ctx[0])) {
 		ret = PTR_ERR(dev->alloc_ctx[0]);
@@ -1145,7 +1185,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 		ret = PTR_ERR(dev->alloc_ctx[1]);
 		goto err_mem_init_ctx_1;
 	}
-
+#endif
 	mutex_init(&dev->mfc_mutex);
 
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
@@ -1234,6 +1274,10 @@ err_mem_init_ctx_1:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
 err_res:
 	s5p_mfc_final_pm(dev);
+#ifdef CONFIG_EXYNOS_IOMMU
+	if (mapping)
+		arm_iommu_release_mapping(mapping);
+#endif
 
 	pr_debug("%s-- with error\n", __func__);
 	return ret;
@@ -1260,7 +1304,10 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 		put_device(dev->mem_dev_l);
 		put_device(dev->mem_dev_r);
 	}
-
+#ifdef CONFIG_EXYNOS_IOMMU
+	if (mapping)
+		arm_iommu_release_mapping(mapping);
+#endif
 	s5p_mfc_final_pm(dev);
 	return 0;
 }
