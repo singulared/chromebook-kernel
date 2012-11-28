@@ -227,11 +227,13 @@ int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder);
 /*
  * exynos specific framebuffer structure.
  *
+ * @release_work: for the worker destroying the fb after it's done being used
  * @fb: drm framebuffer obejct.
  * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
  */
 struct exynos_drm_fb {
 	struct kref			refcount;
+	struct work_struct		release_work;
 	struct drm_framebuffer		fb;
 	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS

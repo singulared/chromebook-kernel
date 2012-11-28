@@ -151,6 +151,14 @@ void exynos_drm_kds_callback_rm_fb(void *callback_parameter,
 
 void exynos_drm_fb_release(struct kref *kref)
 {
+	struct exynos_drm_fb *exynos_fb;
+
+	exynos_fb = container_of(kref, struct exynos_drm_fb, refcount);
+	schedule_work(&exynos_fb->release_work);
+}
+
+static void exynos_drm_fb_release_work_fn(struct work_struct *work)
+{
 	struct drm_framebuffer *fb;
 	struct exynos_drm_fb *exynos_fb;
 	struct exynos_drm_private *dev_priv;
@@ -158,7 +166,7 @@ void exynos_drm_fb_release(struct kref *kref)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_fb = container_of(kref, struct exynos_drm_fb, refcount);
+	exynos_fb = container_of(work, struct exynos_drm_fb, release_work);
 	fb = &exynos_fb->fb;
 	dev_priv = fb->dev->dev_private;
 
@@ -252,6 +260,7 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 	}
 
 	kref_init(&exynos_fb->refcount);
+	INIT_WORK(&exynos_fb->release_work, exynos_drm_fb_release_work_fn);
 
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
