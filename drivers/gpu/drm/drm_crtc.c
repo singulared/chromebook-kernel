@@ -61,6 +61,14 @@ static struct drm_prop_enum_list drm_dpms_enum_list[] =
 
 DRM_ENUM_NAME_FN(drm_get_dpms_name, drm_dpms_enum_list)
 
+static struct drm_prop_enum_list drm_cp_enum_list[] = {
+	{ DRM_MODE_CONTENT_PROTECTION_OFF, "Undesired" },
+	{ DRM_MODE_CONTENT_PROTECTION_DESIRED, "Desired" },
+	{ DRM_MODE_CONTENT_PROTECTION_ENABLED, "Enabled" },
+};
+
+DRM_ENUM_NAME_FN(drm_get_content_protection_name, drm_cp_enum_list)
+
 /*
  * Optional properties
  */
@@ -806,6 +814,7 @@ static int drm_mode_create_standard_connector_properties(struct drm_device *dev)
 {
 	struct drm_property *edid;
 	struct drm_property *dpms;
+	struct drm_property *content_protection;
 
 	/*
 	 * Standard properties (apply to all connectors)
@@ -819,6 +828,11 @@ static int drm_mode_create_standard_connector_properties(struct drm_device *dev)
 				   "DPMS", drm_dpms_enum_list,
 				   ARRAY_SIZE(drm_dpms_enum_list));
 	dev->mode_config.dpms_property = dpms;
+
+	content_protection = drm_property_create_enum(dev, 0,
+			"Content Protection", drm_cp_enum_list,
+			ARRAY_SIZE(drm_cp_enum_list));
+	dev->mode_config.content_protection_property = content_protection;
 
 	return 0;
 }

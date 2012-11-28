@@ -840,6 +840,7 @@ struct drm_mode_config {
 	struct list_head property_blob_list;
 	struct drm_property *edid_property;
 	struct drm_property *dpms_property;
+	struct drm_property *content_protection_property;
 
 	/* DVI-I properties */
 	struct drm_property *dvi_i_subconnector_property;
@@ -918,6 +919,7 @@ extern void drm_encoder_cleanup(struct drm_encoder *encoder);
 
 extern char *drm_get_connector_name(struct drm_connector *connector);
 extern char *drm_get_dpms_name(int val);
+extern char *drm_get_content_protection_name(int val);
 extern char *drm_get_dvi_i_subconnector_name(int val);
 extern char *drm_get_dvi_i_select_name(int val);
 extern char *drm_get_tv_subconnector_name(int val);
