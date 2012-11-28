@@ -149,13 +149,18 @@ void exynos_drm_kds_callback_rm_fb(void *callback_parameter,
 }
 #endif
 
-static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
+void exynos_drm_fb_release(struct kref *kref)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-	struct exynos_drm_private *dev_priv = fb->dev->dev_private;
+	struct drm_framebuffer *fb;
+	struct exynos_drm_fb *exynos_fb;
+	struct exynos_drm_private *dev_priv;
 	int i, nr;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	exynos_fb = container_of(kref, struct exynos_drm_fb, refcount);
+	fb = &exynos_fb->fb;
+	dev_priv = fb->dev->dev_private;
 
 	drm_framebuffer_cleanup(fb);
 
@@ -196,6 +201,11 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 	}
 
 	kfree(exynos_fb);
+}
+
+static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
+{
+	exynos_drm_fb_put(to_exynos_fb(fb));
 }
 
 static int exynos_drm_fb_create_handle(struct drm_framebuffer *fb,
@@ -240,6 +250,8 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 		DRM_ERROR("failed to allocate exynos drm framebuffer\n");
 		return ERR_PTR(-ENOMEM);
 	}
+
+	kref_init(&exynos_fb->refcount);
 
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
