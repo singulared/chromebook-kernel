@@ -297,6 +297,7 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 	struct drm_device *dev = crtc->dev;
 	struct kds_resource_set **pkds = callback_extra_parameter;
 	struct kds_resource_set *prev_kds;
+	struct drm_framebuffer *prev_fb;
 	unsigned long flags;
 
 	exynos_drm_crtc_update(crtc, fb);
@@ -304,17 +305,22 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 
 	spin_lock_irqsave(&dev->event_lock, flags);
 	prev_kds = exynos_crtc->pending_kds;
+	prev_fb = exynos_crtc->pending_fb;
 	exynos_crtc->pending_kds = *pkds;
+	exynos_crtc->pending_fb = fb;
 	*pkds = NULL;
-	if (prev_kds)
+	if (prev_fb)
 		exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
-	if (prev_kds) {
+	if (prev_fb) {
 		DRM_ERROR("previous work detected\n");
-		kds_resource_set_release(&prev_kds);
+		exynos_drm_fb_put(to_exynos_fb(prev_fb));
+		if (prev_kds)
+			kds_resource_set_release(&prev_kds);
 	} else {
 		BUG_ON(atomic_read(&exynos_crtc->flip_pending));
+		BUG_ON(prev_kds);
 		atomic_set(&exynos_crtc->flip_pending, 1);
 	}
 }
@@ -431,6 +437,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	}
 #endif
 
+	exynos_drm_fb_get(exynos_fb);
+
 	trace_exynos_flip_request(exynos_crtc->pipe);
 
 	return 0;
@@ -451,6 +459,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	struct drm_crtc *crtc = dev_priv->crtc[crtc_idx];
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct kds_resource_set *kds;
+	struct drm_framebuffer *fb;
 	unsigned long flags;
 
 	/* set wait vsync event to zero and wake up queue. */
@@ -470,9 +479,14 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	kds = exynos_crtc->current_kds;
 	exynos_crtc->current_kds = exynos_crtc->pending_kds;
 	exynos_crtc->pending_kds = NULL;
+	fb = exynos_crtc->current_fb;
+	exynos_crtc->current_fb = exynos_crtc->pending_fb;
+	exynos_crtc->pending_fb = NULL;
 	exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&drm_dev->event_lock, flags);
 
+	if (fb)
+		exynos_drm_fb_put(to_exynos_fb(fb));
 	if (kds)
 		kds_resource_set_release(&kds);
 

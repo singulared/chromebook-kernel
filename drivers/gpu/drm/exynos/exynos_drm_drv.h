@@ -262,6 +262,8 @@ static inline void exynos_drm_fb_put(struct exynos_drm_fb *exynos_fb)
  * @drm_crtc: crtc object.
  * @overlay: contain information common to display controller and hdmi and
  *	contents of this overlay object would be copied to sub driver size.
+ * @current_fb: current fb that is being scanned out
+ * @pending_fb: fb that will start scanout on next flip
  * @event: vblank event that is currently queued for flip
  * @pipe: a crtc index created at load() with a new crtc object creation
  *	and the crtc object would be set to private->crtc array
@@ -276,6 +278,8 @@ static inline void exynos_drm_fb_put(struct exynos_drm_fb *exynos_fb)
 struct exynos_drm_crtc {
 	struct drm_crtc			drm_crtc;
 	struct exynos_drm_overlay	overlay;
+	struct drm_framebuffer		*current_fb;
+	struct drm_framebuffer		*pending_fb;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct drm_pending_vblank_event *event;
 	struct kds_resource_set		*current_kds;
