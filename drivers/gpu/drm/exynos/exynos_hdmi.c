@@ -33,6 +33,8 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_i2c.h>
 #include <linux/of_gpio.h>
 #include <plat/gpio-cfg.h>
 
@@ -2228,20 +2230,6 @@ static int hdmi_resources_cleanup(struct hdmi_context *hdata)
 	return 0;
 }
 
-static struct i2c_client *hdmi_ddc, *hdmi_hdmiphy;
-
-void hdmi_attach_ddc_client(struct i2c_client *ddc)
-{
-	if (ddc)
-		hdmi_ddc = ddc;
-}
-
-void hdmi_attach_hdmiphy_client(struct i2c_client *hdmiphy)
-{
-	if (hdmiphy)
-		hdmi_hdmiphy = hdmiphy;
-}
-
 struct platform_device *hdmi_audio_device;
 
 int hdmi_register_audio_device(struct platform_device *pdev)
@@ -2294,6 +2282,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	struct hdmi_context *hdata;
 	struct exynos_drm_hdmi_pdata *pdata;
 	struct resource *res;
+	struct device_node *ddc_node, *phy_node;
 	int ret;
 	enum of_gpio_flags flags;
 
@@ -2350,22 +2339,32 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	}
 
 	/* DDC i2c driver */
-	if (i2c_add_driver(&ddc_driver)) {
-		DRM_ERROR("failed to register ddc i2c driver\n");
-		ret = -ENOENT;
+	ddc_node = of_find_node_by_name(NULL, "exynos_ddc");
+	if (!ddc_node) {
+		DRM_ERROR("Failed to find ddc node in device tree\n");
+		ret = -ENODEV;
+		goto err_iomap;
+	}
+	hdata->ddc_port = of_find_i2c_device_by_node(ddc_node);
+	if (!hdata->ddc_port) {
+		DRM_ERROR("Failed to get ddc i2c client by node\n");
+		ret = -ENODEV;
 		goto err_iomap;
 	}
 
-	hdata->ddc_port = hdmi_ddc;
-
 	/* hdmiphy i2c driver */
-	if (i2c_add_driver(&hdmiphy_driver)) {
-		DRM_ERROR("failed to register hdmiphy i2c driver\n");
-		ret = -ENOENT;
+	phy_node = of_find_node_by_name(NULL, "exynos_hdmiphy");
+	if (!phy_node) {
+		DRM_ERROR("Failed to find hdmiphy node in device tree\n");
+		ret = -ENODEV;
 		goto err_ddc;
 	}
-
-	hdata->hdmiphy_port = hdmi_hdmiphy;
+	hdata->hdmiphy_port = of_find_i2c_device_by_node(phy_node);
+	if (!hdata->hdmiphy_port) {
+		DRM_ERROR("Failed to get hdmi phy i2c client from node\n");
+		ret = -ENODEV;
+		goto err_ddc;
+	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res == NULL) {
@@ -2442,9 +2441,9 @@ err_int_irq:
  err_workqueue:
 	destroy_workqueue(hdata->wq);
 err_hdmiphy:
-	i2c_del_driver(&hdmiphy_driver);
+	put_device(&hdata->hdmiphy_port->dev);
 err_ddc:
-	i2c_del_driver(&ddc_driver);
+	put_device(&hdata->ddc_port->dev);
 err_iomap:
 	iounmap(hdata->regs);
 err_req_region:
@@ -2484,10 +2483,8 @@ static int __devexit hdmi_remove(struct platform_device *pdev)
 	release_mem_region(hdata->regs_res->start,
 			resource_size(hdata->regs_res));
 
-	/* hdmiphy i2c driver */
-	i2c_del_driver(&hdmiphy_driver);
-	/* DDC i2c driver */
-	i2c_del_driver(&ddc_driver);
+	put_device(&hdata->hdmiphy_port->dev);
+	put_device(&hdata->ddc_port->dev);
 
 	kfree(hdata);
 
