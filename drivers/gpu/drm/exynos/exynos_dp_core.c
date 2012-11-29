@@ -507,6 +507,9 @@ static int exynos_dp_process_clock_recovery(struct exynos_dp_device *dp)
 		return ret;
 
 	lane_count = dp->link_train.lane_count;
+	if (lane_count == 0)
+		return 0;
+
 	adjust_request = link_status + 4;
 
 	if (exynos_dp_clock_recovery_ok(link_status, lane_count) == 0) {
