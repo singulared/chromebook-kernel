@@ -148,7 +148,6 @@ struct exynos_drm_private {
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_callback kds_cb;
-	struct kds_callback kds_cb_rm_fb;
 #endif
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
@@ -239,7 +238,6 @@ struct exynos_drm_fb {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct drm_crtc			*crtc;
 	struct kds_resource_set		*kds_res_set;
-	struct kds_resource_set		*kds_res_set_rm_fb;
 	struct dma_buf			*dma_buf;
 #endif
 };
