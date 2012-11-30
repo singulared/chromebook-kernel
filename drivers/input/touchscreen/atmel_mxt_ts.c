@@ -2700,7 +2700,8 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	sysfs_unmerge_group(&client->dev.kobj, &mxt_power_attr_group);
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	free_irq(data->irq, data);
-	input_unregister_device(data->input_dev);
+	if (data->input_dev)
+		input_unregister_device(data->input_dev);
 	kfree(data->object_table);
 	kfree(data->fw_file);
 	kfree(data->config_file);
@@ -2764,6 +2765,9 @@ static int mxt_suspend(struct device *dev)
 	u8 *power_config;
 	int ret;
 
+	if (mxt_in_bootloader(data))
+		return 0;
+
 	mutex_lock(&input_dev->mutex);
 
 	/* Save 3 bytes T7 Power config */
@@ -2819,6 +2823,9 @@ static int mxt_resume(struct device *dev)
 	struct mxt_data *data = i2c_get_clientdata(client);
 	struct input_dev *input_dev = data->input_dev;
 	int ret;
+
+	if (mxt_in_bootloader(data))
+		return 0;
 
 	/* Process any pending message so that CHG line can be de-asserted */
 	ret = mxt_handle_messages(data, false);
