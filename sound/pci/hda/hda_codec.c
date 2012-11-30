@@ -3434,13 +3434,16 @@ void snd_hda_codec_set_power_to_all(struct hda_codec *codec, hda_nid_t fg,
 
 	if (power_state == AC_PWRST_D0) {
 		unsigned long end_time;
-		int state;
+		int state, actual_state, set_state;
 		/* wait until the codec reachs to D0 */
 		end_time = jiffies + msecs_to_jiffies(500);
 		do {
 			state = snd_hda_codec_read(codec, fg, 0,
 						   AC_VERB_GET_POWER_STATE, 0);
-			if (state == power_state)
+			actual_state = (state >> 4) & 0x0f;
+			set_state = state & 0x0f;
+			if (actual_state == set_state &&
+			    actual_state == power_state)
 				break;
 			msleep(1);
 		} while (time_after_eq(end_time, jiffies));
