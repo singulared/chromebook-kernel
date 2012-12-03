@@ -2056,7 +2056,7 @@ static const struct attribute_group mxt_attr_group = {
 };
 
 static struct attribute *mxt_power_attrs[] = {
-	&dev_attr_suspend_acq_interval_ms,
+	&dev_attr_suspend_acq_interval_ms.attr,
 	NULL
 };
 
