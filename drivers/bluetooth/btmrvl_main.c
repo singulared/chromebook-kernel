@@ -562,6 +562,8 @@ int btmrvl_register_hdev(struct btmrvl_private *priv)
 	hdev->send = btmrvl_send_frame;
 	hdev->ioctl = btmrvl_ioctl;
 
+	set_bit(HCI_QUIRK_RESET_ON_CLOSE, &hdev->quirks);
+
 	btmrvl_send_module_cfg_cmd(priv, MODULE_BRINGUP_REQ);
 
 	hdev->dev_type = priv->btmrvl_dev.dev_type;
