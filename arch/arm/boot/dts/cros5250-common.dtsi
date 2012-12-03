@@ -73,8 +73,8 @@
 				};
 				ldo7_reg: LDO7 {
 					regulator-name = "vdd_ldo7";
-					regulator-min-microvolt = <1000000>;
-					regulator-max-microvolt = <1000000>;
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
 					regulator-always-on;
 					reg_op_mode = <1>; /* Standby Mode */
 				};
