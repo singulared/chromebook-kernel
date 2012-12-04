@@ -342,20 +342,14 @@ static struct task_struct *select_bad_process(unsigned int *ppoints,
 		if (!p->mm)
 			continue;
 
-		if (p->flags & PF_EXITING) {
+		if (p->flags & PF_EXITING && !force_kill) {
 			/*
-			 * If p is the current task and is in the process of
-			 * releasing memory, we allow the "kill" to set
-			 * TIF_MEMDIE, which will allow it to gain access to
-			 * memory reserves.  Otherwise, it may stall forever.
-			 *
-			 * The loop isn't broken here, however, in case other
-			 * threads are found to have already been oom killed.
+			 * If this task is not being ptraced on exit,
+			 * then wait for it to finish before killing
+			 * some other task unnecessarily.
 			 */
-			if (p == current) {
-				chosen = p;
-				*ppoints = 1000;
-			}
+			if (!(p->group_leader->ptrace & PT_TRACE_EXIT))
+				return ERR_PTR(-1UL);
 		}
 
 		points = oom_badness(p, memcg, nodemask, totalpages);
@@ -401,7 +395,7 @@ static void dump_tasks(const struct mem_cgroup *memcg, const nodemask_t *nodemas
 			continue;
 		}
 
-		pr_info("[%5d] %5d %5d %8lu %8lu %3u     %3d         %5d %s\n",
+		pr_info("[%5d] %5d %5d %8lu %8lu %3u     %3d	 %5d %s\n",
 			task->pid, task_uid(task), task->tgid,
 			task->mm->total_vm, get_mm_rss(task->mm),
 			task_cpu(task), task->signal->oom_adj,
@@ -705,11 +699,11 @@ void out_of_memory(struct zonelist *zonelist, gfp_t gfp_mask,
 		return;
 
 	/*
-	 * If current has a pending SIGKILL, then automatically select it.  The
-	 * goal is to allow it to allocate so that it may quickly exit and free
-	 * its memory.
+	 * If current has a pending SIGKILL or is exiting, then automatically
+	 * select it.  The goal is to allow it to allocate so that it may
+	 * quickly exit and free its memory.
 	 */
-	if (fatal_signal_pending(current)) {
+	if (fatal_signal_pending(current) || current->flags & PF_EXITING) {
 		set_thread_flag(TIF_MEMDIE);
 		return;
 	}
