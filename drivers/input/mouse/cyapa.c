@@ -121,13 +121,6 @@
 #define BL_ERROR_FLASH_PROT  0x08
 #define BL_ERROR_FLASH_CSUM  0x04
 
-#define REG_BL_KEY1 0x0d
-#define REG_BL_KEY2 0x0e
-#define REG_BL_KEY3 0x0f
-#define BL_KEY1 0xc0
-#define BL_KEY2 0xc1
-#define BL_KEY3 0xc2
-
 #define BL_STATUS_SIZE  3  /* length of bootloader status registers */
 #define BLK_HEAD_BYTES 32
 
