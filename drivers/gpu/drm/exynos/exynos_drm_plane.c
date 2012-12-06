@@ -87,7 +87,6 @@ static int exynos_disable_plane(struct drm_plane *plane)
 			exynos_drm_encoder_crtc_disable);
 
 	exynos_plane->enabled = false;
-	exynos_plane->overlay.zpos = DEFAULT_ZPOS;
 
 	return 0;
 }
