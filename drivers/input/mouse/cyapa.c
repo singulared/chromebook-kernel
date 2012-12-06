@@ -1963,8 +1963,18 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	if (cyapa->btn_capability & CAPABILITY_RIGHT_BTN_MASK)
 		__set_bit(BTN_RIGHT, input->keybit);
 
+	/*
+	 * We are using the number of buttons reported to infer BUTTONPAD.
+	 * This is true for all currently known devices, that a device with
+	 * just one button (a left button) is a type with the button
+	 * underneath the touch surface, and one with more than one button
+	 * is not. It is concievable that device can be built that does
+	 * not conform to this, though.
+	 */
+	if (cyapa->btn_capability == CAPABILITY_LEFT_BTN_MASK)
+		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
+
 	__set_bit(INPUT_PROP_POINTER, input->propbit);
-	__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
 
 	/* Register the device in input subsystem */
 	ret = input_register_device(input);
