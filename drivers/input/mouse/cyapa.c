@@ -2158,6 +2158,7 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 	if (cyapa->input)
 		input_unregister_device(cyapa->input);
 
+	cyapa_set_power_mode(cyapa, PWR_MODE_OFF);
 	kfree(cyapa->read_fw_image);
 	kfree(cyapa);
 
