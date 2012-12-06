@@ -231,7 +231,7 @@ struct cyapa {
 
 	struct i2c_client *client;
 	struct input_dev *input;
-	char *phys;	/* device physical location */
+	char phys[32];	/* device physical location */
 	int irq;
 	u8 adapter_func;
 	bool irq_wake;  /* irq wake is enabled */
@@ -2083,12 +2083,8 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	cyapa->gen = CYAPA_GEN3;
 	cyapa->client = client;
 	i2c_set_clientdata(client, cyapa);
-	cyapa->phys = kasprintf(GFP_KERNEL, "i2c-%d-%04x/input0",
-				client->adapter->nr, client->addr);
-	if (!cyapa->phys) {
-		ret = -ENOMEM;
-		goto err_mem_free;
-	}
+	sprintf(cyapa->phys, "i2c-%d-%04x/input0", client->adapter->nr,
+		client->addr);
 
 	cyapa->adapter_func = adapter_func;
 	/* i2c isn't supported, set smbus */
@@ -2132,7 +2128,6 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	return 0;
 
 err_mem_free:
-	kfree(cyapa->phys);
 	kfree(cyapa);
 
 	return ret;
@@ -2164,7 +2159,6 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 		input_unregister_device(cyapa->input);
 
 	kfree(cyapa->read_fw_image);
-	kfree(cyapa->phys);
 	kfree(cyapa);
 
 	return 0;
