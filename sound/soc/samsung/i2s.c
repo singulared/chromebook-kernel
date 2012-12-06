@@ -877,6 +877,26 @@ static int i2s_resume(struct snd_soc_dai *dai)
 #endif
 
 
+#ifdef CONFIG_PM_RUNTIME
+static int i2s_runtime_suspend(struct device *dev)
+{
+	struct i2s_dai *i2s = dev_get_drvdata(dev);
+
+	clk_disable(i2s->clk);
+
+	return 0;
+}
+
+static int i2s_runtime_resume(struct device *dev)
+{
+	struct i2s_dai *i2s = dev_get_drvdata(dev);
+
+	clk_enable(i2s->clk);
+
+	return 0;
+}
+#endif /* CONFIG_PM_RUNTIME */
+
 static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct i2s_dai *i2s = to_info(dai);
@@ -897,21 +917,22 @@ static int samsung_i2s_dai_probe(struct snd_soc_dai *dai)
 		iounmap(i2s->addr);
 		return -ENOENT;
 	}
-	clk_prepare_enable(i2s->clk);
 
 	if (other) {
 		other->addr = i2s->addr;
 		other->clk = i2s->clk;
 	}
 
+probe_exit:
+	clk_prepare_enable(i2s->clk);
+
 	if (i2s->quirks & QUIRK_NEED_RSTCLR)
 		writel(CON_RSTCLR, i2s->addr + I2SCON);
 
-	if (i2s->quirks & QUIRK_SEC_DAI)
+	if ((i2s->quirks & QUIRK_SEC_DAI) && !is_secondary(i2s))
 		idma_reg_addr_init(i2s->addr,
 					i2s->sec_dai->idma_playback.dma_addr);
 
-probe_exit:
 	/* Reset any constraint on RFS and BFS */
 	i2s->rfs = 0;
 	i2s->bfs = 0;
@@ -926,6 +947,7 @@ probe_exit:
 		i2s_set_sysclk(dai, SAMSUNG_I2S_CDCLK,
 				0, SND_SOC_CLOCK_IN);
 
+	clk_disable_unprepare(i2s->clk);
 	return 0;
 }
 
@@ -1293,6 +1315,11 @@ static int samsung_i2s_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops samsung_i2s_pm = {
+	SET_RUNTIME_PM_OPS(i2s_runtime_suspend,
+				i2s_runtime_resume, NULL)
+};
+
 static struct platform_device_id samsung_i2s_driver_ids[] = {
 	{
 		.name           = "samsung-i2s",
@@ -1328,6 +1355,7 @@ static struct platform_driver samsung_i2s_driver = {
 	.driver = {
 		.name = "samsung-i2s",
 		.owner = THIS_MODULE,
+		.pm = &samsung_i2s_pm,
 		.of_match_table = of_match_ptr(exynos_i2s_match),
 	},
 };
