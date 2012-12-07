@@ -112,14 +112,12 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
 	struct drm_framebuffer *fb;
 	struct exynos_drm_fb *exynos_fb;
-	struct exynos_drm_private *dev_priv;
 	int i, nr;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	exynos_fb = container_of(work, struct exynos_drm_fb, release_work);
 	fb = &exynos_fb->fb;
-	dev_priv = fb->dev->dev_private;
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (exynos_fb->dma_buf)
