@@ -901,6 +901,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	struct mixer_context *mctx = arg;
 	struct mixer_resources *res = &mctx->mixer_res;
 	u32 val, base, shadow;
+	bool flip_complete = false;
 	int i;
 
 	spin_lock(&res->reg_slock);
@@ -932,7 +933,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 		for (i = 0; i < MIXER_WIN_NR; i++)
 			mctx->win_data[i].updated = false;
 
-		exynos_drm_crtc_finish_pageflip(mctx->drm_dev, mctx->pipe);
+		flip_complete = true;
 
 		if (mctx->event_flags & MXR_EVENT_VSYNC) {
 			DRM_DEBUG_KMS("mctx->event_flags & MXR_EVENT_VSYNC");
@@ -952,6 +953,9 @@ out:
 	mixer_reg_write(res, MXR_INT_STATUS, val);
 
 	spin_unlock(&res->reg_slock);
+
+	if (flip_complete)
+		exynos_drm_crtc_finish_pageflip(mctx->drm_dev, mctx->pipe);
 
 	return IRQ_HANDLED;
 }

@@ -60,10 +60,12 @@ struct exynos_drm_crtc {
 	struct exynos_drm_overlay	overlay;
 	struct drm_framebuffer		*current_fb;
 	struct drm_framebuffer		*pending_fb;
+	struct drm_framebuffer		*pending_fb_extra;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct drm_pending_vblank_event *event;
 	struct kds_resource_set		*current_kds;
 	struct kds_resource_set		*pending_kds;
+	struct kds_resource_set		*pending_kds_extra;
 	struct kds_resource_set		*future_kds;
 	struct kds_resource_set		*future_kds_extra;
 #endif
@@ -357,37 +359,39 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_parameter)
 {
-	struct drm_framebuffer *fb = callback_parameter;
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-	struct drm_crtc *crtc =  exynos_fb->crtc;
+	struct drm_framebuffer *prev_fb, *fb = callback_parameter;
+	struct drm_crtc *crtc =  to_exynos_fb(fb)->crtc;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct kds_resource_set **pkds = callback_extra_parameter;
-	struct kds_resource_set *prev_kds;
-	struct drm_framebuffer *prev_fb;
 	unsigned long flags;
 
-	exynos_drm_crtc_update(crtc, fb);
-	exynos_drm_crtc_apply(crtc);
+	/*
+	 * Under rare circumstances (modeset followed by flip) it is possible
+	 * to have two fbs ready in time for the same vblank. We don't want to
+	 * drop the latter fb because it is most recent. We can't drop the
+	 * former either because we've already applied it and the mixer does
+	 * not allow applying more than one frame on a vblank. So instead of
+	 * dropping a frame, we store the latter frame in the extra slot and
+	 * apply it on the next vblank.
+	 */
 
 	spin_lock_irqsave(&dev->event_lock, flags);
-	prev_kds = exynos_crtc->pending_kds;
 	prev_fb = exynos_crtc->pending_fb;
-	exynos_crtc->pending_kds = *pkds;
-	exynos_crtc->pending_fb = fb;
+	if (unlikely(prev_fb)) {
+		exynos_crtc->pending_kds_extra = *pkds;
+		exynos_crtc->pending_fb_extra = fb;
+	} else {
+		exynos_crtc->pending_kds = *pkds;
+		exynos_crtc->pending_fb = fb;
+	}
 	*pkds = NULL;
-	if (prev_fb)
-		exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
-	if (prev_fb) {
-		DRM_ERROR("previous work detected\n");
-		exynos_drm_fb_put(to_exynos_fb(prev_fb));
-		if (prev_kds)
-			kds_resource_set_release(&prev_kds);
-	} else {
+	if (likely(!prev_fb)) {
 		BUG_ON(atomic_read(&exynos_crtc->flip_pending));
-		BUG_ON(prev_kds);
+		exynos_drm_crtc_update(crtc, fb);
+		exynos_drm_crtc_apply(crtc);
 		atomic_set(&exynos_crtc->flip_pending, 1);
 	}
 }
@@ -532,7 +536,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	struct drm_crtc *crtc = dev_priv->crtc[crtc_idx];
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct kds_resource_set *kds;
-	struct drm_framebuffer *fb;
+	struct drm_framebuffer *fb, *pending_fb;
 	unsigned long flags;
 
 	/* set wait vsync wake up queue. */
@@ -550,10 +554,18 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	}
 	kds = exynos_crtc->current_kds;
 	exynos_crtc->current_kds = exynos_crtc->pending_kds;
-	exynos_crtc->pending_kds = NULL;
 	fb = exynos_crtc->current_fb;
 	exynos_crtc->current_fb = exynos_crtc->pending_fb;
-	exynos_crtc->pending_fb = NULL;
+	if (unlikely(exynos_crtc->pending_fb_extra)) {
+		exynos_crtc->pending_fb = exynos_crtc->pending_fb_extra;
+		exynos_crtc->pending_kds = exynos_crtc->pending_kds_extra;
+		exynos_crtc->pending_fb_extra = NULL;
+		exynos_crtc->pending_kds_extra = NULL;
+	} else {
+		exynos_crtc->pending_fb = NULL;
+		exynos_crtc->pending_kds = NULL;
+	}
+	pending_fb = exynos_crtc->pending_fb;
 	exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&drm_dev->event_lock, flags);
 
@@ -561,6 +573,12 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 		exynos_drm_fb_put(to_exynos_fb(fb));
 	if (kds)
 		kds_resource_set_release(&kds);
+
+	if (unlikely(pending_fb)) {
+		exynos_drm_crtc_update(crtc, pending_fb);
+		exynos_drm_crtc_apply(crtc);
+		atomic_set(&exynos_crtc->flip_pending, 1);
+	}
 
 	drm_vblank_put(drm_dev, crtc_idx);
 }
