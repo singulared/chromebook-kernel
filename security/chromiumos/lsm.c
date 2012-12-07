@@ -158,6 +158,11 @@ static int chromiumos_security_load_module(struct file *file)
 	struct dentry *module_root;
 
 	if (!file) {
+		if (!module_locking) {
+			report_load_module(NULL, "old-api-locking-ignored");
+			return 0;
+		}
+
 		report_load_module(NULL, "old-api-denied");
 		return -EPERM;
 	}
