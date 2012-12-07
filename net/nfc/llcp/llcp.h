@@ -122,7 +122,6 @@ struct nfc_llcp_sock {
 
 	struct sk_buff_head tx_queue;
 	struct sk_buff_head tx_pending_queue;
-	struct sk_buff_head tx_backlog_queue;
 
 	struct list_head accept_queue;
 	struct sock *parent;
