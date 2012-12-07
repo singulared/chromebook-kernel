@@ -585,7 +585,9 @@ static void fimd_win_commit(void *ctx, int zpos)
 	val |= WINCONx_ENWIN;
 	writel(val, fimd_ctx->regs + WINCON(win));
 
-	mie_set_6bit_dithering(fimd_ctx, win);
+	/* only apply dithering on hardware window 0. */
+	if (win == 0)
+		mie_set_6bit_dithering(fimd_ctx, win);
 
 	/* Enable DMA channel and unprotect windows */
 	val = readl(fimd_ctx->regs + SHADOWCON);
