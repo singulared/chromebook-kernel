@@ -7730,10 +7730,17 @@ bool intel_set_mode(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	drm_i915_private_t *dev_priv = dev->dev_private;
-	struct drm_display_mode *adjusted_mode, saved_mode, saved_hwmode;
+	struct drm_display_mode *adjusted_mode, *saved_mode, *saved_hwmode;
 	struct intel_crtc *intel_crtc;
 	unsigned disable_pipes, prepare_pipes, modeset_pipes;
 	bool ret = true;
+
+	saved_mode = kmalloc(2 * sizeof(*saved_mode), GFP_KERNEL);
+	if (!saved_mode) {
+		DRM_ERROR("i915: Could not allocate saved display mode.\n");
+		return false;
+	}
+	saved_hwmode = saved_mode + 1;
 
 	intel_modeset_affected_pipes(crtc, &modeset_pipes,
 				     &prepare_pipes, &disable_pipes);
@@ -7744,8 +7751,8 @@ bool intel_set_mode(struct drm_crtc *crtc,
 	for_each_intel_crtc_masked(dev, disable_pipes, intel_crtc)
 		intel_crtc_disable(&intel_crtc->base);
 
-	saved_hwmode = crtc->hwmode;
-	saved_mode = crtc->mode;
+	*saved_hwmode = crtc->hwmode;
+	*saved_mode = crtc->mode;
 
 	/* Hack: Because we don't (yet) support global modeset on multiple
 	 * crtcs, we don't keep track of the new mode for more than one crtc.
@@ -7756,7 +7763,8 @@ bool intel_set_mode(struct drm_crtc *crtc,
 	if (modeset_pipes) {
 		adjusted_mode = intel_modeset_adjusted_mode(crtc, mode);
 		if (IS_ERR(adjusted_mode)) {
-			return false;
+			ret = false;
+			goto out;
 		}
 	}
 
@@ -7808,12 +7816,14 @@ bool intel_set_mode(struct drm_crtc *crtc,
 done:
 	drm_mode_destroy(dev, adjusted_mode);
 	if (!ret && crtc->enabled) {
-		crtc->hwmode = saved_hwmode;
-		crtc->mode = saved_mode;
+		crtc->hwmode = *saved_hwmode;
+		crtc->mode = *saved_mode;
 	} else {
 		intel_modeset_check_state(dev);
 	}
 
+out:
+	kfree(saved_mode);
 	return ret;
 }
 
