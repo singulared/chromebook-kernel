@@ -453,8 +453,13 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 			goto fail_kds;
 		}
 	} else {
+		/*
+		 * For normal page-flip (i.e. non-modeset) we should
+		 * never be flipping a non-kds buffer.
+		 */
+		if (event)
+			DRM_ERROR("flipping a non-kds buffer\n");
 		*pkds = NULL;
-		DRM_ERROR("flipping a non-kds buffer\n");
 		exynos_drm_kds_callback(fb, pkds);
 	}
 
