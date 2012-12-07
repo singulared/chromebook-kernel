@@ -120,7 +120,7 @@ struct page **exynos_gem_get_pages(struct drm_gem_object *obj,
 
 	for (i = 0; i < npages; i++) {
 		p = alloc_page(gfpmask);
-		if (IS_ERR(p))
+		if (!p)
 			goto fail;
 		pages[i] = p;
 	}
