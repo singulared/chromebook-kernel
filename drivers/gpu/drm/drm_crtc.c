@@ -453,6 +453,12 @@ static void drm_framebuffer_free_bug(struct kref *kref)
 	BUG();
 }
 
+static void __drm_framebuffer_unreference(struct drm_framebuffer *fb)
+{
+	DRM_DEBUG("FB ID: %d\n", fb->base.id);
+	kref_put(&fb->refcount, drm_framebuffer_free_bug);
+}
+
 /* dev->mode_config.fb_lock must be held! */
 static void __drm_framebuffer_unregister(struct drm_device *dev,
 					 struct drm_framebuffer *fb)
@@ -463,7 +469,7 @@ static void __drm_framebuffer_unregister(struct drm_device *dev,
 
 	fb->base.id = 0;
 
-	kref_put(&fb->refcount, drm_framebuffer_free_bug);
+	__drm_framebuffer_unreference(fb);
 }
 
 /**
@@ -552,6 +558,7 @@ void drm_framebuffer_remove(struct drm_framebuffer *fb)
 			if (ret)
 				DRM_ERROR("failed to disable plane with busy fb\n");
 			/* disconnect the plane from the fb and crtc: */
+			__drm_framebuffer_unreference(plane->fb);
 			plane->fb = NULL;
 			plane->crtc = NULL;
 		}
@@ -1916,15 +1923,13 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 	struct drm_mode_object *obj;
 	struct drm_plane *plane;
 	struct drm_crtc *crtc;
-	struct drm_framebuffer *fb;
+	struct drm_framebuffer *fb = NULL, *old_fb = NULL;
 	int ret = 0;
 	unsigned int fb_width, fb_height;
 	int i;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
-
-	drm_modeset_lock_all(dev);
 
 	/*
 	 * First, find the plane, crtc, and fb objects.  If not available,
@@ -1935,8 +1940,7 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 	if (!obj) {
 		DRM_DEBUG_KMS("Unknown plane ID %d\n",
 			      plane_req->plane_id);
-		ret = -ENOENT;
-		goto out;
+		return -ENOENT;
 	}
 	plane = obj_to_plane(obj);
 
@@ -1952,10 +1956,13 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 
 	/* No fb means shut it down */
 	if (!plane_req->fb_id) {
+		drm_modeset_lock_all(dev);
+		old_fb = plane->fb;
 		plane->crtc = crtc;
 		plane->funcs->disable_plane(plane);
 		plane->crtc = NULL;
 		plane->fb = NULL;
+		drm_modeset_unlock_all(dev);
 		goto out;
 	}
 
@@ -1966,8 +1973,6 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 		ret = -ENOENT;
 		goto out;
 	}
-	/* fb is protect by the mode_config lock, so drop the ref immediately */
-	drm_framebuffer_unreference(fb);
 
 	/* Check whether this plane supports the fb pixel format. */
 	for (i = 0; i < plane->format_count; i++)
@@ -2013,18 +2018,25 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 		goto out;
 	}
 
+	drm_modeset_lock_all(dev);
 	ret = plane->funcs->update_plane(plane, crtc, fb,
 					 plane_req->crtc_x, plane_req->crtc_y,
 					 plane_req->crtc_w, plane_req->crtc_h,
 					 plane_req->src_x, plane_req->src_y,
 					 plane_req->src_w, plane_req->src_h);
 	if (!ret) {
+		old_fb = plane->fb;
+		fb = NULL;
 		plane->crtc = crtc;
 		plane->fb = fb;
 	}
+	drm_modeset_unlock_all(dev);
 
 out:
-	drm_modeset_unlock_all(dev);
+	if (fb)
+		drm_framebuffer_unreference(fb);
+	if (old_fb)
+		drm_framebuffer_unreference(old_fb);
 
 	return ret;
 }
