@@ -318,7 +318,6 @@ struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
 		return NULL;
 	}
 
-	exynos_gem_obj->size = size;
 	obj = &exynos_gem_obj->base;
 
 	ret = drm_gem_object_init(dev, obj, size);
