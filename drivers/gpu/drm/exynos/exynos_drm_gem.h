@@ -53,7 +53,7 @@ struct exynos_drm_gem_buf {
 };
 
 /*
- * exynos drm buffer structure.
+ * exynos drm object structure.
  *
  * @base: a gem object.
  *	- a new handle to this gem object would be created
@@ -64,7 +64,7 @@ struct exynos_drm_gem_buf {
  *	continuous memory region allocated by user request
  *	or at framebuffer creation.
  * @size: total memory size to physically non-continuous memory region.
- * @flags: indicate memory type to allocated buffer and cache attruibute.
+ * @flags: indicate memory type to allocated buffer and cache attribute.
  *
  * P.S. this object would be transfered to user as kms_bo.handle so
  *	user can access the buffer through kms_bo.handle.
