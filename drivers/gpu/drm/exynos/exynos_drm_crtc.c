@@ -62,11 +62,9 @@ void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 		buffer = exynos_drm_fb_buffer(fb, i);
 
 		overlay->dma_addr[i] = buffer->dma_addr;
-		overlay->vaddr[i] = buffer->kvaddr;
 
-		DRM_DEBUG_KMS("buffer: %d, vaddr = 0x%lx, dma_addr = 0x%lx\n",
-				i, (unsigned long)overlay->vaddr[i],
-				(unsigned long)overlay->dma_addr[i]);
+		DRM_DEBUG_KMS("buffer: %d, dma_addr = 0x%lx\n",
+				i, (unsigned long)overlay->dma_addr[i]);
 	}
 
 	actual_w = min((mode->hdisplay - pos->crtc_x), pos->crtc_w);

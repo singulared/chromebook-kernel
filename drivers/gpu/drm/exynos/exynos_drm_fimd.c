@@ -81,7 +81,6 @@ struct fimd_win_data {
 	unsigned int		vmargin;
 
 	dma_addr_t		dma_addr;
-	void __iomem		*vaddr;
 	unsigned int		buf_offsize;
 	unsigned int		line_size;	/* bytes */
 	bool			enabled;
@@ -335,7 +334,6 @@ static void fimd_win_mode_set(void *ctx, struct exynos_drm_overlay *overlay)
 	win_data->vmargin = (overlay->crtc_vtotal - overlay->crtc_height -
 				overlay->crtc_vsync_len) / 2;
 	win_data->dma_addr = overlay->dma_addr[0] + offset;
-	win_data->vaddr = overlay->vaddr[0] + offset;
 	win_data->bpp = overlay->bpp;
 	win_data->buf_offsize = overlay->fb_pitch -
 		(overlay->fb_width * (overlay->bpp >> 3));
@@ -349,9 +347,7 @@ static void fimd_win_mode_set(void *ctx, struct exynos_drm_overlay *overlay)
 			win_data->offset_x, win_data->offset_y);
 	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
 			win_data->ovl_width, win_data->ovl_height);
-	DRM_DEBUG_KMS("paddr = 0x%lx, vaddr = 0x%lx\n",
-			(unsigned long)win_data->dma_addr,
-			(unsigned long)win_data->vaddr);
+	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
 	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
 			overlay->fb_width, overlay->crtc_width);
 }
