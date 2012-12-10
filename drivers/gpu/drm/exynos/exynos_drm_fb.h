@@ -46,8 +46,8 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 			    struct drm_mode_fb_cmd2 *mode_cmd);
 
 /* get memory information of a drm framebuffer */
-struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
-						 int index);
+struct exynos_drm_gem_buf *
+exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb, int index);
 
 void exynos_drm_mode_config_init(struct drm_device *dev);
 

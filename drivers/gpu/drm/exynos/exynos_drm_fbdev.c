@@ -78,6 +78,7 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 {
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_buf *buffer;
 	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
 	unsigned long offset;
@@ -88,7 +89,7 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height);
 
 	/* RGB formats use only one buffer */
-	buffer = exynos_drm_fb_buffer(fb, 0);
+	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
 	if (!buffer) {
 		DRM_LOG_KMS("buffer is null.\n");
 		return -EFAULT;

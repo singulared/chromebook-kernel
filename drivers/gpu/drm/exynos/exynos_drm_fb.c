@@ -37,15 +37,14 @@
 #include "exynos_drm_crtc.h"
 
 /* Helper functions to push things in/out of the iommu. */
-static int exynos_drm_fb_map(struct drm_framebuffer *fb)
+static int exynos_drm_fb_map(struct exynos_drm_fb *exynos_fb)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_obj *gem_ob = exynos_fb->exynos_gem_obj[0];
 	struct drm_gem_object *obj = &gem_ob->base;
 	struct exynos_drm_gem_buf *buf;
 	int ret;
 
-	buf = exynos_drm_fb_buffer(fb, 0);
+	buf = exynos_drm_fb_buffer(exynos_fb, 0);
 	if (!buf) {
 		DRM_ERROR("buffer is null\n");
 		return -ENOMEM;
@@ -67,14 +66,13 @@ static int exynos_drm_fb_map(struct drm_framebuffer *fb)
 	return 0;
 }
 
-static int exynos_drm_fb_unmap(struct drm_framebuffer *fb)
+static int exynos_drm_fb_unmap(struct exynos_drm_fb *exynos_fb)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_obj *gem_ob = exynos_fb->exynos_gem_obj[0];
 	struct drm_gem_object *obj = &gem_ob->base;
 	struct exynos_drm_gem_buf *buf;
 
-	buf = exynos_drm_fb_buffer(fb, 0);
+	buf = exynos_drm_fb_buffer(exynos_fb, 0);
 	if (!buf) {
 		DRM_ERROR("buffer is null\n");
 		return -ENOMEM;
@@ -126,7 +124,7 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 
 	drm_framebuffer_cleanup(fb);
 
-	if (exynos_drm_fb_unmap(fb))
+	if (exynos_drm_fb_unmap(exynos_fb))
 		DRM_ERROR("Couldn't unmap buffer\n");
 
 	nr = exynos_drm_format_num_buffers(fb->pixel_format);
@@ -242,7 +240,7 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		exynos_fb->exynos_gem_obj[i] = to_exynos_gem_obj(obj);
 	}
 
-	if (exynos_drm_fb_map(fb)) {
+	if (exynos_drm_fb_map(exynos_fb)) {
 		DRM_ERROR("Failed to map gem object\n");
 		ret = -ENOMEM;
 		goto err_map;
@@ -260,10 +258,9 @@ err_lookup:
 	return ERR_PTR(ret);
 }
 
-struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
-						int index)
+struct exynos_drm_gem_buf *
+exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb, int index)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_buf *buffer;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);

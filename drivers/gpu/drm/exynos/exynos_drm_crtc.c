@@ -55,11 +55,12 @@ void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 	struct exynos_drm_gem_buf *buffer;
 	unsigned int actual_w;
 	unsigned int actual_h;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	int nr = exynos_drm_format_num_buffers(fb->pixel_format);
 	int i;
 
 	for (i = 0; i < nr; i++) {
-		buffer = exynos_drm_fb_buffer(fb, i);
+		buffer = exynos_drm_fb_buffer(exynos_fb, i);
 
 		overlay->dma_addr[i] = buffer->dma_addr;
 
