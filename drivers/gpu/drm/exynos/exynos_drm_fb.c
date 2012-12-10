@@ -174,9 +174,8 @@ static struct drm_framebuffer_funcs exynos_drm_fb_funcs = {
 	.dirty		= exynos_drm_fb_dirty,
 };
 
-struct drm_framebuffer *
-exynos_drm_framebuffer_init(struct drm_device *dev,
-			    struct drm_mode_fb_cmd2 *mode_cmd)
+struct exynos_drm_fb *
+exynos_drm_fb_init(struct drm_device *dev, struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct exynos_drm_fb *exynos_fb;
 	int ret;
@@ -198,7 +197,7 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 
 	drm_helper_mode_fill_fb_struct(&exynos_fb->fb, mode_cmd);
 
-	return &exynos_fb->fb;
+	return exynos_fb;
 
 err_init:
 	kfree(exynos_fb);
@@ -210,19 +209,16 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		      struct drm_mode_fb_cmd2 *mode_cmd)
 {
 	struct drm_gem_object *obj;
-	struct drm_framebuffer *fb;
 	struct exynos_drm_fb *exynos_fb;
 	int i, nr, ret = 0;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	fb = exynos_drm_framebuffer_init(dev, mode_cmd);
-	if (IS_ERR(fb))
-		return fb;
+	exynos_fb = exynos_drm_fb_init(dev, mode_cmd);
+	if (IS_ERR(exynos_fb))
+		return ERR_CAST(exynos_fb);
 
-	exynos_fb = to_exynos_fb(fb);
-	nr = exynos_drm_format_num_buffers(fb->pixel_format);
-
+	nr = exynos_drm_format_num_buffers(mode_cmd->pixel_format);
 	for (i = 0; i < nr; i++) {
 		obj = drm_gem_object_lookup(dev, file_priv,
 				mode_cmd->handles[i]);
@@ -246,7 +242,7 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		goto err_map;
 	}
 
-	return fb;
+	return &exynos_fb->fb;
 
 err_map:
 err_lookup:
