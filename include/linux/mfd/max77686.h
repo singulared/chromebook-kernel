@@ -73,6 +73,7 @@ enum max77686_regulators {
 
 struct max77686_regulator_data {
 	int id;
+	int opmode;
 	struct regulator_init_data *initdata;
 	struct device_node *of_node;
 };

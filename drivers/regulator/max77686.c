@@ -410,6 +410,12 @@ static int max77686_pmic_dt_parse_pdata(struct max77686_dev *iodev,
 		of_regulator_match(iodev->dev, regulators_np, &rmatch, 1);
 		rdata[i].initdata = rmatch.init_data;
 		rdata[i].of_node = rmatch.of_node;
+		if (of_property_read_u32(rdata[i].of_node, "max77686-opmode",
+			&rdata[i].opmode)) {
+			dev_warn(iodev->dev, "no op_mode property property at %s\n",
+			rmatch.name);
+			rdata[i].opmode = regulators[i].enable_mask;
+		}
 	}
 
 	pdata->regulators = rdata;
@@ -465,7 +471,10 @@ static int max77686_pmic_probe(struct platform_device *pdev)
 		config.init_data = pdata->regulators[i].initdata;
 		config.of_node = pdata->regulators[i].of_node;
 
-		max77686->opmode[i] = regulators[i].enable_mask;
+		if (config.of_node)
+			max77686->opmode[i] = pdata->regulators[i].opmode;
+		else
+			max77686->opmode[i] = regulators[i].enable_mask;
 		max77686->rdev[i] = regulator_register(&regulators[i], &config);
 		if (IS_ERR(max77686->rdev[i])) {
 			ret = PTR_ERR(max77686->rdev[i]);
