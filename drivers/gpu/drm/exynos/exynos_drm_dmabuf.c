@@ -163,11 +163,10 @@ static void exynos_gem_dmabuf_kunmap(struct dma_buf *dma_buf,
 	/* TODO */
 }
 
-static int exynos_drm_gem_dmabuf_mmap(struct dma_buf *dmabuf,
-                                     struct vm_area_struct *vma)
+static int exynos_gem_dmabuf_mmap(struct dma_buf *dmabuf,
+				  struct vm_area_struct *vma)
 {
-	struct drm_gem_object *obj = dmabuf->priv;
-	struct exynos_drm_gem_obj *exynos_gem_obj = to_exynos_gem_obj(obj);
+	struct exynos_drm_gem_obj *exynos_gem_obj = dmabuf->priv;
 	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
 	unsigned long uaddr = vma->vm_start;
 	int ret;
@@ -193,7 +192,7 @@ static int exynos_drm_gem_dmabuf_mmap(struct dma_buf *dmabuf,
 }
 
 static struct dma_buf_ops exynos_dmabuf_ops = {
-	.mmap                   = exynos_drm_gem_dmabuf_mmap,
+	.mmap			= exynos_gem_dmabuf_mmap,
 	.map_dma_buf		= exynos_gem_map_dma_buf,
 	.unmap_dma_buf		= exynos_gem_unmap_dma_buf,
 	.kmap			= exynos_gem_dmabuf_kmap,
