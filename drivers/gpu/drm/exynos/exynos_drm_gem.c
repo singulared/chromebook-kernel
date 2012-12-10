@@ -303,7 +303,6 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 	drm_gem_object_release(obj);
 
 	kfree(exynos_gem_obj);
-	exynos_gem_obj = NULL;
 }
 
 struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
