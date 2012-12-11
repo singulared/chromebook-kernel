@@ -124,16 +124,6 @@ enum exynos_sysmmu_inttype {
 	SYSMMU_FAULTS_NUM
 };
 
-/*
- * @itype: type of fault.
- * @pgtable_base: the physical address of page table base. This is 0 if @itype
- *                is SYSMMU_BUSERROR.
- * @fault_addr: the device (virtual) address that the System MMU tried to
- *             translated. This is 0 if @itype is SYSMMU_BUSERROR.
- */
-typedef int (*sysmmu_fault_handler_t)(enum exynos_sysmmu_inttype itype,
-			unsigned long pgtable_base, unsigned long fault_addr);
-
 static unsigned short fault_reg_offset[SYSMMU_FAULTS_NUM] = {
 	REG_PAGE_FAULT_ADDR,
 	REG_AR_FAULT_ADDR,
@@ -176,7 +166,6 @@ struct sysmmu_drvdata {
 	int activations;
 	rwlock_t lock;
 	struct iommu_domain *domain;
-	sysmmu_fault_handler_t fault_handler;
 	unsigned long pgtable;
 };
 
@@ -291,48 +280,23 @@ finish:
 	read_unlock_irqrestore(&data->lock, flags);
 }
 
-static void __set_fault_handler(struct sysmmu_drvdata *data,
-					sysmmu_fault_handler_t handler)
-{
-	unsigned long flags;
-
-	write_lock_irqsave(&data->lock, flags);
-	data->fault_handler = handler;
-	write_unlock_irqrestore(&data->lock, flags);
-}
-
-void exynos_sysmmu_set_fault_handler(struct device *dev,
-					sysmmu_fault_handler_t handler)
-{
-	struct sysmmu_drvdata *data = dev_get_drvdata(dev->archdata.iommu);
-
-	__set_fault_handler(data, handler);
-}
-
-static int default_fault_handler(enum exynos_sysmmu_inttype itype,
-		     unsigned long pgtable_base, unsigned long fault_addr)
+static void __show_fault_information(unsigned long *pgtable, unsigned long iova,
+				     int flags)
 {
 	unsigned long *ent;
 
-	if ((itype >= SYSMMU_FAULTS_NUM) || (itype < SYSMMU_PAGEFAULT))
-		itype = SYSMMU_FAULT_UNKNOWN;
-
 	pr_err("%s occurred at 0x%lx(Page table base: 0x%lx)\n",
-			sysmmu_fault_name[itype], fault_addr, pgtable_base);
+			sysmmu_fault_name[flags], iova, __pa(pgtable));
 
-	ent = section_entry(__va(pgtable_base), fault_addr);
+	ent = section_entry(pgtable, iova);
 	pr_err("\tLv1 entry: 0x%lx\n", *ent);
 
 	if (lv1ent_page(ent)) {
-		ent = page_entry(ent, fault_addr);
+		ent = page_entry(ent, iova);
 		pr_err("\t Lv2 entry: 0x%lx\n", *ent);
 	}
 
 	pr_err("Generating Kernel OOPS... because it is unrecoverable.\n");
-
-	BUG();
-
-	return 0;
 }
 
 static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
@@ -341,7 +305,7 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	struct sysmmu_drvdata *data = dev_id;
 	struct resource *irqres;
 	struct platform_device *pdev;
-	enum exynos_sysmmu_inttype itype;
+	enum exynos_sysmmu_inttype itype = SYSMMU_FAULT_UNKNOWN;
 	unsigned long addr = -1;
 
 	int i, ret = -ENOSYS;
@@ -357,9 +321,7 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 			break;
 	}
 
-	if (i == pdev->num_resources) {
-		itype = SYSMMU_FAULT_UNKNOWN;
-	} else {
+	if (i < pdev->num_resources) {
 		itype = (enum exynos_sysmmu_inttype)
 			__ffs(__raw_readl(data->sfrbases[i] + REG_INT_STATUS));
 		if (WARN_ON(!((itype >= 0) && (itype < SYSMMU_FAULT_UNKNOWN))))
@@ -370,25 +332,25 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 	}
 
 	if (data->domain)
-		ret = report_iommu_fault(data->domain, data->dev,
-				addr, itype);
+		ret = report_iommu_fault(data->domain, data->dev, addr, itype);
+	else
+		__show_fault_information(__va(data->pgtable), itype, addr);
 
-	if ((ret == -ENOSYS) && data->fault_handler) {
-		unsigned long base = data->pgtable;
-		if (itype != SYSMMU_FAULT_UNKNOWN)
-			base = __raw_readl(
-					data->sfrbases[i] + REG_PT_BASE_ADDR);
-		ret = data->fault_handler(itype, base, addr);
-	}
-
-	if (!ret && (itype != SYSMMU_FAULT_UNKNOWN))
+	if (ret == -ENOSYS)
+		pr_err("NO SYSTEM MMU FAULT HANDLER REGISTERED FOR %s\n",
+						dev_name(data->dev));
+	else if (ret < 0)
+		pr_err("SYSTEM MMU FAULT HANDLER FOR %s RETURNED ERROR, %d\n",
+						dev_name(data->dev), ret);
+	else if (itype != SYSMMU_FAULT_UNKNOWN)
 		__raw_writel(1 << itype, data->sfrbases[i] + REG_INT_CLEAR);
 	else
-		dev_dbg(data->sysmmu, "(%s) %s is not handled.\n",
-				data->dbgname, sysmmu_fault_name[itype]);
+		ret = -ENOSYS;
 
-	if (itype != SYSMMU_FAULT_UNKNOWN)
-		sysmmu_unblock(data->sfrbases[i]);
+	if (ret)
+		BUG();
+
+	sysmmu_unblock(data->sfrbases[i]);
 
 	read_unlock(&data->lock);
 
@@ -668,8 +630,6 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	rwlock_init(&data->lock);
 	INIT_LIST_HEAD(&data->node);
 
-	__set_fault_handler(data, &default_fault_handler);
-
 	if (dev->parent)
 		pm_runtime_enable(dev);
 
@@ -708,6 +668,17 @@ static inline void pgtable_flush(void *vastart, void *vaend)
 				virt_to_phys(vaend));
 }
 
+static int exynos_iommu_fault_handler(struct iommu_domain *domain,
+		struct device *dev, unsigned long iova, int flags, void *token)
+{
+	struct exynos_iommu_domain *priv = domain->priv;
+
+	dev_err(dev, "System MMU Generated FAULT!\n\n");
+	__show_fault_information(priv->pgtable, iova, flags);
+
+	return -ENOSYS;
+}
+
 static int exynos_iommu_domain_init(struct iommu_domain *domain)
 {
 	struct exynos_iommu_domain *priv;
@@ -735,6 +706,8 @@ static int exynos_iommu_domain_init(struct iommu_domain *domain)
 	domain->geometry.aperture_start = 0;
 	domain->geometry.aperture_end   = ~0UL;
 	domain->geometry.force_aperture = true;
+
+	iommu_set_fault_handler(domain, &exynos_iommu_fault_handler, NULL);
 
 	domain->priv = priv;
 	return 0;
