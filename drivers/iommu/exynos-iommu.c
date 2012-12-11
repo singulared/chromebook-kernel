@@ -205,6 +205,12 @@ struct sysmmu_prefbuf {
 	unsigned long config;
 };
 
+struct sysmmu_version {
+	unsigned char major; /* major = 0 means that driver must use MMU_VERSION
+				register instead of this structure */
+	unsigned char minor;
+};
+
 struct sysmmu_drvdata {
 	struct device *sysmmu;	/* System MMU's device descriptor */
 	struct device *master;	/* Client device that needs System MMU */
@@ -214,6 +220,7 @@ struct sysmmu_drvdata {
 	spinlock_t lock;
 	struct sysmmu_prefbuf pbufs[MAX_NUM_PBUF];
 	int num_pbufs;
+	struct sysmmu_version ver;
 	struct iommu_domain *domain;
 	unsigned long pgtable;
 	bool runtime_active;
@@ -245,6 +252,20 @@ static unsigned int __sysmmu_version(struct sysmmu_drvdata *drvdata,
 	unsigned int major;
 
 	major = readl(drvdata->sfrbases[idx] + REG_MMU_VERSION);
+
+	if ((MMU_MAJ_VER(major) == 0) || (MMU_MAJ_VER(major) > 3)) {
+		/* register MMU_VERSION is used for special purpose */
+		if (drvdata->ver.major == 0) {
+			/* min ver. is not important for System MMU 1 and 2 */
+			major = 1;
+		} else {
+			if (minor)
+				*minor = drvdata->ver.minor;
+			major = drvdata->ver.major;
+		}
+
+		return major;
+	}
 
 	if (minor)
 		*minor = MMU_MIN_VER(major);
@@ -933,7 +954,14 @@ static int __init __sysmmu_setup(struct device *sysmmu,
 	const char *compat;
 	struct platform_device *pmaster = NULL;
 	u32 master_inst_no = -1;
+	u32 ver[2];
 	int ret;
+
+	if (!of_property_read_u32_array(sysmmu->of_node, "version", ver, 2)) {
+		drvdata->ver.major = (unsigned char)ver[0];
+		drvdata->ver.minor = (unsigned char)ver[1];
+		dev_dbg(sysmmu, "Found version %d.%d\n", ver[0], ver[1]);
+	}
 
 	drvdata->pbufs[0].base = 0;
 	drvdata->pbufs[0].size = ~0;
