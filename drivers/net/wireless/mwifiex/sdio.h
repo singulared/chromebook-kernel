@@ -25,6 +25,7 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/host.h>
 
 #include "main.h"
 
@@ -331,5 +332,10 @@ static inline int mwifiex_sdio_event_complete(struct mwifiex_adapter *adapter,
 	dev_kfree_skb_any(skb);
 	return 0;
 }
+
+enum mwifiex_sdio_work_flags {
+	MWIFIEX_SDIO_WORK_REGDBG,
+	MWIFIEX_SDIO_WORK_RESET,
+};
 
 #endif /* _MWIFIEX_SDIO_H */

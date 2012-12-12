@@ -32,6 +32,7 @@
 #include <net/lib80211.h>
 #include <linux/firmware.h>
 #include <linux/ctype.h>
+#include <linux/regulator/machine.h>
 
 #include "decl.h"
 #include "ioctl.h"
@@ -557,6 +558,7 @@ struct mwifiex_if_ops {
 	int (*cmdrsp_complete) (struct mwifiex_adapter *, struct sk_buff *);
 	int (*event_complete) (struct mwifiex_adapter *, struct sk_buff *);
 	void (*reg_dbg) (struct mwifiex_adapter *);
+	void (*card_reset) (struct mwifiex_adapter *);
 };
 
 struct mwifiex_adapter {

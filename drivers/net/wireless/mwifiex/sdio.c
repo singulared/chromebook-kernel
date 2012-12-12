@@ -50,6 +50,12 @@ static struct mwifiex_if_ops sdio_ops;
 
 static struct semaphore add_remove_card_sem;
 
+/* enum mwifiex_sdio_work_flags bitmap */
+static unsigned long sdio_work_flags;
+
+static struct mwifiex_adapter *reg_dbg_adapter;
+static struct mwifiex_adapter *reset_adapter;
+
 static int mwifiex_sdio_resume(struct device *dev);
 
 /*
@@ -1743,13 +1749,49 @@ mwifiex_update_mp_end_port(struct mwifiex_adapter *adapter, u16 port)
 		port, card->mp_data_port_mask);
 }
 
+static bool mwifiex_sdio_mwi87xx_reset(void)
+{
+	struct regulator *wifi_en, *wifi_rst;
+	bool ok;
+
+	wifi_en = regulator_get(NULL, "wifi-en");
+	wifi_rst = regulator_get(NULL, "wifi-rst-l");
+	ok = !IS_ERR(wifi_en) && !IS_ERR(wifi_rst);
+	if (ok) {
+		regulator_disable(wifi_rst);
+		regulator_disable(wifi_en);
+		regulator_enable(wifi_rst);
+		/* as per 8797 datasheet section 1.5.2 */
+		mdelay(1);
+		regulator_enable(wifi_en);
+	}
+
+	if (!IS_ERR(wifi_rst))
+		regulator_put(wifi_rst);
+	if (!IS_ERR(wifi_en))
+		regulator_put(wifi_en);
+	return ok;
+}
+
+static void mwifiex_sdio_reset_work(struct mwifiex_adapter *adapter)
+{
+	struct sdio_mmc_card *card = adapter->card;
+	struct mmc_host *host = card->func->card->host;
+
+	pr_err("Resetting card...\n");
+	mmc_remove_host(host);
+	if (!mwifiex_sdio_mwi87xx_reset())
+		pr_err("External card reset failed! Trying to reattach...\n");
+	/* 20ms delay is based on experiment with sdhci controller */
+	mdelay(20);
+	mmc_add_host(host);
+}
+
 /*
  * This function reads and displays SDIO registers for debugging.
  */
-static struct mwifiex_adapter *saved_adapter;
-static void mwifiex_sdio_reg_dbg_worker(struct work_struct *work)
+static void mwifiex_sdio_reg_dbg_work(struct mwifiex_adapter *adapter)
 {
-	struct mwifiex_adapter *adapter = saved_adapter;
 	struct sdio_mmc_card *card = adapter->card;
 	struct sdio_func *func = card->func;
 	struct sdio_reg_dbg cccr = {
@@ -1830,15 +1872,40 @@ static void mwifiex_sdio_reg_dbg_worker(struct work_struct *work)
 
 	sdio_release_host(func);
 }
-static DECLARE_WORK(reg_dbg_work, mwifiex_sdio_reg_dbg_worker);
+
+static void sdio_work_worker(struct work_struct *work)
+{
+	if (test_and_clear_bit(MWIFIEX_SDIO_WORK_REGDBG, &sdio_work_flags))
+		mwifiex_sdio_reg_dbg_work(reg_dbg_adapter);
+	if (test_and_clear_bit(MWIFIEX_SDIO_WORK_RESET, &sdio_work_flags))
+		mwifiex_sdio_reset_work(reset_adapter);
+}
+static DECLARE_WORK(sdio_work, sdio_work_worker);
+
+/* This function resets the card */
+static void mwifiex_sdio_card_reset(struct mwifiex_adapter *adapter)
+{
+	if (test_bit(MWIFIEX_SDIO_WORK_RESET, &sdio_work_flags))
+		return;
+
+	/* The actual reset operation must be run outside of driver thread.
+	 * This is because mmc_remove_host() will cause the device to be
+	 * instantly destroyed, and the driver then needs to end its thread,
+	 * leading to a deadlock.
+	 */
+	reset_adapter = adapter;
+	set_bit(MWIFIEX_SDIO_WORK_RESET, &sdio_work_flags);
+	schedule_work(&sdio_work);
+}
 
 static void mwifiex_sdio_reg_dbg(struct mwifiex_adapter *adapter)
 {
-	if (work_pending(&reg_dbg_work))
+	if (test_bit(MWIFIEX_SDIO_WORK_REGDBG, &sdio_work_flags))
 		return;
 
-	saved_adapter = adapter;
-	schedule_work(&reg_dbg_work);
+	reg_dbg_adapter = adapter;
+	set_bit(MWIFIEX_SDIO_WORK_REGDBG, &sdio_work_flags);
+	schedule_work(&sdio_work);
 }
 
 static struct mwifiex_if_ops sdio_ops = {
@@ -1860,6 +1927,7 @@ static struct mwifiex_if_ops sdio_ops = {
 	.cmdrsp_complete = mwifiex_sdio_cmdrsp_complete,
 	.event_complete = mwifiex_sdio_event_complete,
 	.reg_dbg = mwifiex_sdio_reg_dbg,
+	.card_reset = mwifiex_sdio_card_reset,
 };
 
 /*
@@ -1897,7 +1965,7 @@ mwifiex_sdio_cleanup_module(void)
 	/* Set the flag as user is removing this module. */
 	user_rmmod = 1;
 
-	cancel_work_sync(&reg_dbg_work);
+	cancel_work_sync(&sdio_work);
 	sdio_unregister_driver(&mwifiex_sdio);
 }
 

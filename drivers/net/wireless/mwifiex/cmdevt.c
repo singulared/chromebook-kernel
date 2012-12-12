@@ -876,6 +876,9 @@ mwifiex_cmd_timeout_func(unsigned long function_context)
 
 	if (adapter->if_ops.reg_dbg)
 		adapter->if_ops.reg_dbg(adapter);
+
+	if (adapter->if_ops.card_reset)
+		adapter->if_ops.card_reset(adapter);
 }
 
 /*
