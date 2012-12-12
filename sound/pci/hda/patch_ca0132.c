@@ -44,6 +44,7 @@
 #define FLOAT_ONE	0x3f800000
 #define FLOAT_TWO	0x40000000
 #define FLOAT_MINUS_5	0xc0a00000
+#define FLOAT_60	0x42700000;
 
 #define UNSOL_TAG_HP	0x10
 #define UNSOL_TAG_AMIC1	0x12
@@ -4235,6 +4236,10 @@ static void ca0132_setup_defaults(struct hda_codec *codec)
 	/* set WUH source */
 	tmp = FLOAT_TWO;
 	dspio_set_param(codec, 0x31, 0x00, &tmp, sizeof(unsigned int));
+
+	/* set AEC level */
+	tmp = FLOAT_60;
+	dspio_set_param(codec, 0x86, 0x05, &tmp, sizeof(unsigned int));
 }
 
 static void ca0132_init_flags(struct hda_codec *codec)
