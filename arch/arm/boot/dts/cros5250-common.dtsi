@@ -177,6 +177,11 @@
 		status = "disabled";
 	};
 
+	codec@11000000 {
+		samsung,mfc-r = <0x43000000 0x800000>;
+		samsung,mfc-l = <0x51000000 0x800000>;
+	};
+
 	hdmi {
 		hpd-gpio = <&gpx3 7 0xf 1 3>;
 	};
