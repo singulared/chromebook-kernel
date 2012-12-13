@@ -1204,7 +1204,20 @@ static struct platform_driver exynos_dp_driver = {
 	},
 };
 
-module_platform_driver(exynos_dp_driver);
+static int __init exynos_dp_init(void)
+{
+       return platform_driver_probe(&exynos_dp_driver, exynos_dp_probe);
+}
+
+static void __exit exynos_dp_exit(void)
+{
+       platform_driver_unregister(&exynos_dp_driver);
+}
+/* TODO: Register as module_platform_driver */
+/* Currently, we make it late_initcall to make */
+/* sure that s3c-fb is probed before DP driver */
+late_initcall(exynos_dp_init);
+module_exit(exynos_dp_exit);
 
 MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC DP Driver");
