@@ -1013,6 +1013,14 @@ static int exynos_dp_power_on(struct exynos_dp_device *dp)
 
 	exynos_dp_init_dp(dp);
 
+	/*
+	 * DP controller is reset and needs HPD interrupt to trigger
+	 * re-configuration. If we don't have valid IRQ, this is never
+	 * going to happen. Let's reconfigure it here in this case.
+	 */
+	if (dp->irq < 0 && !exynos_dp_detect_hpd(dp))
+		schedule_work(&dp->hotplug_work);
+
 	return 0;
 }
 
@@ -1060,6 +1068,8 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 	struct exynos_dp_device *dp = ctx;
 
 	dp->drm_dev = drm_dev;
+
+	exynos_dp_power(dp, DRM_MODE_DPMS_ON);
 
 	return 0;
 }
@@ -1140,12 +1150,6 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 		irqflags = 0;
 	}
 
-	if (dp->irq < 0) {
-		dev_err(&pdev->dev, "failed to get irq\n");
-		ret = -ENODEV;
-		goto err_gpio;
-	}
-
 	dp->training_type = pdata->training_type;
 	dp->video_info = pdata->video_info;
 	if (pdata->phy_init) {
@@ -1157,16 +1161,16 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
 
-	ret = request_irq(dp->irq, exynos_dp_irq_handler, irqflags,
-			"exynos-dp", dp);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to request irq\n");
-		goto err_gpio;
+	if (dp->irq >= 0) {
+		ret = request_irq(dp->irq, exynos_dp_irq_handler, irqflags,
+				"exynos-dp", dp);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request irq\n");
+			goto err_gpio;
+		}
 	}
 
 	platform_set_drvdata(pdev, dp);
-
-	exynos_dp_power(dp, DRM_MODE_DPMS_ON);
 
 	exynos_display_attach_panel(EXYNOS_DRM_DISPLAY_TYPE_FIMD, &dp_panel_ops,
 			dp);
