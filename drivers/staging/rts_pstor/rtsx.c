@@ -857,7 +857,7 @@ static void rtsx_init_options(struct rtsx_chip *chip)
 
 	chip->card_drive_sel = 0x55;
 	chip->sd30_drive_sel_1v8 = 0x03;
-	chip->sd30_drive_sel_3v3 = 0x01;
+	chip->sd30_drive_sel_3v3 = 0x02;
 
 	chip->do_delink_before_power_down = 1;
 	chip->auto_power_down = 1;
