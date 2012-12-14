@@ -270,10 +270,6 @@ static int cpufreq_thermal_notifier(struct notifier_block *nb,
 		}
 	}
 
-	/* Never exceed user_policy.max*/
-	if (max_freq > policy->user_policy.max)
-		max_freq = policy->user_policy.max;
-
 	if (policy->max != max_freq)
 		cpufreq_verify_within_limits(policy, 0, max_freq);
 
