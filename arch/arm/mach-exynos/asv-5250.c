@@ -16,6 +16,7 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 
@@ -36,11 +37,16 @@
 #define MOD_SG_OFFSET		21
 #define MOD_SG_MASK		0x7
 
+/* For MIF_ID_REG */
+#define MIF_MOD_SG_OFFSET	28
+#define MIF_MOD_SG_MASK		0x3
+
 #define DEFAULT_MIF_ASV_GROUP	0
 
 #define ABB_MODE_BYPASS		255
 
 #define CHIP_ID_REG		(S5P_VA_CHIPID + 0x4)
+#define MIF_ID_REG		(S5P_VA_CHIPID + 0x8)
 #define LOT_ID_REG		(S5P_VA_CHIPID + 0x14)
 
 /* ASV choice table based on HPM and IDS values */
@@ -359,6 +365,31 @@ static int exynos5250_asv_store_result(struct samsung_asv *asv_info)
 	return 0;
 }
 
+/*
+ * Non-fused chips run at a constant 800MHz/1V for DDR3. Fused chips may need
+ * 1.05V for ASV group 0 in the worst case. By default, the u-boot sets the
+ * MIF voltage to 1V. Running the u-boot at 1V for some time before the kernel
+ * increases it to 1.05V in case of speed group 0 is acceptable and will not
+ * cause any problems. This function increases the MIF voltage for DDR3 ASV
+ * group 0 fused chips.
+ */
+static int exynos5250_ddr3_mif_voltage_set_sg0(void)
+{
+	struct regulator *vdd_mif;
+	u32 ret;
+
+	vdd_mif = regulator_get(NULL, "vdd_mif");
+	if (IS_ERR(vdd_mif)) {
+		pr_err("Failed to get regulator resource: vdd_mif\n");
+		return -ENODEV;
+	}
+	ret = regulator_set_voltage(vdd_mif, 1050000, 1050000);
+	WARN_ON(ret);
+	regulator_put(vdd_mif);
+
+	return ret;
+}
+
 static int exynos5250_asv_init(void)
 {
 	u32 chip_id;
@@ -378,6 +409,7 @@ static int exynos5250_asv_init(void)
 		u32 exynos_orig_sp;
 		u32 exynos_mod_sp;
 		s32 exynos_cal_asv;
+		u32 mif_id;
 
 		/* Get the main ASV speed group */
 		exynos_orig_sp = (chip_id >> ORIG_SG_OFFSET) & ORIG_SG_MASK;
@@ -392,8 +424,29 @@ static int exynos5250_asv_init(void)
 		pr_info("EXYNOS5250: ORIG: %d MOD: %d RESULT: %d\n",
 			exynos_orig_sp, exynos_mod_sp, exynos_result_of_asv);
 
-		/* Always use the default MIF ASV GROUP */
-		exynos_result_mif_asv = DEFAULT_MIF_ASV_GROUP;
+		/* Get the MIF ASV speed group */
+		mif_id = __raw_readl(MIF_ID_REG);
+
+		/*
+		 * DDR3 has only 2 MIF ASV groups as compared to LPDDR3 which
+		 * has 4. Add support for DDR3 MIF speed group calculation.
+		 * TODO: Add LPDDR3 MIF ASV speed group support
+		 */
+		exynos_mod_sp = (mif_id >> MIF_MOD_SG_OFFSET) & MIF_MOD_SG_MASK;
+		if (exynos_mod_sp < 0 || exynos_mod_sp > 1) {
+			pr_warn("Illegal MIF ASV group: %d\n", exynos_mod_sp);
+			exynos_mod_sp = 0;
+		}
+
+		pr_info("EXYNOS5250 MIF: RESULT: %d\n", exynos_mod_sp);
+
+		/*
+		 * If the MIF result is 1 then it is ASV group 0 (1.05V)
+		 * else ASV group 1 (1V)
+		 */
+		if (exynos_mod_sp)
+			if (exynos5250_ddr3_mif_voltage_set_sg0())
+				pr_err("Could not set DDR3 MIF ASV0 voltage\n");
 
 		exynos5250_pre_set_abb();
 
