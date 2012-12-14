@@ -93,6 +93,7 @@ struct fimd_context {
 	struct clk			*bus_clk;
 	struct clk			*lcd_clk;
 	void __iomem			*regs;
+	void __iomem			*regs_mie;
 	struct fimd_win_data		win_data[WINDOWS_NR];
 	unsigned int			clkdiv;
 	unsigned int			default_win;
@@ -485,6 +486,46 @@ static void fimd_win_set_colkey(struct device *dev, unsigned int win)
 	writel(keycon1, ctx->regs + WKEYCON1_BASE(win));
 }
 
+
+static void mie_set_6bit_dithering(struct fimd_context *ctx)
+{
+	struct fb_videomode *timing = &ctx->panel->timing;
+	unsigned long val;
+	int i;
+
+	writel(MIE_HRESOL(timing->xres) | MIE_VRESOL(timing->yres) |
+				MIE_MODE_UI, ctx->regs_mie + MIE_CTRL1);
+
+	writel(MIE_WINHADDR0(0) | MIE_WINHADDR1(timing->xres),
+						ctx->regs_mie + MIE_WINHADDR);
+	writel(MIE_WINVADDR0(0) | MIE_WINVADDR1(timing->yres),
+						ctx->regs_mie + MIE_WINVADDR);
+
+	val = (timing->xres + timing->left_margin +
+			timing->right_margin + timing->hsync_len) *
+	      (timing->yres + timing->upper_margin +
+			timing->lower_margin + timing->vsync_len) /
+							(MIE_PWMCLKVAL + 1);
+	writel(PWMCLKCNT(val), ctx->regs_mie + MIE_PWMCLKCNT);
+
+	writel((MIE_VBPD(timing->upper_margin)) |
+		MIE_VFPD(timing->lower_margin) |
+		MIE_VSPW(timing->vsync_len), ctx->regs_mie + MIE_PWMVIDTCON1);
+
+	writel(MIE_HBPD(timing->left_margin) |
+		MIE_HFPD(timing->right_margin) |
+		MIE_HSPW(timing->hsync_len), ctx->regs_mie + MIE_PWMVIDTCON2);
+
+	writel(MIE_DITHCON_EN | MIE_RGB6MODE,
+					ctx->regs_mie + MIE_AUXCON);
+
+	/* Bypass MIE image brightness enhancement */
+	for (i = 0; i <= 0x30; i += 4) {
+		writel(0, ctx->regs_mie + 0x100 + i);
+		writel(0, ctx->regs_mie + 0x200 + i);
+	}
+}
+
 static void fimd_win_commit(struct device *dev, int zpos)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
@@ -596,6 +637,8 @@ static void fimd_win_commit(struct device *dev, int zpos)
 	val = readl(ctx->regs + WINCON(win));
 	val |= WINCONx_ENWIN;
 	writel(val, ctx->regs + WINCON(win));
+
+	mie_set_6bit_dithering(ctx);
 
 	/* Enable DMA channel and unprotect windows */
 	val = readl(ctx->regs + SHADOWCON);
@@ -853,6 +896,7 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 
 		ctx->suspended = false;
 
+		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
 		/* if vblank was enabled status, enable it again. */
 		if (test_and_clear_bit(0, &ctx->irq_flags))
 			fimd_enable_vblank(dev);
@@ -1027,6 +1071,11 @@ static int fimd_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
+	if (!ctx->regs_mie) {
+		dev_err(dev, "failed to map registers\n");
+		return -ENXIO;
+	}
 	ctx->vidcon0 = pdata->vidcon0;
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
@@ -1057,6 +1106,7 @@ static int fimd_probe(struct platform_device *pdev)
 	for (win = 0; win < WINDOWS_NR; win++)
 		fimd_clear_win(ctx, win);
 
+	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
 	exynos_drm_subdrv_register(subdrv);
 
 	return 0;
