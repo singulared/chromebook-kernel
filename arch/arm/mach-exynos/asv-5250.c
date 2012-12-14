@@ -36,7 +36,6 @@
 #define MOD_SG_OFFSET		21
 #define MOD_SG_MASK		0x7
 
-#define DEFAULT_ASV_GROUP	1
 #define DEFAULT_MIF_ASV_GROUP	0
 
 #define ABB_MODE_BYPASS		255
@@ -343,14 +342,14 @@ static int exynos5250_asv_store_result(struct samsung_asv *asv_info)
 				break;
 			}
 		}
-	}
-	/*
-	 * If ASV result value is lower than the default value then choose
-	 * the default group (1)
-	 */
-	if (exynos_result_of_asv < DEFAULT_ASV_GROUP)
-		exynos_result_of_asv = DEFAULT_ASV_GROUP;
 
+		/*
+		 * 0 is a reserved value here; make sure we're at least 1.
+		 */
+		if (exynos_result_of_asv < 1)
+			exynos_result_of_asv = 1;
+
+	}
 	printk(KERN_INFO "EXYNOS5250: IDS:%d HPM:%d RESULT:%d MIF:%d\n",
 		asv_info->ids_result, asv_info->hpm_result,
 		exynos_result_of_asv, exynos_result_mif_asv);
@@ -362,10 +361,7 @@ static int exynos5250_asv_store_result(struct samsung_asv *asv_info)
 
 static int exynos5250_asv_init(void)
 {
-	unsigned int tmp;
-	unsigned int exynos_orig_sp;
-	unsigned int exynos_mod_sp;
-	int exynos_cal_asv;
+	u32 chip_id;
 	struct samsung_asv *exynos_asv;
 
 	printk(KERN_INFO  "EXYNOS5250: Adaptive Support Voltage init\n");
@@ -374,34 +370,30 @@ static int exynos5250_asv_init(void)
 	if (!exynos_asv)
 		return -ENOMEM;
 
-	tmp = __raw_readl(CHIP_ID_REG);
-	exynos_asv->package_id = tmp; /* Store PKG_ID */
+	chip_id = __raw_readl(CHIP_ID_REG);
+	exynos_asv->package_id = chip_id; /* Store PKG_ID */
 
 	/* If Speed group is fused then retrieve it from there */
-	if ((tmp >> FUSED_SG_OFFSET) & 0x1) {
-		exynos_orig_sp = (tmp >> ORIG_SG_OFFSET) & ORIG_SG_MASK;
-		exynos_mod_sp = (tmp >> MOD_SG_OFFSET) & MOD_SG_MASK;
-		exynos_cal_asv = exynos_orig_sp - exynos_mod_sp;
+	if ((chip_id >> FUSED_SG_OFFSET) & 0x1) {
+		u32 exynos_orig_sp;
+		u32 exynos_mod_sp;
+		s32 exynos_cal_asv;
 
-		/*
-		 * If There is no origin speed group,
-		 * store 1 asv group into exynos_result_of_asv.
-		 */
-		if (!exynos_orig_sp) {
-			printk(KERN_INFO "EXYNOS5250: No Origin speed Group\n");
-			exynos_result_of_asv = DEFAULT_ASV_GROUP;
-		} else {
-			if (exynos_cal_asv < DEFAULT_ASV_GROUP) {
-				exynos_result_of_asv = DEFAULT_ASV_GROUP;
-				exynos_result_mif_asv = DEFAULT_ASV_GROUP;
-			} else {
-				exynos_result_of_asv = exynos_cal_asv;
-				exynos_result_mif_asv = DEFAULT_MIF_ASV_GROUP;
-			}
+		/* Get the main ASV speed group */
+		exynos_orig_sp = (chip_id >> ORIG_SG_OFFSET) & ORIG_SG_MASK;
+		exynos_mod_sp = (chip_id >> MOD_SG_OFFSET) & MOD_SG_MASK;
+		exynos_cal_asv = exynos_orig_sp - exynos_mod_sp;
+		if (exynos_cal_asv < 0) {
+			pr_warn("Illegal ASV group: %d\n", exynos_cal_asv);
+			exynos_cal_asv = 0;
 		}
 
-		printk(KERN_INFO "EXYNOS5250: ORIG: %d MOD: %d RESULT: %d\n",
+		exynos_result_of_asv = exynos_cal_asv;
+		pr_info("EXYNOS5250: ORIG: %d MOD: %d RESULT: %d\n",
 			exynos_orig_sp, exynos_mod_sp, exynos_result_of_asv);
+
+		/* Always use the default MIF ASV GROUP */
+		exynos_result_mif_asv = DEFAULT_MIF_ASV_GROUP;
 
 		exynos5250_pre_set_abb();
 
