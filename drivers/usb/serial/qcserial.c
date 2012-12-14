@@ -103,7 +103,8 @@ static const struct usb_device_id id_table[] = {
 	{USB_DEVICE(0x05c6, 0x920d)},	/* Gobi 3000 Composite */
 	{USB_DEVICE(0x0af0, 0x8120)},	/* Option Gobi 3000 QDL */
 	{USB_DEVICE(0x1410, 0xa020)},   /* Novatel Gobi 3000 QDL */
-	{USB_DEVICE(0x1410, 0xa021)},	/* Novatel Gobi 3000 Composite */
+	{USB_DEVICE(0x1410, 0xa021)},	/* Novatel Gobi 3000 Composite (E396) */
+	{USB_DEVICE(0x1410, 0xa023)},	/* Novatel Gobi 3000 Composite (E396U) */
 	{USB_DEVICE(0x413c, 0x8193)},	/* Dell Gobi 3000 QDL */
 	{USB_DEVICE(0x413c, 0x8194)},	/* Dell Gobi 3000 Composite */
 	{USB_DEVICE(0x1199, 0x9013)},	/* Sierra Wireless Gobi 3000 Modem device (MC8355) */
