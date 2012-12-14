@@ -844,6 +844,24 @@ static int atkbd_activate(struct atkbd *atkbd)
 }
 
 /*
+ * atkbd_deactivate() resets and disables the keyboard from sending
+ * keystrokes.
+ */
+static int atkbd_deactivate(struct atkbd *atkbd)
+{
+	struct ps2dev *ps2dev = &atkbd->ps2dev;
+
+	if (ps2_command(ps2dev, NULL, ATKBD_CMD_RESET_DIS)) {
+		dev_err(&ps2dev->serio->dev,
+			"Failed to deactivate keyboard on %s\n",
+			ps2dev->serio->phys);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
  * atkbd_cleanup() restores the keyboard state so that BIOS is happy after a
  * reboot.
  */
@@ -1199,6 +1217,9 @@ static int atkbd_reconnect(struct serio *serio)
 
 	mutex_lock(&atkbd->mutex);
 
+	if (atkbd->write)
+		atkbd_deactivate(atkbd);
+
 	atkbd_disable(atkbd);
 
 	if (atkbd->write) {
@@ -1207,8 +1228,6 @@ static int atkbd_reconnect(struct serio *serio)
 
 		if (atkbd->set != atkbd_select_set(atkbd, atkbd->set, atkbd->extra))
 			goto out;
-
-		atkbd_activate(atkbd);
 
 		/*
 		 * Restore LED state and repeat rate. While input core
@@ -1224,6 +1243,9 @@ static int atkbd_reconnect(struct serio *serio)
 	}
 
 	atkbd_enable(atkbd);
+	if (atkbd->write)
+		atkbd_activate(atkbd);
+
 	retval = 0;
 
  out:
