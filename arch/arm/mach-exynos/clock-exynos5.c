@@ -1044,6 +1044,10 @@ static struct clk exynos5_init_clocks_off[] = {
 		.parent		= &exynos5_clk_aclk_66.clk,
 		.enable		= exynos5_clk_ip_peric_ctrl,
 		.ctrlbit	= (1 << 15),
+	}, {
+		.name		= "chipid_apbif",
+		.enable		= exynos5_clk_ip_peris_ctrl,
+		.ctrlbit	= (1 << 0),
 	}
 };
 
