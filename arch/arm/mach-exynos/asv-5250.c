@@ -403,6 +403,8 @@ static int exynos5250_asv_init(void)
 		printk(KERN_INFO "EXYNOS5250: ORIG: %d MOD: %d RESULT: %d\n",
 			exynos_orig_sp, exynos_mod_sp, exynos_result_of_asv);
 
+		exynos5250_pre_set_abb();
+
 		return 0;
 	}
 
