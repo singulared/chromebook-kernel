@@ -184,7 +184,7 @@ static int exynos5250_check_lot_id(struct samsung_asv *asv_info)
 	unsigned int i;
 	unsigned int tmp;
 	unsigned int wno;
-	char lot_id[5];
+	char lot_id[6];
 
 	lid_reg = __raw_readl(LOT_ID_REG);
 
@@ -201,26 +201,24 @@ static int exynos5250_check_lot_id(struct samsung_asv *asv_info)
 		lid_reg /= 36;
 		lot_id[i] = (tmp < 10) ? (tmp + '0') : ((tmp - 10) + 'A');
 	}
+	lot_id[5] = '\0';
 
 	wno = (rev_lid >> 6) & 0x1f;
 
+	printk(KERN_INFO "Exynos5250: Lot ID is %s and wafer number is %d\n",
+			lot_id, wno);
+
 	/* NZVPU lot has incorrect IDS value */
-	if ((!strncmp(lot_id, "NZVPU", ARRAY_SIZE(lot_id)))) {
+	if (!strcmp(lot_id, "NZVPU")) {
 		exynos_lot_is_nzvpu = true;
-		printk(KERN_INFO "Exynos5250: Lot ID is %s and wafer number is %d\n",
-				lot_id, wno);
 		if (wno >= 2 && wno <= 6)
 			asv_info->ids_result -= 16;
 		return 0;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(special_lot_id_list); i++) {
-		if (!strncmp(lot_id, special_lot_id_list[i],
-						ARRAY_SIZE(lot_id))) {
-			printk(KERN_INFO "Exynos5250: Lot ID is %s\n", lot_id);
+	for (i = 0; i < ARRAY_SIZE(special_lot_id_list); i++)
+		if (!strcmp(lot_id, special_lot_id_list[i]))
 			return 0;
-		}
-	}
 
 	return -EINVAL;
 }
