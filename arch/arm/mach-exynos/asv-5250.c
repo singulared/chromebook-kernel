@@ -394,8 +394,16 @@ static int exynos5250_asv_init(void)
 {
 	u32 chip_id;
 	struct samsung_asv *exynos_asv;
+	struct clk *chipid_clk;
 
 	printk(KERN_INFO  "EXYNOS5250: Adaptive Support Voltage init\n");
+
+	chipid_clk = clk_get(NULL, "chipid_apbif");
+	if (IS_ERR(chipid_clk)) {
+		pr_err("Failed to get chipid clock for ASV\n");
+		return PTR_ERR(chipid_clk);
+	}
+	clk_enable(chipid_clk);
 
 	exynos_asv = kzalloc(sizeof(struct samsung_asv), GFP_KERNEL);
 	if (!exynos_asv)
@@ -450,13 +458,15 @@ static int exynos5250_asv_init(void)
 
 		exynos5250_pre_set_abb();
 
-		return 0;
+		goto exit;
 	}
 
 	exynos_asv->ids_result = (exynos_asv->package_id >> IDS_ARM_OFFSET) & IDS_ARM_MASK;
 	exynos_asv->hpm_result = (exynos_asv->package_id >> HPM_OFFSET) & HPM_MASK;
 	exynos5250_asv_store_result(exynos_asv);
 
+exit:
+	clk_disable(chipid_clk);
 	return 0;
 }
 device_initcall_sync(exynos5250_asv_init);

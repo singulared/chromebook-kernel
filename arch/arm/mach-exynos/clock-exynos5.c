@@ -997,6 +997,10 @@ static struct clk exynos5_init_clocks_off[] = {
 		.name		= "g3d",
 		.enable		= exynos5_clk_ip_g3d_ctrl,
 		.ctrlbit	= ((1 << 1) | (1 << 0)),
+	}, {
+		.name		= "chipid_apbif",
+		.enable		= exynos5_clk_ip_peris_ctrl,
+		.ctrlbit	= (1 << 0),
 	}
 };
 
