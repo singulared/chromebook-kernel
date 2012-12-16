@@ -1196,18 +1196,17 @@ static int cyapa_check_fw(struct cyapa *cyapa, const struct firmware *fw)
 	return 0;
 }
 
-static int cyapa_firmware(struct cyapa *cyapa)
+static int cyapa_firmware(struct cyapa *cyapa, const char *fw_name)
 {
 	struct device *dev = &cyapa->client->dev;
 	int ret;
 	const struct firmware *fw;
-	const char *fw_name = CYAPA_FW_NAME;
 	int i;
 
-	ret = request_firmware(&fw, CYAPA_FW_NAME, dev);
+	ret = request_firmware(&fw, fw_name, dev);
 	if (ret) {
 		dev_err(dev, "Could not load firmware from %s, %d\n",
-			  fw_name, ret);
+			fw_name, ret);
 		return ret;
 	}
 
@@ -1342,9 +1341,17 @@ static ssize_t cyapa_update_fw_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct cyapa *cyapa = dev_get_drvdata(dev);
+	char *fw_name;
 	int ret;
 
-	ret = cyapa_firmware(cyapa);
+	/* Do not allow paths that step out of /lib/firmware  */
+	if (strstr(buf, "../") != NULL)
+		return -EINVAL;
+
+	fw_name = !strncmp(buf, "1", count) ||
+		  !strncmp(buf, "1\n", count) ? CYAPA_FW_NAME : buf;
+
+	ret = cyapa_firmware(cyapa, fw_name);
 	if (ret)
 		dev_err(dev, "firmware update failed, %d\n", ret);
 	else
