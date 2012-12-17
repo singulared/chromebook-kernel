@@ -36,6 +36,46 @@
 #include "exynos_drm_gem.h"
 #include "exynos_trace.h"
 
+/*
+ * Exynos specific crtc structure.
+ *
+ * @drm_crtc: crtc object.
+ * @overlay: contain information common to display controller and hdmi and
+ *	contents of this overlay object would be copied to sub driver size.
+ * @current_fb: current fb that is being scanned out
+ * @pending_fb: fb that will start scanout on next flip
+ * @event: vblank event that is currently queued for flip
+ * @pipe: a crtc index created at load() with a new crtc object creation
+ *	and the crtc object would be set to private->crtc array
+ *	to get a crtc object corresponding to this pipe from private->crtc
+ *	array when irq interrupt occured. the reason of using this pipe is that
+ *	drm framework doesn't support multiple irq yet.
+ *	we can refer to the crtc to current hardware interrupt occured through
+ *	this pipe value.
+ * @dpms: store the crtc dpms value
+ * @flip_pending: there is a flip pending that we need to process next vblank
+ */
+struct exynos_drm_crtc {
+	struct drm_crtc			drm_crtc;
+	struct exynos_drm_overlay	overlay;
+	struct drm_framebuffer		*current_fb;
+	struct drm_framebuffer		*pending_fb;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct drm_pending_vblank_event *event;
+	struct kds_resource_set		*current_kds;
+	struct kds_resource_set		*pending_kds;
+	struct kds_resource_set		*future_kds;
+	struct kds_resource_set		*future_kds_extra;
+#endif
+	unsigned int			pipe;
+	unsigned int			dpms;
+	unsigned int			flip_in_flight;
+	atomic_t			flip_pending;
+};
+
+#define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
+				drm_crtc)
+
 static void exynos_drm_crtc_apply(struct drm_crtc *crtc)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
