@@ -52,12 +52,6 @@ enum HDMI_PACKET_TYPE {
 	HDMI_PACKET_TYPE_AUI = HDMI_PACKET_TYPE_INFOFRAME + 4
 };
 
-void hdmi_attach_ddc_client(struct i2c_client *ddc);
-void hdmi_attach_hdmiphy_client(struct i2c_client *hdmiphy);
-
-extern struct i2c_driver hdmiphy_driver;
-extern struct i2c_driver ddc_driver;
-
 enum exynos_mixer_mode_type {
 	EXYNOS_MIXER_MODE_INVALID,
 	EXYNOS_MIXER_MODE_SD_NTSC,
