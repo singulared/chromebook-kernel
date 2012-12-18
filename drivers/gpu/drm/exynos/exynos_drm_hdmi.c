@@ -45,8 +45,6 @@ struct drm_hdmi_context {
 	struct exynos_drm_subdrv	subdrv;
 	struct exynos_drm_hdmi_context	*hdmi_ctx;
 	struct exynos_drm_hdmi_context	*mixer_ctx;
-
-	bool	enabled[MIXER_WIN_NR];
 };
 
 int exynos_platform_device_hdmi_register(void)
@@ -249,16 +247,11 @@ static void drm_hdmi_dpms(struct device *subdrv_dev, int mode)
 static void drm_hdmi_apply(struct device *subdrv_dev)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
-	int i;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	for (i = 0; i < MIXER_WIN_NR; i++) {
-		if (!ctx->enabled[i])
-			continue;
-		if (mixer_ops && mixer_ops->win_commit)
-			mixer_ops->win_commit(ctx->mixer_ctx->ctx, i);
-	}
+	if (mixer_ops && mixer_ops->apply)
+		mixer_ops->apply(ctx->mixer_ctx->ctx);
 
 	if (hdmi_ops && hdmi_ops->commit)
 		hdmi_ops->commit(ctx->hdmi_ctx->ctx);
@@ -301,8 +294,6 @@ static void drm_mixer_commit(struct device *subdrv_dev, int zpos)
 
 	if (mixer_ops && mixer_ops->win_commit)
 		mixer_ops->win_commit(ctx->mixer_ctx->ctx, win);
-
-	ctx->enabled[win] = true;
 }
 
 static void drm_mixer_disable(struct device *subdrv_dev, int zpos)
@@ -319,8 +310,6 @@ static void drm_mixer_disable(struct device *subdrv_dev, int zpos)
 
 	if (mixer_ops && mixer_ops->win_disable)
 		mixer_ops->win_disable(ctx->mixer_ctx->ctx, win);
-
-	ctx->enabled[win] = false;
 }
 
 static struct exynos_drm_overlay_ops drm_hdmi_overlay_ops = {
