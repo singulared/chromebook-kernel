@@ -230,6 +230,8 @@ int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder);
  * @release_work: for the worker destroying the fb after it's done being used
  * @fb: drm framebuffer obejct.
  * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
+ * @rendered: true once fb is rendered
+ * @prepared: true once shadow registers have been updated
  */
 struct exynos_drm_fb {
 	struct kref			refcount;
@@ -237,10 +239,11 @@ struct exynos_drm_fb {
 	struct drm_framebuffer		fb;
 	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct drm_crtc			*crtc;
 	struct kds_resource_set		*kds_res_set;
 	struct dma_buf			*dma_buf;
 #endif
+	bool				rendered;
+	bool				prepared;
 };
 
 #define to_exynos_fb(x)	container_of(x, struct exynos_drm_fb, fb)
