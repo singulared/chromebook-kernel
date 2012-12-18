@@ -373,7 +373,7 @@ static struct snd_soc_dai_link daisy_dai[] = {
 		.stream_name = "Playback",
 		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "HiFi",
-		.platform_name = "samsung-audio",
+		.platform_name = "samsung-i2s.0",
 		.init = daisy_init,
 		.ops = &daisy_ops,
 	}, { /* Capture i/f */
@@ -381,7 +381,7 @@ static struct snd_soc_dai_link daisy_dai[] = {
 		.stream_name = "Capture",
 		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "HiFi",
-		.platform_name = "samsung-audio",
+		.platform_name = "samsung-i2s.0",
 		.ops = &daisy_ops,
 	},
 };
