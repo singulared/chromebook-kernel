@@ -865,8 +865,10 @@ static void fimd_window_suspend(struct device *dev)
 
 	for (i = 0; i < WINDOWS_NR; i++) {
 		win_data = &ctx->win_data[i];
-		win_data->resume = win_data->enabled;
-		fimd_win_disable(dev, i);
+		if (win_data->enabled) {
+			win_data->resume = win_data->enabled;
+			fimd_win_disable(dev, i);
+		}
 	}
 	fimd_wait_for_vblank(dev);
 }
