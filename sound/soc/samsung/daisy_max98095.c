@@ -68,7 +68,7 @@ static int set_audio_clock_heirachy(struct platform_device *pdev)
 		goto out1;
 	}
 
-	sclk_audbus = clk_get(&pdev->dev, "audio-bus");
+	sclk_audbus = clk_get(&pdev->dev, "sclk-audio0");
 	if (IS_ERR(sclk_audbus)) {
 		printk(KERN_WARNING "%s: Cannot find audio-bus.\n",
 				__func__);
@@ -84,7 +84,7 @@ static int set_audio_clock_heirachy(struct platform_device *pdev)
 		goto out3;
 	}
 
-	i2sclk = clk_get(NULL, "i2sclk");
+	i2sclk = clk_get(NULL, "sclk-i2s");
 	if (IS_ERR(i2sclk)) {
 		printk(KERN_WARNING "%s: Cannot find i2sclk.\n",
 				__func__);
