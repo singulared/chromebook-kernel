@@ -80,6 +80,7 @@
 #define VITHAR_DEFAULT_CLOCK 533000000
 #define RUNTIME_PM_DELAY_TIME 10
 #define CONFIG_T6XX_HWVER_R0P0 1
+#define G3D_ASV_VOL_OFFSET	25000
 
 struct regulator *kbase_platform_get_regulator(void);
 int kbase_platform_regulator_init(void);
@@ -1458,8 +1459,12 @@ static int mali_dvfs_update_asv(int group)
 		if (exynos_lot_id)
 			mali_dvfs_infotbl[i].voltage =
 				mali_dvfs_asv_vol_tbl_special[group-1][i];
-		 else
-			 mali_dvfs_infotbl[i].voltage =
+		else if (g3d_vol_lock)
+				mali_dvfs_infotbl[i].voltage =
+					mali_dvfs_asv_vol_tbl[group][i] +
+						G3D_ASV_VOL_OFFSET;
+		else
+			mali_dvfs_infotbl[i].voltage =
 				mali_dvfs_asv_vol_tbl[group][i];
 	}
 
