@@ -37,6 +37,18 @@
 #define MOD_SG_OFFSET		21
 #define MOD_SG_MASK		0x7
 
+#define FUSED_MIF_VOL_LOCK_OFFSET	7
+#define FUSED_INT_VOL_LOCK_OFFSET	8
+#define FUSED_G3D_VOL_LOCK_OFFSET	9
+#define FUSED_ARM_VOL_LOCK_OFFSET	10
+#define FUSED_ARM_VOL_LOCK_MASK		0x03
+
+/* Matches levels from exynos5250_freq_table */
+#define FUSED_ARM_UNLOCKED_INDEX	15	/* 200 MHz */
+#define FUSED_ARM_800_LOCK_INDEX	9
+#define FUSED_ARM_1000_LOCK_INDEX	7
+#define FUSED_ARM_1100_LOCK_INDEX	6
+
 /* For MIF_ID_REG */
 #define MIF_MOD_SG_OFFSET	28
 #define MIF_MOD_SG_MASK		0x3
@@ -78,6 +90,16 @@ unsigned int exynos_result_of_asv;
 unsigned int exynos_result_mif_asv;
 bool exynos_lot_id;
 bool exynos_lot_is_nzvpu;
+bool int_vol_lock;
+bool g3d_vol_lock;
+static unsigned int arm_vol_lock_lvl_index;
+
+static const unsigned int arm_vol_lock_lvl_table[] = {
+	FUSED_ARM_UNLOCKED_INDEX,
+	FUSED_ARM_800_LOCK_INDEX,
+	FUSED_ARM_1000_LOCK_INDEX,
+	FUSED_ARM_1100_LOCK_INDEX,
+};
 
 /* ASV group voltage table */
 #define CPUFREQ_LEVEL_END	(16)
@@ -170,8 +192,10 @@ const unsigned int exynos5250_cpufreq_get_asv(unsigned int index)
 	unsigned int asv_group = exynos_result_of_asv;
 	if (exynos_lot_id)
 		return asv_voltage_special[index][asv_group];
-	else
+	else {
+		index = min_t(unsigned int, index, arm_vol_lock_lvl_index);
 		return asv_voltage[index][asv_group];
+	}
 }
 
 char *special_lot_id_list[] = {
@@ -418,6 +442,16 @@ static int exynos5250_asv_init(void)
 		u32 exynos_mod_sp;
 		s32 exynos_cal_asv;
 		u32 mif_id;
+		u32 arm_vol_lock;
+
+		int_vol_lock = (chip_id >> FUSED_INT_VOL_LOCK_OFFSET) & 0x1;
+		g3d_vol_lock = (chip_id >> FUSED_G3D_VOL_LOCK_OFFSET) & 0x1;
+		arm_vol_lock = (chip_id >> FUSED_ARM_VOL_LOCK_OFFSET) &
+			FUSED_ARM_VOL_LOCK_MASK;
+		arm_vol_lock_lvl_index = arm_vol_lock_lvl_table[arm_vol_lock];
+
+		pr_info("EXYNOS5250: ASV lock int: %d g3d: %d arm: %u\n",
+			(int)int_vol_lock, (int)g3d_vol_lock, arm_vol_lock);
 
 		/* Get the main ASV speed group */
 		exynos_orig_sp = (chip_id >> ORIG_SG_OFFSET) & ORIG_SG_MASK;
