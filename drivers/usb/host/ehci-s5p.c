@@ -37,6 +37,7 @@ struct s5p_ehci_hcd {
 	struct usb_phy *phy;
 	struct usb_otg *otg;
 	struct s5p_ehci_platdata *pdata;
+	int vbus_gpio;
 };
 
 static const struct hc_driver s5p_ehci_hc_driver = {
@@ -90,22 +91,27 @@ static void s5p_ehci_phy_disable(struct s5p_ehci_hcd *s5p_ehci)
 		s5p_ehci->pdata->phy_exit(pdev, USB_PHY_TYPE_HOST);
 }
 
-static void s5p_setup_vbus_gpio(struct platform_device *pdev)
+static int s5p_setup_vbus_gpio(struct platform_device *pdev)
 {
 	int err;
 	int gpio;
 
 	if (!pdev->dev.of_node)
-		return;
+		return -ENODEV;
 
 	gpio = of_get_named_gpio(pdev->dev.of_node,
 			"samsung,vbus-gpio", 0);
 	if (!gpio_is_valid(gpio))
-		return;
+		return -EINVAL;
+	dev_dbg(&pdev->dev, "vbus_gpio = %d\n", gpio);
 
 	err = gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "ehci_vbus_gpio");
-	if (err)
+	if (err) {
 		dev_err(&pdev->dev, "can't request ehci vbus gpio %d", gpio);
+		return err;
+	}
+
+	return gpio;
 }
 
 static u64 ehci_s5p_dma_mask = DMA_BIT_MASK(32);
@@ -131,8 +137,6 @@ static int s5p_ehci_probe(struct platform_device *pdev)
 	if (!pdev->dev.coherent_dma_mask)
 		pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 
-	s5p_setup_vbus_gpio(pdev);
-
 	s5p_ehci = devm_kzalloc(&pdev->dev, sizeof(struct s5p_ehci_hcd),
 				GFP_KERNEL);
 	if (!s5p_ehci)
@@ -153,6 +157,10 @@ static int s5p_ehci_probe(struct platform_device *pdev)
 	}
 
 	s5p_ehci->dev = &pdev->dev;
+
+	s5p_ehci->vbus_gpio = s5p_setup_vbus_gpio(pdev);
+	if (!gpio_is_valid(s5p_ehci->vbus_gpio))
+		dev_warn(&pdev->dev, "Failed to setup vbus gpio\n");
 
 	hcd = usb_create_hcd(&s5p_ehci_hc_driver, &pdev->dev,
 					dev_name(&pdev->dev));
@@ -270,6 +278,9 @@ static int s5p_ehci_suspend(struct device *dev)
 
 	s5p_ehci_phy_disable(s5p_ehci);
 
+	if (gpio_is_valid(s5p_ehci->vbus_gpio))
+		gpio_set_value(s5p_ehci->vbus_gpio, 0);
+
 	clk_disable_unprepare(s5p_ehci->clk);
 
 	return rc;
@@ -284,6 +295,9 @@ static int s5p_ehci_resume(struct device *dev)
 
 	if (s5p_ehci->otg)
 		s5p_ehci->otg->set_host(s5p_ehci->otg, &s5p_ehci->hcd->self);
+
+	if (gpio_is_valid(s5p_ehci->vbus_gpio))
+		gpio_set_value(s5p_ehci->vbus_gpio, 1);
 
 	s5p_ehci_phy_enable(s5p_ehci);
 
