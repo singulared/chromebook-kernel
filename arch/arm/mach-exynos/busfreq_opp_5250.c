@@ -44,6 +44,7 @@
 #define ASV_GROUP_10	10
 #define ASV_GROUP_12	12
 #define MIF_ASV_GROUP	3
+#define INT_ASV_VOL_OFFSET	25000
 
 static struct clk *mout_bpll;
 static struct clk *mout_mpll;
@@ -487,6 +488,10 @@ static void exynos5250_set_bus_volt(void)
 		else if (exynos_lot_id)
 			exynos5_busfreq_table_int[i].volt =
 				exynos5_int_volt_orig[asv_group_index][i];
+		else if (int_vol_lock)
+			exynos5_busfreq_table_int[i].volt =
+				exynos5_int_volt[asv_group_index][i] +
+							INT_ASV_VOL_OFFSET;
 		else
 			exynos5_busfreq_table_int[i].volt =
 				exynos5_int_volt[asv_group_index][i];

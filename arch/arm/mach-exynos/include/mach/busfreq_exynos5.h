@@ -27,6 +27,7 @@ extern unsigned int exynos_result_of_asv;
 extern unsigned int exynos_result_mif_asv;
 extern bool exynos_lot_id;
 extern bool exynos_lot_is_nzvpu;
+extern bool int_vol_lock;
 
 enum busfreq_level_idx {
 	LV_0,
