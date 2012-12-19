@@ -1341,7 +1341,7 @@ static ssize_t cyapa_update_fw_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct cyapa *cyapa = dev_get_drvdata(dev);
-	char *fw_name;
+	const char *fw_name;
 	int ret;
 
 	/* Do not allow paths that step out of /lib/firmware  */
