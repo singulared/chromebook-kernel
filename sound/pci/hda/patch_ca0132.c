@@ -3445,8 +3445,8 @@ static int stop_mic1(struct hda_codec *codec)
 						 AC_VERB_GET_CONV, 0);
 	if (oldval != 0)
 		snd_hda_codec_write(codec, spec->adcs[0], 0,
-				AC_VERB_SET_CHANNEL_STREAMID,
-				0);
+				    AC_VERB_SET_CHANNEL_STREAMID,
+				    0);
 	return oldval;
 }
 
@@ -4476,6 +4476,155 @@ static void ca0132_exit_chip(struct hda_codec *codec)
 		dsp_reset(codec);
 }
 
+static int xdata_read(struct hda_codec *codec, u16 addr)
+{
+	struct ca0132_spec *spec = codec->spec;
+	int data;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_HIGH,
+			    (addr >> 8) & 0xFF);
+	data = snd_hda_codec_read(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_DATA_READ, 0);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return data;
+}
+
+static int xdata_write(struct hda_codec *codec, u16 addr, u8 value)
+{
+	struct ca0132_spec *spec = codec->spec;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_HIGH,
+			    (addr >> 8) & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_DATA_WRITE, value);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return 0;
+}
+
+static int idata_read(struct hda_codec *codec, u16 addr)
+{
+	struct ca0132_spec *spec = codec->spec;
+	int data;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_HIGH,
+			    (addr >> 8) & 0xFF);
+	data = snd_hda_codec_read(codec, WIDGET_CHIP_CTRL, 0,
+			    0xF09, 0);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return data;
+}
+
+static int idata_write(struct hda_codec *codec, u16 addr, u8 value)
+{
+	struct ca0132_spec *spec = codec->spec;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_HIGH,
+			    (addr >> 8) & 0xFF);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    0x709, value);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return 0;
+}
+
+static int pmu_read(struct hda_codec *codec, u8 addr)
+{
+	struct ca0132_spec *spec = codec->spec;
+	int data;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr);
+	data = snd_hda_codec_read(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_PLL_PMU_READ, 0);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return data;
+}
+
+static int pmu_write(struct hda_codec *codec, u8 addr, u8 value)
+{
+	struct ca0132_spec *spec = codec->spec;
+
+	mutex_lock(&spec->chipio_mutex);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr);
+	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
+			    VENDOR_CHIPIO_PLL_PMU_WRITE, value);
+	mutex_unlock(&spec->chipio_mutex);
+
+	return 0;
+}
+
+static int ca0132_init_codec(struct hda_codec *codec)
+{
+	u8 codecDevices[] = {
+		1, 2, 3, 6, 8, 10, 11
+	};
+	bool codec_ready = true;
+	int retryCount = 3;
+	int tryCount = 5;
+	int i;
+	int codecStateAddr = 0x18BE;
+	int addr;
+	int data;
+
+	do {
+		codec_ready = true;
+		for (i = 0; i < ARRAY_SIZE(codecDevices); i++) {
+			addr = codecStateAddr + 13 * codecDevices[i] + 8;
+			data = xdata_read(codec, addr);
+			if ((data > 0) && (data & 0x4))
+				codec_ready = false;
+		}
+
+		if (!codec_ready) {
+			snd_hda_codec_write(codec, 1, 0,
+					    AC_VERB_SET_POWER_STATE, 4);
+
+			data = pmu_read(codec, 0xF);
+			pmu_write(codec, 0xF, data & ~0x88);
+			msleep(100);
+			pmu_write(codec, 0xF, data | 0x88);
+			msleep(100);
+			xdata_write(codec, 0xB6, 0x1);
+			xdata_write(codec, 0x1F07, 0xF9);
+			xdata_write(codec, 0x1F08, 0x72);
+			idata_write(codec, 0x7D, 0x40);
+
+			do {
+				data = xdata_read(codec, 0xB6);
+				msleep(100);
+			} while (data != 0 && --tryCount);
+
+			snd_hda_codec_write(codec, 1, 0,
+					    AC_VERB_SET_POWER_STATE, 0);
+			msleep(500);
+		}
+	} while (!codec_ready && --retryCount);
+
+	return 0;
+}
+
 static int ca0132_init(struct hda_codec *codec)
 {
 	struct ca0132_spec *spec = codec->spec;
@@ -4486,9 +4635,10 @@ static int ca0132_init(struct hda_codec *codec)
 
 	snd_hda_power_up(codec);
 
+	snd_hda_sequence_write(codec, spec->base_init_verbs);
+	ca0132_init_codec(codec);
 	ca0132_init_params(codec);
 	ca0132_init_flags(codec);
-	snd_hda_sequence_write(codec, spec->base_init_verbs);
 	ca0132_download_dsp(codec);
 	ca0132_refresh_widget_caps(codec);
 	ca0132_setup_defaults(codec);
