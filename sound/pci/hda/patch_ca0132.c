@@ -822,6 +822,7 @@ static int chipio_send(struct hda_codec *codec,
 	} while (time_before(jiffies, timeout));
 
 	CTASSERT(0);
+	printk(KERN_ERR"CA0132 chipio timed out %x %x\n", reg, data);
 	return -1;
 }
 
