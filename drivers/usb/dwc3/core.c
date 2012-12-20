@@ -453,6 +453,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	if (of_get_property(node, "tx-fifo-resize", NULL))
 		dwc->needs_fifo_resize = true;
 
+	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
 	pm_runtime_forbid(dev);
@@ -518,6 +519,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
+	pm_runtime_put(dev);
 	pm_runtime_allow(dev);
 
 	return 0;
@@ -544,6 +546,7 @@ err1:
 
 err0:
 	dwc3_free_event_buffers(dwc);
+	pm_runtime_disable(&pdev->dev);
 
 	return ret;
 }
@@ -555,7 +558,6 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	dwc3_debugfs_exit(dwc);
