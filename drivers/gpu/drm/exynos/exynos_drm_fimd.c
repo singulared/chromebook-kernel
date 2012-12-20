@@ -336,9 +336,18 @@ static void fimd_disable_vblank(struct device *dev)
 static void fimd_wait_for_vblank(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	u32 val;
+	bool vblank_enabled = true;
 
 	if (ctx->suspended)
 		return;
+
+	val = readl(ctx->regs + VIDINTCON0);
+
+	if (!(val & VIDINTCON0_INT_FRAME)) {
+		vblank_enabled = false;
+		fimd_enable_vblank(dev);
+	}
 
 	atomic_set(&ctx->wait_vsync_event, 1);
 
@@ -350,6 +359,9 @@ static void fimd_wait_for_vblank(struct device *dev)
 				!atomic_read(&ctx->wait_vsync_event),
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
+
+	if (!vblank_enabled)
+		fimd_disable_vblank(dev);
 }
 
 static struct exynos_drm_manager_ops fimd_manager_ops = {
