@@ -469,4 +469,4 @@ exit:
 	clk_disable(chipid_clk);
 	return 0;
 }
-device_initcall_sync(exynos5250_asv_init);
+subsys_initcall_sync(exynos5250_asv_init);
