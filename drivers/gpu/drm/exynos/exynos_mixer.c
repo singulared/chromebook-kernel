@@ -869,6 +869,55 @@ static void mixer_wait_for_vblank(void *ctx)
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 }
 
+static void mixer_complete_scanout(void *ctx, dma_addr_t dma_addr,
+					unsigned long size)
+{
+	struct mixer_context *mixer_ctx = ctx;
+	struct mixer_resources *res = &mixer_ctx->mixer_res;
+	dma_addr_t dma_addr_in_use;
+	int win;
+	bool in_use = false;
+
+	mutex_lock(&mixer_ctx->mixer_mutex);
+	if (!mixer_ctx->powered) {
+		mutex_unlock(&mixer_ctx->mixer_mutex);
+		return;
+	}
+	mutex_unlock(&mixer_ctx->mixer_mutex);
+
+	/*
+	 * This dma-addr must not be used next time so check the
+	 * register and disable the window if yes.
+	 */
+	for (win = 0; win < MIXER_WIN_NR; win++) {
+		if (!mixer_ctx->win_data[win].enabled)
+			continue;
+
+		dma_addr_in_use = mixer_reg_read(res, MXR_GRAPHIC_BASE(win));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size))
+				if (mixer_ctx->win_data[win].enabled)
+					mixer_win_disable(ctx, win);
+	}
+
+	/*
+	 * If the dma-addr is being used right now, then set in_use
+	 * flag so that we wait for vsync before freeing fb.
+	 */
+	for (win = 0; win < MIXER_WIN_NR; win++) {
+		dma_addr_in_use = mixer_reg_read(res, MXR_GRAPHIC_BASE_S(win));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size)) {
+				in_use = true;
+				/* no need to check all windows*/
+				break;
+		}
+	}
+
+	if (in_use)
+		mixer_wait_for_vblank(ctx);
+}
+
 static void mixer_window_suspend(struct mixer_context *ctx)
 {
 	struct hdmi_win_data *win_data;
@@ -977,7 +1026,7 @@ static struct exynos_mixer_ops mixer_ops = {
 	.iommu_on		= mixer_iommu_on,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
-	.wait_for_vblank	= mixer_wait_for_vblank,
+	.complete_scanout	= mixer_complete_scanout,
 	.dpms			= mixer_dpms,
 
 	/* overlay */

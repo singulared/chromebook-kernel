@@ -51,7 +51,8 @@ struct exynos_mixer_ops {
 	int (*iommu_on)(void *ctx, bool enable);
 	int (*enable_vblank)(void *ctx, int pipe);
 	void (*disable_vblank)(void *ctx);
-	void (*wait_for_vblank)(void *ctx);
+	void (*complete_scanout)(void *ctx, dma_addr_t dma_addr,
+					unsigned long size);
 	void (*dpms)(void *ctx, int mode);
 
 	/* overlay */
