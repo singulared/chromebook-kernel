@@ -1123,8 +1123,7 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
 
-	if (work_pending(&dp->hotplug_work))
-		flush_work(&dp->hotplug_work);
+	flush_work(&dp->hotplug_work);
 
 	if (pdev->dev.of_node) {
 		if (dp->phy_addr)
@@ -1147,8 +1146,7 @@ int exynos_dp_suspend(struct device *dev)
 
 	disable_irq(dp->irq);
 
-	if (work_pending(&dp->hotplug_work))
-		flush_work(&dp->hotplug_work);
+	flush_work(&dp->hotplug_work);
 
 	if (dev->of_node) {
 		if (dp->phy_addr)
