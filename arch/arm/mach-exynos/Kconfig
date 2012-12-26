@@ -108,11 +108,6 @@ config EXYNOS5_SETUP_FIMD1
 	help
 	  Common setup code for FIMD1.
 
-config EXYNOS_DEV_SYSMMU
-	bool
-	help
-	  Common setup code for SYSTEM MMU in EXYNOS platforms
-
 config EXYNOS4_DEV_USB_OHCI
 	bool
 	help
