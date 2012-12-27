@@ -1216,6 +1216,10 @@ static long devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	u32 vidpid;
 
 	struct qmihandle *handle = (struct qmihandle *)file->private_data;
+	if (!handle) {
+		GOBI_WARN("invalid qmihandle");
+		return -ENXIO;
+	}
 
 	GOBI_DEBUG("%p %04x %08x", handle, handle->cid, cmd);
 
