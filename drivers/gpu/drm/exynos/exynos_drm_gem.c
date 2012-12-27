@@ -709,7 +709,7 @@ unlock:
 int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 				struct drm_file *file)
 {
-	struct drm_exynos_gem_cpu_acquire *args = data;
+	struct drm_exynos_gem_cpu_release *args = data;
 	struct exynos_drm_file_private *file_priv = file->driver_priv;
 	struct drm_gem_object *obj;
 	struct exynos_drm_gem_obj *exynos_gem_obj;
