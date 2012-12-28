@@ -16,6 +16,9 @@
 #include <linux/io.h>
 #include <linux/platform_data/ntc_thermistor.h>
 #include <linux/gpio.h>
+#include <linux/delay.h>
+#include <linux/regulator/fixed.h>
+#include <linux/regulator/machine.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -29,6 +32,46 @@
 #include <plat/gpio-cfg.h>
 
 #include "common.h"
+#include <video/platform_lcd.h>
+
+static void lcd_set_power(struct plat_lcd_data *pd,
+			unsigned int power)
+{
+	struct regulator *lcd_fet;
+	struct regulator *backlight_fet;
+
+	lcd_fet = regulator_get(NULL, "lcd_vdd");
+	if (!IS_ERR(lcd_fet)) {
+		if (power)
+			regulator_enable(lcd_fet);
+		else
+			regulator_disable(lcd_fet);
+
+		regulator_put(lcd_fet);
+	}
+
+	/* Turn on regulator for backlight */
+	backlight_fet = regulator_get(NULL, "vcd_led");
+	if (!IS_ERR(backlight_fet)) {
+		if (power)
+			regulator_enable(backlight_fet);
+		else
+			regulator_disable(backlight_fet);
+
+		regulator_put(backlight_fet);
+	}
+	/* Wait 10 ms between regulator on and PWM start per spec */
+	mdelay(10);
+}
+
+static struct plat_lcd_data smdk5250_lcd_data = {
+	.set_power	= lcd_set_power,
+};
+
+static struct platform_device smdk5250_lcd = {
+	.name			= "platform-lcd",
+	.dev.platform_data	= &smdk5250_lcd_data,
+};
 
 /*
  * The following lookup table is used to override device names when devices
@@ -282,6 +325,7 @@ static void __init exynos5_dt_machine_init(void)
 	if (of_machine_is_compatible("samsung,exynos5250")) {
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
+		platform_device_register(&smdk5250_lcd);
 		/* MAX77686 PMIC interrupt setup code */
 		s3c_gpio_setpull(EXYNOS5_GPX3(2), S3C_GPIO_PULL_NONE);
 	}
