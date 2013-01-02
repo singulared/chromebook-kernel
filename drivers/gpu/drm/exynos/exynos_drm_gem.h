@@ -152,9 +152,6 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void* data,
 int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 			       struct drm_file *file_priv);
 
-/* initialize gem object. */
-int exynos_drm_gem_init_object(struct drm_gem_object *obj);
-
 /* free gem object. */
 void exynos_drm_gem_free_object(struct drm_gem_object *gem_obj);
 

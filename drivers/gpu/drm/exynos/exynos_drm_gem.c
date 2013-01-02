@@ -778,13 +778,6 @@ unlock:
 	return ret;
 }
 
-int exynos_drm_gem_init_object(struct drm_gem_object *obj)
-{
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	return 0;
-}
-
 void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj;
