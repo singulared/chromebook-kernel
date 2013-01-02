@@ -378,18 +378,13 @@ struct exynos_drm_gem_obj *exynos_drm_gem_create(struct drm_device *dev,
 	 * allocate all pages as desired size if user wants to allocate
 	 * physically non-continuous memory.
 	 */
-	if (flags & EXYNOS_BO_NONCONTIG) {
+	if (flags & EXYNOS_BO_NONCONTIG)
 		ret = exynos_drm_gem_get_pages(&exynos_gem_obj->base);
-		if (ret < 0) {
-			drm_gem_object_release(&exynos_gem_obj->base);
-			goto err_fini_buf;
-		}
-	} else {
+	else
 		ret = exynos_drm_alloc_buf(dev, buf, flags);
-		if (ret < 0) {
-			drm_gem_object_release(&exynos_gem_obj->base);
-			goto err_fini_buf;
-		}
+	if (ret < 0) {
+		drm_gem_object_release(&exynos_gem_obj->base);
+		goto err_fini_buf;
 	}
 
 	return exynos_gem_obj;
