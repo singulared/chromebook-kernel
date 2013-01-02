@@ -533,8 +533,8 @@ static void s5p_mfc_get_enc_frame_buffer_v6(struct s5p_mfc_ctx *ctx,
 static int s5p_mfc_set_enc_ref_buffer_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
-	size_t buf_addr1, buf_size1;
-	int i;
+	size_t buf_addr1;
+	int i, buf_size1;
 
 	mfc_debug_enter();
 
