@@ -9,12 +9,20 @@
  * as published by the Free Software Foundation; version 2
  * of the License.
  */
+
+#define pr_fmt(fmt) "test_nx: " fmt
+
 #include <linux/module.h>
 #include <linux/sort.h>
 #include <linux/slab.h>
 
 #include <asm/uaccess.h>
 #include <asm/asm.h>
+
+/* 0xC3 is the opcode for "ret" */
+#define INSN_RET	0xC3
+/* 0x90 is the opcode for "nop" */
+#define INSN_NOP	0x90
 
 extern int rodata_test_data;
 
@@ -34,18 +42,15 @@ extern int rodata_test_data;
  * (otherwise we'd have to sort and that's just too messy)
  */
 
-
-
 /*
  * We want to set up an exception handling point on our stack,
- * which means a variable value. This function is rather dirty
- * and walks the exception table of the module, looking for a magic
- * marker and replaces it with a specific function.
+ * which means a variable value.
  */
-static void fudze_exception_table(void *marker, void *new)
+static struct exception_table_entry *original_extable;
+static struct exception_table_entry replaced_extable;
+static void fake_exception_table(void *new)
 {
 	struct module *mod = THIS_MODULE;
-	struct exception_table_entry *extable;
 
 	/*
 	 * Note: This module has only 1 exception table entry,
@@ -54,12 +59,30 @@ static void fudze_exception_table(void *marker, void *new)
 	 * table.
 	 */
 	if (mod->num_exentries > 1) {
-		printk(KERN_ERR "test_nx: too many exception table entries!\n");
-		printk(KERN_ERR "test_nx: test results are not reliable.\n");
+		pr_err("too many exception table entries!\n");
+		pr_err("test results are not reliable.\n");
 		return;
 	}
-	extable = (struct exception_table_entry *)mod->extable;
-	extable[0].insn = (unsigned long)new;
+	/* Save original exception table when first called. */
+	if (original_extable == NULL)
+		original_extable = mod->extable;
+	/* Replace the original exception table with a duplicate. */
+	if (mod->extable == original_extable)
+		mod->extable = &replaced_extable;
+
+	/* Record new insn address. */
+	mod->extable->insn = (unsigned long)new;
+
+	/* Record new fixup address. */
+	mod->extable->fixup = original_extable->fixup;
+}
+
+static void restore_exception_table(void)
+{
+	struct module *mod = THIS_MODULE;
+
+	if (original_extable)
+		mod->extable = original_extable;
 }
 
 
@@ -82,7 +105,8 @@ static noinline int test_address(void *address)
 	unsigned long result;
 
 	/* Set up an exception table entry for our address */
-	fudze_exception_table(&foo_label, address);
+	fake_exception_table(address);
+	pr_info("calling %p (0x%02X)\n", address, *(unsigned char *)address);
 	result = 1;
 	asm volatile(
 		"foo_label:\n"
@@ -97,76 +121,87 @@ static noinline int test_address(void *address)
 		: [fake_code] "r" (address), [zero] "r" (0UL), "0" (result)
 	);
 	/* change the exception table back for the next round */
-	fudze_exception_table(address, &foo_label);
+	restore_exception_table();
 
 	if (result)
 		return -ENODEV;
 	return 0;
 }
 
-static unsigned char test_data = 0xC3; /* 0xC3 is the opcode for "ret" */
+static unsigned char test_data;
+static const int module_rodata_test_data = INSN_RET;
 
 static int test_NX(void)
 {
 	int ret = 0;
-	/* 0xC3 is the opcode for "ret" */
-	char stackcode[] = {0xC3, 0x90, 0 };
+	char stackcode[] = {INSN_RET, INSN_NOP, 0 };
 	char *heap;
 
-	test_data = 0xC3;
+	test_data = INSN_RET;
 
-	printk(KERN_INFO "Testing NX protection\n");
+	pr_info("Testing NX protection ...\n");
 
 	/* Test 1: check if the stack is not executable */
 	if (test_address(&stackcode)) {
-		printk(KERN_ERR "test_nx: stack was executable\n");
+		pr_err("stack is executable\n");
 		ret = -ENODEV;
 	}
-
 
 	/* Test 2: Check if the heap is executable */
 	heap = kmalloc(64, GFP_KERNEL);
 	if (!heap)
 		return -ENOMEM;
-	heap[0] = 0xC3; /* opcode for "ret" */
+	heap[0] = INSN_RET;
 
 	if (test_address(heap)) {
-		printk(KERN_ERR "test_nx: heap was executable\n");
+		pr_err("heap is executable\n");
 		ret = -ENODEV;
 	}
 	kfree(heap);
 
-	/*
-	 * The following 2 tests currently fail, this needs to get fixed
-	 * Until then, don't run them to avoid too many people getting scared
-	 * by the error message
-	 */
-
 #ifdef CONFIG_DEBUG_RODATA
-	/* Test 3: Check if the .rodata section is executable */
-	if (rodata_test_data != 0xC3) {
-		printk(KERN_ERR "test_nx: .rodata marker has invalid value\n");
+	/* Test 3: Check if the kernel .rodata section is executable */
+	if (rodata_test_data != INSN_RET) {
+		pr_err("kernel .rodata marker has invalid value\n");
 		ret = -ENODEV;
 	} else if (test_address(&rodata_test_data)) {
-		printk(KERN_ERR "test_nx: .rodata section is executable\n");
+		pr_err("kernel .rodata section is executable\n");
 		ret = -ENODEV;
 	}
+#else
+	pr_err("kernel .rodata section executable: missing " \
+		"CONFIG_DEBUG_RODATA\n");
+	ret = -ENODEV;
 #endif
 
-#if 0
+#ifdef CONFIG_DEBUG_SET_MODULE_RONX
 	/* Test 4: Check if the .data section of a module is executable */
 	if (test_address(&test_data)) {
-		printk(KERN_ERR "test_nx: .data section is executable\n");
+		pr_err(".data section is executable\n");
 		ret = -ENODEV;
 	}
 
+	/* Test 5: Check if the .rodata section of a module is executable */
+	if (module_rodata_test_data != INSN_RET) {
+		pr_err("module .rodata marker has invalid value\n");
+		ret = -ENODEV;
+	} else if (test_address((void *)&module_rodata_test_data)) {
+		pr_err("module .rodata section is executable\n");
+		ret = -ENODEV;
+	}
+#else
+	pr_err("module .data and .rodata sections executable: missing " \
+		"CONFIG_DEBUG_SET_MODULE_RONX\n");
+	ret = -ENODEV;
 #endif
+
+	pr_info("Done testing.\n");
+
 	return ret;
 }
 
 static void test_exit(void)
-{
-}
+{ }
 
 module_init(test_NX);
 module_exit(test_exit);
