@@ -66,24 +66,18 @@ static int exynos_drm_fb_map(struct exynos_drm_fb *exynos_fb)
 	return 0;
 }
 
-static int exynos_drm_fb_unmap(struct exynos_drm_fb *exynos_fb)
+static void exynos_drm_fb_unmap(struct exynos_drm_fb *exynos_fb)
 {
 	struct exynos_drm_gem_obj *gem_ob = exynos_fb->exynos_gem_obj[0];
 	struct drm_gem_object *obj = &gem_ob->base;
 	struct exynos_drm_gem_buf *buf;
 
 	buf = exynos_drm_fb_buffer(exynos_fb, 0);
-	if (!buf) {
-		DRM_ERROR("buffer is null\n");
-		return -ENOMEM;
-	}
+	if (!buf)
+		return;
 
-	/*
-	 * Not critical, this is used for cleanup in the fb_create error path
-	 * path so keep it silent.
-	 */
 	if (!buf->dma_addr)
-		return -ENOMEM;
+		return;
 
 	buf->dma_addr = 0;
 
@@ -94,8 +88,6 @@ static int exynos_drm_fb_unmap(struct exynos_drm_fb *exynos_fb)
 		     DMA_BIDIRECTIONAL);
 
 	drm_gem_object_unreference_unlocked(obj);
-
-	return 0;
 }
 
 void exynos_drm_fb_release(struct kref *kref)
@@ -124,8 +116,7 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 
 	drm_framebuffer_cleanup(fb);
 
-	if (exynos_drm_fb_unmap(exynos_fb))
-		DRM_ERROR("Couldn't unmap buffer\n");
+	exynos_drm_fb_unmap(exynos_fb);
 
 	nr = exynos_drm_format_num_buffers(fb->pixel_format);
 
