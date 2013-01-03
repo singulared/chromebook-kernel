@@ -14,6 +14,7 @@
 #include <linux/serial_core.h>
 #include <linux/memblock.h>
 #include <linux/io.h>
+#include <linux/platform_data/ntc_thermistor.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -23,6 +24,7 @@
 #include <plat/cpu.h>
 #include <plat/regs-serial.h>
 #include <plat/mfc.h>
+#include <plat/adc.h>	/* for s3c_adc_register and friends */
 
 #include "common.h"
 
@@ -113,6 +115,106 @@ static const struct of_dev_auxdata exynos5440_auxdata_lookup[] __initconst = {
 	{},
 };
 
+
+/* NTC Thermistor. Attached to S3C-ADC in some Samsung SoC Devices */
+struct s3c_adc_client *ntc_adc_clients[4];
+struct mutex ntc_adc_locks[] = {
+	__MUTEX_INITIALIZER(ntc_adc_locks[0]),
+	__MUTEX_INITIALIZER(ntc_adc_locks[1]),
+	__MUTEX_INITIALIZER(ntc_adc_locks[2]),
+	__MUTEX_INITIALIZER(ntc_adc_locks[3]),
+};
+
+static int __init s3c_adc_ntc_init(struct platform_device *pdev)
+{
+	struct s3c_adc_client *ntc_adc_client;
+
+	ntc_adc_client = s3c_adc_register(pdev, NULL, NULL, 0);
+	if (IS_ERR(ntc_adc_client))
+		return PTR_ERR(ntc_adc_client);
+
+	ntc_adc_clients[pdev->id] = ntc_adc_client;
+
+	return 0;
+}
+
+/*
+ * read_thermistor_uV: is a call back from ntc_thermistor driver.
+ * returns the temperature of the thermistor in celsius
+ */
+static int read_thermistor_uV(struct platform_device *pdev)
+{
+	static unsigned int ntc_adc_ports[] = {3, 4, 5, 6};
+	s64 converted;
+	unsigned int port = ntc_adc_ports[pdev->id];
+	struct s3c_adc_client *client = ntc_adc_clients[pdev->id];
+	struct ntc_thermistor_platform_data *pdata = pdev->dev.platform_data;
+	struct mutex *lock = ntc_adc_locks + pdev->id;
+	int ret;
+
+	/* Arrays are sized; make sure we haven't blown over */
+	BUG_ON(pdev->id >= ARRAY_SIZE(ntc_adc_locks));
+
+	/*
+	 * s3c_adc_read() assumes two processes aren't using the same client
+	 * at the same time (yes, it's a bad design), so grab a per-client
+	 * mutex to ensure this is OK.
+	 */
+	mutex_lock(lock);
+	ret = s3c_adc_read(client, port);
+	mutex_unlock(lock);
+
+	if (ret < 0) {
+		dev_warn(&pdev->dev, "Thermistor read err: 0x%08x\n", ret);
+		return ret;
+	}
+
+	converted = pdata->pullup_uV * (s64) ret;
+	converted >>= 12;
+
+	return (int) converted;
+}
+
+static struct ntc_thermistor_platform_data ntc_adc_pdata = {
+	.read_uV	= read_thermistor_uV,
+	.pullup_uV	= 1800000, /* voltage of vdd for ADC */
+	.pullup_ohm	= 47000,
+	.pulldown_ohm	= 0,
+	.connect	= NTC_CONNECTED_GROUND,
+};
+
+struct platform_device s3c_device_adc_ntc_thermistor0 = {
+	.name			= "ncp15wb473",
+	.id			= 0,
+	.dev			= {
+		.platform_data = &ntc_adc_pdata,
+	},
+};
+
+struct platform_device s3c_device_adc_ntc_thermistor1 = {
+	.name			= "ncp15wb473",
+	.id			= 1,
+	.dev			= {
+	.platform_data = &ntc_adc_pdata,
+	},
+};
+
+struct platform_device s3c_device_adc_ntc_thermistor2 = {
+	.name			= "ncp15wb473",
+	.id			= 2,
+	.dev			= {
+		.platform_data = &ntc_adc_pdata,
+	},
+};
+
+struct platform_device s3c_device_adc_ntc_thermistor3 = {
+	.name			= "ncp15wb473",
+	.id			= 3,
+	.dev			= {
+		.platform_data = &ntc_adc_pdata,
+	},
+};
+
 static void __init exynos5_dt_map_io(void)
 {
 	unsigned long root = of_get_flat_dt_root();
@@ -138,6 +240,13 @@ static void __init enable_xclkout(void)
        tmp |= PMU_DEBUG_XXTI;
        writel(tmp, S5P_PMU_DEBUG);
 }
+
+static struct platform_device *smdk5250_devices[] __initdata = {
+	&s3c_device_adc_ntc_thermistor0,
+	&s3c_device_adc_ntc_thermistor1,
+	&s3c_device_adc_ntc_thermistor2,
+	&s3c_device_adc_ntc_thermistor3,
+};
 
 static void __init exynos5_dt_machine_init(void)
 {
@@ -174,6 +283,16 @@ static void __init exynos5_dt_machine_init(void)
 	else if (of_machine_is_compatible("samsung,exynos5440"))
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5440_auxdata_lookup, NULL);
+
+	/* Enable power to ADC */
+	__raw_writel(0x1, S5P_ADC_PHY_CONTROL);
+
+	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor0);
+	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor1);
+	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor2);
+	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor3);
+
+	platform_add_devices(smdk5250_devices, ARRAY_SIZE(smdk5250_devices));
 }
 
 static char const *exynos5_dt_compat[] __initdata = {
