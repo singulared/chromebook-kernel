@@ -148,7 +148,7 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 	/*
 	 * VM_DONTCOPY - don't make this mapping available in fork'ed processes
 	 * VM_DONTEXPAND - disable mremap on this region
-	 * VM_RESERVED & VM_IO - disables paging
+	 * VM_IO - disables paging
 	 * VM_MIXEDMAP - Support mixing struct page*s and raw pfns.
 	 *               This is needed to support using the dedicated and
 	 *               the OS based memory backends together.
@@ -157,7 +157,7 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 	 * This will need updating to propagate coherency flags
 	 * See MIDBASE-1057
 	 */
-	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_RESERVED | VM_IO | VM_MIXEDMAP;
+	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_IO | VM_MIXEDMAP;
 	vma->vm_ops = &kbase_vm_ops;
 	vma->vm_private_data = reg;
 
@@ -755,7 +755,7 @@ static int kbase_tracking_page_setup(struct kbase_context * kctx, struct vm_area
 
 	/* no real access */
 	vma->vm_flags &= ~(VM_READ | VM_WRITE | VM_EXEC);
-	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_RESERVED | VM_IO;
+	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_IO;
 	vma->vm_ops = &kbase_vm_special_ops;
 	vma->vm_private_data = kctx;
 
