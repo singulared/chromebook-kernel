@@ -802,9 +802,10 @@ static int s5p_mfc_open(struct file *file)
 			mfc_err("power on failed\n");
 			goto err_pwr_enable;
 		}
-		ret = s5p_mfc_alloc_and_load_firmware(dev);
-		if (ret)
-			goto err_alloc_fw;
+		ret = s5p_mfc_load_firmware(dev);
+		if (ret) {
+			goto err_load_fw;
+		}
 		/* Init the FW */
 		ret = s5p_mfc_init_hw(dev);
 		if (ret)
@@ -858,18 +859,18 @@ static int s5p_mfc_open(struct file *file)
 	return ret;
 	/* Deinit when failure occured */
 err_queue_init:
+	if (dev->num_inst == 1)
+		s5p_mfc_deinit_hw(dev);
 err_init_hw:
-	s5p_mfc_release_firmware(dev);
-err_alloc_fw:
+err_load_fw:
 	dev->ctx[ctx->num] = NULL;
 	del_timer_sync(&dev->watchdog_timer);
 err_pwr_enable:
 	if (dev->num_inst == 1) {
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("power off failed\n");
-		s5p_mfc_release_firmware(dev);
+		s5p_mfc_clock_off();
 	}
-	s5p_mfc_clock_off();
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);
 err_bad_node:
@@ -926,11 +927,8 @@ static int s5p_mfc_release(struct file *file)
 		clear_bit(0, &dev->hw_lock);
 	dev->num_inst--;
 	if (dev->num_inst == 0) {
-		mfc_debug(2, "Last instance - release firmware\n");
-		/* reset <-> F/W release */
-		s5p_mfc_reset(dev);
+		mfc_debug(2, "Last instance\n");
 		s5p_mfc_deinit_hw(dev);
-		s5p_mfc_release_firmware(dev);
 		del_timer_sync(&dev->watchdog_timer);
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("Power off failed\n");
@@ -1238,6 +1236,12 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 	mutex_init(&dev->mfc_mutex);
 
+	s5p_mfc_clock_on();
+	ret = s5p_mfc_alloc_firmware(dev);
+	s5p_mfc_clock_off();
+	if (ret)
+		goto err_alloc_fw;
+
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
 	if (ret)
 		goto err_v4l2_dev_reg;
@@ -1319,6 +1323,8 @@ err_dec_reg:
 err_dec_alloc:
 	v4l2_device_unregister(&dev->v4l2_dev);
 err_v4l2_dev_reg:
+	s5p_mfc_release_firmware(dev);
+err_alloc_fw:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
 err_mem_init_ctx_1:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
@@ -1345,6 +1351,7 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 	video_unregister_device(dev->vfd_enc);
 	video_unregister_device(dev->vfd_dec);
 	v4l2_device_unregister(&dev->v4l2_dev);
+	s5p_mfc_release_firmware(dev);
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
 
