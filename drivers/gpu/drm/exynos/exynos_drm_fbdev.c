@@ -74,7 +74,9 @@ static struct fb_ops exynos_drm_fb_ops = {
 };
 
 static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
-				     struct drm_framebuffer *fb)
+				     struct drm_framebuffer *fb,
+				     unsigned int fb_width,
+				     unsigned int fb_height)
 {
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
@@ -85,7 +87,7 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
-	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height);
+	drm_fb_helper_fill_var(fbi, helper, fb_width, fb_height);
 
 	/* RGB formats use only one buffer */
 	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
@@ -169,7 +171,8 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 		goto out;
 	}
 
-	ret = exynos_drm_fbdev_update(helper, helper->fb);
+	ret = exynos_drm_fbdev_update(helper, helper->fb, sizes->fb_width,
+			sizes->fb_height);
 	if (ret < 0) {
 		fb_dealloc_cmap(&fbi->cmap);
 		goto out;
