@@ -31,7 +31,7 @@ OSK_STATIC_INLINE mali_bool osk_is_privileged(void)
 	mali_bool is_privileged = MALI_FALSE;
 
 	/* Check if the caller is root */
-	if (current_euid() == 0)
+	if (from_kuid(&init_user_ns, current_euid()) == 0)
 	{
 		is_privileged = MALI_TRUE;
 	}
