@@ -1215,8 +1215,8 @@ static int __init exynos_init_irq_eint(struct device_node *eint_np,
 	 * interrupt support code here can be completely removed.
 	 */
 	static const struct of_device_id exynos_pinctrl_ids[] = {
-		{ .compatible = "samsung,pinctrl-exynos4210", },
-		{ .compatible = "samsung,pinctrl-exynos4x12", },
+		{ .compatible = "samsung,exynos4210-pinctrl", },
+		{ .compatible = "samsung,exynos4x12-pinctrl", },
 	};
 	struct device_node *pctrl_np, *wkup_np;
 	const char *wkup_compat = "samsung,exynos4210-wakeup-eint";
