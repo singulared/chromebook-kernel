@@ -43,7 +43,7 @@ struct exynos_dp_device {
 	struct drm_device	*drm_dev;
 	struct resource		*res;
 	struct clk		*clock;
-	unsigned int		irq;
+	int			irq;
 	void __iomem		*reg_base;
 	int			hpd_gpio;
 
