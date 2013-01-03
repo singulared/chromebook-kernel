@@ -82,7 +82,8 @@ static void exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
 	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
-	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
+	struct drm_gem_object *drm_gem_object = &exynos_gem_obj->base;
+	size_t size = drm_gem_object->size;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
