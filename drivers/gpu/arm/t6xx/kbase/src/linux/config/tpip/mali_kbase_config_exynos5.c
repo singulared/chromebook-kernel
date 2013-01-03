@@ -1871,6 +1871,7 @@ static void kbase_platform_dvfs_set_vol(unsigned int vol)
 	return;
 }
 
+#if defined CONFIG_T6XX_DVFS
 int kbase_platform_dvfs_get_level(int freq)
 {
 	int i;
@@ -1880,6 +1881,7 @@ int kbase_platform_dvfs_get_level(int freq)
 	}
 	return -1;
 }
+#endif
 
 #if defined CONFIG_T6XX_DVFS || defined CONFIG_T6XX_DEBUG_SYS
 void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
