@@ -73,15 +73,15 @@ static struct fb_ops exynos_drm_fb_ops = {
 	.fb_setcmap	= drm_fb_helper_setcmap,
 };
 
-static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
-				     struct drm_framebuffer *fb,
-				     unsigned int fb_width,
-				     unsigned int fb_height)
+static void exynos_drm_fbdev_update(struct drm_fb_helper *helper,
+				    struct drm_framebuffer *fb,
+				    struct exynos_drm_gem_obj *exynos_gem_obj,
+				    unsigned int fb_width,
+				    unsigned int fb_height)
 {
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-	struct exynos_drm_gem_buf *buffer;
+	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
 	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -89,20 +89,11 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(fbi, helper, fb_width, fb_height);
 
-	/* RGB formats use only one buffer */
-	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
-	if (!buffer) {
-		DRM_LOG_KMS("buffer is null.\n");
-		return -EFAULT;
-	}
-
 	dev->mode_config.fb_base = (resource_size_t)buffer->dma_addr;
 	fbi->screen_base = buffer->kvaddr;
 	fbi->fix.smem_start = (unsigned long)(buffer->dma_addr);
 	fbi->screen_size = size;
 	fbi->fix.smem_len = size;
-
-	return 0;
 }
 
 static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
@@ -171,12 +162,9 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 		goto out;
 	}
 
-	ret = exynos_drm_fbdev_update(helper, helper->fb, sizes->fb_width,
-			sizes->fb_height);
-	if (ret < 0) {
-		fb_dealloc_cmap(&fbi->cmap);
-		goto out;
-	}
+	/* RGB formats use only one buffer */
+	exynos_drm_fbdev_update(helper, helper->fb, exynos_gem_obj,
+			sizes->fb_width, sizes->fb_height);
 
 /*
  * if failed, all resources allocated above would be released by
