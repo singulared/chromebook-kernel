@@ -96,4 +96,13 @@
 		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
 		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
 	};
+
+	i2c@12CD0000 {
+		ptn3460-bridge@20 {
+			compatible = "nxp,ptn3460";
+			reg = <0x20>;
+			powerdown-gpio = <&gpy2 5 1 0 0>;
+			reset-gpio = <&gpx1 5 1 0 0>;
+		};
+	};
 };
