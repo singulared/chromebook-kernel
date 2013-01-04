@@ -1,0 +1,73 @@
+
+* Samsung S2MPS11 Voltage and Current Regulator
+
+The Samsung S2MP211 is a multi-function device which includes volatage and
+current regulators, rtc, charger controller and other sub-blocks. It is
+interfaced to the host controller using a i2c interface. Each sub-block is
+addressed by the host system using different i2c slave address. This document
+describes the bindings for 'pmic' sub-block of s2mps11.
+
+Required properties:
+- compatible: Should be "samsung,s2mps11-pmic".
+- reg: Specifies the i2c slave address of the pmic block. It should be 0x66.
+
+Optional properties:
+- interrupt-parent: Specifies the phandle of the interrupt controller to which
+  the interrupts from s2mps11 are delivered to.
+- interrupts: Interrupt specifiers for interrupt sources.
+- ramp_delay: Ramp delay for BUCKs.
+- ramp_enable: The ramp delay enable/disable control.
+
+Regulators: The regulators of s2mps11 that have to be instantiated should be
+included in a sub-node named 'regulators'. Regulator nodes included in this
+sub-node should be of the format as listed below.
+
+	regulator_name {
+		standard regulator bindings here
+	};
+
+The following are the names of the regulators that the s2mps11 pmic block
+supports. Note: The 'n' in LDOn and BUCKn represents the LDO or BUCK number
+as per the datasheet of s2mps11.
+
+	- LDOn
+		  - valid values for n are 1 to 28
+		  - Example: LDO0, LD01, LDO28
+	- BUCKn
+		  - valid values for n are 1 to 9.
+		  - Example: BUCK1, BUCK2, BUCK9
+
+The bindings inside the regulator nodes use the standard regulator bindings
+which are documented elsewhere.
+
+Example:
+
+	s2mps11_pmic@66 {
+		compatible = "samsung,s2mps11-pmic";
+		reg = <0x66>;
+		s2mps11,buck2-ramp-delay = <12>;
+		s2mps11,buck6-ramp-enable = <1>;
+
+		regulators {
+			ldo1_reg: LDO1 {
+				regulator-name = "VDD_ABB_3.3V";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+			};
+
+			ldo2_reg: LDO2 {
+				regulator-name = "VDD_ALIVE_1.1V";
+				regulator-min-microvolt = <1100000>;
+				regulator-max-microvolt = <1100000>;
+				regulator-always-on;
+			};
+
+			buck1_reg: BUCK1 {
+				regulator-name = "VDD_MIF_1.2V";
+				regulator-min-microvolt = <950000>;
+				regulator-max-microvolt = <1350000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+		};
+	};

@@ -20,6 +20,7 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
+#include <linux/regulator/of_regulator.h>
 #include <linux/mfd/samsung/core.h>
 #include <linux/mfd/samsung/s2mps11.h>
 
@@ -231,14 +232,105 @@ static struct regulator_desc regulators[] = {
 	regulator_desc_buck10,
 };
 
+#ifdef CONFIG_OF
+static int s2mps11_pmic_dt_parse_pdata(struct sec_pmic_dev *iodev,
+					struct sec_platform_data *pdata)
+{
+	struct device_node *pmic_np, *regulators_np, *reg_np;
+	struct sec_regulator_data *rdata;
+	unsigned int i;
+
+	pmic_np = iodev->dev->of_node;
+	if (!pmic_np) {
+		dev_err(iodev->dev, "could not find pmic sub-node\n");
+		return -ENODEV;
+	}
+
+	regulators_np = of_find_node_by_name(pmic_np, "regulators");
+	if (!regulators_np) {
+		dev_err(iodev->dev, "could not find regulators sub-node\n");
+		return -EINVAL;
+	}
+
+	/* count the number of regulators to be supported in pmic */
+	pdata->num_regulators = 0;
+	for_each_child_of_node(regulators_np, reg_np) {
+		pdata->num_regulators++;
+	}
+
+	rdata = devm_kzalloc(iodev->dev, sizeof(*rdata) *
+				pdata->num_regulators, GFP_KERNEL);
+	if (!rdata) {
+		dev_err(iodev->dev,
+			"could not allocate memory for regulator data\n");
+		return -ENOMEM;
+	}
+
+	pdata->regulators = rdata;
+	for_each_child_of_node(regulators_np, reg_np) {
+		for (i = 0; i < ARRAY_SIZE(regulators); i++)
+			if (!of_node_cmp(reg_np->name, regulators[i].name))
+				break;
+
+		if (i == ARRAY_SIZE(regulators)) {
+			dev_warn(iodev->dev,
+			"don't know how to configure regulator %s\n",
+			reg_np->name);
+			continue;
+		}
+
+		rdata->id = i;
+		rdata->initdata = of_get_regulator_init_data(
+						iodev->dev, reg_np);
+		rdata->reg_node = reg_np;
+		rdata++;
+	}
+
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck2-ramp-delay", &i))
+		pdata->buck2_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck34-ramp-delay", &i))
+		pdata->buck34_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck5-ramp-delay", &i))
+		pdata->buck5_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck16-ramp-delay", &i))
+		pdata->buck16_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck7810-ramp-delay", &i))
+		pdata->buck7810_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck9-ramp-delay", &i))
+		pdata->buck9_ramp_delay = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck6-ramp-enable", &i))
+		pdata->buck6_ramp_enable = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck2-ramp-enable", &i))
+		pdata->buck2_ramp_enable = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck3-ramp-enable", &i))
+		pdata->buck3_ramp_enable = i;
+	if (!of_property_read_u32(pmic_np, "s2mps11,buck4-ramp-enable", &i))
+		pdata->buck4_ramp_enable = i;
+
+	return 0;
+}
+#else
+static int s5m8767_pmic_dt_parse_pdata(struct sec_pmic_dev *iodev,
+					struct sec_platform_data *pdata)
+{
+	return 0;
+}
+#endif /* CONFIG_OF */
+
 static int s2mps11_pmic_probe(struct platform_device *pdev)
 {
 	struct sec_pmic_dev *iodev = dev_get_drvdata(pdev->dev.parent);
-	struct sec_platform_data *pdata = dev_get_platdata(iodev->dev);
+	struct sec_platform_data *pdata = iodev->pdata;
 	struct regulator_config config = { };
 	struct s2mps11_info *s2mps11;
 	int i, ret;
 	unsigned char ramp_enable, ramp_reg = 0;
+
+	if (iodev->dev->of_node) {
+		ret = s2mps11_pmic_dt_parse_pdata(iodev, pdata);
+		if (ret)
+			return ret;
+	}
 
 	if (!pdata) {
 		dev_err(pdev->dev.parent, "Platform data not supplied\n");
@@ -282,14 +374,15 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 	ramp_reg |= get_ramp_delay(s2mps11->ramp_delay9);
 	sec_reg_write(iodev, S2MPS11_REG_RAMP_BUCK, ramp_reg);
 
-	for (i = 0; i < S2MPS11_REGULATOR_MAX; i++) {
+	for (i = 0; i < pdata->num_regulators; i++) {
 
+		int id = pdata->regulators[i].id;
 		config.dev = &pdev->dev;
 		config.regmap = iodev->regmap;
 		config.init_data = pdata->regulators[i].initdata;
 		config.driver_data = s2mps11;
 
-		s2mps11->rdev[i] = regulator_register(&regulators[i], &config);
+		s2mps11->rdev[i] = regulator_register(&regulators[id], &config);
 		if (IS_ERR(s2mps11->rdev[i])) {
 			ret = PTR_ERR(s2mps11->rdev[i]);
 			dev_err(&pdev->dev, "regulator init failed for %d\n",
