@@ -1128,6 +1128,12 @@ static int iommu_init(struct platform_device *pdev)
 
 	return 0;
 }
+
+static void iommu_deinit(struct platform_device *pdev)
+{
+	s5p_destroy_iommu_mapping(&pdev->dev);
+	DRM_DEBUG("released the IOMMU mapping\n");
+}
 #endif
 
 static int __devinit mixer_resources_init_exynos(
@@ -1333,6 +1339,10 @@ static int mixer_remove(struct platform_device *pdev)
 
 	mixer_resource_poweroff(mctx);
 	mixer_resources_cleanup(dev, mctx);
+
+#ifdef CONFIG_EXYNOS_IOMMU
+	iommu_deinit(pdev);
+#endif
 
 	kfree(mctx);
 

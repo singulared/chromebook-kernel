@@ -337,6 +337,7 @@ static void iommu_deinit(struct platform_device *pdev)
 static int exynos_drm_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
@@ -352,7 +353,13 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
 
-	return drm_platform_init(&exynos_drm_driver, pdev);
+	ret = drm_platform_init(&exynos_drm_driver, pdev);
+#ifdef CONFIG_EXYNOS_IOMMU
+	if (ret)
+		iommu_deinit(pdev);
+#endif
+
+	return ret;
 }
 
 static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
