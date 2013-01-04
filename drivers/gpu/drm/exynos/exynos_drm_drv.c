@@ -244,6 +244,12 @@ static struct drm_ioctl_desc exynos_ioctls[] = {
 			exynos_drm_ipp_queue_buf, DRM_UNLOCKED | DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(EXYNOS_IPP_CMD_CTRL,
 			exynos_drm_ipp_cmd_ctrl, DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_GEM_CPU_ACQUIRE,
+			exynos_drm_gem_cpu_acquire_ioctl,
+			DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_GEM_CPU_RELEASE,
+			exynos_drm_gem_cpu_release_ioctl,
+			DRM_UNLOCKED | DRM_AUTH),
 };
 
 static const struct file_operations exynos_drm_driver_fops = {

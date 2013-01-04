@@ -64,6 +64,11 @@ struct drm_exynos_gem_mmap {
 	uint64_t mapped;
 };
 
+struct drm_exynos_plane_set_zpos {
+	__u32 plane_id;
+	__s32 zpos;
+};
+
 /**
  * A structure to gem information.
  *
@@ -93,8 +98,33 @@ struct drm_exynos_vidi_connection {
 	uint64_t edid;
 };
 
+/* acquire type definitions. */
+enum drm_exynos_gem_cpu_acquire_type {
+	DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED = 0x0,
+	DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE = 0x1,
+};
+
+/**
+ * A structure for acquiring buffer for CPU access.
+ *
+ * @handle: a handle to gem object created.
+ */
+struct drm_exynos_gem_cpu_acquire {
+	unsigned int handle;
+	unsigned int flags;
+};
+
+/*
+ * A structure for releasing buffer for GPU access.
+ *
+ * @handle: a handle to gem object created.
+ */
+struct drm_exynos_gem_cpu_release {
+	unsigned int handle;
+};
+
 /* memory type definitions. */
-enum e_drm_exynos_gem_mem_type {
+enum drm_exynos_gem_mem_type {
 	/* Physically Continuous memory and used as default. */
 	EXYNOS_BO_CONTIG	= 0 << 0,
 	/* Physically Non-Continuous memory. */
@@ -321,6 +351,8 @@ struct drm_exynos_ipp_cmd_ctrl {
 /* Reserved 0x03 ~ 0x05 for exynos specific gem ioctl */
 #define DRM_EXYNOS_GEM_GET		0x04
 #define DRM_EXYNOS_VIDI_CONNECTION	0x07
+#define DRM_EXYNOS_GEM_CPU_ACQUIRE	0x08
+#define DRM_EXYNOS_GEM_CPU_RELEASE	0x09
 
 /* G2D */
 #define DRM_EXYNOS_G2D_GET_VER		0x20
@@ -347,6 +379,12 @@ struct drm_exynos_ipp_cmd_ctrl {
 
 #define DRM_IOCTL_EXYNOS_VIDI_CONNECTION	DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_VIDI_CONNECTION, struct drm_exynos_vidi_connection)
+
+#define DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_GEM_CPU_ACQUIRE, struct drm_exynos_gem_cpu_acquire)
+
+#define DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_GEM_CPU_RELEASE, struct drm_exynos_gem_cpu_release)
 
 #define DRM_IOCTL_EXYNOS_G2D_GET_VER		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_G2D_GET_VER, struct drm_exynos_g2d_get_ver)
