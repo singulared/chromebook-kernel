@@ -140,7 +140,10 @@ static const struct i2c_device_id ptn3460_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ptn3460_ids);
 
-static SIMPLE_DEV_PM_OPS(ptn3460_pm_ops, ptn3460_suspend, ptn3460_resume);
+static const struct dev_pm_ops ptn3460_pm_ops = {
+	.suspend	= ptn3460_suspend,
+	.resume_noirq	= ptn3460_resume,
+};
 
 static struct i2c_driver ptn3460_driver = {
 	.id_table	= ptn3460_ids,
