@@ -1342,7 +1342,18 @@ enum v4l2_colorfx {
 /* last CID + 1 */
 #define V4L2_CID_LASTP1                         (V4L2_CID_BASE+42)
 
-#define V4L2_CID_CODEC_DISPLAY_STATUS           (V4L2_CID_BASE + 54)
+#define V4L2_CID_CACHEABLE                      (V4L2_CID_LASTP1 + 1)
+#define V4L2_CID_TV_LAYER_BLEND_ENABLE          (V4L2_CID_LASTP1 + 2)
+#define V4L2_CID_TV_LAYER_BLEND_ALPHA           (V4L2_CID_LASTP1 + 3)
+#define V4L2_CID_TV_PIXEL_BLEND_ENABLE          (V4L2_CID_LASTP1 + 4)
+#define V4L2_CID_TV_CHROMA_ENABLE               (V4L2_CID_LASTP1 + 5)
+#define V4L2_CID_TV_CHROMA_VALUE                (V4L2_CID_LASTP1 + 6)
+/* for color space conversion equation selection */
+#define V4L2_CID_CSC_EQ_MODE                    (V4L2_CID_LASTP1 + 8)
+#define V4L2_CID_CSC_EQ                         (V4L2_CID_LASTP1 + 9)
+#define V4L2_CID_CSC_RANGE                      (V4L2_CID_LASTP1 + 10)
+#define V4L2_CID_GLOBAL_ALPHA                   (V4L2_CID_LASTP1 + 11)
+#define V4L2_CID_CODEC_DISPLAY_STATUS           (V4L2_CID_LASTP1 + 12)
 
 /*  MPEG-class control IDs defined by V4L2 */
 #define V4L2_CID_MPEG_BASE 			(V4L2_CTRL_CLASS_MPEG | 0x900)
