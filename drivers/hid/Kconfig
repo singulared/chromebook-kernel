@@ -260,6 +260,7 @@ config HID_LOGITECH
 config HID_LOGITECH_DJ
 	tristate "Logitech Unifying receivers full support"
 	depends on HID_LOGITECH
+	select HID_LOGITECH_HIDPP
 	default m
 	---help---
 	Say Y if you want support for Logitech Unifying receivers and devices.
@@ -267,6 +268,12 @@ config HID_LOGITECH_DJ
 	devices to the same receiver. Without this driver it will be handled by
 	generic USB_HID driver and all incomming events will be multiplexed
 	into a single mouse and a single keyboard device.
+
+config HID_LOGITECH_HIDPP
+	tristate "Support for Logitech Vendor Specific HID commands"
+	---help---
+	This module allows sending vendor specific commands to Logitech
+	devices
 
 config LOGITECH_FF
 	bool "Logitech force feedback support"
