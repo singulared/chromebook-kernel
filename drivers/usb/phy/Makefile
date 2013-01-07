@@ -11,3 +11,4 @@ obj-$(CONFIG_USB_EHCI_TEGRA)	+= tegra_usb_phy.o
 obj-$(CONFIG_USB_RCAR_PHY)		+= rcar-phy.o
 obj-$(CONFIG_SAMSUNG_USBPHY)		+= samsung-usbphy.o
 obj-$(CONFIG_SAMSUNG_USB2PHY)		+= samsung-usb2.o
+obj-$(CONFIG_SAMSUNG_USB3PHY)		+= samsung-usb3.o
