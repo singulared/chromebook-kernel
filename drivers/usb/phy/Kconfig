@@ -54,6 +54,14 @@ config SAMSUNG_USB2PHY
 	  Enable this to support Samsung USB 2.0 (High Speed) PHY controller
 	  driver for Samsung SoCs.
 
+config SAMSUNG_USB3PHY
+	tristate "Samsung USB 3.0 PHY controller Driver"
+	select SAMSUNG_USBPHY
+	select USB_OTG_UTILS
+	help
+	  Enable this to support Samsung USB 3.0 (Super Speed) phy controller
+	  for samsung SoCs.
+
 config SAMSUNG_USBPHY
 	tristate "Samsung USB PHY Driver"
 	help
