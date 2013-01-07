@@ -50,7 +50,6 @@ static int cros_ec_command_xfer_noretry(struct chromeos_ec_device *ec_dev,
 	int ret = -ENOMEM;
 	int i;
 	int packet_len;
-	u8 res_code;
 	u8 *out_buf = NULL;
 	u8 *in_buf = NULL;
 	u8 sum;
