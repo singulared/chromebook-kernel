@@ -1203,7 +1203,7 @@ static int keyspan_fake_startup(struct usb_serial *serial)
 	int 				response;
 	const struct ihex_binrec 	*record;
 	char				*fw_name;
-	const struct firmware		*fw;
+	const struct firmware		*fw = NULL;
 
 	dbg("Keyspan startup version %04x product %04x",
 	    le16_to_cpu(serial->dev->descriptor.bcdDevice),
