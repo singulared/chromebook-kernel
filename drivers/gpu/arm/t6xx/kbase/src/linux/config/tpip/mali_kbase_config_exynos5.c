@@ -173,32 +173,6 @@ static void pm_callback_power_off(kbase_device *kbdev)
 #endif /* CONFIG_PM_RUNTIME */
 }
 
-/**
- * Power Management callback - runtime power ON
- */
-#ifdef CONFIG_PM_RUNTIME
-static int pm_callback_runtime_power_on(kbase_device *kbdev)
-{
-#if MALI_RTPM_DEBUG
-	printk("kbase_device_runtime_resume\n");
-#endif /* MALI_RTPM_DEBUG */
-	return kbase_platform_cmu_pmu_control(kbdev, 1);
-}
-#endif /* CONFIG_PM_RUNTIME */
-
-/**
- * Power Management callback - runtime power OFF
- */
-#ifdef CONFIG_PM_RUNTIME
-static void pm_callback_runtime_power_off(kbase_device *kbdev)
-{
-#if MALI_RTPM_DEBUG
-	printk("kbase_device_runtime_suspend\n");
-#endif /* MALI_RTPM_DEBUG */
-	kbase_platform_cmu_pmu_control(kbdev, 0);
-}
-#endif /* CONFIG_PM_RUNTIME */
-
 static kbase_pm_callback_conf pm_callbacks =
 {
 	.power_on_callback = pm_callback_power_on,
@@ -1208,25 +1182,6 @@ void kbase_platform_remove_sysfs_file(struct device *dev)
 #endif /* CONFIG_T6XX_DEBUG_SYS */
 
 #include "osk/include/mali_osk_lock_order.h"
-
-#ifdef CONFIG_PM_RUNTIME
-static void kbase_platform_runtime_term(struct kbase_device *kbdev)
-{
-	pm_runtime_disable(kbdev->osdev.dev);
-}
-#endif /* CONFIG_PM_RUNTIME */
-
-#ifdef CONFIG_PM_RUNTIME
-extern void pm_runtime_init(struct device *dev);
-
-static mali_error kbase_platform_runtime_init(struct kbase_device *kbdev)
-{
-	pm_runtime_init(kbdev->osdev.dev);
-	pm_suspend_ignore_children(kbdev->osdev.dev, true);
-	pm_runtime_enable(kbdev->osdev.dev);
-	return MALI_ERROR_NONE;
-}
-#endif /* CONFIG_PM_RUNTIME */
 
 mali_error kbase_platform_init(kbase_device *kbdev)
 {
