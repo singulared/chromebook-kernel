@@ -196,6 +196,21 @@
 					/* Output OFF of ENB8 is low */
 					max77686-opmode = <0x1>;
 				};
+
+				en32khz_ap: EN32KHZ_AP {
+					regulator-name = "en32khz_ap";
+					regulator-boot-on;
+				};
+
+				en32khz_cp: EN32KHZ_CP {
+					regulator-name = "en32khz_cp";
+					regulator-boot-on;
+				};
+
+				p32khz: P32KHZ {
+					regulator-name = "p32khz";
+					regulator-boot-on;
+				};
 			};
 		};
 	};
