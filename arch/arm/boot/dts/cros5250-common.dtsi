@@ -27,6 +27,9 @@
 
 		max77686@09 {
 			compatible = "maxim,max77686";
+			interrupt-parent = <&wakeup_eint>;
+			interrupts = <26 0>;
+			wakeup-source;
 			reg = <0x09>;
 
 			voltage-regulators {
