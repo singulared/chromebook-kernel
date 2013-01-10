@@ -15,6 +15,7 @@
 #include <linux/memblock.h>
 #include <linux/io.h>
 #include <linux/platform_data/ntc_thermistor.h>
+#include <linux/gpio.h>
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
@@ -25,6 +26,7 @@
 #include <plat/regs-serial.h>
 #include <plat/mfc.h>
 #include <plat/adc.h>	/* for s3c_adc_register and friends */
+#include <plat/gpio-cfg.h>
 
 #include "common.h"
 
@@ -277,9 +279,12 @@ static void __init exynos5_dt_machine_init(void)
 		}
 	}
 
-	if (of_machine_is_compatible("samsung,exynos5250"))
+	if (of_machine_is_compatible("samsung,exynos5250")) {
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
+		/* MAX77686 PMIC interrupt setup code */
+		s3c_gpio_setpull(EXYNOS5_GPX3(2), S3C_GPIO_PULL_NONE);
+	}
 	else if (of_machine_is_compatible("samsung,exynos5440"))
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5440_auxdata_lookup, NULL);
