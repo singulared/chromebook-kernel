@@ -27,7 +27,7 @@
 #include <plat/devs.h>
 #include <plat/cpu.h>
 #include <linux/platform_data/i2c-s3c2410.h>
-#include <plat/s5p-time.h>
+#include <plat/samsung-time.h>
 
 #include "common.h"
 
@@ -107,7 +107,7 @@ static void __init torbreck_map_io(void)
 	s5pv210_init_io(NULL, 0);
 	s3c24xx_init_clocks(24000000);
 	s3c24xx_init_uarts(torbreck_uartcfgs, ARRAY_SIZE(torbreck_uartcfgs));
-	s5p_set_timer_source(S5P_PWM3, S5P_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init torbreck_machine_init(void)
@@ -132,6 +132,6 @@ MACHINE_START(TORBRECK, "TORBRECK")
 	.handle_irq	= vic_handle_irq,
 	.map_io		= torbreck_map_io,
 	.init_machine	= torbreck_machine_init,
-	.init_time	= s5p_timer_init,
+	.init_time	= samsung_timer_init,
 	.restart	= s5pv210_restart,
 MACHINE_END
