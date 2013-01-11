@@ -75,6 +75,8 @@
 		samsung,fimd-frame-rate = <60>;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
+		samsung,src-clk-name = "sclk_vpll";
+		samsung,fimd-src-clk-rate = <70500000>;
 	};
 
 	display-port-controller {
