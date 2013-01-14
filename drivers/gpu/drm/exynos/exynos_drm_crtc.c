@@ -466,6 +466,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	mutex_unlock(&dev->struct_mutex);
 
+	exynos_drm_fb_get(exynos_fb);
+
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	exynos_fb->crtc = crtc;
 	if (gem_ob->base.export_dma_buf) {
@@ -508,8 +510,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		spin_unlock_irqrestore(&dev->event_lock, flags);
 	}
 #endif
-
-	exynos_drm_fb_get(exynos_fb);
 
 	trace_exynos_flip_request(exynos_crtc->pipe);
 
