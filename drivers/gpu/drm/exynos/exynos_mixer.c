@@ -1021,6 +1021,30 @@ static void mixer_dpms(void *ctx, int mode)
 	}
 }
 
+int mixer_check_timing(void *ctx, struct fb_videomode *timing)
+{
+	struct mixer_context *mixer_ctx = ctx;
+	u32 w, h;
+
+	w = timing->xres;
+	h = timing->yres;
+
+	DRM_DEBUG_KMS("%s : xres=%d, yres=%d, refresh=%d, intl=%d\n",
+		__func__, timing->xres, timing->yres,
+		timing->refresh, (timing->vmode &
+		FB_VMODE_INTERLACED) ? true : false);
+
+	if (mixer_ctx->mxr_ver == MXR_VER_0_0_0_16)
+		return 0;
+
+	if ((w >= 464 && w <= 720 && h >= 261 && h <= 576) ||
+		(w >= 1024 && w <= 1280 && h >= 576 && h <= 720) ||
+		(w >= 1664 && w <= 1920 && h >= 936 && h <= 1080))
+		return 0;
+
+	return -EINVAL;
+}
+
 static struct exynos_mixer_ops mixer_ops = {
 	/* manager */
 	.iommu_on		= mixer_iommu_on,
@@ -1034,6 +1058,9 @@ static struct exynos_mixer_ops mixer_ops = {
 	.win_commit		= mixer_win_commit,
 	.win_disable		= mixer_win_disable,
 	.apply                  = mixer_apply,
+
+	/* display */
+	.check_timing		= mixer_check_timing,
 };
 
 static irqreturn_t mixer_irq_handler(int irq, void *arg)
