@@ -516,6 +516,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	return 0;
 
 fail_kds:
+	exynos_drm_fb_put(exynos_fb);
 	*pkds = NULL;
 	spin_lock_irqsave(&dev->event_lock, flags);
 	exynos_crtc->flip_in_flight--;
