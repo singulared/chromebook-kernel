@@ -269,6 +269,13 @@
 		#size-cells = <0>;
 	};
 
+	usb@12000000 {
+		compatible = "samsung,exynos5250-dwusb3";
+		reg = <0x12000000 0x10000>;
+		interrupts = <0 72 0>;
+		status = "disabled";
+	};
+
 	usb@12110000 {
 		compatible = "samsung,exynos4210-ehci";
 		reg = <0x12110000 0x100>;

@@ -38,3 +38,17 @@ Example:
 		reg = <0x12120000 0x100>;
 		interrupts = <0 71 0>;
 	};
+
+DWC3
+Required properties:
+ - compatible: should be "samsung,exynos5250-dwusb3" for USB 3.0 DWC3 controller.
+ - reg: physical base address of the controller and length of memory mapped
+   region.
+ - interrupts: interrupt number to the cpu.
+
+Example:
+	usb@12000000 {
+		compatible = "samsung,exynos5250-dwusb3";
+		reg = <0x12000000 0x10000>;
+		interrupts = <0 72 0>;
+	};
