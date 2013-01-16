@@ -30,6 +30,7 @@
 #include "intel_drv.h"
 #include "../../../platform/x86/intel_ips.h"
 #include <linux/module.h>
+#include <linux/kernel.h>
 
 #define FORCEWAKE_ACK_TIMEOUT_MS 2
 
@@ -2637,7 +2638,7 @@ static void gen6_enable_rps(struct drm_device *dev)
 		DRM_DEBUG_DRIVER("Failed to set the min frequency\n");
 	}
 
-	gen6_set_rps(dev_priv->dev, (gt_perf_status & 0xff00) >> 8);
+	gen6_set_rps(dev_priv->dev, (u8)max((gt_perf_status & 0xff00) >> 8, 10u));
 
 	/* requires MSI enabled */
 	I915_WRITE(GEN6_PMIER, GEN6_PM_DEFERRED_EVENTS);
