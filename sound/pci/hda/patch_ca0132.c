@@ -822,7 +822,7 @@ static int chipio_send(struct hda_codec *codec,
 	} while (time_before(jiffies, timeout));
 
 	CTASSERT(0);
-	printk(KERN_ERR"CA0132 chipio timed out %x %x\n", reg, data);
+	printk(KERN_ERR "CA0132 chipio timed out %x %x\n", reg, data);
 	return -1;
 }
 
@@ -1256,7 +1256,6 @@ static int dspio_send_scp_message(struct hda_codec *codec,
 				  unsigned int *bytes_returned)
 {
 	struct ca0132_spec *spec = codec->spec;
-	int retry;
 	int status = -1;
 	unsigned int scp_send_size = 0;
 	unsigned int total_size;
@@ -3352,12 +3351,13 @@ static void ca0132_update_latency(struct hda_codec *codec,
 				  unsigned int direction)
 {
 	struct ca0132_spec *spec = codec->spec;
-	if (spec->dsp_state == DSP_DOWNLOADING)
-		return;
-
 	unsigned int latency;
 	struct snd_pcm_substream *substr;
 	struct snd_pcm_runtime *runtime;
+
+	if (spec->dsp_state == DSP_DOWNLOADING)
+		return;
+
 	latency = (direction == SNDRV_PCM_STREAM_PLAYBACK)
 			? ca0132_get_playback_latency(codec)
 			: ca0132_get_capture_latency(codec);
@@ -3451,7 +3451,7 @@ static int stop_mic1(struct hda_codec *codec)
 }
 
 /* Resume Mic1 streaming if it was stopped. */
-static int resume_mic1(struct hda_codec *codec, unsigned int oldval)
+static void resume_mic1(struct hda_codec *codec, unsigned int oldval)
 {
 	struct ca0132_spec *spec = codec->spec;
 	/* Restore the previous stream and channel */
@@ -4509,24 +4509,6 @@ static int xdata_write(struct hda_codec *codec, u16 addr, u8 value)
 	mutex_unlock(&spec->chipio_mutex);
 
 	return 0;
-}
-
-static int idata_read(struct hda_codec *codec, u16 addr)
-{
-	struct ca0132_spec *spec = codec->spec;
-	int data;
-
-	mutex_lock(&spec->chipio_mutex);
-	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
-			    VENDOR_CHIPIO_8051_ADDRESS_LOW, addr & 0xFF);
-	snd_hda_codec_write(codec, WIDGET_CHIP_CTRL, 0,
-			    VENDOR_CHIPIO_8051_ADDRESS_HIGH,
-			    (addr >> 8) & 0xFF);
-	data = snd_hda_codec_read(codec, WIDGET_CHIP_CTRL, 0,
-			    0xF09, 0);
-	mutex_unlock(&spec->chipio_mutex);
-
-	return data;
 }
 
 static int idata_write(struct hda_codec *codec, u16 addr, u8 value)
