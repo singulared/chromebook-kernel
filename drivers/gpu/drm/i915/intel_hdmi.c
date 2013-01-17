@@ -336,6 +336,41 @@ static bool intel_hdmi_mode_fixup(struct drm_encoder *encoder,
 	return true;
 }
 
+/*
+ * intel_hdmi_hpd- is the specified port connected?
+ * @dev_priv: i915 private structure
+ * @intel_hdmi: the HDMI port to test
+ *
+ * Returns true if @intel_hdmi is connected, false otherwise.
+ */
+static bool intel_hdmi_hpd(struct drm_i915_private *dev_priv,
+					   struct intel_hdmi *intel_hdmi)
+{
+	u32 bit;
+
+	/* XXX: IBX has different SDEISR bits */
+	if (HAS_PCH_IBX(dev_priv->dev))
+		return true;
+
+	switch (intel_hdmi->sdvox_reg) {
+	case HDMIB:
+	case SDVOB:
+		bit = SDE_PORTB_HOTPLUG_CPT;
+		break;
+	case HDMIC:
+	case SDVOC:
+		bit = SDE_PORTC_HOTPLUG_CPT;
+		break;
+	case HDMID:
+		bit = SDE_PORTD_HOTPLUG_CPT;
+		break;
+	default:
+		return true;
+	}
+
+	return I915_READ(SDEISR) & bit;
+}
+
 static enum drm_connector_status
 intel_hdmi_detect(struct drm_connector *connector, bool force)
 {
@@ -346,6 +381,11 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 
 	intel_hdmi->has_hdmi_sink = false;
 	intel_hdmi->has_audio = false;
+
+	if (HAS_PCH_SPLIT(connector->dev) &&
+	    !intel_hdmi_hpd(dev_priv, intel_hdmi))
+		return status;
+
 	edid = drm_get_edid(connector,
 			    intel_gmbus_get_adapter(dev_priv,
 						    intel_hdmi->ddc_bus));
@@ -532,7 +572,7 @@ void intel_hdmi_init(struct drm_device *dev, int sdvox_reg)
 
 	intel_encoder->type = INTEL_OUTPUT_HDMI;
 
-	connector->polled = DRM_CONNECTOR_POLL_DISCONNECT | DRM_CONNECTOR_POLL_DISCONNECT_ONLY;
+	connector->polled = DRM_CONNECTOR_POLL_HPD;
 	connector->interlace_allowed = 1;
 	connector->doublescan_allowed = 0;
 	intel_encoder->crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
