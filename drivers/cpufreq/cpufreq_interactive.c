@@ -146,7 +146,8 @@ static void del_idle_timer(struct cpufreq_interactive_cpuinfo *pcpu)
 
 static void cpufreq_interactive_timer(unsigned long data)
 {
-	struct cpufreq_interactive_cpuinfo *pcpu = data;
+	struct cpufreq_interactive_cpuinfo *pcpu =
+		(struct cpufreq_interactive_cpuinfo *)data;
 	int cpu_id = pcpu->cpu_id;
 	unsigned int delta_idle;
 	unsigned int delta_time;
@@ -937,7 +938,7 @@ static int __init cpufreq_interactive_init(void)
 		pcpu->cpu_id = i;
 		init_timer(&pcpu->cpu_timer);
 		pcpu->cpu_timer.function = cpufreq_interactive_timer;
-		pcpu->cpu_timer.data = pcpu;
+		pcpu->cpu_timer.data = (unsigned long)pcpu;
 	}
 
 	spin_lock_init(&updown_state_lock);
