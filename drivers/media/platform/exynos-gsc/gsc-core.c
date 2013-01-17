@@ -1210,10 +1210,8 @@ static int gsc_resume(struct device *dev)
 
 	pr_debug("gsc%d: state: 0x%lx", gsc->id, gsc->state);
 
-	/* Do not resume if the device was idle before system suspend */
 	spin_lock_irqsave(&gsc->slock, flags);
-	if (!test_and_clear_bit(ST_SUSPEND, &gsc->state) ||
-	    !gsc_m2m_active(gsc)) {
+	if (!test_and_clear_bit(ST_SUSPEND, &gsc->state)) {
 		spin_unlock_irqrestore(&gsc->slock, flags);
 		return 0;
 	}
