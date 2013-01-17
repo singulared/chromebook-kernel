@@ -893,10 +893,6 @@ static const struct snd_kcontrol_new max98095_left_speaker_mixer_controls[] = {
 	SOC_DAPM_SINGLE("Right DAC1 Switch", M98095_050_MIX_SPK_LEFT, 6, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC2 Switch", M98095_050_MIX_SPK_LEFT, 3, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC3 Switch", M98095_050_MIX_SPK_LEFT, 3, 1, 0),
-	SOC_DAPM_SINGLE("MIC1 Switch", M98095_050_MIX_SPK_LEFT, 4, 1, 0),
-	SOC_DAPM_SINGLE("MIC2 Switch", M98095_050_MIX_SPK_LEFT, 5, 1, 0),
-	SOC_DAPM_SINGLE("IN1 Switch", M98095_050_MIX_SPK_LEFT, 1, 1, 0),
-	SOC_DAPM_SINGLE("IN2 Switch", M98095_050_MIX_SPK_LEFT, 2, 1, 0),
 };
 
 /* Right speaker mixer switch */
@@ -905,10 +901,6 @@ static const struct snd_kcontrol_new max98095_right_speaker_mixer_controls[] = {
 	SOC_DAPM_SINGLE("Right DAC1 Switch", M98095_051_MIX_SPK_RIGHT, 0, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC2 Switch", M98095_051_MIX_SPK_RIGHT, 3, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC3 Switch", M98095_051_MIX_SPK_RIGHT, 3, 1, 0),
-	SOC_DAPM_SINGLE("MIC1 Switch", M98095_051_MIX_SPK_RIGHT, 5, 1, 0),
-	SOC_DAPM_SINGLE("MIC2 Switch", M98095_051_MIX_SPK_RIGHT, 4, 1, 0),
-	SOC_DAPM_SINGLE("IN1 Switch", M98095_051_MIX_SPK_RIGHT, 1, 1, 0),
-	SOC_DAPM_SINGLE("IN2 Switch", M98095_051_MIX_SPK_RIGHT, 2, 1, 0),
 };
 
 /* Left headphone mixer switch */
@@ -1208,20 +1200,12 @@ static const struct snd_soc_dapm_route max98095_audio_map[] = {
 	{"Left Speaker Mixer", "Right DAC1 Switch", "DACR1"},
 	{"Left Speaker Mixer", "Mono DAC2 Switch", "DACM2"},
 	{"Left Speaker Mixer", "Mono DAC3 Switch", "DACM3"},
-	{"Left Speaker Mixer", "MIC1 Switch", "MIC1 Input"},
-	{"Left Speaker Mixer", "MIC2 Switch", "MIC2 Input"},
-	{"Left Speaker Mixer", "IN1 Switch", "IN1 Input"},
-	{"Left Speaker Mixer", "IN2 Switch", "IN2 Input"},
 
 	/* Right speaker output mixer */
 	{"Right Speaker Mixer", "Left DAC1 Switch", "DACL1"},
 	{"Right Speaker Mixer", "Right DAC1 Switch", "DACR1"},
 	{"Right Speaker Mixer", "Mono DAC2 Switch", "DACM2"},
 	{"Right Speaker Mixer", "Mono DAC3 Switch", "DACM3"},
-	{"Right Speaker Mixer", "MIC1 Switch", "MIC1 Input"},
-	{"Right Speaker Mixer", "MIC2 Switch", "MIC2 Input"},
-	{"Right Speaker Mixer", "IN1 Switch", "IN1 Input"},
-	{"Right Speaker Mixer", "IN2 Switch", "IN2 Input"},
 
 	/* Earpiece/Receiver output mixer */
 	{"Receiver Mixer", "Left DAC1 Switch", "DACL1"},
