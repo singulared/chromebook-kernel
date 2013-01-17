@@ -872,4 +872,8 @@
 		};
 	};
 
+	ppmu {
+		compatible = "samsung,exynos5250-ppmu";
+		reg = <0x13660000 0x2000>;	/* PPMU_DDR_RIGHT */
+	};
 };
