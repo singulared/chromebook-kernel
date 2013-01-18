@@ -312,7 +312,7 @@ unlock:
 	return NOTIFY_DONE;
 }
 
-static __devinit int exynos5_busfreq_int_probe(struct platform_device *pdev)
+static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 {
 	struct busfreq_data_int *data;
 	struct opp *opp;
@@ -427,7 +427,7 @@ err_regulator:
 	return err;
 }
 
-static __devexit int exynos5_busfreq_int_remove(struct platform_device *pdev)
+static int exynos5_busfreq_int_remove(struct platform_device *pdev)
 {
 	struct busfreq_data_int *data = platform_get_drvdata(pdev);
 
@@ -460,7 +460,7 @@ static struct platform_device *exynos5_devfreq_pdev;
 
 static struct platform_driver exynos5_busfreq_int_driver = {
 	.probe		= exynos5_busfreq_int_probe,
-	.remove		= __devexit_p(exynos5_busfreq_int_remove),
+	.remove		= exynos5_busfreq_int_remove,
 	.driver		= {
 		.name		= "exynos5-bus-int",
 		.owner		= THIS_MODULE,
