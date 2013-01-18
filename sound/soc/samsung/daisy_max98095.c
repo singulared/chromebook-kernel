@@ -396,7 +396,7 @@ static struct snd_soc_card daisy_snd = {
 	.num_dapm_routes = ARRAY_SIZE(daisy_audio_map),
 };
 
-static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
+static int daisy_max98095_driver_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &daisy_snd;
 	struct device_node *dn;
@@ -460,7 +460,7 @@ err_unregister:
 	return ret;
 }
 
-static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
+static int daisy_max98095_driver_remove(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 	struct daisy_max98095 *machine = snd_soc_card_get_drvdata(card);
@@ -473,7 +473,7 @@ static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id daisy_max98095_of_match[] __devinitconst = {
+static const struct of_device_id daisy_max98095_of_match[] = {
 	{ .compatible = "google,daisy-audio-max98095", },
 	{},
 };
@@ -486,7 +486,7 @@ static struct platform_driver daisy_max98095_driver = {
 		.of_match_table = daisy_max98095_of_match,
 	},
 	.probe = daisy_max98095_driver_probe,
-	.remove = __devexit_p(daisy_max98095_driver_remove),
+	.remove = daisy_max98095_driver_remove,
 };
 
 module_platform_driver(daisy_max98095_driver);
