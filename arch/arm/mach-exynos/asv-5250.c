@@ -279,7 +279,7 @@ static void exynos5250_pre_set_abb(void)
 			break;
 		default:
 			exynos5250_set_abb_member(ABB_ARM, ABB_MODE_BYPASS);
-			exynos5250_set_abb_member(ABB_INT, ABB_MODE_BYPASS);
+			exynos5250_set_abb_member(ABB_INT, ABB_MODE_080);
 			exynos5250_set_abb_member(ABB_G3D, ABB_MODE_BYPASS);
 			break;
 		}
