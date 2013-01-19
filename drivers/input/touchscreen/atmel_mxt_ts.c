@@ -2696,6 +2696,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	init_completion(&data->bl_completion);
 	init_completion(&data->auto_cal_completion);
 
+	device_set_wakeup_enable(&client->dev, false);
+
 	async_schedule(mxt_initialize_async, data);
 
 	return 0;
