@@ -86,9 +86,9 @@
 	};
 
 	i2c@12CD0000 {
-		ps8622-bridge@20 {
+		ps8622-bridge@8 {
 			compatible = "parade,ps8622";
-			reg = <0x48>;
+			reg = <0x08>;
 			sleep-gpio = <&gpc3 6 1 0 0>;
 			reset-gpio = <&gpc3 1 1 0 0>;
 			hpd-gpio = <&gpc3 0 0 0 0>;
