@@ -68,7 +68,7 @@
 #endif
 
 #ifdef MALI_DVFS_ASV_ENABLE
-#include <mach/busfreq_exynos5.h>
+#include <mach/asv-5250.h>
 #define MALI_DVFS_ASV_GROUP_SPECIAL_NUM 10
 #define MALI_DVFS_ASV_GROUP_NUM 12
 #endif
