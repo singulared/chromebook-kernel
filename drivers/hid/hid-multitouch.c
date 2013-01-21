@@ -51,6 +51,7 @@ MODULE_LICENSE("GPL");
 #define MT_QUIRK_VALID_IS_INRANGE	(1 << 5)
 #define MT_QUIRK_VALID_IS_CONFIDENCE	(1 << 6)
 #define MT_QUIRK_SLOT_IS_CONTACTID_MINUS_ONE	(1 << 8)
+#define MT_QUIRK_STANTUM	(1 << 9)
 
 struct mt_slot {
 	__s32 x, y, p, w, h;
@@ -107,6 +108,7 @@ struct mt_device {
 #define MT_CLS_EGALAX_SERIAL			0x0104
 #define MT_CLS_TOPSEED				0x0105
 #define MT_CLS_PANASONIC			0x0106
+#define MT_CLS_STANTUM				0x0107
 
 #define MT_DEFAULT_MAXCONTACT	10
 
@@ -121,6 +123,22 @@ static int cypress_compute_slot(struct mt_device *td)
 		return td->curdata.contactid;
 	else
 		return -1;
+}
+
+static int stantum_compute_slot(struct mt_device *td)
+{
+	int i;
+	for (i = 0; i < td->maxcontacts; ++i) {
+		if (td->slots[i].contactid == td->curdata.contactid)
+			return i;
+	}
+
+	for (i = 0; i < td->maxcontacts; ++i) {
+		if (!td->slots[i].seen_in_this_frame)
+			return i;
+	}
+
+	return -1;
 }
 
 static int find_slot_from_contactid(struct mt_device *td)
@@ -204,6 +222,12 @@ static struct mt_class mt_classes[] = {
 	{ .name = MT_CLS_PANASONIC,
 		.quirks = MT_QUIRK_NOT_SEEN_MEANS_UP,
 		.maxcontacts = 4 },
+
+	{ .name = MT_CLS_STANTUM,
+		.quirks = MT_QUIRK_ALWAYS_VALID |
+			MT_QUIRK_NOT_SEEN_MEANS_UP |
+			MT_QUIRK_STANTUM,
+		.maxcontacts = 10 },
 
 	{ }
 };
@@ -455,6 +479,9 @@ static int mt_compute_slot(struct mt_device *td)
 	if (quirks & MT_QUIRK_SLOT_IS_CONTACTID_MINUS_ONE)
 		return td->curdata.contactid - 1;
 
+	if (quirks & MT_QUIRK_STANTUM)
+		return stantum_compute_slot(td);
+
 	return find_slot_from_contactid(td);
 }
 
@@ -564,8 +591,11 @@ static int mt_event(struct hid_device *hid, struct hid_field *field,
 			 * Includes multi-packet support where subsequent
 			 * packets are sent with zero contactcount.
 			 */
-			if (value)
+			if (value) {
 				td->num_expected = value;
+				if (quirks & MT_QUIRK_STANTUM)
+					td->num_received = 0;
+			}
 			break;
 		case HID_DG_TOUCH:
 			/* do nothing */
@@ -576,13 +606,23 @@ static int mt_event(struct hid_device *hid, struct hid_field *field,
 			return 0;
 		}
 
-		if (usage->hid == td->last_slot_field)
-			mt_complete_slot(td);
+		if (!(quirks & MT_QUIRK_STANTUM)) {
+			if (usage->hid == td->last_slot_field)
+				mt_complete_slot(td);
 
-		if (field->index == td->last_field_index
-			&& td->num_received >= td->num_expected)
-			mt_emit_event(td, field->hidinput->input);
-
+			if (field->index == td->last_field_index
+				&& td->num_received >= td->num_expected)
+				mt_emit_event(td, field->hidinput->input);
+		} else if (td->num_received < td->num_expected) {
+			if (usage->hid == td->last_slot_field) {
+				mt_complete_slot(td);
+				if (td->num_received >= td->num_expected) {
+					mt_emit_event(td,
+						      field->hidinput->input);
+					td->num_expected = 0;
+				}
+			}
+		}
 	}
 
 	/* we have handled the hidinput part, now remains hiddev */
@@ -955,7 +995,7 @@ static const struct hid_device_id mt_devices[] = {
 			USB_DEVICE_ID_QUANTA_OPTICAL_TOUCH_3008) },
 
 	/* Stantum panels */
-	{ .driver_data = MT_CLS_CONFIDENCE,
+	{ .driver_data = MT_CLS_STANTUM,
 		HID_USB_DEVICE(USB_VENDOR_ID_STANTUM,
 			USB_DEVICE_ID_MTP)},
 	{ .driver_data = MT_CLS_CONFIDENCE,
