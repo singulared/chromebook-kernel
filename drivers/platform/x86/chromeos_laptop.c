@@ -295,14 +295,7 @@ static int __init setup_link_tp(const struct dmi_system_id *id)
 						   ATMEL_TP_I2C_ADDR,
 						   I2C_CLIENT_END };
 
-	/* first try cyapa touchpad */
-	tp = chromeos_laptop_add_i2c_device("trackpad",
-					    I2C_ADAPTER_VGADDC,
-					    &cyapa_device);
-	if (tp)
-		return 0;
-
-	/* then try atmel mxt touchpad */
+	/* add atmel mxt touchpad */
 	tp = chromeos_laptop_add_probed_i2c_device("trackpad",
 						   I2C_ADAPTER_VGADDC,
 						   &atmel_224s_tp_device,
