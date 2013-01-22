@@ -27,10 +27,16 @@
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/exynos_ppmu.h>
+#include <mach/asv-5250.h>
 
 #define MAX_SAFEVOLT			1100000 /* 1.10V */
 /* Assume that the bus is saturated if the utilization is 25% */
 #define INT_BUS_SATURATION_RATIO	25
+
+#define ASV_GROUP_10	10
+#define ASV_GROUP_12	12
+
+static unsigned int asv_group_index;
 
 enum int_level_idx {
 	LV_0,
@@ -73,6 +79,39 @@ static struct int_bus_opp_table exynos5_int_opp_table[] = {
 	{LV_3, 133000, 1025000},
 	{LV_4, 100000, 1025000},
 	{0, 0, 0},
+};
+
+static unsigned int
+exynos5_int_volt[ASV_GROUP_12][LV_4] = {
+	/* L0        L1       L2       L3 */
+	{1037500, 1000000, 975000, 950000}, /* ASV0 */
+	{1025000,  975000, 962500, 937500}, /* ASV1 */
+	{1025000,  987500, 975000, 950000}, /* ASV2 */
+	{1012500,  975000, 962500, 937500}, /* ASV3 */
+	{1000000,  962500, 950000, 925000}, /* ASV4 */
+	{ 987500,  950000, 937500, 912500}, /* ASV5 */
+	{ 975000,  937500, 925000, 900000}, /* ASV6 */
+	{ 962500,  925000, 912500, 900000}, /* ASV7 */
+	{ 962500,  925000, 912500, 900000}, /* ASV8 */
+	{ 950000,  912500, 900000, 900000}, /* ASV9 */
+	{ 950000,  912500, 900000, 900000}, /* ASV10 */
+	{ 937500,  900000, 900000, 887500}, /* ASV11 */
+};
+
+static unsigned int
+exynos5_int_volt_orig[ASV_GROUP_10+1][LV_4] = {
+	/* L0        L1       L2       L3 */
+	{      0,      0,      0,      0}, /* ASV0 */
+	{1025000, 987500, 975000, 950000}, /* ASV1 */
+	{1012500, 975000, 962500, 937500}, /* ASV2 */
+	{1012500, 987500, 975000, 950000}, /* ASV3 */
+	{1000000, 975000, 962500, 937500}, /* ASV4 */
+	{1012500, 987500, 975000, 950000}, /* ASV5 */
+	{1000000, 975000, 962500, 937500}, /* ASV6 */
+	{ 987500, 962500, 950000, 925000}, /* ASV7 */
+	{ 975000, 950000, 937500, 912500}, /* ASV8 */
+	{ 962500, 937500, 925000, 900000}, /* ASV9 */
+	{ 962500, 937500, 925000, 900000}, /* ASV10 */
 };
 
 static void busfreq_mon_reset(struct busfreq_data_int *data)
@@ -243,6 +282,26 @@ static struct devfreq_dev_profile exynos5_devfreq_int_profile = {
 static int exynos5250_init_int_tables(struct busfreq_data_int *data)
 {
 	int i, err = 0;
+
+	asv_group_index = exynos_result_of_asv;
+
+	if (asv_group_index == 0xff) {
+		asv_group_index = 0;
+	}
+
+	for (i = LV_0; i < LV_4; i++) {
+		if (exynos_lot_is_nzvpu)
+			exynos5_int_opp_table[i].volt = 1025000;
+		else if (exynos_lot_id)
+			exynos5_int_opp_table[i].volt =
+				exynos5_int_volt_orig[asv_group_index][i];
+		else
+			exynos5_int_opp_table[i].volt =
+				exynos5_int_volt[asv_group_index][i];
+	}
+
+	printk(KERN_INFO "VDD_INT Voltage table set with %d Group\n",
+				asv_group_index);
 
 	for (i = LV_0; i < LV_2; i++) {
 		err = opp_add(data->dev, exynos5_int_opp_table[i].clk,
