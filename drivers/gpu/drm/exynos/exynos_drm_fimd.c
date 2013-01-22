@@ -424,49 +424,47 @@ static void fimd_win_set_pixfmt(struct device *dev, unsigned int win)
 	case 1:
 		val |= WINCON0_BPPMODE_1BPP;
 		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_4WORD;
 		break;
 	case 2:
 		val |= WINCON0_BPPMODE_2BPP;
 		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_8WORD;
 		break;
 	case 4:
 		val |= WINCON0_BPPMODE_4BPP;
 		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_8WORD;
 		break;
 	case 8:
 		val |= WINCON0_BPPMODE_8BPP_PALETTE;
-		val |= WINCONx_BURSTLEN_8WORD;
 		val |= WINCONx_BYTSWP;
 		break;
 	case 16:
 		val |= WINCON0_BPPMODE_16BPP_565;
 		val |= WINCONx_HAWSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
 		break;
 	case 24:
 		val |= WINCON0_BPPMODE_24BPP_888;
 		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
 		break;
 	case 32:
 		val |= WINCON1_BPPMODE_28BPP_A4888
 			| WINCON1_BLD_PIX | WINCON1_ALPHA_SEL;
 		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
 		break;
 	default:
 		DRM_DEBUG_KMS("invalid pixel size so using unpacked 24bpp.\n");
 
 		val |= WINCON0_BPPMODE_24BPP_888;
 		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
 		break;
 	}
 
 	DRM_DEBUG_KMS("bpp = %d\n", win_data->bpp);
+
+	/* Restrict the burst length to 4WORD for cursor */
+	if (win_data->fb_width <= 96)
+		val |= WINCONx_BURSTLEN_4WORD;
+	else
+		val |= WINCONx_BURSTLEN_16WORD;
 
 	writel(val, ctx->regs + WINCON(win));
 }
