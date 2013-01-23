@@ -52,6 +52,10 @@
 			reset-gpio = <&gpx1 5 1 0 0>;
 			edid-emulation = <5>;
 		};
+
+		codec {
+			mclk-pin = <1>;
+		};
 	};
 
 	dwmmc2@12220000 {
