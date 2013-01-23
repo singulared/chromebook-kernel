@@ -180,6 +180,14 @@
 	#define M98095_XTEN                     (1<<1)
 	#define M98095_MDLLEN                   (1<<2)
 
+/* M98095_026_SYS_CLK */
+	#define M98095_MCLKSEL_MCLK1            (0<<0)
+	#define M98095_MCLKSEL_MCLK2            (1<<0)
+	#define M98095_PSCLK_DISABLED           (0<<4)
+	#define M98095_PSCLK_DIV1               (1<<4)
+	#define M98095_PSCLK_DIV2               (2<<4)
+	#define M98095_PSCLK_DIV4               (3<<4)
+
 /* M98095_027_DAI1_CLKMODE, M98095_031_DAI2_CLKMODE, M98095_03B_DAI3_CLKMODE */
 	#define M98095_CLKMODE_MASK             0xFF
 

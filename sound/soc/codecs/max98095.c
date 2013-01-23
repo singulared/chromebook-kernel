@@ -1499,6 +1499,7 @@ static int max98095_dai_set_sysclk(struct snd_soc_dai *dai,
 {
 	struct snd_soc_codec *codec = dai->codec;
 	struct max98095_priv *max98095 = snd_soc_codec_get_drvdata(codec);
+	u8 sysclk = max98095->pdata->mclksel;
 
 	/* Requested clock frequency is already setup */
 	if (freq == max98095->sysclk)
@@ -1510,17 +1511,19 @@ static int max98095_dai_set_sysclk(struct snd_soc_dai *dai,
 	 *         0x03 (when master clk is 40MHz to 60MHz)..
 	 */
 	if ((freq >= 10000000) && (freq < 20000000)) {
-		snd_soc_write(codec, M98095_026_SYS_CLK, 0x10);
+		sysclk |= M98095_PSCLK_DIV1;
 	} else if ((freq >= 20000000) && (freq < 40000000)) {
-		snd_soc_write(codec, M98095_026_SYS_CLK, 0x20);
+		sysclk |= M98095_PSCLK_DIV2;
 	} else if ((freq >= 40000000) && (freq < 60000000)) {
-		snd_soc_write(codec, M98095_026_SYS_CLK, 0x30);
+		sysclk |= M98095_PSCLK_DIV4;
 	} else {
 		dev_err(codec->dev, "Invalid master clock frequency\n");
 		return -EINVAL;
 	}
+	snd_soc_write(codec, M98095_026_SYS_CLK, sysclk);
 
-	dev_dbg(dai->dev, "Clock source is %d at %uHz\n", clk_id, freq);
+	dev_dbg(codec->dev, "Clock source is MCLK%d at %uHz\n",
+		max98095->pdata->mclksel + 1, freq);
 
 	max98095->sysclk = freq;
 	return 0;
@@ -2369,6 +2372,7 @@ static struct max98095_pdata *max98095_of_pdata(struct i2c_client *i2c)
 {
 	struct max98095_pdata *pdata;
 	struct device_node *dn = i2c->dev.of_node;
+	u32 pin;
 
 	pdata = devm_kzalloc(&i2c->dev, sizeof(struct max98095_pdata),
 			     GFP_KERNEL);
@@ -2380,6 +2384,11 @@ static struct max98095_pdata *max98095_of_pdata(struct i2c_client *i2c)
 
 	if (of_get_property(dn, "mic-right-digital", NULL))
 		pdata->digmic_right_mode = 1;
+
+	if (!of_property_read_u32(dn, "mclk-pin", &pin) && (pin == 2))
+		pdata->mclksel = M98095_MCLKSEL_MCLK2;
+	else
+		pdata->mclksel = M98095_MCLKSEL_MCLK1;
 
 	pdata->eq_cfgcnt = ARRAY_SIZE(built_in_eqs);
 	pdata->eq_cfg = built_in_eqs;

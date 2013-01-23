@@ -49,6 +49,9 @@ struct max98095_pdata {
 	 */
 	unsigned int digmic_left_mode:1;
 	unsigned int digmic_right_mode:1;
+
+	/* Codec master clock pin selection */
+	u8 mclksel;
 };
 
 #endif

@@ -12,6 +12,8 @@ Optional properties:
 			instead of analog
   - mic-right-digital : specifies if the right microphone is a DMIC
 			instead of analog
+  - mclk-pin :  specifies which MCLKx pin is used to provide the codec clock
+		1 for MCLK1, 2 for MCLK2/GPIO3.
 
 Example:
 
@@ -21,4 +23,5 @@ codec: max98095@11 {
 
 	mic-left-digital;
 	mic-righ-digital;
+	mclk-pin = <1>;
 };
