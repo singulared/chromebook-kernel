@@ -4071,6 +4071,18 @@ static void refresh_amp_caps(struct hda_codec *codec, hda_nid_t nid, int dir)
 	snd_hda_override_amp_caps(codec, nid, dir, caps);
 }
 
+static void ca0132_set_dmic_gain(struct hda_codec *codec, unsigned int gain)
+{
+	unsigned int mic_gain_reg;
+	chipio_read(codec, 0x18B098, &mic_gain_reg);
+	mic_gain_reg = (mic_gain_reg & ~0x1F) | gain;
+	chipio_write(codec, 0x18B098, mic_gain_reg);
+
+	chipio_read(codec, 0x18B09C, &mic_gain_reg);
+	mic_gain_reg = (mic_gain_reg & ~0x1F) | gain;
+	chipio_write(codec, 0x18B09C, mic_gain_reg);
+}
+
 static void ca0132_set_dmic(struct hda_codec *codec, int enable)
 {
 	struct ca0132_spec *spec = codec->spec;
@@ -4094,6 +4106,8 @@ static void ca0132_set_dmic(struct hda_codec *codec, int enable)
 
 		if (!(spec->dmic_ctl & 0x20))
 			chipio_set_control_flag(codec, CONTROL_FLAG_DMIC, 1);
+
+		ca0132_set_dmic_gain(codec, 0x14);
 	} else {
 		/* set AMic input as mono */
 		tmp = FLOAT_ONE;
@@ -4107,6 +4121,8 @@ static void ca0132_set_dmic(struct hda_codec *codec, int enable)
 
 		if (!(spec->dmic_ctl & 0x20))
 			chipio_set_control_flag(codec, CONTROL_FLAG_DMIC, 0);
+
+		ca0132_set_dmic_gain(codec, 0x0);
 	}
 	ca0132_set_vipsource(codec, 1);
 	resume_mic1(codec, oldval);
