@@ -906,6 +906,8 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 
 	spin_lock(&res->reg_slock);
 
+	WARN_ON(!mctx->is_mixer_powered_on);
+
 	/* read interrupt status for handling and clearing flags for VSYNC */
 	val = mixer_reg_read(res, MXR_INT_STATUS);
 

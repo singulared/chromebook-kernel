@@ -645,6 +645,8 @@ static irqreturn_t fimd_irq_handler(int irq, void *arg)
 	struct fimd_context *fimd_ctx = (struct fimd_context *)arg;
 	u32 val;
 
+	WARN_ON(fimd_ctx->suspended);
+
 	val = readl(fimd_ctx->regs + VIDINTCON1);
 
 	if (val & VIDINTCON1_INT_FRAME)
