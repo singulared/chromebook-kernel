@@ -1041,6 +1041,7 @@ enum {
 	ALC880_FIXUP_6ST_BASE,
 	ALC880_FIXUP_6ST,
 	ALC880_FIXUP_6ST_DIG,
+	ALC880_FIXUP_6ST_AUTOMUTE,
 };
 
 /* enable the volume-knob widget support on NID 0x21 */
@@ -1301,6 +1302,15 @@ static const struct hda_fixup alc880_fixups[] = {
 		.chained = true,
 		.chain_id = ALC880_FIXUP_6ST_BASE,
 	},
+	[ALC880_FIXUP_6ST_AUTOMUTE] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x1b, 0x0121401f }, /* HP with jack detect */
+			{ }
+		},
+		.chained_before = true,
+		.chain_id = ALC880_FIXUP_6ST_BASE,
+	},
 };
 
 static const struct snd_pci_quirk alc880_fixup_tbl[] = {
@@ -1315,7 +1325,7 @@ static const struct snd_pci_quirk alc880_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1584, 0x9077, "Uniwill P53", ALC880_FIXUP_VOL_KNOB),
 	SND_PCI_QUIRK(0x161f, 0x203d, "W810", ALC880_FIXUP_W810),
 	SND_PCI_QUIRK(0x161f, 0x205d, "Medion Rim 2150", ALC880_FIXUP_MEDION_RIM),
-	SND_PCI_QUIRK(0x1631, 0xe011, "PB 13201056", ALC880_FIXUP_6ST),
+	SND_PCI_QUIRK(0x1631, 0xe011, "PB 13201056", ALC880_FIXUP_6ST_AUTOMUTE),
 	SND_PCI_QUIRK(0x1734, 0x107c, "FSC F1734", ALC880_FIXUP_F1734),
 	SND_PCI_QUIRK(0x1734, 0x1094, "FSC Amilo M1451G", ALC880_FIXUP_FUJITSU),
 	SND_PCI_QUIRK(0x1734, 0x10ac, "FSC AMILO Xi 1526", ALC880_FIXUP_F1734),
@@ -1378,6 +1388,7 @@ static const struct hda_model_fixup alc880_fixup_models[] = {
 	{.id = ALC880_FIXUP_5ST_DIG, .name = "5stack-digout"},
 	{.id = ALC880_FIXUP_6ST, .name = "6stack"},
 	{.id = ALC880_FIXUP_6ST_DIG, .name = "6stack-digout"},
+	{.id = ALC880_FIXUP_6ST_AUTOMUTE, .name = "6stack-automute"},
 	{}
 };
 
