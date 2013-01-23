@@ -1056,6 +1056,7 @@ static void mixer_resource_poweroff(struct mixer_context *mctx)
 		clk_disable(res->vp);
 		clk_disable(res->sclk_mixer);
 	}
+	mixer_win_reset(mctx);
 	mctx->is_mixer_powered_on = false;
 }
 
