@@ -16,7 +16,6 @@
 #ifdef CONFIG_PM_RUNTIME
 #include <linux/pm_runtime.h>
 #endif
-#include <mach/sysmmu.h>
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_pm.h"
@@ -47,7 +46,7 @@ int s5p_mfc_init_pm(struct s5p_mfc_dev *dev)
 
 	ret = clk_prepare(pm->clock_gate);
 	if (ret) {
-		mfc_err("Failed to preapre clock-gating control\n");
+		mfc_err("Failed to prepare clock-gating control\n");
 		goto err_p_ip_clk;
 	}
 
@@ -117,27 +116,7 @@ void s5p_mfc_clock_off(void)
 int s5p_mfc_power_on(void)
 {
 #ifdef CONFIG_PM_RUNTIME
-	int ret;
-	ret = pm_runtime_get_sync(pm->device);
-	if (ret < 0)
-		goto out;
-
-	ret = platform_sysmmu_on(p_dev->mem_dev_l);
-	if (ret < 0)
-		goto out_err;
-
-	ret = platform_sysmmu_on(p_dev->mem_dev_r);
-	if (ret < 0)
-		goto out_err2;
-
-	return ret;
-
-out_err2:
-	platform_sysmmu_off(p_dev->mem_dev_l);
-out_err:
-	pm_runtime_put_sync(pm->device);
-out:
-	return ret;
+	return pm_runtime_get_sync(pm->device);
 #else
 	atomic_set(&pm->power, 1);
 	return 0;
@@ -147,10 +126,7 @@ out:
 int s5p_mfc_power_off(void)
 {
 #ifdef CONFIG_PM_RUNTIME
-	pm_runtime_put_sync(pm->device);
-	platform_sysmmu_off(p_dev->mem_dev_l);
-	platform_sysmmu_off(p_dev->mem_dev_r);
-	return 0;
+	return pm_runtime_put_sync(pm->device);
 #else
 	atomic_set(&pm->power, 0);
 	return 0;

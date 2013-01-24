@@ -903,7 +903,6 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 
 static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
-	struct s5p_mfc_dev *dev = video_drvdata(file);
 	struct s5p_mfc_fmt *fmt;
 	struct v4l2_pix_format_mplane *pix_fmt_mp = &f->fmt.pix_mp;
 
@@ -928,18 +927,6 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			return -EINVAL;
 		}
 
-		if (!IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16) {
-				mfc_err("Not supported format.\n");
-				return -EINVAL;
-			}
-		} else if (IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT) {
-				mfc_err("Not supported format.\n");
-				return -EINVAL;
-			}
-		}
-
 		if (fmt->num_planes != pix_fmt_mp->num_planes) {
 			mfc_err("failed to try output format\n");
 			return -EINVAL;
@@ -957,6 +944,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct s5p_mfc_dev *dev = video_drvdata(file);
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
+	struct s5p_mfc_fmt *fmt;
 	struct v4l2_pix_format_mplane *pix_fmt_mp = &f->fmt.pix_mp;
 	int ret = 0;
 
@@ -969,9 +957,13 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		goto out;
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		/* dst_fmt is validated by call to vidioc_try_fmt */
-		ctx->dst_fmt = find_format(f, MFC_FMT_ENC);
+		fmt = find_format(f, MFC_FMT_ENC);
+		if (!fmt) {
+			mfc_err("failed to set capture format\n");
+			return -EINVAL;
+		}
 		ctx->state = MFCINST_INIT;
+		ctx->dst_fmt = fmt;
 		ctx->codec_mode = ctx->dst_fmt->codec_mode;
 		ctx->enc_dst_buf_size =	pix_fmt_mp->plane_fmt[0].sizeimage;
 		pix_fmt_mp->plane_fmt[0].bytesperline = 0;
@@ -992,8 +984,28 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		}
 		mfc_debug(2, "Got instance number: %d\n", ctx->inst_no);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		/* src_fmt is validated by call to vidioc_try_fmt */
-		ctx->src_fmt = find_format(f, MFC_FMT_RAW);
+		fmt = find_format(f, MFC_FMT_RAW);
+		if (!fmt) {
+			mfc_err("failed to set output format\n");
+			return -EINVAL;
+		}
+
+		if (!IS_MFCV6(dev) &&
+				(fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16)) {
+			mfc_err("Not supported format.\n");
+			return -EINVAL;
+		} else if (IS_MFCV6(dev) &&
+				(fmt->fourcc == V4L2_PIX_FMT_NV12MT)) {
+			mfc_err("Not supported format.\n");
+			return -EINVAL;
+		}
+
+		if (fmt->num_planes != pix_fmt_mp->num_planes) {
+			mfc_err("failed to set output format\n");
+			ret = -EINVAL;
+			goto out;
+		}
+		ctx->src_fmt = fmt;
 		ctx->img_width = pix_fmt_mp->width;
 		ctx->img_height = pix_fmt_mp->height;
 		mfc_debug(2, "codec number: %d\n", ctx->src_fmt->codec_mode);
@@ -1520,8 +1532,7 @@ int vidioc_encoder_cmd(struct file *file, void *priv,
 
 		spin_lock_irqsave(&dev->irqlock, flags);
 		if (list_empty(&ctx->src_queue)) {
-			mfc_debug(2, "EOS: empty src queue, entering finishing"
-				" state");
+			mfc_debug(2, "EOS: empty src queue, entering finishing state");
 			ctx->state = MFCINST_FINISHING;
 			spin_unlock_irqrestore(&dev->irqlock, flags);
 			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
