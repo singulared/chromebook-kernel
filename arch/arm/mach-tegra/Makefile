@@ -11,6 +11,7 @@ obj-y					+= pm.o
 obj-y					+= sleep.o
 obj-y					+= reset.o
 obj-y					+= reset-handler.o
+obj-y					+= sleep.o
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra20_clocks.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra20_clocks_data.o
