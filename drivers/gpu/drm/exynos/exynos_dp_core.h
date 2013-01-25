@@ -46,6 +46,7 @@ struct exynos_dp_device {
 	int			irq;
 	void __iomem		*reg_base;
 	int			hpd_gpio;
+	bool			force_connected;
 
 	struct dp_phy_ops	phy_ops;
 	struct video_info	*video_info;

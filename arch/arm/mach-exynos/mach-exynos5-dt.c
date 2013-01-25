@@ -592,11 +592,12 @@ static struct video_info ps8622_dp_config = {
 };
 
 static struct exynos_dp_platdata smdk5250_dp_data = {
-	.video_info     = &ptn3460_dp_config,
-	.training_type  = SW_LINK_TRAINING,
-	.hpd_gpio	= -ENODEV,
-	.phy_init       = s5p_dp_phy_init,
-	.phy_exit       = s5p_dp_phy_exit,
+	.video_info		= &ptn3460_dp_config,
+	.training_type		= SW_LINK_TRAINING,
+	.hpd_gpio		= -ENODEV,
+	.force_connected	= true,
+	.phy_init		= s5p_dp_phy_init,
+	.phy_exit		= s5p_dp_phy_exit,
 };
 
 #define S5P_PMU_DEBUG				S5P_PMUREG(0x0A00)

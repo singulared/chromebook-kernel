@@ -1057,10 +1057,11 @@ static int exynos_dp_check_timing(void *ctx, void *timing)
 static bool exynos_dp_is_connected(void *ctx)
 {
 	struct exynos_dp_device *dp = ctx;
-	int ret;
 
-	ret = exynos_dp_detect_hpd(dp);
-	return !ret;
+	if (dp->force_connected)
+		return true;
+	else
+		return !exynos_dp_detect_hpd(dp);
 }
 
 static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
@@ -1152,6 +1153,7 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 
 	dp->training_type = pdata->training_type;
 	dp->video_info = pdata->video_info;
+	dp->force_connected = pdata->force_connected;
 	if (pdata->phy_init) {
 		dp->phy_ops.phy_init = pdata->phy_init;
 		dp->phy_ops.phy_init();
