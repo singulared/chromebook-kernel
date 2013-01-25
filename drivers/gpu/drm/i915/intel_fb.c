@@ -289,7 +289,8 @@ void intel_fb_restore_mode(struct drm_device *dev)
 
 	/* Be sure to shut off any planes that may be active */
 	list_for_each_entry(plane, &config->plane_list, head)
-		plane->funcs->disable_plane(plane);
+		if (plane->enabled)
+			plane->funcs->disable_plane(plane);
 
 	drm_modeset_unlock_all(dev);
 }
