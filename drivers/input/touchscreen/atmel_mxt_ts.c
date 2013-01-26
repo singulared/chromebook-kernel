@@ -25,6 +25,11 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
+#if defined(CONFIG_ACPI_BUTTON)
+#include <acpi/button.h>
+#endif
+
+
 /* Version */
 #define MXT_VER_20		20
 #define MXT_VER_21		21
@@ -386,6 +391,11 @@ struct mxt_data {
 
 	/* map for the tracking id currently being used */
 	bool current_id[MXT_MAX_FINGER];
+
+#if defined(CONFIG_ACPI_BUTTON)
+	/* notifier block for acpi_lid_notifier */
+	struct notifier_block lid_notifier;
+#endif
 };
 
 /* global root node of the atmel_mxt_ts debugfs directory. */
@@ -2458,6 +2468,24 @@ static void mxt_input_close(struct input_dev *dev)
 	mxt_stop(data);
 }
 
+#if defined(CONFIG_ACPI_BUTTON)
+static int mxt_lid_notify(struct notifier_block *nb, unsigned long val,
+			   void *unused)
+{
+	struct mxt_data *data = container_of(nb, struct mxt_data, lid_notifier);
+
+	if (mxt_in_bootloader(data))
+		return NOTIFY_OK;
+
+	if (val == 0)
+		mxt_stop(data);
+	else
+		mxt_start(data);
+
+	return NOTIFY_OK;
+}
+#endif
+
 static int mxt_input_dev_create(struct mxt_data *data)
 {
 	struct input_dev *input_dev;
@@ -2700,6 +2728,14 @@ static int __devinit mxt_probe(struct i2c_client *client,
 
 	async_schedule(mxt_initialize_async, data);
 
+#if defined(CONFIG_ACPI_BUTTON)
+	data->lid_notifier.notifier_call = mxt_lid_notify;
+	if (acpi_lid_notifier_register(&data->lid_notifier)) {
+		pr_info("lid notifier registration failed\n");
+		data->lid_notifier.notifier_call = NULL;
+	}
+#endif
+
 	return 0;
 
 err_free_object:
@@ -2720,6 +2756,10 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	free_irq(data->irq, data);
 	if (data->input_dev)
 		input_unregister_device(data->input_dev);
+#if defined(CONFIG_ACPI_BUTTON)
+	if (data->lid_notifier.notifier_call)
+		acpi_lid_notifier_unregister(&data->lid_notifier);
+#endif
 	kfree(data->object_table);
 	kfree(data->fw_file);
 	kfree(data->config_file);
@@ -2812,6 +2852,15 @@ static int mxt_suspend(struct device *dev)
 	if (ret)
 		dev_err(dev, "Save T9 ctrl config failed, %d\n", ret);
 	data->T9_ctrl_valid = (ret == 0);
+
+#if defined(CONFIG_ACPI_BUTTON)
+	ret = acpi_lid_open();
+	if (ret == 0) {
+		/* lid is closed. set T9_ctrl to operational on resume */
+		data->T9_ctrl = MXT_TOUCH_CTRL_OPERATIONAL;
+		data->T9_ctrl_valid = true;
+	}
+#endif
 
 	/*
 	 *  For tpads, save T42 and T19 ctrl registers if may wakeup,
