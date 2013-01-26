@@ -26,6 +26,7 @@
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_gpio.h>
 #include <linux/usb/samsung_usb_phy.h>
 
 #include "samsung-usbphy.h"
@@ -33,6 +34,7 @@
 int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 {
 	struct device_node *usbphy_sys;
+	int ret;
 
 	/* Getting node for system controller interface for usb-phy */
 	usbphy_sys = of_get_child_by_name(sphy->dev->of_node, "usbphy-sys");
@@ -56,6 +58,30 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 	 */
 	if (sphy->sysreg == NULL)
 		dev_warn(sphy->dev, "Can't get usb-phy sysreg cfg register\n");
+
+	/* Getting PHY clk gpio here to enable/disable PHY clock PLL, if any */
+	sphy->phyclk_gpio = of_get_named_gpio(sphy->dev->of_node,
+						"samsung,phyclk-gpio", 0);
+	/*
+	 * We don't want to return error code here in case we don't get the
+	 * PHY clock gpio, some PHYs may not have it.
+	 */
+	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		ret = gpio_request_one(sphy->phyclk_gpio, GPIOF_INIT_HIGH,
+						"samsung_usb_phy_clock_en");
+		if (ret) {
+			/*
+			 * We don't want to return error code here,
+			 * sometimes either of usb2 phy or usb3 phy may not
+			 * have the PHY clock gpio.
+			 */
+			dev_err(sphy->dev, "can't request phyclk gpio %d\n",
+						sphy->phyclk_gpio);
+			sphy->phyclk_gpio = -EINVAL;
+		}
+	} else {
+		dev_warn(sphy->dev, "Can't get usb-phy clock gpio\n");
+	}
 
 	of_node_put(usbphy_sys);
 
