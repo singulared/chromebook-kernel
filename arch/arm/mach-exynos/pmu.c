@@ -309,7 +309,7 @@ static struct exynos_pmu_conf exynos5250_pmu_config[] = {
 	{ EXYNOS5_CMU_SYSCLK_DISP1_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
 	{ EXYNOS5_CMU_SYSCLK_MAU_SYS_PWR_REG,		{ 0x1, 0x1, 0x0} },
 	{ EXYNOS5_CMU_RESET_GSCL_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
-	{ EXYNOS5_CMU_RESET_ISP_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
+	/* CMU_RESET_ISP_SYS_PWR_REG handled in exynos5250_disable_isp() */
 	{ EXYNOS5_CMU_RESET_MFC_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
 	{ EXYNOS5_CMU_RESET_G3D_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
 	{ EXYNOS5_CMU_RESET_DISP1_SYS_PWR_REG,		{ 0x1, 0x0, 0x0} },
@@ -364,6 +364,47 @@ static void exynos5_debug_enable_uart_wakeup(void)
 	tmp |= EXYNOS5_PAD_RET_UART_AUTOMATIC_WAKEUP;
 	__raw_writel(tmp, S5P_PAD_RET_UART_OPTION);
 #endif
+}
+
+#define ISP_DISABLE_TRIES			10
+
+/*
+ * Disable the image signal processor.
+ *
+ * We currently have no code in the kernel to manage the state of the ISP.
+ *
+ * The ISP's power sequencing code needs to be run in a very specific order
+ * and shouldn't necessarily be intertwined with the power on/power off code
+ * of the main CPU core.  Until there is kernel code to manage the ISP, we'll
+ * just hardcode powering off the ISP here.
+ */
+static void exynos5250_disable_isp(void)
+{
+	int i;
+
+	/* Make sure ISP ARM is disabled; don't use WFI or WFE */
+	__raw_writel(0, EXYNOS5_ISP_ARM_OPTION);
+
+	/* Put the ISP ARM in reset */
+	__raw_writel(0x0, EXYNOS5_ISP_ARM_CONFIGURATION);
+	for (i = 0; i < ISP_DISABLE_TRIES; i++) {
+		if (!(__raw_readl(EXYNOS5_ISP_ARM_STATUS) & 0x1))
+			break;
+		usleep_range(80, 100);
+	}
+	WARN_ON(i == ISP_DISABLE_TRIES);
+
+	/* Reset the ISP CMU block in power-off/low power state */
+	__raw_writel(0x0, EXYNOS5_CMU_RESET_ISP_SYS_PWR_REG);
+
+	/* Turn off power to the ISP in normal mode */
+	__raw_writel(0x0, EXYNOS5_ISP_CONFIGURATION);
+	for (i = 0; i < ISP_DISABLE_TRIES; i++) {
+		if (!(__raw_readl(EXYNOS5_ISP_STATUS) & 0x7))
+			break;
+		usleep_range(80, 100);
+	}
+	WARN_ON(i == ISP_DISABLE_TRIES);
 }
 
 static void exynos5_init_pmu(void)
@@ -434,6 +475,7 @@ static int __init exynos_pmu_init(void)
 		exynos_pmu_config = exynos4x12_pmu_config;
 		pr_info("EXYNOS4x12 PMU Initialize\n");
 	} else if (soc_is_exynos5250()) {
+		exynos5250_disable_isp();
 		/*
 		 * When SYS_WDTRESET is set, watchdog timer reset request
 		 * is ignored by power management unit.
