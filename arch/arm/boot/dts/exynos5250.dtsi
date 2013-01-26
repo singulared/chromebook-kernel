@@ -732,11 +732,6 @@
 		#size-cells = <1>;
 		ranges;
 
-		isp_arm_pd: pd@0x10042280 {
-			compatible = "samsung,exynos4210-pd";
-			reg = <0x10042280 0x20>;
-		};
-
 		usbotg_pd: pd@0x10042E00 {
 			compatible = "samsung,exynos4210-pd";
 			reg = <0x10042E00 0x20>;
@@ -790,11 +785,6 @@
 		gsc_pd: pd@0x10044000 {
 			compatible = "samsung,exynos4210-pd";
 			reg = <0x10044000 0x20>;
-		};
-
-		isp_pd: pd@0x10044020 {
-			compatible = "samsung,exynos4210-pd";
-			reg = <0x10044020 0x20>;
 		};
 
 		mfc_pd: pd@0x10044040 {
