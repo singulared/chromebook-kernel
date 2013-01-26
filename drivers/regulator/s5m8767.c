@@ -20,8 +20,11 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
+#include <linux/regulator/of_regulator.h>
 #include <linux/mfd/s5m87xx/s5m-core.h>
 #include <linux/mfd/s5m87xx/s5m-pmic.h>
+
+#define S5M8767_OPMODE_MASK			0x3
 
 struct s5m8767_info {
 	struct device *dev;
@@ -525,10 +528,97 @@ static struct regulator_desc regulators[] = {
 	regulator_desc_buck(9),
 };
 
+#ifdef CONFIG_OF
+static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
+					struct s5m_platform_data *pdata)
+{
+	struct device_node *pmic_np, *regulators_np, *reg_np;
+	struct s5m_regulator_data *rdata;
+	unsigned int i;
+
+	pmic_np = iodev->dev->of_node;
+	if (!pmic_np) {
+		dev_err(iodev->dev, "could not find pmic sub-node\n");
+		return -ENODEV;
+	}
+
+	regulators_np = of_find_node_by_name(pmic_np, "voltage-regulators");
+	if (!regulators_np) {
+		dev_err(iodev->dev, "could not find regulators sub-node\n");
+		return -EINVAL;
+	}
+
+	/* count the number of regulators to be supported in pmic */
+	pdata->num_regulators = 0;
+	for_each_child_of_node(regulators_np, reg_np)
+		pdata->num_regulators++;
+
+	rdata = devm_kzalloc(iodev->dev, sizeof(*rdata) *
+				pdata->num_regulators, GFP_KERNEL);
+	if (!rdata) {
+		dev_err(iodev->dev,
+			"could not allocate memory for regulator data\n");
+		return -ENOMEM;
+	}
+
+	pdata->regulators = rdata;
+	for_each_child_of_node(regulators_np, reg_np) {
+		for (i = 0; i < ARRAY_SIZE(regulators); i++)
+			if (!of_node_cmp(reg_np->name, regulators[i].name))
+				break;
+
+		if (i == ARRAY_SIZE(regulators)) {
+			dev_warn(iodev->dev,
+				"No configuration data for regulator %s\n",
+				reg_np->name);
+			continue;
+		}
+
+		rdata->id = i;
+		rdata->initdata = of_get_regulator_init_data(
+						iodev->dev, reg_np);
+		rdata->reg_node = reg_np;
+		if (of_property_read_u32(reg_np, "reg_op_mode",
+				&rdata->reg_op_mode)) {
+			dev_warn(iodev->dev, "no op_mode property property at %s\n",
+				reg_np->full_name);
+			/*
+			 * Set operating mode to NORMAL "ON" as default. The
+			 * 32KHz clocks are being turned on and kept on by
+			 * default, so the below mode setting does not impact
+			 * it.
+			 */
+			rdata->reg_op_mode = S5M8767_OPMODE_MASK;
+		}
+		rdata++;
+	}
+
+	if (!of_property_read_u32(pmic_np, "s5m8767,buck_ramp_delay", &i))
+		pdata->buck_ramp_delay = i & 0xf;
+
+	if (of_get_property(pmic_np, "s5m8767,buck2_ramp_enable", NULL))
+		pdata->buck2_ramp_enable = 1;
+
+	if (of_get_property(pmic_np, "s5m8767,buck3_ramp_enable", NULL))
+		pdata->buck3_ramp_enable = 1;
+
+	if (of_get_property(pmic_np, "s5m8767,buck4_ramp_enable", NULL))
+		pdata->buck4_ramp_enable = 1;
+
+	return 0;
+}
+#else
+static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
+					struct s5m_platform_data *pdata)
+{
+	return 0;
+}
+#endif	/* CONFIG_OF */
+
 static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 {
 	struct s5m87xx_dev *iodev = dev_get_drvdata(pdev->dev.parent);
-	struct s5m_platform_data *pdata = dev_get_platdata(iodev->dev);
+	struct s5m_platform_data *pdata = iodev->pdata;
 	struct regulator_dev **rdev;
 	struct s5m8767_info *s5m8767;
 	int i, ret, size;
@@ -536,6 +626,12 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 	if (!pdata) {
 		dev_err(pdev->dev.parent, "Platform data not supplied\n");
 		return -ENODEV;
+	}
+
+	if (iodev->dev->of_node) {
+		ret = s5m8767_pmic_dt_parse_pdata(iodev, pdata);
+		if (ret)
+			return ret;
 	}
 
 	if (pdata->buck2_gpiodvs) {
@@ -564,7 +660,10 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 	if (!s5m8767)
 		return -ENOMEM;
 
-	size = sizeof(struct regulator_dev *) * (S5M8767_REG_MAX - 2);
+	if (!pdata->num_regulators)
+		pdata->num_regulators = S5M8767_REG_MAX - 2;
+
+	size = sizeof(struct regulator_dev *) * pdata->num_regulators;
 	s5m8767->rdev = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
 	if (!s5m8767->rdev)
 		return -ENOMEM;
@@ -572,7 +671,7 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 	rdev = s5m8767->rdev;
 	s5m8767->dev = &pdev->dev;
 	s5m8767->iodev = iodev;
-	s5m8767->num_regulators = S5M8767_REG_MAX - 2;
+	s5m8767->num_regulators = pdata->num_regulators;
 	platform_set_drvdata(pdev, s5m8767);
 
 	s5m8767->buck_gpioindex = pdata->buck_default_idx;
@@ -724,7 +823,9 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 				(desc->max - desc->min) / desc->step + 1;
 
 		rdev[i] = regulator_register(&regulators[id], s5m8767->dev,
-				pdata->regulators[i].initdata, s5m8767, NULL);
+					     pdata->regulators[i].initdata,
+					     s5m8767,
+					     pdata->regulators[i].reg_node);
 		if (IS_ERR(rdev[i])) {
 			ret = PTR_ERR(rdev[i]);
 			dev_err(s5m8767->dev, "regulator init failed for %d\n",

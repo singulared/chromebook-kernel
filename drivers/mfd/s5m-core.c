@@ -26,6 +26,13 @@
 #include <linux/mfd/s5m87xx/s5m-rtc.h>
 #include <linux/regmap.h>
 
+#ifdef CONFIG_OF
+static struct of_device_id __devinitdata s5m87xx_pmic_dt_match[] = {
+	{.compatible = "samsung,s5m8767-pmic"},
+	{},
+};
+#endif
+
 static struct mfd_cell s5m8751_devs[] = {
 	{
 		.name = "s5m8751-pmic",
@@ -89,6 +96,45 @@ static struct regmap_config s5m_regmap_config = {
 	.val_bits = 8,
 };
 
+static inline int s5m87xx_i2c_get_driver_data(struct i2c_client *i2c,
+					       const struct i2c_device_id *id)
+{
+#ifdef CONFIG_OF
+	if (i2c->dev.of_node) {
+		const struct of_device_id *match;
+		match = of_match_node(s5m87xx_pmic_dt_match, i2c->dev.of_node);
+		return (int)match->data;
+	}
+#endif
+	return (int)id->driver_data;
+}
+
+#ifdef CONFIG_OF
+static struct s5m_platform_data *s5m87xx_i2c_parse_dt_pdata(struct device *dev)
+{
+	struct s5m_platform_data *pd;
+
+	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	if (!pd) {
+		dev_err(dev, "could not allocate memory for pdata\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (of_property_read_u32(dev->of_node, "s5m-core,device_type",
+				 &pd->device_type)) {
+		dev_warn(dev, "no OF device_type property");
+	} else {
+		dev_dbg(dev, "OF device_type property = %u", pd->device_type);
+	}
+	return pd;
+}
+#else
+static struct s5m_platform_data *s5m8767_i2c_parse_dt_pdata(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 static int s5m87xx_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
@@ -105,14 +151,35 @@ static int s5m87xx_i2c_probe(struct i2c_client *i2c,
 	s5m87xx->dev = &i2c->dev;
 	s5m87xx->i2c = i2c;
 	s5m87xx->irq = i2c->irq;
-	s5m87xx->type = id->driver_data;
+	s5m87xx->type = s5m87xx_i2c_get_driver_data(i2c, id);
 
-	if (pdata) {
-		s5m87xx->device_type = pdata->device_type;
-		s5m87xx->ono = pdata->ono;
-		s5m87xx->irq_base = pdata->irq_base;
-		s5m87xx->wakeup = pdata->wakeup;
+	if (s5m87xx->dev->of_node) {
+		pdata = s5m87xx_i2c_parse_dt_pdata(s5m87xx->dev);
+		if (IS_ERR(pdata)) {
+			ret = PTR_ERR(pdata);
+			goto err;
+		}
 	}
+	s5m87xx->pdata = pdata;
+
+	if (!pdata) {
+		ret = -ENODEV;
+		dev_warn(s5m87xx->dev, "No platform data found\n");
+		goto err;
+	}
+
+	s5m87xx->device_type = pdata->device_type;
+	/* TODO(tbroch): address whether we want this addtional interrupt node
+	   and add it to DT parsing if yes.
+	*/
+	s5m87xx->ono = pdata->ono;
+	/* TODO(tbroch): remove hack below and parse irq_base via DT */
+	s5m87xx->irq_base = pdata->irq_base = MAX77686_IRQ_BASE;
+#ifdef OF_CONFIG
+	s5m87xx->wakeup = i2c->flags & I2C_CLIENT_WAKE;
+#else
+	s5m87xx->wakeup = pdata->wakeup;
+#endif
 
 	s5m87xx->regmap = regmap_init_i2c(i2c, &s5m_regmap_config);
 	if (IS_ERR(s5m87xx->regmap)) {
@@ -184,6 +251,7 @@ static struct i2c_driver s5m87xx_i2c_driver = {
 	.driver = {
 		   .name = "s5m87xx",
 		   .owner = THIS_MODULE,
+		   .of_match_table = of_match_ptr(s5m87xx_pmic_dt_match),
 	},
 	.probe = s5m87xx_i2c_probe,
 	.remove = s5m87xx_i2c_remove,

@@ -304,6 +304,7 @@ enum s5m8763_irq {
  * @irq_masks_cur: currently active value
  * @irq_masks_cache: cached hardware value
  * @type: indicate which s5m87xx "variant" is used
+ * @pdata: platform data
  */
 struct s5m87xx_dev {
 	struct device *dev;
@@ -321,6 +322,7 @@ struct s5m87xx_dev {
 	u8 irq_masks_cache[NUM_IRQ_REGS];
 	int type;
 	bool wakeup;
+	struct s5m_platform_data *pdata;
 };
 
 int s5m_irq_init(struct s5m87xx_dev *s5m87xx);
