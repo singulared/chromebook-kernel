@@ -466,6 +466,8 @@ static const struct usb_device_id qc_vidpids[] = {
 	MKVIDPID(0x1199, 0x9008),	/* Sierra Wireless Gobi 2000 */
 	MKVIDPID(0x1199, 0x9009),	/* Sierra Wireless Gobi 2000 */
 	MKVIDPID(0x1199, 0x900a),	/* Sierra Wireless Gobi 2000 */
+	MKVIDPID(0x1199, 0x9012),	/* Sierra Wireless Gobi 3000 */
+	MKVIDPID(0x1199, 0x9013),	/* Sierra Wireless Gobi 3000 */
 	MKVIDPID(0x05c6, 0x9225),	/* Sony Gobi 2000 */
 	MKVIDPID(0x05c6, 0x9235),	/* Top Global Gobi 2000 */
 	MKVIDPID(0x05c6, 0x9275),	/* iRex Technologies Gobi 2000 */
