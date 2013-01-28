@@ -33,7 +33,6 @@ module_param(debug, bool, 0644);
 			printk(KERN_DEBUG "%s: " fmt, __func__, ## arg);\
 	} while (0)
 
-
 /* Instance is already queued on the job_queue */
 #define TRANS_QUEUED		(1 << 0)
 /* Instance is currently running in hardware */
@@ -341,9 +340,12 @@ int v4l2_m2m_expbuf(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 						struct v4l2_exportbuffer *eb)
 {
 	struct vb2_queue *vq;
-
-	/* Below code is written only for FIMC CAPTURE for now */
-	vq = v4l2_m2m_get_vq(m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+	if (eb->mem_offset < DST_QUEUE_OFF_BASE) {
+		vq = v4l2_m2m_get_vq(m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	} else {
+		vq = v4l2_m2m_get_vq(m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		eb->mem_offset -= DST_QUEUE_OFF_BASE;
+	}
 	return vb2_expbuf(vq, eb);
 }
 EXPORT_SYMBOL_GPL(v4l2_m2m_expbuf);
