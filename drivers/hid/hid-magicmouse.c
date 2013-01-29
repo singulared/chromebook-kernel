@@ -379,16 +379,16 @@ static int magicmouse_setup_input(struct input_dev *input, struct hid_device *hd
 		__clear_bit(BTN_RIGHT, input->keybit);
 		__clear_bit(BTN_MIDDLE, input->keybit);
 		__set_bit(BTN_MOUSE, input->keybit);
+		__set_bit(BTN_TOOL_FINGER, input->keybit);
+		__set_bit(BTN_TOOL_DOUBLETAP, input->keybit);
+		__set_bit(BTN_TOOL_TRIPLETAP, input->keybit);
+		__set_bit(BTN_TOOL_QUADTAP, input->keybit);
+		__set_bit(BTN_TOOL_QUINTTAP, input->keybit);
+		__set_bit(BTN_TOUCH, input->keybit);
+		__set_bit(INPUT_PROP_POINTER, input->propbit);
 		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
 	}
 
-	__set_bit(BTN_TOOL_FINGER, input->keybit);
-	__set_bit(BTN_TOOL_DOUBLETAP, input->keybit);
-	__set_bit(BTN_TOOL_TRIPLETAP, input->keybit);
-	__set_bit(BTN_TOOL_QUADTAP, input->keybit);
-	__set_bit(BTN_TOOL_QUINTTAP, input->keybit);
-	__set_bit(BTN_TOUCH, input->keybit);
-	__set_bit(INPUT_PROP_POINTER, input->propbit);
 
 	__set_bit(EV_ABS, input->evbit);
 
