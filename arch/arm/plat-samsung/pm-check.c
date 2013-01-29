@@ -65,7 +65,8 @@ static int pm_check_interleave_bytes;
 static bool pm_check_skip_unused = 1;
 
 static u32 crc_size;	/* size needed for the crc block */
-static u32 *crcs;	/* allocated over suspend/resume */
+static u32 *crcs;	/* allocated at suspend */
+static void *crcs_base;	/* actual memory to free */
 
 static phys_addr_t stack_base_phys;
 static phys_addr_t crcs_phys;
@@ -305,6 +306,65 @@ static u32 *s3c_pm_countram(const struct resource *res, u32 *val)
 	return val;
 }
 
+/* s3c_pm_check_free - free pm_check memory and NULL-out globals
+ *
+ * This undoes s3c_pm_check_alloc and frees memory assocated with CRCs.
+ */
+static void s3c_pm_check_free(void)
+{
+	kfree(crcs_base);
+
+	crcs_base = NULL;
+	crcs = NULL;
+	crc_size = 0;
+}
+
+/* s3c_pm_check_alloc - allocate pm_check memory and setup globals
+ *
+ * We'll allocate memory (if needed) needed based on the new value of crc_size.
+ * We'll then update globals (crc_size, crcs, crcs_base) as needed.  If we
+ * fail to allocate memory we'll leave crcs_base=NULL, crcs=NULL, crc_size=0.
+ */
+static void s3c_pm_check_alloc(u32 new_crc_size)
+{
+	u32 to_allocate;
+
+	/*
+	 * No-op if we've already got the right size; note that nearly 100%
+	 * of the time we've got the right size already because iomem_resource
+	 * doesn't really change during the normal running of the system.
+	 */
+	if (crc_size == new_crc_size)
+		return;
+
+	/* Free old memory if it was allocated */
+	s3c_pm_check_free();
+
+	/* Add 4 for padding (TODO: why?) */
+	to_allocate = new_crc_size + 4;
+
+	/*
+	 * Over-allocate by 2 chunks so that nobody overlaps with us.
+	 * in s3c_pm_should_skip_page().  That helps ensure that we
+	 * check all memory that's actually in-use.
+	 */
+	to_allocate += (2 * pm_check_chunksize);
+
+	/* Actually allocate */
+	crcs_base = kmalloc(to_allocate, GFP_KERNEL);
+	if (crcs_base == NULL) {
+		printk(KERN_ERR "Cannot allocated CRC save area\n");
+		return;
+	}
+
+	/* Skip one chunk to be sure nobody is close to us */
+	crcs = crcs_base + pm_check_chunksize;
+	crc_size = new_crc_size;
+
+	pr_debug("%s: %p %p 0x%x 0x%x\n",
+		 __func__, crcs_base, crcs, to_allocate, crc_size);
+}
+
 /* s3c_pm_prepare_check
  *
  * prepare the necessary information for creating the CRCs. This
@@ -315,9 +375,12 @@ static u32 *s3c_pm_countram(const struct resource *res, u32 *val)
 void s3c_pm_check_prepare(void)
 {
 	ktime_t start, stop, delta;
+	u32 new_crc_size = 0;
 
-	if (!pm_check_enabled)
+	if (!pm_check_enabled) {
+		s3c_pm_check_free();
 		return;
+	}
 
 	if (strcasecmp(pm_check_checksum_type, CHECKSUM_TYPE_CRC) == 0) {
 		checksum_func = crc32_le;
@@ -330,12 +393,11 @@ void s3c_pm_check_prepare(void)
 		checksum_func = s3c_pm_sum_mem;
 	}
 
-	crc_size = 0;
 	/* Timing code generates warnings at this point in suspend */
 	if (pm_check_print_timings)
 		start = ktime_get();
 	bitfix_prepare();
-	s3c_pm_run_sysram(s3c_pm_countram, &crc_size);
+	s3c_pm_run_sysram(s3c_pm_countram, &new_crc_size);
 	if (pm_check_print_timings) {
 		stop = ktime_get();
 		delta = ktime_sub(stop, start);
@@ -344,11 +406,9 @@ void s3c_pm_check_prepare(void)
 	}
 
 	S3C_PMDBG("s3c_pm_check: Chunk size: %d, %u bytes for checks needed\n",
-		pm_check_chunksize, crc_size);
+		pm_check_chunksize, new_crc_size);
 
-	crcs = kmalloc(crc_size+4, GFP_KERNEL);
-	if (crcs == NULL)
-		printk(KERN_ERR "Cannot allocated CRC save area\n");
+	s3c_pm_check_alloc(new_crc_size);
 }
 
 /* externs from sleep.S */
@@ -550,17 +610,17 @@ void s3c_pm_check_restore(void)
 }
 
 /**
- * s3c_pm_check_cleanup() - free memory resources
+ * s3c_pm_check_cleanup() - free resources
  *
- * Free the resources that where allocated by the suspend
- * memory check code. We do this separately from the
- * s3c_pm_check_restore() function as we cannot call any
- * functions that might sleep during that resume.
+ * We don't actually free pm_check memory here.  Instead, we free when the
+ * next suspend happens if pm_check got disabled.
+ *
+ * Generally we want to keep memory around since we need a fairly large chunk
+ * of contiguous memory (1 megabyte with 8K chunks and a 2G system) and that
+ * gets harder and harder to get the longer the system is up.
  */
 void s3c_pm_check_cleanup(void)
 {
-	kfree(crcs);
-	crcs = NULL;
 	bitfix_finish();
 }
 
@@ -595,3 +655,13 @@ void s3c_pm_check_set_interleave_bytes(int interleave_bytes)
 {
 	pm_check_interleave_bytes = interleave_bytes;
 }
+
+/**
+ * s3c_pm_check_init - Init code for pm_check
+ */
+static void __init s3c_pm_check_init(void)
+{
+	/* Call prepare once at init time to make sure we get memory. */
+	s3c_pm_check_prepare();
+}
+late_initcall(s3c_pm_check_init);
