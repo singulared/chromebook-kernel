@@ -1006,6 +1006,7 @@ request_firmware(const struct firmware **firmware_p, const char *name,
 
 	ret = usermodehelper_read_trylock();
 	if (ret) {
+		kfree(fw_priv);
 		dev_err(device, "firmware: %s will not be loaded\n", name);
 	} else {
 		ret = _request_firmware_load(fw_priv, true,
