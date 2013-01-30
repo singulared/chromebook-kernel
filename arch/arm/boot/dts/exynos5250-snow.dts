@@ -68,6 +68,11 @@
 		codec {
 			mclk-pin = <1>;
 		};
+
+		light-sensor {
+			compatible = "invn,isl29018";
+			reg = <0x44>;
+		};
 	};
 
 	dwmmc2@12220000 {
