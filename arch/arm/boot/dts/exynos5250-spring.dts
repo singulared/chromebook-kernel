@@ -109,6 +109,11 @@
 		codec {
 			mclk-pin = <2>;
 		};
+
+		temp-sensor {
+			compatible = "gmt,g781";
+			reg = <0x4c>;
+		};
 	};
 
 	sound {
