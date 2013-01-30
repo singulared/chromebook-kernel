@@ -340,22 +340,23 @@ static void *vb2_dc_dmabuf_ops_kmap(struct dma_buf *dbuf, unsigned long pgnum)
 {
 	struct vb2_dc_buf *buf = dbuf->priv;
 
-	return buf->vaddr + pgnum * PAGE_SIZE;
+	return vb2_dc_vaddr(buf) + pgnum * PAGE_SIZE;
 }
 
 static void *vb2_dc_dmabuf_ops_vmap(struct dma_buf *dbuf)
 {
 	struct vb2_dc_buf *buf = dbuf->priv;
 
-	return buf->vaddr;
+	return vb2_dc_vaddr(buf);
 }
 
 /* a dummy function to support the mmap functionality for now */
 static int vb2_dc_dmabuf_ops_mmap(struct dma_buf *dbuf,
 				  struct vm_area_struct *vma)
 {
-	/* do nothing */
-	return -EINVAL;
+	struct vb2_dc_buf *buf = dbuf->priv;
+
+	return vb2_dc_mmap(buf, vma);
 }
 
 static struct dma_buf_ops vb2_dc_dmabuf_ops = {
