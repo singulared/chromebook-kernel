@@ -46,9 +46,14 @@ Required properties:
    region.
  - interrupts: interrupt number to the cpu.
 
+Optional properties:
+ - samsung,vbus-gpio:  if present, specifies the GPIO that
+   needs to be pulled up for the bus to be powered.
+
 Example:
 	usb@12000000 {
 		compatible = "samsung,exynos5250-dwusb3";
 		reg = <0x12000000 0x10000>;
 		interrupts = <0 72 0>;
+		samsung,vbus-gpio = <&gpx2 7 1 3 3>;
 	};

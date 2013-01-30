@@ -42,6 +42,7 @@
 	};
 
 	usb@12000000 {
+		samsung,vbus-gpio = <&gpx2 7 1 3 3>;
 		status = "okay";
 	};
 
