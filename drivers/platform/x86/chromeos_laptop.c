@@ -440,6 +440,7 @@ static const struct __initdata dmi_system_id chromeos_laptop_dmi_table[] = {
 	},
 	{ }
 };
+MODULE_DEVICE_TABLE(dmi, chromeos_laptop_dmi_table);
 
 static int __init chromeos_laptop_init(void)
 {
