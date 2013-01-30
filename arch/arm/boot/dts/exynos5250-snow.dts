@@ -46,6 +46,10 @@
 		status = "okay";
 	};
 
+	usbphy@12100000 {
+		samsung,phyclk-gpio = <&gpy1 1 1 0 3>;
+	};
+
 	usb@12110000 {
 		samsung,vbus-gpio = <&gpx1 1 1 3 3>;
 		status = "okay";
