@@ -47,6 +47,14 @@
 		};
 	};
 
+	i2c@12CA0000 {
+		battery: sbs-battery@b {
+			compatible = "sbs,sbs-battery";
+			reg = <0xb>;
+			sbs,poll-retry-count = <1>;
+		};
+	};
+
 	i2c@12C90000 {
 		samsung,i2c-sda-delay = <100>;
 		samsung,i2c-max-bus-freq = <66000>;

@@ -288,6 +288,18 @@
 		};
 	};
 
+	i2c@12CA0000 {
+		ec: chromeos-ec@0 {
+			i2c-passthrough {
+				battery: sbs-battery@b {
+					compatible = "sbs,sbs-battery";
+					reg = <0xb>;
+					sbs,poll-retry-count = <1>;
+				};
+			};
+		};
+	};
+
 	i2c@12CD0000 {
 		ps8622-bridge@8 {
 			compatible = "parade,ps8622";

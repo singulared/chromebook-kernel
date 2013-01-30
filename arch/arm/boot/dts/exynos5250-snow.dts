@@ -56,6 +56,12 @@
 		samsung,arbitration-gpios = <&gpf0 3 1 0 0>,
 			<&gpe0 4 0 3 0>;
 
+		battery: sbs-battery@b {
+			compatible = "sbs,sbs-battery";
+			reg = <0xb>;
+			sbs,poll-retry-count = <1>;
+		};
+
 		power-regulator {
 			compatible = "ti,tps65090";
 			reg = <0x48>;
