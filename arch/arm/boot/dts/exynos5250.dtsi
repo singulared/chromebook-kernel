@@ -764,6 +764,10 @@
 		compatible = "samsung,exynos5-hdmi";
 		reg = <0x14530000 0x70000>;
 		interrupts = <0 95 0>;
+
+		hdmi-audio {
+			compatible = "samsung,exynos5-hdmi-audio";
+		};
 	};
 
 	mixer: mixer {
