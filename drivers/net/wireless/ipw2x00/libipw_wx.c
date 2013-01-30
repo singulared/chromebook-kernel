@@ -523,7 +523,9 @@ int libipw_wx_set_encodeext(struct libipw_device *ieee,
 			       struct iw_request_info *info,
 			       union iwreq_data *wrqu, char *extra)
 {
+#ifdef CONFIG_LIBIPW_DEBUG
 	struct net_device *dev = ieee->dev;
+#endif
 	struct iw_point *encoding = &wrqu->encoding;
 	struct iw_encode_ext *ext = (struct iw_encode_ext *)extra;
 	int i, idx, ret = 0;
