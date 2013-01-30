@@ -52,7 +52,14 @@
 #define SLEEP_DURATION_LONG_HI 220
 
 /* expected value for DIDVID register */
-#define TPM_TIS_I2C_DID_VID 0x000b15d1L
+#define TPM_TIS_I2C_DID_VID_9635 0x000b15d1L
+#define TPM_TIS_I2C_DID_VID_9645 0x001a15d1L
+
+enum i2c_chip_type {
+	SLB9635,
+	SLB9645,
+	UNKNOWN,
+};
 
 /* Structure to store I2C TPM specific stuff */
 struct tpm_inf_dev {
@@ -61,6 +68,7 @@ struct tpm_inf_dev {
 	struct tpm_chip *chip;
 	bool powered_while_suspended;
 	struct work_struct init_work;
+	enum i2c_chip_type chip_type;
 };
 
 static struct tpm_inf_dev tpm_dev;
@@ -104,9 +112,9 @@ static int i2c_transfer_nolock(struct i2c_adapter *adap, struct i2c_msg *msgs,
  */
 static int iic_tpm_read(u8 addr, u8 *buffer, size_t len)
 {
-
 	struct i2c_msg msg1 = { tpm_dev.client->addr, 0, 1, &addr };
 	struct i2c_msg msg2 = { tpm_dev.client->addr, I2C_M_RD, len, buffer };
+	struct i2c_msg msgs[] = {msg1, msg2};
 
 	int rc;
 	int count;
@@ -119,30 +127,53 @@ static int iic_tpm_read(u8 addr, u8 *buffer, size_t len)
 		return -EOPNOTSUPP;
 	i2c_lock_adapter(tpm_dev.client->adapter);
 
-	for (count = 0; count < MAX_COUNT; count++) {
-		rc = i2c_transfer_nolock(tpm_dev.client->adapter, &msg1, 1);
-		if (rc > 0)
-			break; /* break here to skip sleep */
+	if ((tpm_dev.chip_type == SLB9635) || (tpm_dev.chip_type == UNKNOWN)) {
+		/* slb9635 protocol should work in both cases */
+		for (count = 0; count < MAX_COUNT; count++) {
+			rc = i2c_transfer_nolock(tpm_dev.client->adapter,
+						 &msg1, 1);
+			if (rc > 0)
+				break; /* break here to skip sleep */
 
-		usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
-	}
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+		}
 
-	if (rc <= 0)
-		goto out;
+		if (rc <= 0)
+			goto out;
 
-	/* After the TPM has successfully received the register address it needs
-	 * some time, thus we're sleeping here again, before retrieving the data
-	 */
-	for (count = 0; count < MAX_COUNT; count++) {
-		usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
-		rc = i2c_transfer_nolock(tpm_dev.client->adapter, &msg2, 1);
-		if (rc > 0)
-			break;
+		/* After the TPM has successfully received the register address
+		 * it needs some time, thus we're sleeping here again, before
+		 * retrieving the data
+		 */
+		for (count = 0; count < MAX_COUNT; count++) {
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+			rc = i2c_transfer_nolock(tpm_dev.client->adapter,
+						 &msg2, 1);
+			if (rc > 0)
+				break;
 
+		}
+	} else {
+		/* use a combined read for newer chips
+		 * unfortunately the smbus functions are not suitable due to
+		 * the 32 byte limit of the smbus.
+		 * retries should usually not be needed, but are kept just to
+		 * be safe on the safe side.
+		*/
+		for (count = 0; count < MAX_COUNT; count++) {
+			rc = i2c_transfer_nolock(tpm_dev.client->adapter,
+						 msgs, 2);
+			if (rc > 0)
+				break;	/* break here to skip sleep */
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+		}
 	}
 
 out:
 	i2c_unlock_adapter(tpm_dev.client->adapter);
+	/* take care of 'guard time' */
+	usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+
 	if (rc <= 0)
 		return -EIO;
 
@@ -178,6 +209,8 @@ static int iic_tpm_write_generic(u8 addr, u8 *buffer, size_t len,
 	}
 
 	i2c_unlock_adapter(tpm_dev.client->adapter);
+	/* take care of 'guard time' */
+	usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
 	if (rc <= 0)
 		return -EIO;
 
@@ -565,6 +598,7 @@ static void tpm_tis_i2c_selftest(struct work_struct *work)
 static int tpm_tis_i2c_init(struct device *dev)
 {
 	u32 vendor;
+	u32 expected_did_vid;
 	int rc = 0;
 	struct tpm_chip *chip;
 
@@ -597,11 +631,16 @@ static int tpm_tis_i2c_init(struct device *dev)
 		goto out_vendor;
 	}
 
-	/* create DID_VID register value, after swapping to little-endian */
-	vendor = be32_to_cpu((__be32) vendor);
+	if (tpm_dev.chip_type == SLB9635) {
+		vendor = be32_to_cpu((__be32) vendor);
+		expected_did_vid = TPM_TIS_I2C_DID_VID_9635;
+	} else {
+		/* device id and byte order has changed for newer i2c tpms */
+		expected_did_vid = TPM_TIS_I2C_DID_VID_9645;
+	}
 
-	if (vendor != TPM_TIS_I2C_DID_VID) {
-		dev_dbg(dev, "bad vendor id\n");
+	if (tpm_dev.chip_type != UNKNOWN && vendor != expected_did_vid) {
+		dev_err(dev, "vendor id did not match! ID was %08x\n", vendor);
 		rc = -ENODEV;
 		goto out_release;
 	}
@@ -641,6 +680,7 @@ out_err:
 
 static const struct i2c_device_id tpm_i2c_tis_table[] = {
 	{ "slb9635tt", 0 },
+	{ "slb9645tt", 0 },
 	{ "tpm_tis_i2c", 0 },
 	{ },
 };
@@ -728,8 +768,23 @@ static struct i2c_driver tpm_i2c_tis_driver = {
 static int __devinit tpm_tis_i2c_probe(struct i2c_client *client,
 					const struct i2c_device_id *dev_id)
 {
+	struct device *dev = &(client->dev);
+	char *name = client->name;
+
 	tpm_dev.client = client;
 	dev_dbg(&client->dev, "tpm_tis_i2c probe\n");
+
+	if (strncmp(name, "slb9645tt", strlen("slb9645tt")) == 0) {
+		dev_dbg(dev, "Chiptype: slb9645tt\n");
+		tpm_dev.chip_type = SLB9645;
+	} else if (strncmp(name, "slb9635tt", strlen("slb9635tt")) == 0) {
+		dev_dbg(dev, "Chiptype: slb9635tt\n");
+		tpm_dev.chip_type = SLB9635;
+	} else {
+		dev_notice(dev, "No chiptype was provided, fallback to slb9635\n");
+		tpm_dev.chip_type = UNKNOWN;
+	}
+
 	return tpm_tis_i2c_init(&client->dev);
 }
 
@@ -760,5 +815,5 @@ module_i2c_driver(tpm_i2c_tis_driver);
 
 MODULE_AUTHOR("Peter Huewe <huewe.external@infineon.com>");
 MODULE_DESCRIPTION("TPM TIS I2C Driver");
-MODULE_VERSION("2.1.2");
+MODULE_VERSION("2.1.6");
 MODULE_LICENSE("GPL");
