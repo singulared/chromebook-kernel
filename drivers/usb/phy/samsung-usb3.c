@@ -241,12 +241,17 @@ static int samsung_exynos5_usb3phy_clk_switch(struct usb_phy *phy,
  */
 static int samsung_usb3_phy_init(struct usb_phy *phy)
 {
+	struct samsung_usbphy *sphy = phy_to_sphy(phy);
+
 	/*
-	 * We start with using PHY refclk from external PLL,
-	 * once runtime suspend for the device is called this
-	 * will change to internal core clock
+	 * We check if we have a PHY ref_clk gpio available, then only
+	 * use XusbXTI (external PLL); otherwise use internal core clock
+	 * form XXTI.
 	 */
-	return  samsung_exynos5_usb3_phy_init(phy, true);
+	if (gpio_is_valid(sphy->phyclk_gpio))
+		return  samsung_exynos5_usb3_phy_init(phy, true);
+	else
+		return  samsung_exynos5_usb3_phy_init(phy, false);
 }
 
 /*
@@ -365,10 +370,11 @@ static int samsung_usb3_phy_runtime_suspend(struct device *dev)
 {
 	struct samsung_usbphy *sphy = dev_get_drvdata(dev);
 
-	samsung_exynos5_usb3phy_clk_switch(&sphy->phy, false);
-
-	if (gpio_is_valid(sphy->phyclk_gpio))
+	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		samsung_exynos5_usb3phy_clk_switch(&sphy->phy, false);
+		/* Turn off PLL here */
 		gpio_set_value(sphy->phyclk_gpio, 0);
+	}
 
 	return 0;
 }
@@ -378,6 +384,7 @@ static int samsung_usb3_phy_runtime_resume(struct device *dev)
 	struct samsung_usbphy *sphy = dev_get_drvdata(dev);
 
 	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		/* Turn on the PLL here */
 		gpio_set_value(sphy->phyclk_gpio, 1);
 		/*
 		 * PI6C557-03 clock generator needs 3ms typically to stabilise,
@@ -385,9 +392,9 @@ static int samsung_usb3_phy_runtime_resume(struct device *dev)
 		 * and cross our fingers that it's enough.
 		 */
 		usleep_range(10000, 20000);
-	}
 
-	samsung_exynos5_usb3phy_clk_switch(&sphy->phy, true);
+		samsung_exynos5_usb3phy_clk_switch(&sphy->phy, true);
+	}
 
 	return 0;
 }
