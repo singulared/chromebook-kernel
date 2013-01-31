@@ -340,12 +340,10 @@ int v4l2_m2m_expbuf(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 						struct v4l2_exportbuffer *eb)
 {
 	struct vb2_queue *vq;
-	if (eb->mem_offset < DST_QUEUE_OFF_BASE) {
+	if (V4L2_TYPE_IS_OUTPUT(eb->type))
 		vq = v4l2_m2m_get_vq(m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	} else {
+	else
 		vq = v4l2_m2m_get_vq(m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
-		eb->mem_offset -= DST_QUEUE_OFF_BASE;
-	}
 	return vb2_expbuf(vq, eb);
 }
 EXPORT_SYMBOL_GPL(v4l2_m2m_expbuf);
