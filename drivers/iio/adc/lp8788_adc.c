@@ -187,12 +187,6 @@ static int lp8788_iio_map_register(struct iio_dev *indio_dev,
 	return 0;
 }
 
-static inline void lp8788_iio_map_unregister(struct iio_dev *indio_dev,
-				struct lp8788_adc *adc)
-{
-	iio_map_array_unregister(indio_dev, adc->map);
-}
-
 static int lp8788_adc_probe(struct platform_device *pdev)
 {
 	struct lp8788 *lp = dev_get_drvdata(pdev->dev.parent);
@@ -230,7 +224,7 @@ static int lp8788_adc_probe(struct platform_device *pdev)
 	return 0;
 
 err_iio_device:
-	lp8788_iio_map_unregister(indio_dev, adc);
+	iio_map_array_unregister(indio_dev);
 err_iio_map:
 	iio_device_free(indio_dev);
 	return ret;
@@ -239,10 +233,9 @@ err_iio_map:
 static int lp8788_adc_remove(struct platform_device *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
-	struct lp8788_adc *adc = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
-	lp8788_iio_map_unregister(indio_dev, adc);
+	iio_map_array_unregister(indio_dev);
 	iio_device_free(indio_dev);
 
 	return 0;
