@@ -277,6 +277,7 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 	sphy->regs		= phy_base;
 	sphy->clk		= clk;
 	sphy->phy.dev		= sphy->dev;
+	sphy->phy.type		= USB_PHY_TYPE_USB3;
 	sphy->phy.label		= "samsung-usb3phy";
 	sphy->phy.init		= samsung_usb3phy_init;
 	sphy->phy.shutdown	= samsung_usb3phy_shutdown;
@@ -287,7 +288,7 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, sphy);
 
-	return usb_add_phy(&sphy->phy, USB_PHY_TYPE_USB3);
+	return usb_add_phy_dev(&sphy->phy);
 }
 
 static int samsung_usb3phy_remove(struct platform_device *pdev)

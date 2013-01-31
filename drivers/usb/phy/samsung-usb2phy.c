@@ -428,6 +428,7 @@ static int samsung_usb2phy_probe(struct platform_device *pdev)
 	sphy->clk		= clk;
 	sphy->drv_data		= drv_data;
 	sphy->phy.dev		= sphy->dev;
+	sphy->phy.type		= USB_PHY_TYPE_USB2;
 	sphy->phy.label		= "samsung-usb2phy";
 	sphy->phy.init		= samsung_usb2phy_init;
 	sphy->phy.shutdown	= samsung_usb2phy_shutdown;
@@ -441,7 +442,7 @@ static int samsung_usb2phy_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, sphy);
 
-	return usb_add_phy(&sphy->phy, USB_PHY_TYPE_USB2);
+	return usb_add_phy_dev(&sphy->phy);
 }
 
 static int samsung_usb2phy_remove(struct platform_device *pdev)
