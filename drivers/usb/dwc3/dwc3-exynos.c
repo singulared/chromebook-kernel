@@ -165,9 +165,11 @@ static int __devinit dwc3_exynos_probe(struct platform_device *pdev)
 		 * if we have no gpio to control external PLL, we are using
 		 * the internal clock.
 		 */
+		if (pdata->use_ext_clk)
+			pdata->use_ext_clk(pdev,
+					   gpio_is_valid(exynos->phyclk_gpio));
 		if (pdata->phy_init)
-			pdata->phy_init(pdev, pdata->phy_type,
-					gpio_is_valid(exynos->phyclk_gpio));
+			pdata->phy_init(pdev, pdata->phy_type);
 	}
 
 	pm_runtime_set_active(&pdev->dev);
@@ -340,9 +342,11 @@ static int dwc3_exynos_resume(struct device *dev)
 	if (!pdata) {
 		dev_dbg(&pdev->dev, "missing platform data\n");
 	} else {
+		if (pdata->use_ext_clk)
+			pdata->use_ext_clk(pdev,
+					   gpio_is_valid(exynos->phyclk_gpio));
 		if (pdata->phy_init)
-			pdata->phy_init(pdev, pdata->phy_type,
-					gpio_is_valid(exynos->phyclk_gpio));
+			pdata->phy_init(pdev, pdata->phy_type);
 	}
 
 	/* runtime set active to reflect active state. */

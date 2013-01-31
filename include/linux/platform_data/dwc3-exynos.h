@@ -17,9 +17,10 @@
 
 struct dwc3_exynos_data {
 	int phy_type;
-	int (*phy_init)(struct platform_device *pdev, int type, bool ext_clk);
+	int (*phy_init)(struct platform_device *pdev, int type);
 	int (*phy_exit)(struct platform_device *pdev, int type);
 	int (*phyclk_switch)(struct platform_device *pdev, bool use_ext_clk);
+	int (*use_ext_clk)(struct platform_device *pdev, bool ext_clk);
 };
 
 #endif /* _DWC3_EXYNOS_H_ */

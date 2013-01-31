@@ -14,6 +14,7 @@
 struct s5p_ehci_platdata {
 	int (*phy_init)(struct platform_device *pdev, int type);
 	int (*phy_exit)(struct platform_device *pdev, int type);
+	int (*use_ext_clk)(struct platform_device *pdev, bool ext_clk);
 };
 
 extern void s5p_ehci_set_platdata(struct s5p_ehci_platdata *pd);

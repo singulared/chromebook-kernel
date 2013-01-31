@@ -47,6 +47,7 @@ struct exynos_usb_phy {
 static atomic_t host_usage;
 static struct exynos_usb_phy usb_phy_control;
 static DEFINE_SPINLOCK(phy_lock);
+static bool ext_clk;
 
 static int exynos4_usb_host_phy_is_on(void)
 {
@@ -287,7 +288,7 @@ int exynos5_dwc_phyclk_switch(struct platform_device *pdev, bool use_ext_clk)
 	return _exynos5_usb_phy30_init(pdev, use_ext_clk);
 }
 
-static int exynos5_usb_phy30_init(struct platform_device *pdev, bool ext_clk)
+static int exynos5_usb_phy30_init(struct platform_device *pdev)
 {
 	int ret;
 	struct clk *host_clk = NULL;
@@ -587,7 +588,13 @@ static int exynos4_usb_phy1_exit(struct platform_device *pdev)
 	return 0;
 }
 
-int s5p_usb_phy_init(struct platform_device *pdev, int type, bool ext_clk)
+int s5p_usb_phy_use_ext_clk(struct platform_device *pdev, bool ext_clk_val)
+{
+	ext_clk = ext_clk_val;
+	return 0;
+}
+
+int s5p_usb_phy_init(struct platform_device *pdev, int type)
 {
 	if (type == S5P_USB_PHY_HOST) {
 		if (soc_is_exynos5250())
@@ -596,7 +603,7 @@ int s5p_usb_phy_init(struct platform_device *pdev, int type, bool ext_clk)
 			return exynos4_usb_phy1_init(pdev);
 	} else if (type == S5P_USB_PHY_DRD) {
 		if (soc_is_exynos5250())
-			return exynos5_usb_phy30_init(pdev, ext_clk);
+			return exynos5_usb_phy30_init(pdev);
 		else
 			dev_err(&pdev->dev, "USB 3.0 DRD not present\n");
 	}
