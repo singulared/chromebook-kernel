@@ -128,7 +128,7 @@ nv50_instmem_init(struct drm_device *dev)
 {
 	struct drm_nouveau_private *dev_priv = dev->dev_private;
 	struct nv50_instmem_priv *priv;
-	struct nouveau_channel *chan;
+	struct nouveau_channel *chan = NULL;
 	struct nouveau_vm *vm;
 	int ret, i;
 	u32 tmp;
