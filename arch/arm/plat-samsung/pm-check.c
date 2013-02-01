@@ -659,9 +659,11 @@ void s3c_pm_check_set_interleave_bytes(int interleave_bytes)
 /**
  * s3c_pm_check_init - Init code for pm_check
  */
-static void __init s3c_pm_check_init(void)
+static int __init s3c_pm_check_init(void)
 {
 	/* Call prepare once at init time to make sure we get memory. */
 	s3c_pm_check_prepare();
+
+	return 0;
 }
 late_initcall(s3c_pm_check_init);
