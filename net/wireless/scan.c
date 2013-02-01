@@ -44,6 +44,16 @@ static void bss_release(struct kref *ref)
 	kfree(bss);
 }
 
+static inline void bss_ref_get(struct cfg80211_internal_bss *bss)
+{
+	kref_get(&bss->ref);
+}
+
+static inline void bss_ref_put(struct cfg80211_internal_bss *bss)
+{
+	kref_put(&bss->ref, bss_release);
+}
+
 static void __cfg80211_unlink_bss(struct cfg80211_registered_device *dev,
 				  struct cfg80211_internal_bss *bss)
 {
@@ -51,7 +61,7 @@ static void __cfg80211_unlink_bss(struct cfg80211_registered_device *dev,
 
 	list_del_init(&bss->list);
 	rb_erase(&bss->rbn, &dev->bss_tree);
-	kref_put(&bss->ref, bss_release);
+	bss_ref_put(bss);
 }
 
 static void __cfg80211_bss_expire(struct cfg80211_registered_device *dev,
@@ -459,7 +469,7 @@ struct cfg80211_bss *cfg80211_get_bss(struct wiphy *wiphy,
 			continue;
 		if (is_bss(&bss->pub, bssid, ssid, ssid_len)) {
 			res = bss;
-			kref_get(&res->ref);
+			bss_ref_get(res);
 			break;
 		}
 	}
@@ -652,7 +662,7 @@ cfg80211_bss_update(struct cfg80211_registered_device *dev,
 	dev->bss_generation++;
 	spin_unlock_bh(&dev->bss_lock);
 
-	kref_get(&found->ref);
+	bss_ref_get(found);
 	return found;
 }
 
@@ -819,7 +829,7 @@ void cfg80211_ref_bss(struct cfg80211_bss *pub)
 		return;
 
 	bss = container_of(pub, struct cfg80211_internal_bss, pub);
-	kref_get(&bss->ref);
+	bss_ref_get(bss);
 }
 EXPORT_SYMBOL(cfg80211_ref_bss);
 
@@ -831,7 +841,7 @@ void cfg80211_put_bss(struct cfg80211_bss *pub)
 		return;
 
 	bss = container_of(pub, struct cfg80211_internal_bss, pub);
-	kref_put(&bss->ref, bss_release);
+	bss_ref_put(bss);
 }
 EXPORT_SYMBOL(cfg80211_put_bss);
 
