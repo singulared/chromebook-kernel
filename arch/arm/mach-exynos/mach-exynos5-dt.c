@@ -351,6 +351,7 @@ static void __init exynos5_dt_machine_init(void)
 		gpio_request_one(EXYNOS5_GPX3(0), GPIOF_OUT_INIT_HIGH,
 								"lcd_bl_en");
 		samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
+		exynos5_fimd1_gpio_setup_24bpp();
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
 		platform_device_register(&smdk5250_lcd);

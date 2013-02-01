@@ -68,6 +68,7 @@ config SOC_EXYNOS5250
 	select S5P_DEV_MFC
 	select SAMSUNG_DMADEV
 	select SAMSUNG_DEV_PWM
+	select EXYNOS5_SETUP_FIMD1
 	help
 	  Enable EXYNOS5250 SoC support
 
@@ -107,6 +108,11 @@ config EXYNOS4_SETUP_FIMD0
 	bool
 	help
 	  Common setup code for FIMD0.
+
+config EXYNOS5_SETUP_FIMD1
+	bool
+	help
+	  Common setup code for FIMD1.
 
 config EXYNOS4_DEV_USB_OHCI
 	bool
