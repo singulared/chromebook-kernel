@@ -2123,7 +2123,7 @@ static s32 brcmf_inform_single_bss(struct brcmf_cfg80211_info *cfg,
 	if (!bss)
 		return -ENOMEM;
 
-	cfg80211_put_bss(bss);
+	cfg80211_put_bss(wiphy, bss);
 
 	return err;
 }
@@ -2229,7 +2229,7 @@ static s32 wl_inform_ibss(struct brcmf_cfg80211_info *cfg,
 		goto CleanUp;
 	}
 
-	cfg80211_put_bss(bss);
+	cfg80211_put_bss(wiphy, bss);
 
 CleanUp:
 

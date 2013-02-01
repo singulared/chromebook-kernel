@@ -300,7 +300,7 @@ static void __cfg80211_sme_scan_done(struct net_device *dev)
 
 	bss = cfg80211_get_conn_bss(wdev);
 	if (bss) {
-		cfg80211_put_bss(bss);
+		cfg80211_put_bss(&rdev->wiphy, bss);
 	} else {
 		/* not found */
 		if (wdev->conn->state == CFG80211_CONN_SCAN_AGAIN)
@@ -463,7 +463,7 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 
 	if (wdev->current_bss) {
 		cfg80211_unhold_bss(wdev->current_bss);
-		cfg80211_put_bss(&wdev->current_bss->pub);
+		cfg80211_put_bss(wdev->wiphy, &wdev->current_bss->pub);
 		wdev->current_bss = NULL;
 	}
 
@@ -479,7 +479,7 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 		kfree(wdev->connect_keys);
 		wdev->connect_keys = NULL;
 		wdev->ssid_len = 0;
-		cfg80211_put_bss(bss);
+		cfg80211_put_bss(wdev->wiphy, bss);
 		return;
 	}
 
@@ -587,7 +587,7 @@ void __cfg80211_roamed(struct wireless_dev *wdev,
 	}
 
 	cfg80211_unhold_bss(wdev->current_bss);
-	cfg80211_put_bss(&wdev->current_bss->pub);
+	cfg80211_put_bss(wdev->wiphy, &wdev->current_bss->pub);
 	wdev->current_bss = NULL;
 
 	cfg80211_hold_bss(bss_from_pub(bss));
@@ -622,7 +622,7 @@ void __cfg80211_roamed(struct wireless_dev *wdev,
 
 	return;
 out:
-	cfg80211_put_bss(bss);
+	cfg80211_put_bss(wdev->wiphy, bss);
 }
 
 void cfg80211_roamed(struct net_device *dev,
@@ -664,7 +664,7 @@ void cfg80211_roamed_bss(struct net_device *dev,
 
 	ev = kzalloc(sizeof(*ev) + req_ie_len + resp_ie_len, gfp);
 	if (!ev) {
-		cfg80211_put_bss(bss);
+		cfg80211_put_bss(wdev->wiphy, bss);
 		return;
 	}
 
@@ -705,7 +705,7 @@ void __cfg80211_disconnected(struct net_device *dev, const u8 *ie,
 
 	if (wdev->current_bss) {
 		cfg80211_unhold_bss(wdev->current_bss);
-		cfg80211_put_bss(&wdev->current_bss->pub);
+		cfg80211_put_bss(wdev->wiphy, &wdev->current_bss->pub);
 	}
 
 	wdev->current_bss = NULL;
@@ -876,7 +876,7 @@ int __cfg80211_connect(struct cfg80211_registered_device *rdev,
 		if (bss) {
 			wdev->conn->state = CFG80211_CONN_AUTHENTICATE_NEXT;
 			err = cfg80211_conn_do_work(wdev);
-			cfg80211_put_bss(bss);
+			cfg80211_put_bss(wdev->wiphy, bss);
 		} else {
 			/* otherwise we'll need to scan for the AP first */
 			err = cfg80211_conn_scan(wdev);
