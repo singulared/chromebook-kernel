@@ -165,6 +165,16 @@ struct power_supply {
 				     enum power_supply_property psp);
 	void (*external_power_changed)(struct power_supply *psy);
 	void (*set_charged)(struct power_supply *psy);
+	/**
+	 * @to_bus_dev - Get the device this power supply connects to
+	 *
+	 * This can be used in a suspend_again() handler to resume
+	 * communications (e.g. attached i2c port) and put it back
+	 * into suspend afterwards.
+	 *
+	 * @psy: Power supply
+	 */
+	struct device *(*to_bus_dev)(struct power_supply *psy);
 
 	/* For APM emulation, think legacy userspace. */
 	int use_for_apm;

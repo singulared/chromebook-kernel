@@ -798,6 +798,18 @@ static struct sbs_platform_data *sbs_of_populate_pdata(
 }
 #endif
 
+#ifdef CONFIG_PM
+struct device *sbs_to_i2c_dev(struct power_supply *psy)
+{
+	struct sbs_info *chip;
+
+	chip = container_of(psy, struct sbs_info, power_supply);
+	return &chip->client->adapter->dev;
+}
+#else
+#define sbs_to_i2c_dev	NULL
+#endif
+
 static int __devinit sbs_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
@@ -833,6 +845,7 @@ static int __devinit sbs_probe(struct i2c_client *client,
 	chip->ignore_changes = 1;
 	chip->last_state = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->power_supply.external_power_changed = sbs_external_power_changed;
+	chip->power_supply.to_bus_dev = sbs_to_i2c_dev;
 
 	pdata = sbs_of_populate_pdata(client);
 
