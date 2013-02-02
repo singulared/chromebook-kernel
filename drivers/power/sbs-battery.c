@@ -503,8 +503,10 @@ static int sbs_get_battery_capacity(struct i2c_client *client,
 		return mode;
 
 	ret = sbs_read_word_data(client, sbs_data[reg_offset].addr);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_warn("Failed to read word data\n");
 		return ret;
+	}
 
 	if (psp == POWER_SUPPLY_PROP_CAPACITY) {
 		/* sbs spec says that this can be >100 %
