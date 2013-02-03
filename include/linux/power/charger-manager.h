@@ -85,16 +85,17 @@ struct charger_global_desc {
  * @num_charger_regulator: the number of entries in charger_regulators
  * @charger_regulators: array of regulator_bulk_data for chargers
  * @psy_fuel_gauge: the name of power-supply for fuel gauge
- * @temperature_out_of_range:
- *	Determine whether the status is overheat or cold or normal.
- *	return_value > 0: overheat
- *	return_value == 0: normal
- *	return_value < 0: cold
  * @measure_battery_temp:
  *	true: measure battery temperature
  *	false: measure ambient temperature
  * @battery_has_temp: get temperature from battery before calling
  *	temperature_out_of_range()
+ * @temperature_high: high temperature threshold (milli-degrees C)
+ * @temperature_high_recovery: after a high temperature reading, we wait
+ * until temperature drops to this value before allowing charging
+ * @temperature_low: low temperature threshold
+ * @temperature_low_recovery: after a low temperature reading, we wait
+ * until temperature rises to this value before allowing charging
  */
 struct charger_desc {
 	char *psy_name;
@@ -115,9 +116,19 @@ struct charger_desc {
 
 	char *psy_fuel_gauge;
 
-	int (*temperature_out_of_range)(int *mC);
 	bool measure_battery_temp;
 	bool battery_knows_temp;
+	int temperature_high;
+	int temperature_high_recovery;
+	int temperature_low;
+	int temperature_low_recovery;
+};
+
+/* Current temperature status */
+enum charger_manager_temp_state {
+	CM_TEMP_OK = 0,
+	CM_TEMP_HOT = 1,
+	CM_TEMP_COLD = -1,
 };
 
 #define PSY_NAME_MAX	30
@@ -144,6 +155,7 @@ struct charger_desc {
  *	saved status of external power before entering suspend-to-RAM
  * @status_save_batt:
  *	saved status of battery before entering suspend-to-RAM
+ * @temp_state: last recorded temperature state of battery (CM_TEMP_...)
  */
 struct charger_manager {
 	struct list_head entry;
@@ -167,6 +179,7 @@ struct charger_manager {
 
 	bool status_save_ext_pwr_inserted;
 	bool status_save_batt;
+	enum charger_manager_temp_state temp_state;
 };
 
 #ifdef CONFIG_CHARGER_MANAGER

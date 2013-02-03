@@ -417,6 +417,39 @@ static void fullbatt_vchk(struct work_struct *work)
 	}
 }
 
+static int cm_check_temperature(struct charger_manager *cm, int *mC)
+{
+	struct charger_desc *desc = cm->desc;
+	enum charger_manager_temp_state state = cm->temp_state;
+
+	switch (state) {
+	case CM_TEMP_OK:
+		if (*mC >= desc->temperature_high)
+			state = CM_TEMP_HOT;
+		else if (*mC <= desc->temperature_low)
+			state = CM_TEMP_COLD;
+		break;
+	case CM_TEMP_HOT:
+		if (*mC <= desc->temperature_low)
+			state = CM_TEMP_COLD;
+		else if (*mC < desc->temperature_high_recovery)
+			state = CM_TEMP_OK;
+		break;
+	case CM_TEMP_COLD:
+		if (*mC >= desc->temperature_high)
+			state = CM_TEMP_HOT;
+		else if (*mC > desc->temperature_low_recovery)
+			state = CM_TEMP_OK;
+		break;
+	default:
+		pr_err("%s has invalid state %d\n", __func__, state);
+	}
+
+	/* Remember last state */
+	cm->temp_state = state;
+	return state;
+}
+
 static int temperature_out_of_range(struct charger_manager *cm, int *temp_mC)
 {
 	union power_supply_propval val;
@@ -444,7 +477,7 @@ static int temperature_out_of_range(struct charger_manager *cm, int *temp_mC)
 		*temp_mC = val.intval * 100;
 	}
 
-	return cm->desc->temperature_out_of_range(temp_mC);
+	return cm_check_temperature(cm, temp_mC);
 }
 
 enum cm_state_t {
@@ -1158,12 +1191,6 @@ static int charger_manager_probe(struct platform_device *pdev)
 	if (desc->polling_interval_ms == 0 ||
 	    msecs_to_jiffies(desc->polling_interval_ms) <= CM_JIFFIES_SMALL) {
 		dev_err(&pdev->dev, "polling_interval_ms is too small\n");
-		ret = -EINVAL;
-		goto err_chg_stat;
-	}
-
-	if (!desc->temperature_out_of_range) {
-		dev_err(&pdev->dev, "there is no temperature_out_of_range\n");
 		ret = -EINVAL;
 		goto err_chg_stat;
 	}
