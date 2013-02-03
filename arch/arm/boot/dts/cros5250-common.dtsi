@@ -215,6 +215,9 @@
 					reg_op_mode = <1>; /* Normal Mode */
 				};
 			};
+
+			maxim_rtc: rtc {
+			};
 		};
 	};
 
