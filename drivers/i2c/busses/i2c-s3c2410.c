@@ -1339,7 +1339,7 @@ static int s3c24xx_i2c_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int s3c24xx_i2c_suspend_noirq(struct device *dev)
+static int s3c24xx_i2c_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct s3c24xx_i2c *i2c = platform_get_drvdata(pdev);
@@ -1364,7 +1364,7 @@ static int s3c24xx_i2c_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops s3c24xx_i2c_dev_pm_ops = {
-	.suspend_noirq = s3c24xx_i2c_suspend_noirq,
+	.suspend = s3c24xx_i2c_suspend,
 	.resume = s3c24xx_i2c_resume,
 };
 
