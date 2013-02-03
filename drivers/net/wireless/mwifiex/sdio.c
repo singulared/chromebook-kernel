@@ -707,11 +707,8 @@ static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 
 	/* Assume that the allocated buffer is 8-byte aligned */
 	fwbuf = kzalloc(MWIFIEX_UPLD_SIZE, GFP_KERNEL);
-	if (!fwbuf) {
-		dev_err(adapter->dev,
-			"unable to alloc buffer for FW. Terminating dnld\n");
+	if (!fwbuf)
 		return -ENOMEM;
-	}
 
 	/* Perform firmware data transfer */
 	do {
@@ -1509,7 +1506,6 @@ static int mwifiex_alloc_sdio_mpa_buffers(struct mwifiex_adapter *adapter,
 
 	card->mpa_tx.buf = kzalloc(mpa_tx_buf_size, GFP_KERNEL);
 	if (!card->mpa_tx.buf) {
-		dev_err(adapter->dev, "could not alloc buffer for MP-A TX\n");
 		ret = -1;
 		goto error;
 	}
@@ -1518,7 +1514,6 @@ static int mwifiex_alloc_sdio_mpa_buffers(struct mwifiex_adapter *adapter,
 
 	card->mpa_rx.buf = kzalloc(mpa_rx_buf_size, GFP_KERNEL);
 	if (!card->mpa_rx.buf) {
-		dev_err(adapter->dev, "could not alloc buffer for MP-A RX\n");
 		ret = -1;
 		goto error;
 	}
@@ -1671,10 +1666,8 @@ static int mwifiex_init_sdio(struct mwifiex_adapter *adapter)
 
 	/* Allocate buffers for SDIO MP-A */
 	card->mp_regs = kzalloc(MAX_MP_REGS, GFP_KERNEL);
-	if (!card->mp_regs) {
-		dev_err(adapter->dev, "failed to alloc mp_regs\n");
+	if (!card->mp_regs)
 		return -ENOMEM;
-	}
 
 	ret = mwifiex_alloc_sdio_mpa_buffers(adapter,
 					     SDIO_MP_TX_AGGR_DEF_BUF_SIZE,
