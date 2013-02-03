@@ -1,0 +1,19 @@
+* MAX77686 Real Time Clock controller
+
+This RTC is part of the MAX77686 MFD, which also includes a PMIC device.
+The RTC part is in a subnode:
+
+Required properties:
+- name: "rtc"
+
+(no other properties are defined at present)
+
+Example:
+
+	max77686 {
+		voltage-regulators {
+			...
+		};
+		rtc {
+		};
+	};

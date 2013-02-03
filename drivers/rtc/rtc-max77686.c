@@ -447,6 +447,10 @@ static int __devinit max77686_rtc_probe(struct platform_device *pdev)
 	info->virq = IRQ_GPIO_END + 1 + MAX77686_RTCIRQ_RTCA1;
 	platform_set_drvdata(pdev, info);
 
+	/* Find OF node if available, no decoding of anything yet */
+	pdev->dev.of_node = of_find_node_by_name(max77686->dev->of_node,
+						 "rtc");
+
 	ret = max77686_rtc_init_reg(info);
 
 	if (ret < 0) {
