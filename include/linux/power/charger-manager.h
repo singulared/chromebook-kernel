@@ -131,7 +131,6 @@ enum charger_manager_temp_state {
 	CM_TEMP_COLD = -1,
 };
 
-#define PSY_NAME_MAX	30
 
 /**
  * struct charger_manager
@@ -149,7 +148,7 @@ enum charger_manager_temp_state {
  * @emergency_stop:
  *	When setting true, stop charging
  * @last_temp_mC: the measured temperature in milli-Celsius
- * @psy_name_buf: the name of power-supply-class for charger manager
+ * @psy_name: the name of power-supply-class for charger manager
  * @charger_psy: power_supply for charger manager
  * @status_save_ext_pwr_inserted:
  *	saved status of external power before entering suspend-to-RAM
@@ -174,7 +173,7 @@ struct charger_manager {
 	int emergency_stop;
 	int last_temp_mC;
 
-	char psy_name_buf[PSY_NAME_MAX + 1];
+	const char *psy_name;
 	struct power_supply charger_psy;
 
 	bool status_save_ext_pwr_inserted;

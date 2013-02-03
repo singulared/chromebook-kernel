@@ -1199,12 +1199,8 @@ static int charger_manager_probe(struct platform_device *pdev)
 
 	memcpy(&cm->charger_psy, &psy_default, sizeof(psy_default));
 
-	if (!desc->psy_name) {
-		strncpy(cm->psy_name_buf, psy_default.name, PSY_NAME_MAX);
-	} else {
-		strncpy(cm->psy_name_buf, desc->psy_name, PSY_NAME_MAX);
-	}
-	cm->charger_psy.name = cm->psy_name_buf;
+	if (desc->psy_name)
+		cm->charger_psy.name = desc->psy_name;
 
 	/* Allocate for psy properties because they may vary */
 	cm->charger_psy.properties = kzalloc(sizeof(enum power_supply_property)
