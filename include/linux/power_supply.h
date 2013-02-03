@@ -17,6 +17,7 @@
 #include <linux/leds.h>
 
 struct device;
+struct device_node;
 
 /*
  * All voltages, currents, charges, energies, time and temperatures in uV,
@@ -217,6 +218,8 @@ struct power_supply_info {
 };
 
 extern struct power_supply *power_supply_get_by_name(char *name);
+extern struct power_supply *power_supply_get_by_of_node(
+						struct device_node *dn);
 extern void power_supply_changed(struct power_supply *psy);
 extern int power_supply_am_i_supplied(struct power_supply *psy);
 extern int power_supply_set_battery_charged(struct power_supply *psy);
