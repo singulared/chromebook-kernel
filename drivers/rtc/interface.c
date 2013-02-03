@@ -596,12 +596,10 @@ static int __rtc_match(struct device *dev, void *data)
 	return 0;
 }
 
-struct rtc_device *rtc_class_open(char *name)
+static struct rtc_device *rtc_finish_open(struct device *dev)
 {
-	struct device *dev;
 	struct rtc_device *rtc = NULL;
 
-	dev = class_find_device(rtc_class, NULL, name, __rtc_match);
 	if (dev)
 		rtc = to_rtc_device(dev);
 
@@ -614,7 +612,33 @@ struct rtc_device *rtc_class_open(char *name)
 
 	return rtc;
 }
+
+struct rtc_device *rtc_class_open(char *name)
+{
+	struct device *dev;
+
+	dev = class_find_device(rtc_class, NULL, name, __rtc_match);
+	return rtc_finish_open(dev);
+}
 EXPORT_SYMBOL_GPL(rtc_class_open);
+
+static int __rtc_of_match(struct device *dev, void *data)
+{
+	struct device_node *dn = data;
+
+	if (dev->parent->of_node == dn)
+		return 1;
+	return 0;
+}
+
+struct rtc_device *rtc_class_open_of_node(struct device_node *dn)
+{
+	struct device *dev;
+
+	dev = class_find_device(rtc_class, NULL, dn, __rtc_of_match);
+	return rtc_finish_open(dev);
+}
+EXPORT_SYMBOL_GPL(rtc_class_open_of_node);
 
 void rtc_class_close(struct rtc_device *rtc)
 {
