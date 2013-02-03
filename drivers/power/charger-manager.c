@@ -77,7 +77,8 @@ static struct delayed_work cm_monitor_work; /* init at driver add */
 static struct charger_global_desc *g_desc; /* init with setup_charger_manager */
 
 /* Keep a count of how many times we have polled */
-static unsigned poll_count;
+static unsigned int poll_count;
+static unsigned int suspend_again_count;
 
 /**
  * is_batt_present - See if the battery presents in place.
@@ -515,9 +516,10 @@ static bool _cm_monitor(struct charger_manager *cm)
 	else
 		state = temp < 0 ? CM_CHANGE_COLD : CM_CHANGE_OVERHEAT;
 
-	dev_dbg(cm->dev, "monitoring (%2.2d.%3.3dC):%s count=%u\n",
+	dev_dbg(cm->dev, "monitoring (%2.2d.%3.3dC):%s count=%u,"
+			" susp_count=%u\n",
 		cm->last_temp_mC / 1000, cm->last_temp_mC % 1000,
-		cm_state_name[state], poll_count++);
+		cm_state_name[state], poll_count++, suspend_again_count);
 
 	if (state == CM_CHANGE_NONE)
 		return false;
@@ -1003,6 +1005,7 @@ bool cm_suspend_again(void)
 	struct charger_manager *cm;
 	bool ret = false;
 
+	suspend_again_count++;
 	if (!g_desc || !g_desc->rtc_only_wakeup || !g_desc->rtc_only_wakeup() ||
 	    !cm_rtc_set)
 		return false;
