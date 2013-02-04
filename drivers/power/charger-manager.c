@@ -76,6 +76,9 @@ static struct delayed_work cm_monitor_work; /* init at driver add */
 /* Global charger-manager description */
 static struct charger_global_desc *g_desc; /* init with setup_charger_manager */
 
+/* Keep a count of how many times we have polled */
+static unsigned poll_count;
+
 /**
  * is_batt_present - See if the battery presents in place.
  * @cm: the Charger Manager representing the battery.
@@ -414,6 +417,20 @@ static void fullbatt_vchk(struct work_struct *work)
 	}
 }
 
+enum cm_state_t {
+	CM_CHANGE_NONE,
+	CM_CHANGE_COLD,
+	CM_CHANGE_OVERHEAT,
+	CM_CHANGE_CHARGING,
+};
+
+static const char * const cm_state_name[] = {
+	"ok",
+	"COLD",
+	"OVERHEAT",
+	"CHARGING",
+};
+
 /**
  * _cm_monitor - Monitor the temperature and return true for exceptions.
  * @cm: the Charger Manager representing the battery.
@@ -423,29 +440,31 @@ static void fullbatt_vchk(struct work_struct *work)
  */
 static bool _cm_monitor(struct charger_manager *cm)
 {
-	struct charger_desc *desc = cm->desc;
-	int temp = desc->temperature_out_of_range(&cm->last_temp_mC);
-
-	dev_dbg(cm->dev, "monitoring (%2.2d.%3.3dC)\n",
-		cm->last_temp_mC / 1000, cm->last_temp_mC % 1000);
+	int temp = cm->desc->temperature_out_of_range(&cm->last_temp_mC);
+	enum cm_state_t state;
+	int err = 0;
 
 	/* It has been stopped or charging already */
 	if (!!temp == !!cm->emergency_stop)
+		state = CM_CHANGE_NONE;
+	else if (!temp)
+		state = CM_CHANGE_CHARGING;
+	else
+		state = temp < 0 ? CM_CHANGE_COLD : CM_CHANGE_OVERHEAT;
+
+	dev_dbg(cm->dev, "monitoring (%2.2d.%3.3dC):%s count=%u\n",
+		cm->last_temp_mC / 1000, cm->last_temp_mC % 1000,
+		cm_state_name[state], poll_count++);
+
+	if (state == CM_CHANGE_NONE)
 		return false;
 
-	if (temp) {
-		cm->emergency_stop = temp;
-		if (!try_charger_enable(cm, false)) {
-			if (temp > 0)
-				uevent_notify(cm, "OVERHEAT");
-			else
-				uevent_notify(cm, "COLD");
-		}
-	} else {
-		cm->emergency_stop = 0;
-		if (!try_charger_enable(cm, true))
-			uevent_notify(cm, "CHARGING");
-	}
+	cm->emergency_stop = temp;
+	err = try_charger_enable(cm, temp ? false : true);
+	if (err)
+		dev_warn(cm->dev, "Error changing charge state %d\n", err);
+	else
+		uevent_notify(cm, cm_state_name[state]);
 
 	return true;
 }
