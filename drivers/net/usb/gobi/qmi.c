@@ -215,10 +215,10 @@ int qmux_fill(u16 cid, struct buffer *buf)
 	return 0;
 }
 
-static int tlv_get(void *msg, u16 msgsize, u8 type, void *buf, u16 bufsize)
+static int tlv_get(void *msg, size_t msgsize, u8 type, void *buf, size_t bufsize)
 {
-	u16 pos;
-	u16 msize = 0;
+	size_t pos;
+	size_t msize = 0;
 
 	BUG_ON(!msg || !buf);
 
@@ -230,8 +230,15 @@ static int tlv_get(void *msg, u16 msgsize, u8 type, void *buf, u16 bufsize)
 
 		if (bufsize < msize) {
 			GOBI_ERROR("found type 0x%02x, "
-			    "but value too big (%d > %d)",
+			    "but value too big (%zu > %zu)",
 			    type, msize, bufsize);
+			return -ENOMEM;
+		}
+
+		/* loop is guarded by pos + 3 < msgsize */
+		if (msize > msgsize - (pos + 3)) {
+			GOBI_ERROR("message field too long:"
+			           "%zu + 3 + %zu > %zu", pos, msize, msgsize);
 			return -ENOMEM;
 		}
 
