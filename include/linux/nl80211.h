@@ -1046,8 +1046,6 @@ enum nl80211_commands {
  * @NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX: Bitmap of antennas which are available
  *	for configuration as RX antennas via the above parameters.
  *
- * @NL80211_ATTR_SCAN_FLAGS: scan request control flags (u32)
- *
  * @NL80211_ATTR_MCAST_RATE: Multicast tx rate (in 100 kbps) for IBSS
  *
  * @NL80211_ATTR_OFFCHANNEL_TX_OK: For management frame TX, the frame may be
@@ -1216,6 +1214,44 @@ enum nl80211_commands {
  *
  * @NL80211_ATTR_BG_SCAN_PERIOD: Background scan period in seconds
  *      or 0 to disable background scan.
+ *
+ * @NL80211_ATTR_USER_REG_HINT_TYPE: type of regulatory hint passed from
+ *	userspace. If unset it is assumed the hint comes directly from
+ *	a user. If set code could specify exactly what type of source
+ *	was used to provide the hint. For the different types of
+ *	allowed user regulatory hints see nl80211_user_reg_hint_type.
+ *
+ * @NL80211_ATTR_CONN_FAILED_REASON: The reason for which AP has rejected
+ *	the connection request from a station. nl80211_connect_failed_reason
+ *	enum has different reasons of connection failure.
+ *
+ * @NL80211_ATTR_SAE_DATA: SAE elements in Authentication frames. This starts
+ *	with the Authentication transaction sequence number field.
+ *
+ * @NL80211_ATTR_VHT_CAPABILITY: VHT Capability information element (from
+ *	association request when used with NL80211_CMD_NEW_STATION)
+ *
+ * @NL80211_ATTR_SCAN_FLAGS: scan request control flags (u32)
+ *
+ * @NL80211_ATTR_P2P_CTWINDOW: P2P GO Client Traffic Window (u8), used with
+ *	the START_AP and SET_BSS commands
+ * @NL80211_ATTR_P2P_OPPPS: P2P GO opportunistic PS (u8), used with the
+ *	START_AP and SET_BSS commands. This can have the values 0 or 1;
+ *	if not given in START_AP 0 is assumed, if not given in SET_BSS
+ *	no change is made.
+ *
+ * @NL80211_ATTR_LOCAL_MESH_POWER_MODE: local mesh STA link-specific power mode
+ *	defined in &enum nl80211_mesh_power_mode.
+ *
+ * @NL80211_ATTR_ACL_POLICY: ACL policy, see &enum nl80211_acl_policy,
+ *	carried in a u32 attribute
+ *
+ * @NL80211_ATTR_MAC_ADDRS: Array of nested MAC addresses, used for
+ *	MAC ACL.
+ *
+ * @NL80211_ATTR_MAC_ACL_MAX: u32 attribute to advertise the maximum
+ *	number of MAC addresses that a device can support for MAC
+ *	ACL.
  *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -1404,8 +1440,6 @@ enum nl80211_attrs {
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_TX,
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX,
 
-	NL80211_ATTR_SCAN_FLAGS,
-
 	NL80211_ATTR_SUPPORT_MESH_AUTH,
 	NL80211_ATTR_STA_PLINK_STATE,
 
@@ -1469,6 +1503,33 @@ enum nl80211_attrs {
 	NL80211_ATTR_RX_SIGNAL_DBM,
 
 	NL80211_ATTR_BG_SCAN_PERIOD,
+
+	NL80211_ATTR_WDEV,
+
+	NL80211_ATTR_USER_REG_HINT_TYPE,
+
+	NL80211_ATTR_CONN_FAILED_REASON,
+
+	NL80211_ATTR_SAE_DATA,
+
+	NL80211_ATTR_VHT_CAPABILITY,
+
+	NL80211_ATTR_SCAN_FLAGS,
+
+	NL80211_ATTR_CHANNEL_WIDTH,
+	NL80211_ATTR_CENTER_FREQ1,
+	NL80211_ATTR_CENTER_FREQ2,
+
+	NL80211_ATTR_P2P_CTWINDOW,
+	NL80211_ATTR_P2P_OPPPS,
+
+	NL80211_ATTR_LOCAL_MESH_POWER_MODE,
+
+	NL80211_ATTR_ACL_POLICY,
+
+	NL80211_ATTR_MAC_ADDRS,
+
+	NL80211_ATTR_MAC_ACL_MAX,
 
 	/* add attributes here, update the policy in nl80211.c */
 
