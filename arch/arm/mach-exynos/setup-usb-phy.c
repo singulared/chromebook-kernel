@@ -49,6 +49,8 @@ static struct exynos_usb_phy usb_phy_control;
 static DEFINE_SPINLOCK(phy_lock);
 static bool ext_clk;
 
+static struct regulator *hub_reset;
+
 static int exynos4_usb_host_phy_is_on(void)
 {
 	return (readl(EXYNOS4_PHYPWR) & PHY1_STD_ANALOG_POWERDOWN) ? 0 : 1;
@@ -347,7 +349,7 @@ static int exynos5_usb_phy20_init(struct platform_device *pdev)
 	u32 refclk_freq;
 	u32 hostphy_ctrl0, otgphy_sys, hsic_ctrl, ehcictrl;
 	struct clk *host_clk = NULL;
-	struct regulator *hub_reset;
+	int ret;
 
 	atomic_inc(&host_usage);
 
@@ -404,16 +406,20 @@ static int exynos5_usb_phy20_init(struct platform_device *pdev)
 	writel(hostphy_ctrl0, EXYNOS5_PHY_HOST_CTRL0);
 
 	/* HSIC phy reset */
+	WARN_ON(hub_reset != NULL);
 	hub_reset = regulator_get(NULL, "hsichub-reset-l");
 	if (!IS_ERR(hub_reset)) {
-		/*
-		 * toggle the reset line of the HSIC hub chip.
-		 */
-		regulator_force_disable(hub_reset);
+		/* toggle the reset line of the HSIC hub chip. */
+
+		/* Ought to be disabled but force line just in case */
+		ret = regulator_force_disable(hub_reset);
+		WARN_ON(ret);
+
 		/* keep reset active during 100 us */
 		udelay(100);
-		regulator_enable(hub_reset);
-		regulator_put(hub_reset);
+		ret = regulator_enable(hub_reset);
+		WARN_ON(ret);
+
 		/* Hub init phase takes up to 4 ms */
 		usleep_range(4000, 10000);
 	}
@@ -443,6 +449,7 @@ static int exynos5_usb_phy20_exit(struct platform_device *pdev)
 {
 	u32 hostphy_ctrl0, otgphy_sys, hsic_ctrl;
 	struct clk *host_clk = NULL;
+	int ret;
 
 	if (atomic_dec_return(&host_usage) > 0) {
 		dev_info(&pdev->dev, "still being used\n");
@@ -475,6 +482,15 @@ static int exynos5_usb_phy20_exit(struct platform_device *pdev)
 	exynos_usb_phy_control(USB_PHY1, PHY_DISABLE);
 
 	exynos_usb_phy_clock_disable(host_clk);
+
+	/* put HSIC under reset */
+	WARN_ON(hub_reset == NULL);
+	if (!IS_ERR_OR_NULL(hub_reset)) {
+		ret = regulator_disable(hub_reset);
+		WARN_ON(ret);
+		regulator_put(hub_reset);
+		hub_reset = NULL;
+	}
 
 	return 0;
 }
