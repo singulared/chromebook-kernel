@@ -20,6 +20,9 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <media/videobuf2-core.h>
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#endif
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
@@ -328,6 +331,7 @@ struct gsc_driverdata {
  * @state:	flags used to synchronize m2m and capture mode operation
  * @alloc_ctx:	videobuf2 memory allocator context
  * @vdev:	video device for G-Scaler instance
+ * @mapping:	dma_mapping for G-Scaler IOMMU device
  */
 struct gsc_dev {
 	spinlock_t			slock;
@@ -343,6 +347,9 @@ struct gsc_dev {
 	unsigned long			state;
 	struct vb2_alloc_ctx		*alloc_ctx;
 	struct video_device		vdev;
+#ifdef CONFIG_EXYNOS_IOMMU
+	struct dma_iommu_mapping	*mapping;
+#endif
 };
 
 /**
