@@ -26,7 +26,11 @@ struct buffer {
 
 struct buffer *buffer_new(size_t sz)
 {
-	struct buffer *buf = kmalloc(sizeof(*buf) + sz, GFP_KERNEL);
+	struct buffer *buf;
+	if (sz >= SIZE_MAX - sizeof(*buf))
+		/* size overflow */
+		return NULL;
+	buf = kmalloc(sizeof(*buf) + sz, GFP_KERNEL);
 	if (!buf)
 		return NULL;
 	kref_init(&buf->ref);
