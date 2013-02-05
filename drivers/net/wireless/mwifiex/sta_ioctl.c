@@ -152,6 +152,7 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	}
 	beacon_ie = kmemdup(ies->data, ies->len, GFP_ATOMIC);
 	beacon_ie_len = ies->len;
+	bss_desc->timestamp = ies->tsf;
 	rcu_read_unlock();
 
 	if (!beacon_ie) {
@@ -168,7 +169,6 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	bss_desc->cap_info_bitmap = bss->capability;
 	bss_desc->bss_band = bss_priv->band;
 	bss_desc->fw_tsf = bss_priv->fw_tsf;
-	bss_desc->timestamp = bss->tsf;
 	if (bss_desc->cap_info_bitmap & WLAN_CAPABILITY_PRIVACY) {
 		dev_dbg(priv->adapter->dev, "info: InterpretIE: AP WEP enabled\n");
 		bss_desc->privacy = MWIFIEX_802_11_PRIV_FILTER_8021X_WEP;
