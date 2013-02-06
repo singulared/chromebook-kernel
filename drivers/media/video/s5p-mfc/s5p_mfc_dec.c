@@ -408,7 +408,12 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			return -EINVAL;
 		}
 		if (IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT) {
+			switch (fmt->fourcc) {
+			case V4L2_PIX_FMT_NV12M:
+			case V4L2_PIX_FMT_NV21M:
+			case V4L2_PIX_FMT_NV12MT_16X16:
+				break;
+			default:
 				mfc_err("Not supported format.\n");
 				return -EINVAL;
 			}
@@ -454,7 +459,12 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 				return -EINVAL;
 			}
 		} else if (IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT) {
+			switch (fmt->fourcc) {
+			case V4L2_PIX_FMT_NV12M:
+			case V4L2_PIX_FMT_NV21M:
+			case V4L2_PIX_FMT_NV12MT_16X16:
+				break;
+			default:
 				mfc_err("Not supported format.\n");
 				return -EINVAL;
 			}
