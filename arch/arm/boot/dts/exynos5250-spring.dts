@@ -16,6 +16,10 @@
 	model = "Google Spring";
 	compatible = "google,spring", "samsung,exynos5250";
 
+	adc@12D10000 {
+		status = "disabled";
+	};
+
 	mipi {
 		status = "disabled";
 	};
@@ -94,6 +98,174 @@
 		tpm {
 			compatible = "infineon,slb9645tt";
 			reg = <0x20>;
+		};
+	};
+
+	i2c@12C60000 {
+		s5m8767_pmic@66 {
+			compatible = "samsung,s5m8767-pmic";
+			interrupt-parent = <&wakeup_eint>;
+			interrupts = <26 0>;
+			wakeup-source;
+			reg = <0x66>;
+
+			s5m-core,enable-low-jitter;
+			s5m-core,device_type = <2>;
+			s5m8767,buck_ramp_delay = <25>;		/* default */
+			s5m8767,buck2_ramp_enable;		/* default */
+			s5m8767,buck3_ramp_enable;		/* default */
+			s5m8767,buck4_ramp_enable;		/* default */
+
+			voltage-regulators {
+				s5m_ldo6_reg: LDO6 {
+					regulator-name = "vdd_ldo6";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					reg_op_mode = <0>; /* Off Mode */
+				};
+				s5m_ldo7_reg: LDO7 {
+					regulator-name = "vdd_ldo7";
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo8_reg: LDO8 {
+					regulator-name = "vdd_ldo8";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo10_reg: LDO10 {
+					regulator-name = "vdd_ldo10";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo11_reg: LDO11 {
+					regulator-name = "vdd_ldo11";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					reg_op_mode = <0>; /* Off Mode */
+				};
+				s5m_ldo12_reg: LDO12 {
+					regulator-name = "vdd_ldo12";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo13_reg: LDO13 {
+					regulator-name = "vdd_ldo13";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					reg_op_mode = <0>; /* Off Mode */
+				};
+				s5m_ldo14_reg: LDO14 {
+					regulator-name = "vdd_ldo14";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo15_reg: LDO15 {
+					regulator-name = "vdd_ldo15";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo16_reg: LDO16 {
+					regulator-name = "vdd_ldo16";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+				s5m_ldo25_reg: LDO25 {
+					regulator-name = "vdd_bridge";
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1200000>;
+					regulator-always-on;
+					reg_op_mode = <3>; /* Normal Mode */
+				};
+
+				s5m_buck1_reg: BUCK1 {
+					regulator-name = "vdd_mif";
+					regulator-min-microvolt = <950000>;
+					regulator-max-microvolt = <1300000>;
+					regulator-always-on;
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+
+				s5m_buck2_reg: BUCK2 {
+					regulator-name = "vdd_arm";
+					regulator-min-microvolt = <850000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+
+				s5m_buck3_reg: BUCK3 {
+					regulator-name = "vdd_int";
+					regulator-min-microvolt = <900000>;
+					regulator-max-microvolt = <1200000>;
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+
+				s5m_buck4_reg: BUCK4 {
+					regulator-name = "vdd_g3d";
+					regulator-min-microvolt = <850000>;
+					regulator-max-microvolt = <1300000>;
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Standby Mode */
+				};
+
+				s5m_buck5_reg: BUCK5 {
+					regulator-name = "vdd_1v8";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* No Standby/Low Power mode for BUCK5 */
+					reg_op_mode = <3>; /* Normal Mode */
+				};
+
+				s5m_buck8_reg: BUCK8 {
+					regulator-name = "vdd_ummc";
+					regulator-min-microvolt = <900000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Turn BUCK8 off when ENB8 is low */
+					reg_op_mode = <1>;
+				};
+
+				s5m_en32khz_ap: EN32KHZ_AP {
+					regulator-name = "en32khz_ap";
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Normal Mode */
+				};
+
+				s5m_en32khz_cp: EN32KHZ_CP {
+					regulator-name = "en32khz_cp";
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Normal Mode */
+				};
+
+				s5m_enp32kh: ENP32KHZ {
+					regulator-name = "enp32khz";
+					regulator-boot-on;
+					reg_op_mode = <1>; /* Normal Mode */
+				};
+			};
 		};
 	};
 
