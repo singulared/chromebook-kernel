@@ -178,201 +178,6 @@ static struct exynos_drm_display_ops fimd_display_ops = {
 	.power_on = fimd_display_power_on,
 };
 
-static void fimd_dpms(struct device *subdrv_dev, int mode)
-{
-	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
-
-	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
-
-	mutex_lock(&ctx->lock);
-
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		/*
-		 * enable fimd hardware only if suspended status.
-		 *
-		 * P.S. fimd_dpms function would be called at booting time so
-		 * clk_enable could be called double time.
-		 */
-		if (ctx->suspended)
-			pm_runtime_get_sync(subdrv_dev);
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		if (!ctx->suspended)
-			pm_runtime_put_sync(subdrv_dev);
-		break;
-	default:
-		DRM_DEBUG_KMS("unspecified mode %d\n", mode);
-		break;
-	}
-
-	mutex_unlock(&ctx->lock);
-}
-
-static void fimd_apply(struct device *subdrv_dev)
-{
-	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
-	struct exynos_drm_manager *mgr = ctx->subdrv.manager;
-	struct exynos_drm_manager_ops *mgr_ops = mgr->ops;
-	struct exynos_drm_overlay_ops *ovl_ops = mgr->overlay_ops;
-	struct fimd_win_data *win_data;
-	int i;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	for (i = 0; i < WINDOWS_NR; i++) {
-		win_data = &ctx->win_data[i];
-		if (win_data->enabled && (ovl_ops && ovl_ops->commit))
-			ovl_ops->commit(subdrv_dev, i);
-	}
-
-	if (mgr_ops && mgr_ops->commit)
-		mgr_ops->commit(subdrv_dev);
-}
-
-static void fimd_commit(struct device *dev)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	struct exynos_drm_panel_info *panel = ctx->panel;
-	struct fb_videomode *timing = &panel->timing;
-	struct fimd_driver_data *driver_data;
-	struct platform_device *pdev = to_platform_device(dev);
-	u32 val;
-
-	driver_data = drm_fimd_get_driver_data(pdev);
-	if (ctx->suspended)
-		return;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/* setup polarity values from machine code. */
-	writel(ctx->vidcon1, ctx->regs + driver_data->timing_base + VIDCON1);
-
-	/* setup vertical timing values. */
-	val = VIDTCON0_VBPD(timing->upper_margin - 1) |
-	       VIDTCON0_VFPD(timing->lower_margin - 1) |
-	       VIDTCON0_VSPW(timing->vsync_len - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON0);
-
-	/* setup horizontal timing values.  */
-	val = VIDTCON1_HBPD(timing->left_margin - 1) |
-	       VIDTCON1_HFPD(timing->right_margin - 1) |
-	       VIDTCON1_HSPW(timing->hsync_len - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON1);
-
-	/* setup horizontal and vertical display size. */
-	val = VIDTCON2_LINEVAL(timing->yres - 1) |
-	       VIDTCON2_HOZVAL(timing->xres - 1) |
-	       VIDTCON2_LINEVAL_E(timing->yres - 1) |
-	       VIDTCON2_HOZVAL_E(timing->xres - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON2);
-
-	/* setup clock source, clock divider, enable dma. */
-	val = ctx->vidcon0;
-	val &= ~(VIDCON0_CLKVAL_F_MASK | VIDCON0_CLKDIR);
-
-	if (ctx->clkdiv > 1)
-		val |= VIDCON0_CLKVAL_F(ctx->clkdiv - 1) | VIDCON0_CLKDIR;
-	else
-		val &= ~VIDCON0_CLKDIR;	/* 1:1 clock */
-
-	/*
-	 * fields of register with prefix '_F' would be updated
-	 * at vsync(same as dma start)
-	 */
-	val |= VIDCON0_ENVID | VIDCON0_ENVID_F;
-	writel(val, ctx->regs + VIDCON0);
-}
-
-static int fimd_enable_vblank(struct device *dev)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	u32 val;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (ctx->suspended)
-		return -EPERM;
-
-	if (!test_and_set_bit(0, &ctx->irq_flags)) {
-		val = readl(ctx->regs + VIDINTCON0);
-
-		val |= VIDINTCON0_INT_ENABLE;
-		val |= VIDINTCON0_INT_FRAME;
-
-		val &= ~VIDINTCON0_FRAMESEL0_MASK;
-		val |= VIDINTCON0_FRAMESEL0_VSYNC;
-		val &= ~VIDINTCON0_FRAMESEL1_MASK;
-		val |= VIDINTCON0_FRAMESEL1_NONE;
-
-		writel(val, ctx->regs + VIDINTCON0);
-	}
-
-	return 0;
-}
-
-static void fimd_disable_vblank(struct device *dev)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	u32 val;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (ctx->suspended)
-		return;
-
-	if (test_and_clear_bit(0, &ctx->irq_flags)) {
-		val = readl(ctx->regs + VIDINTCON0);
-
-		val &= ~VIDINTCON0_INT_FRAME;
-		val &= ~VIDINTCON0_INT_ENABLE;
-
-		writel(val, ctx->regs + VIDINTCON0);
-	}
-}
-
-static void fimd_wait_for_vblank(struct device *dev)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	u32 val;
-	bool vblank_enabled = true;
-
-	if (ctx->suspended)
-		return;
-
-	val = readl(ctx->regs + VIDINTCON0);
-
-	if (!(val & VIDINTCON0_INT_FRAME)) {
-		vblank_enabled = false;
-		fimd_enable_vblank(dev);
-	}
-
-	atomic_set(&ctx->wait_vsync_event, 1);
-
-	/*
-	 * wait for FIMD to signal VSYNC interrupt or return after
-	 * timeout which is set to 50ms (refresh rate of 20).
-	 */
-	if (!wait_event_timeout(ctx->wait_vsync_queue,
-				!atomic_read(&ctx->wait_vsync_event),
-				DRM_HZ/20))
-		DRM_DEBUG_KMS("vblank wait timed out.\n");
-
-	if (!vblank_enabled)
-		fimd_disable_vblank(dev);
-}
-
-static struct exynos_drm_manager_ops fimd_manager_ops = {
-	.dpms = fimd_dpms,
-	.apply = fimd_apply,
-	.commit = fimd_commit,
-	.enable_vblank = fimd_enable_vblank,
-	.disable_vblank = fimd_disable_vblank,
-	.wait_for_vblank = fimd_wait_for_vblank,
-};
-
 static void fimd_win_mode_set(struct device *dev,
 			      struct exynos_drm_overlay *overlay)
 {
@@ -707,6 +512,201 @@ static struct exynos_drm_overlay_ops fimd_overlay_ops = {
 	.mode_set = fimd_win_mode_set,
 	.commit = fimd_win_commit,
 	.disable = fimd_win_disable,
+};
+
+static void fimd_dpms(struct device *subdrv_dev, int mode)
+{
+	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
+
+	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
+
+	mutex_lock(&ctx->lock);
+
+	switch (mode) {
+	case DRM_MODE_DPMS_ON:
+		/*
+		 * enable fimd hardware only if suspended status.
+		 *
+		 * P.S. fimd_dpms function would be called at booting time so
+		 * clk_enable could be called double time.
+		 */
+		if (ctx->suspended)
+			pm_runtime_get_sync(subdrv_dev);
+		break;
+	case DRM_MODE_DPMS_STANDBY:
+	case DRM_MODE_DPMS_SUSPEND:
+	case DRM_MODE_DPMS_OFF:
+		if (!ctx->suspended)
+			pm_runtime_put_sync(subdrv_dev);
+		break;
+	default:
+		DRM_DEBUG_KMS("unspecified mode %d\n", mode);
+		break;
+	}
+
+	mutex_unlock(&ctx->lock);
+}
+
+static void fimd_apply(struct device *subdrv_dev)
+{
+	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
+	struct exynos_drm_manager *mgr = ctx->subdrv.manager;
+	struct exynos_drm_manager_ops *mgr_ops = mgr->ops;
+	struct exynos_drm_overlay_ops *ovl_ops = mgr->overlay_ops;
+	struct fimd_win_data *win_data;
+	int i;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	for (i = 0; i < WINDOWS_NR; i++) {
+		win_data = &ctx->win_data[i];
+		if (win_data->enabled && (ovl_ops && ovl_ops->commit))
+			ovl_ops->commit(subdrv_dev, i);
+	}
+
+	if (mgr_ops && mgr_ops->commit)
+		mgr_ops->commit(subdrv_dev);
+}
+
+static void fimd_commit(struct device *dev)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	struct exynos_drm_panel_info *panel = ctx->panel;
+	struct fb_videomode *timing = &panel->timing;
+	struct fimd_driver_data *driver_data;
+	struct platform_device *pdev = to_platform_device(dev);
+	u32 val;
+
+	driver_data = drm_fimd_get_driver_data(pdev);
+	if (ctx->suspended)
+		return;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	/* setup polarity values from machine code. */
+	writel(ctx->vidcon1, ctx->regs + driver_data->timing_base + VIDCON1);
+
+	/* setup vertical timing values. */
+	val = VIDTCON0_VBPD(timing->upper_margin - 1) |
+	       VIDTCON0_VFPD(timing->lower_margin - 1) |
+	       VIDTCON0_VSPW(timing->vsync_len - 1);
+	writel(val, ctx->regs + driver_data->timing_base + VIDTCON0);
+
+	/* setup horizontal timing values.  */
+	val = VIDTCON1_HBPD(timing->left_margin - 1) |
+	       VIDTCON1_HFPD(timing->right_margin - 1) |
+	       VIDTCON1_HSPW(timing->hsync_len - 1);
+	writel(val, ctx->regs + driver_data->timing_base + VIDTCON1);
+
+	/* setup horizontal and vertical display size. */
+	val = VIDTCON2_LINEVAL(timing->yres - 1) |
+	       VIDTCON2_HOZVAL(timing->xres - 1) |
+	       VIDTCON2_LINEVAL_E(timing->yres - 1) |
+	       VIDTCON2_HOZVAL_E(timing->xres - 1);
+	writel(val, ctx->regs + driver_data->timing_base + VIDTCON2);
+
+	/* setup clock source, clock divider, enable dma. */
+	val = ctx->vidcon0;
+	val &= ~(VIDCON0_CLKVAL_F_MASK | VIDCON0_CLKDIR);
+
+	if (ctx->clkdiv > 1)
+		val |= VIDCON0_CLKVAL_F(ctx->clkdiv - 1) | VIDCON0_CLKDIR;
+	else
+		val &= ~VIDCON0_CLKDIR;	/* 1:1 clock */
+
+	/*
+	 * fields of register with prefix '_F' would be updated
+	 * at vsync(same as dma start)
+	 */
+	val |= VIDCON0_ENVID | VIDCON0_ENVID_F;
+	writel(val, ctx->regs + VIDCON0);
+}
+
+static int fimd_enable_vblank(struct device *dev)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	u32 val;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (ctx->suspended)
+		return -EPERM;
+
+	if (!test_and_set_bit(0, &ctx->irq_flags)) {
+		val = readl(ctx->regs + VIDINTCON0);
+
+		val |= VIDINTCON0_INT_ENABLE;
+		val |= VIDINTCON0_INT_FRAME;
+
+		val &= ~VIDINTCON0_FRAMESEL0_MASK;
+		val |= VIDINTCON0_FRAMESEL0_VSYNC;
+		val &= ~VIDINTCON0_FRAMESEL1_MASK;
+		val |= VIDINTCON0_FRAMESEL1_NONE;
+
+		writel(val, ctx->regs + VIDINTCON0);
+	}
+
+	return 0;
+}
+
+static void fimd_disable_vblank(struct device *dev)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	u32 val;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (ctx->suspended)
+		return;
+
+	if (test_and_clear_bit(0, &ctx->irq_flags)) {
+		val = readl(ctx->regs + VIDINTCON0);
+
+		val &= ~VIDINTCON0_INT_FRAME;
+		val &= ~VIDINTCON0_INT_ENABLE;
+
+		writel(val, ctx->regs + VIDINTCON0);
+	}
+}
+
+static void fimd_wait_for_vblank(struct device *dev)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	u32 val;
+	bool vblank_enabled = true;
+
+	if (ctx->suspended)
+		return;
+
+	val = readl(ctx->regs + VIDINTCON0);
+
+	if (!(val & VIDINTCON0_INT_FRAME)) {
+		vblank_enabled = false;
+		fimd_enable_vblank(dev);
+	}
+
+	atomic_set(&ctx->wait_vsync_event, 1);
+
+	/*
+	 * wait for FIMD to signal VSYNC interrupt or return after
+	 * timeout which is set to 50ms (refresh rate of 20).
+	 */
+	if (!wait_event_timeout(ctx->wait_vsync_queue,
+				!atomic_read(&ctx->wait_vsync_event),
+				DRM_HZ/20))
+		DRM_DEBUG_KMS("vblank wait timed out.\n");
+
+	if (!vblank_enabled)
+		fimd_disable_vblank(dev);
+}
+
+static struct exynos_drm_manager_ops fimd_manager_ops = {
+	.dpms = fimd_dpms,
+	.apply = fimd_apply,
+	.commit = fimd_commit,
+	.enable_vblank = fimd_enable_vblank,
+	.disable_vblank = fimd_disable_vblank,
+	.wait_for_vblank = fimd_wait_for_vblank,
 };
 
 static struct exynos_drm_manager fimd_manager = {
