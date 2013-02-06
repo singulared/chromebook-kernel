@@ -43,6 +43,12 @@
 
 #include <mach/map.h>
 
+#ifdef CONFIG_ARCH_EXYNOS
+#include <mach/pmu.h>	/* for exynos_get_bootstatus() */
+#else
+#define exynos_get_bootstatus()	(0)
+#endif
+
 #undef S3C_VA_WATCHDOG
 #define S3C_VA_WATCHDOG (0)
 
@@ -395,6 +401,8 @@ static int __devinit s3c2410wdt_probe(struct platform_device *pdev)
 	}
 
 	watchdog_set_nowayout(&s3c2410_wdd, nowayout);
+
+	s3c2410_wdd.bootstatus = exynos_get_bootstatus();
 
 	ret = watchdog_register_device(&s3c2410_wdd);
 	if (ret) {
