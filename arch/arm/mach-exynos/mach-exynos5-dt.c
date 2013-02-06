@@ -939,13 +939,16 @@ static struct platform_device *smdk5250_devices[] __initdata = {
 #ifdef CONFIG_DRM_EXYNOS_HDMI
 	&exynos_drm_hdmi_device,
 #endif
+#ifdef CONFIG_BUSFREQ_OPP
+	&exynos5_busfreq,
+#endif
+};
+
+static struct platform_device *thermistor_devices[] __initdata = {
 	&s3c_device_adc_ntc_thermistor0,
 	&s3c_device_adc_ntc_thermistor1,
 	&s3c_device_adc_ntc_thermistor2,
 	&s3c_device_adc_ntc_thermistor3,
-#ifdef CONFIG_BUSFREQ_OPP
-	&exynos5_busfreq,
-#endif
 };
 
 static struct regulator_consumer_supply dummy_supplies[] = {
@@ -1168,13 +1171,19 @@ static void __init exynos5250_dt_machine_init(void)
 #endif
 	s5p_tv_setup();
 
-	/* Enable power to ADC */
-	__raw_writel(0x1, S5P_ADC_PHY_CONTROL);
+	np = of_find_compatible_node(NULL, NULL, "samsung,exynos5-adc");
+	if (np && of_device_is_available(np)) {
+		/* Enable power to ADC */
+		__raw_writel(0x1, S5P_ADC_PHY_CONTROL);
 
-	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor0);
-	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor1);
-	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor2);
-	s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor3);
+		s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor0);
+		s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor1);
+		s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor2);
+		s3c_adc_ntc_init(&s3c_device_adc_ntc_thermistor3);
+
+		platform_add_devices(thermistor_devices,
+				     ARRAY_SIZE(thermistor_devices));
+	}
 
 #ifdef CONFIG_BUSFREQ_OPP
 	dev_add(&busfreq, &exynos5_busfreq.dev);
