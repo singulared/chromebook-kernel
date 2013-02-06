@@ -28,6 +28,7 @@ struct exynos4_pmu_conf {
 	unsigned int val[NUM_SYS_POWERDOWN];
 };
 
+extern unsigned int exynos_get_bootstatus(void);
 extern void exynos4_sys_powerdown_conf(enum sys_powerdown mode);
 extern void s3c_cpu_resume(void);
 

@@ -15,6 +15,7 @@
 #include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/pm.h>
+#include <linux/watchdog.h>	/* for WDIOF_CARDRESET */
 
 #include <mach/regs-clock.h>
 #include <mach/pmu.h>
@@ -331,6 +332,17 @@ void __iomem *exynos5_list_diable_wfi_wfe[] = {
 	EXYNOS5_FSYS_ARM_OPTION,
 };
 
+
+/*
+ * RST_STAT bits:
+ *	power-on boot  will set bit 16
+ *	Watchdog reset will set bit 20
+ *	"warm" reboot  will set bit 29
+ */
+#define EXYNOS4_RST_STAT	(S3C_ADDR(0x10020000) + 0x0404)
+#define EXYNOS5_RST_STAT	(S3C_ADDR(0x02180000) + 0x0404)
+#define EXYNOS_WDTRESET		(1 << 20)
+
 static void exynos5_power_off(void)
 {
 	unsigned int tmp;
@@ -450,8 +462,33 @@ static void exynos5250_disable_isp(void)
 	WARN_ON(i == ISP_DISABLE_TRIES);
 }
 
+
+/*
+ * exynos_get_bootstatus() supports generic WDIOC_GETBOOTSTATUS ioctl.
+ * See Documentation/watchdog/watchdog-api.txt for user API.
+ * See usage by drivers/watchdog/s3c2410_wdt.c
+ *
+ * Other subsystems might need to set bits too.
+ * (e.g. WDIOF_OVERHEAT or WDIOF_FANFAULT).
+ */
+unsigned int exynos_get_bootstatus(void)
+{
+	unsigned int rst_stat;
+
+	if (soc_is_exynos5250())
+		rst_stat = readl(EXYNOS5_RST_STAT);
+	else if (soc_is_exynos4210() || soc_is_exynos4212())
+		rst_stat = readl(EXYNOS4_RST_STAT);
+	else
+		return 0;
+
+	return (rst_stat & EXYNOS_WDTRESET) ? WDIOF_CARDRESET : 0;
+}
+
 static int __init exynos4_pmu_init(void)
 {
+	unsigned int bootstatus;
+
 	exynos4_pmu_config = exynos4210_pmu_config;
 
 	if (soc_is_exynos4210()) {
@@ -469,6 +506,10 @@ static int __init exynos4_pmu_init(void)
 	} else {
 		pr_info("EXYNOS4: PMU not supported\n");
 	}
+
+	bootstatus = exynos_get_bootstatus();
+	if (bootstatus & WDIOF_CARDRESET)
+		pr_warning("EXYNOS Watchdog timed out - caused last reboot!");
 
 	return 0;
 }
