@@ -12,6 +12,9 @@
 #ifndef _REGS_FIMV_H
 #define _REGS_FIMV_H
 
+#include <linux/kernel.h>
+#include <asm/sizes.h>
+
 #define S5P_FIMV_REG_SIZE	(S5P_FIMV_END_ADDR - S5P_FIMV_START_ADDR)
 #define S5P_FIMV_REG_COUNT	((S5P_FIMV_END_ADDR - S5P_FIMV_START_ADDR) / 4)
 
@@ -165,9 +168,14 @@
 								decoded pic */
 #define S5P_FIMV_SI_DISPLAY_Y_ADR	0x2010 /* luma addr of displayed pic */
 #define S5P_FIMV_SI_DISPLAY_C_ADR	0x2014 /* chroma addrof displayed pic */
+
 #define S5P_FIMV_SI_CONSUMED_BYTES	0x2018 /* Consumed number of bytes to
 							decode a frame */
 #define S5P_FIMV_SI_DISPLAY_STATUS	0x201c /* status of decoded picture */
+
+#define S5P_FIMV_SI_DECODE_Y_ADR	0x2024 /* luma addr of decoded pic */
+#define S5P_FIMV_SI_DECODE_C_ADR	0x2028 /* chroma addrof decoded pic */
+#define S5P_FIMV_SI_DECODE_STATUS	0x202c /* status of decoded picture */
 
 #define S5P_FIMV_SI_CH0_SB_ST_ADR	0x2044 /* start addr of stream buf */
 #define S5P_FIMV_SI_CH0_SB_FRM_SIZE	0x2048 /* size of stream buf */
@@ -423,20 +431,29 @@
 #define S5P_FIMV_SHARED_RC_CONTROL_CONFIG	0x00A0
 #define S5P_FIMV_SHARED_DISP_FRAME_TYPE_SHIFT	2
 
+/* Offset used by the hardware to store addresses */
+#define MFC_OFFSET_SHIFT	11
+
+#define FIRMWARE_ALIGN		(128 * SZ_1K)	/* 128KB */
+#define MFC_H264_CTX_BUF_SIZE	(600 * SZ_1K)	/* 600KB per H264 instance */
+#define MFC_CTX_BUF_SIZE	(10 * SZ_1K)	/* 10KB per instance */
+#define DESC_BUF_SIZE		(128 * SZ_1K)	/* 128KB for DESC buffer */
+#define SHARED_BUF_SIZE		(8 * SZ_1K)	/* 8KB for shared buffer */
+
+#define DEF_CPB_SIZE		(256 * SZ_1K)	/* 256KB */
+#define MAX_CPB_SIZE		(4 * SZ_1M)	/* 4MB */
+#define MAX_FW_SIZE		(384 * SZ_1K)
+
+#define MFC_VERSION		0x51
+#define MFC_NUM_PORTS		2
+
 #define S5P_FIMV_SHARED_FRAME_PACK_SEI_AVAIL    0x16C
 #define S5P_FIMV_SHARED_FRAME_PACK_ARRGMENT_ID  0x170
 #define S5P_FIMV_SHARED_FRAME_PACK_SEI_INFO     0x174
 #define S5P_FIMV_SHARED_FRAME_PACK_GRID_POS     0x178
 
-/* SEI related information */
-#define S5P_FIMV_FRAME_PACK_SEI_AVAIL           S5P_FIMV_SHARED_FRAME_PACK_SEI_AVAIL
-#define S5P_FIMV_FRAME_PACK_ARRGMENT_ID         S5P_FIMV_SHARED_FRAME_PACK_ARRGMENT_ID
-#define S5P_FIMV_FRAME_PACK_SEI_INFO            S5P_FIMV_SHARED_FRAME_PACK_SEI_INFO
-#define S5P_FIMV_FRAME_PACK_GRID_POS            S5P_FIMV_SHARED_FRAME_PACK_GRID_POS
-
-#define S5P_FIMV_SHARED_SET_E_FRAME_TAG		S5P_FIMV_SHARED_SET_FRAME_TAG
-#define S5P_FIMV_SHARED_GET_E_FRAME_TAG		S5P_FIMV_SHARED_GET_FRAME_TAG_TOP
-#define S5P_FIMV_ENCODED_LUMA_ADDR		S5P_FIMV_ENCODED_Y_ADDR
-#define S5P_FIMV_ENCODED_CHROMA_ADDR		S5P_FIMV_ENCODED_C_ADDR
+/* Values for resolution change in display status */
+#define S5P_FIMV_RES_INCREASE	1
+#define S5P_FIMV_RES_DECREASE	2
 
 #endif /* _REGS_FIMV_H */

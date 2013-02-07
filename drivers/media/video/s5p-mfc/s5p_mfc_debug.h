@@ -1,5 +1,5 @@
 /*
- * drivers/media/video/samsung/mfc5/s5p_mfc_debug.h
+ * drivers/media/platform/samsung/mfc5/s5p_mfc_debug.h
  *
  * Header file for Samsung MFC (Multi Function Codec - FIMV) driver
  * This file contains debug macros

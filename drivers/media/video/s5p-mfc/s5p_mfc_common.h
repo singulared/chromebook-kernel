@@ -22,19 +22,14 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
+#include "regs-mfc.h"
+#include "regs-mfc-v6.h"
 
 /* Definitions related to MFC memory */
 
 /* Offset base used to differentiate between CAPTURE and OUTPUT
 *  while mmaping */
 #define DST_QUEUE_OFF_BASE      (TASK_SIZE / 2)
-
-/* Offset used by the hardware to store addresses */
-#define MFC_OFFSET_SHIFT	11
-
-#define FIRMWARE_ALIGN		0x20000		/* 128KB */
-
-#define DEF_CPB_SIZE		0x40000		/* 512KB */
 
 #define MFC_BANK1_ALLOC_CTX	0
 #define MFC_BANK2_ALLOC_CTX	1
@@ -69,7 +64,40 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 #define MFC_ENC_CAP_PLANE_COUNT	1
 #define MFC_ENC_OUT_PLANE_COUNT	2
 #define STUFF_BYTE		4
-#define MFC_MAX_CTRLS		64
+#define MFC_MAX_CTRLS		70
+
+#define S5P_MFC_CODEC_NONE		-1
+#define S5P_MFC_CODEC_H264_DEC		0
+#define S5P_MFC_CODEC_H264_MVC_DEC	1
+#define S5P_MFC_CODEC_VC1_DEC		2
+#define S5P_MFC_CODEC_MPEG4_DEC		3
+#define S5P_MFC_CODEC_MPEG2_DEC		4
+#define S5P_MFC_CODEC_H263_DEC		5
+#define S5P_MFC_CODEC_VC1RCV_DEC	6
+#define S5P_MFC_CODEC_VP8_DEC		7
+
+#define S5P_MFC_CODEC_H264_ENC		20
+#define S5P_MFC_CODEC_H264_MVC_ENC	21
+#define S5P_MFC_CODEC_MPEG4_ENC		22
+#define S5P_MFC_CODEC_H263_ENC		23
+
+#define S5P_MFC_R2H_CMD_EMPTY			0
+#define S5P_MFC_R2H_CMD_SYS_INIT_RET		1
+#define S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET	2
+#define S5P_MFC_R2H_CMD_SEQ_DONE_RET		3
+#define S5P_MFC_R2H_CMD_INIT_BUFFERS_RET	4
+#define S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET	6
+#define S5P_MFC_R2H_CMD_SLEEP_RET		7
+#define S5P_MFC_R2H_CMD_WAKEUP_RET		8
+#define S5P_MFC_R2H_CMD_COMPLETE_SEQ_RET	9
+#define S5P_MFC_R2H_CMD_DPB_FLUSH_RET		10
+#define S5P_MFC_R2H_CMD_NAL_ABORT_RET		11
+#define S5P_MFC_R2H_CMD_FW_STATUS_RET		12
+#define S5P_MFC_R2H_CMD_FRAME_DONE_RET		13
+#define S5P_MFC_R2H_CMD_FIELD_DONE_RET		14
+#define S5P_MFC_R2H_CMD_SLICE_DONE_RET		15
+#define S5P_MFC_R2H_CMD_ENC_BUFFER_FUL_RET	16
+#define S5P_MFC_R2H_CMD_ERR_RET			32
 
 #define mfc_read(dev, offset)		readl(dev->regs_base + (offset))
 #define mfc_write(dev, data, offset)	writel((data), dev->regs_base + \
@@ -117,7 +145,6 @@ enum s5p_mfc_inst_state {
 	MFCINST_RETURN_INST,
 	MFCINST_ERROR,
 	MFCINST_ABORT,
-	MFCINST_FLUSH,
 	MFCINST_RES_CHANGE_INIT,
 	MFCINST_RES_CHANGE_FLUSH,
 	MFCINST_RES_CHANGE_END,
@@ -142,15 +169,8 @@ enum s5p_mfc_decode_arg {
 	MFC_DEC_RES_CHANGE,
 };
 
-/**
- * enum s5p_mfc_check_state - The state for user notification
- */
-enum s5p_mfc_check_state {
-	MFCSTATE_PROCESSING = 0,
-	MFCSTATE_DEC_RES_DETECT,
-	MFCSTATE_DEC_TERMINATING,
-	MFCSTATE_ENC_NO_OUTPUT,
-};
+#define MFC_BUF_FLAG_USED	(1 << 0)
+#define MFC_BUF_FLAG_EOS	(1 << 1)
 
 struct s5p_mfc_ctx;
 
@@ -167,7 +187,7 @@ struct s5p_mfc_buf {
 		} raw;
 		size_t stream;
 	} cookie;
-	int used;
+	int flags;
 };
 
 /**
@@ -210,7 +230,8 @@ struct s5p_mfc_variant {
 	unsigned int port_num;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
-	char *mclk_name;
+	char	*mclk_name;
+	char	*fw_name;
 };
 
 /**
@@ -221,12 +242,14 @@ struct s5p_mfc_variant {
  * @virt:		kernel virtual address, only valid when the
  *			buffer accessed by driver
  * @dma:		DMA address, only valid when kernel DMA API used
+ * @size:		size of the buffer
  */
 struct s5p_mfc_priv_buf {
 	void		*alloc;
 	unsigned long	ofs;
 	void		*virt;
 	dma_addr_t	dma;
+	size_t		size;
 };
 
 /**
@@ -240,10 +263,10 @@ struct s5p_mfc_priv_buf {
  * @mem_dev_r:		child device of the right memory bank (1)
  * @regs_base:		base address of the MFC hw registers
  * @irq:		irq resource
- * @mfc_mem:		MFC registers memory resource
  * @dec_ctrl_handler:	control framework handler for decoding
  * @enc_ctrl_handler:	control framework handler for encoding
  * @pm:			power management control
+ * @variant:		MFC hardware variant information
  * @num_inst:		couter of active MFC instances
  * @irqlock:		lock for operations on videobuf2 queues
  * @condlock:		lock for changing/checking if a context is ready to be
@@ -266,6 +289,9 @@ struct s5p_mfc_priv_buf {
  * @alloc_ctx:		videobuf2 allocator contexts for two memory banks
  * @enter_suspend:	flag set when entering suspend
  * @ctx_buf:		common context memory (MFCv6)
+ * @warn_start:		hardware error code from which warnings start
+ * @mfc_ops:		ops structure holding HW operation function pointers
+ * @mfc_cmds:		cmd structure holding HW commands function pointers
  *
  */
 struct s5p_mfc_dev {
@@ -277,7 +303,6 @@ struct s5p_mfc_dev {
 	struct device		*mem_dev_r;
 	void __iomem		*regs_base;
 	int			irq;
-	struct resource		*mfc_mem;
 	struct v4l2_ctrl_handler dec_ctrl_handler;
 	struct v4l2_ctrl_handler enc_ctrl_handler;
 	struct s5p_mfc_pm	pm;
@@ -306,6 +331,9 @@ struct s5p_mfc_dev {
 	unsigned long enter_suspend;
 
 	struct s5p_mfc_priv_buf ctx_buf;
+	int warn_start;
+	struct s5p_mfc_hw_ops *mfc_ops;
+	struct s5p_mfc_hw_cmds *mfc_cmds;
 };
 
 /**
@@ -320,7 +348,6 @@ struct s5p_mfc_h264_enc_params {
 	u8 max_ref_pic;
 	u8 num_ref_pic_4p;
 	int _8x8_transform;
-	int rc_mb;
 	int rc_mb_dark;
 	int rc_mb_smooth;
 	int rc_mb_static;
@@ -341,17 +368,17 @@ struct s5p_mfc_h264_enc_params {
 	u16 cpb_size;
 	int interlace;
 	u8 hier_qp;
-	enum v4l2_mpeg_video_h264_hierarchical_coding_type hier_qp_type;
+	u8 hier_qp_type;
 	u8 hier_qp_layer;
 	u8 hier_qp_layer_qp[7];
 	u8 sei_frame_packing;
 	u8 sei_fp_curr_frame_0;
-	enum v4l2_mpeg_video_h264_sei_fp_arrangement_type sei_fp_arrangement_type;
+	u8 sei_fp_arrangement_type;
 
 	u8 fmo;
-	enum v4l2_mpeg_video_h264_fmo_map_type fmo_map_type;
+	u8 fmo_map_type;
 	u8 fmo_slice_grp;
-	enum v4l2_mpeg_video_h264_fmo_change_dir fmo_chg_dir;
+	u8 fmo_chg_dir;
 	u32 fmo_chg_rate;
 	u32 fmo_run_len[4];
 	u8 aso;
@@ -366,6 +393,8 @@ struct s5p_mfc_mpeg4_enc_params {
 	enum v4l2_mpeg_video_mpeg4_profile profile;
 	int quarter_pixel;
 	/* Common for MPEG4, H263 */
+	u16 vop_time_res;
+	u16 vop_frm_delta;
 	u8 rc_frame_qp;
 	u8 rc_min_qp;
 	u8 rc_max_qp;
@@ -462,6 +491,8 @@ struct s5p_mfc_codec_ops {
  *			decoding buffer
  * @dpb_flush_flag:	flag used to indicate that a DPB buffers are being
  *			flushed
+ * @head_processed:	flag mentioning whether the header data is processed
+ *			completely or not
  * @bank1_buf:		handle to memory allocated for temporary buffers from
  *			memory bank 1
  * @bank1_phys:		address of the temporary buffers from memory bank 1
@@ -486,19 +517,20 @@ struct s5p_mfc_codec_ops {
  * @display_delay_enable:	display delay for H264 enable flag
  * @after_packed_pb:	flag used to track buffer when stream is in
  *			Packed PB format
+ * @sei_fp_parse:	enable/disable parsing of frame packing SEI information
  * @dpb_count:		count of the DPB buffers required by MFC hw
  * @total_dpb_count:	count of DPB buffers with additional buffers
  *			requested by the application
- * @ctx_buf:		handle to the memory associated with this context
- * @ctx_phys:		address of the memory associated with this context
- * @ctx_size:		size of the memory associated with this context
- * @desc_buf:		description buffer for decoding handle
- * @desc_phys:		description buffer for decoding address
- * @shm_alloc:		handle for the shared memory buffer
- * @shm:		virtual address for the shared memory buffer
- * @shm_ofs:		address offset for shared memory
+ * @ctx:		context buffer information
+ * @dsc:		descriptor buffer information
+ * @shm:		shared memory buffer information
+ * @mv_count:		number of MV buffers allocated for decoding
  * @enc_params:		encoding parameters for MFC
  * @enc_dst_buf_size:	size of the buffers for encoder output
+ * @luma_dpb_size:	dpb buffer size for luma
+ * @chroma_dpb_size:	dpb buffer size for chroma
+ * @me_buffer_size:	size of the motion estimation buffer
+ * @tmv_buffer_size:	size of temporal predictor motion vector buffer
  * @frame_type:		used to force the type of the next encoded frame
  * @ref_queue:		list of the reference buffers for encoding
  * @ref_queue_cnt:	number of the buffers in the reference list
@@ -546,8 +578,8 @@ struct s5p_mfc_ctx {
 
 	unsigned long consumed_stream;
 
-	unsigned int dpb_flush;
-	unsigned int remained;
+	unsigned int dpb_flush_flag;
+	unsigned int head_processed;
 
 	/* Buffers */
 	void *bank1_buf;
@@ -583,7 +615,6 @@ struct s5p_mfc_ctx {
 	int total_dpb_count;
 	int mv_count;
 	/* Buffers */
-	unsigned int ctx_size;
 	struct s5p_mfc_priv_buf ctx;
 	struct s5p_mfc_priv_buf dsc;
 	struct s5p_mfc_priv_buf shm;
@@ -611,7 +642,7 @@ struct s5p_mfc_ctx {
 
 	struct v4l2_ctrl *ctrls[MFC_MAX_CTRLS];
 	struct v4l2_ctrl_handler ctrl_handler;
-
+	unsigned int frame_tag;
 	size_t scratch_buf_size;
 };
 
@@ -645,23 +676,22 @@ struct mfc_control {
 	__u8			is_volatile;
 };
 
+/* Macro for making hardware specific calls */
+#define s5p_mfc_hw_call(f, op, args...) \
+	((f && f->op) ? f->op(args) : -ENODEV)
 
 #define fh_to_ctx(__fh) container_of(__fh, struct s5p_mfc_ctx, fh)
 #define ctrl_to_ctx(__ctrl) \
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
 
+void clear_work_bit(struct s5p_mfc_ctx *ctx);
+void set_work_bit(struct s5p_mfc_ctx *ctx);
+void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
+void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
+
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
 				(dev->variant->port_num ? 1 : 0) : 0) : 0)
 #define IS_TWOPORT(dev)		(dev->variant->port_num == 2 ? 1 : 0)
 #define IS_MFCV6(dev)		(dev->variant->version >= 0x60 ? 1 : 0)
-
-#if defined(CONFIG_VIDEO_SAMSUNG_S5P_MFC_V5)
-#error "MFC_v5 is not supported for EXYNOS5/Chrome."
-#include "regs-mfc.h"
-#include "s5p_mfc_opr.h"
-#include "s5p_mfc_shm.h"
-#endif
-#include "regs-mfc-v6.h"
-#include "s5p_mfc_opr_v6.h"
 
 #endif /* S5P_MFC_COMMON_H_ */

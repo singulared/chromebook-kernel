@@ -1,5 +1,5 @@
 /*
- * linux/drivers/media/video/s5p-mfc/s5p_mfc_pm.c
+ * linux/drivers/media/platform/s5p-mfc/s5p_mfc_pm.c
  *
  * Copyright (c) 2010 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com/
@@ -16,7 +16,6 @@
 #ifdef CONFIG_PM_RUNTIME
 #include <linux/pm_runtime.h>
 #endif
-#include <mach/sysmmu.h>
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_pm.h"
@@ -29,7 +28,7 @@ static struct s5p_mfc_pm *pm;
 static struct s5p_mfc_dev *p_dev;
 
 #ifdef CLK_DEBUG
-atomic_t clk_ref;
+static atomic_t clk_ref;
 #endif
 
 int s5p_mfc_init_pm(struct s5p_mfc_dev *dev)
@@ -117,27 +116,7 @@ void s5p_mfc_clock_off(void)
 int s5p_mfc_power_on(void)
 {
 #ifdef CONFIG_PM_RUNTIME
-	int ret;
-	ret = pm_runtime_get_sync(pm->device);
-	if (ret < 0)
-		goto out;
-
-	ret = platform_sysmmu_on(p_dev->mem_dev_l);
-	if (ret < 0)
-		goto out_err;
-
-	ret = platform_sysmmu_on(p_dev->mem_dev_r);
-	if (ret < 0)
-		goto out_err2;
-
-	return ret;
-
-out_err2:
-	platform_sysmmu_off(p_dev->mem_dev_l);
-out_err:
-	pm_runtime_put_sync(pm->device);
-out:
-	return ret;
+	return pm_runtime_get_sync(pm->device);
 #else
 	atomic_set(&pm->power, 1);
 	return 0;
@@ -147,10 +126,7 @@ out:
 int s5p_mfc_power_off(void)
 {
 #ifdef CONFIG_PM_RUNTIME
-	pm_runtime_put_sync(pm->device);
-	platform_sysmmu_off(p_dev->mem_dev_l);
-	platform_sysmmu_off(p_dev->mem_dev_r);
-	return 0;
+	return pm_runtime_put_sync(pm->device);
 #else
 	atomic_set(&pm->power, 0);
 	return 0;

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/media/video/s5p-mfc/s5p_mfc_ctrl.h
+ * linux/drivers/media/platform/s5p-mfc/s5p_mfc_ctrl.h
  *
  * Copyright (c) 2010 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com/

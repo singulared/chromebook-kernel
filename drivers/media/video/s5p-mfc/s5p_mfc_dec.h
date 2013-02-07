@@ -1,5 +1,5 @@
 /*
- * linux/drivers/media/video/s5p-mfc/s5p_mfc_dec.h
+ * linux/drivers/media/platform/s5p-mfc/s5p_mfc_dec.h
  *
  * Copyright (C) 2011 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com/

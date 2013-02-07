@@ -1,20 +1,24 @@
 /*
- * linux/drivers/media/video/s5p-mfc/s5p_mfc_shm.h
+ * drivers/media/platform/samsung/mfc5/s5p_mfc_opr_v5.h
  *
- * Copyright (c) 2011 Samsung Electronics Co., Ltd.
- *		http://www.samsung.com/
+ * Header file for Samsung MFC (Multi Function Codec - FIMV) driver
+ * Contains declarations of hw related functions.
+ *
+ * Kamil Debski, Copyright (C) 2011 Samsung Electronics
+ * http://www.samsung.com/
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
-#ifndef S5P_MFC_SHM_H_
-#define S5P_MFC_SHM_H_
+#ifndef S5P_MFC_OPR_V5_H_
+#define S5P_MFC_OPR_V5_H_
 
-enum MFC_SHM_OFS
-{
+#include "s5p_mfc_common.h"
+#include "s5p_mfc_opr.h"
+
+enum MFC_SHM_OFS {
 	EXTENEDED_DECODE_STATUS	= 0x00,	/* D */
 	SET_FRAME_TAG		= 0x04, /* D */
 	GET_FRAME_TAG_TOP	= 0x08, /* D */
@@ -77,18 +81,5 @@ enum MFC_SHM_OFS
 	FRAME_PACK_SEI_INFO	= 0x17c, /* E */
 };
 
-int s5p_mfc_init_shm(struct s5p_mfc_ctx *ctx);
-
-#define s5p_mfc_write_shm(ctx, x, ofs)			\
-	do {						\
-		writel(x, (ctx->shm.virt + ofs));	\
-		wmb();					\
-	} while (0)
-
-static inline u32 s5p_mfc_read_shm(struct s5p_mfc_ctx *ctx, unsigned int ofs)
-{
-	rmb();
-	return readl(ctx->shm.virt + ofs);
-}
-
-#endif /* S5P_MFC_SHM_H_ */
+struct s5p_mfc_hw_ops *s5p_mfc_init_hw_ops_v5(void);
+#endif /* S5P_MFC_OPR_H_ */
