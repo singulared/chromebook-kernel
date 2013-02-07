@@ -12,6 +12,7 @@
 
 #include <linux/clk.h>
 #include <linux/clkdev.h>
+#include <linux/clocksource.h>
 #include <linux/cpuidle.h>
 #include <linux/delay.h>
 #include <linux/export.h>
@@ -27,11 +28,9 @@
 #include <linux/micrel_phy.h>
 #include <linux/mfd/syscon.h>
 #include <asm/cpuidle.h>
-#include <asm/smp_twd.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/hardware/gic.h>
 #include <asm/mach/arch.h>
-#include <asm/mach/time.h>
 #include <asm/system_misc.h>
 
 #include "common.h"
@@ -237,7 +236,7 @@ static void __init imx6q_init_irq(void)
 static void __init imx6q_timer_init(void)
 {
 	mx6q_clocks_init();
-	twd_local_timer_of_register();
+	clocksource_of_init();
 	imx_print_silicon_rev("i.MX6Q", imx6q_revision());
 }
 
