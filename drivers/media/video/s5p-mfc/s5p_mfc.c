@@ -32,10 +32,16 @@
 #include "s5p_mfc_opr.h"
 #include "s5p_mfc_cmd.h"
 #include "s5p_mfc_pm.h"
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <mach/sysmmu.h>
+#include <linux/of_platform.h>
+#endif
 
 #define S5P_MFC_NAME		"s5p-mfc"
 #define S5P_MFC_DEC_NAME	"s5p-mfc-dec"
 #define S5P_MFC_ENC_NAME	"s5p-mfc-enc"
+
+#define S5P_MFC_USE_34_BACKPORT
 
 int debug;
 module_param(debug, int, S_IRUGO | S_IWUSR);
@@ -1013,6 +1019,43 @@ static int match_child(struct device *dev, void *data)
 	return !strcmp(dev_name(dev), (char *)data);
 }
 
+#if defined(S5P_MFC_USE_34_BACKPORT) && defined CONFIG_EXYNOS_IOMMU
+static int iommu_init(struct platform_device *pdev,
+				struct device *mfc_l,
+				struct device *mfc_r)
+{
+	struct platform_device *pds;
+	struct dma_iommu_mapping *mapping;
+
+	pds = find_sysmmu_dt(pdev, "sysmmu_l");
+	if (pds == NULL) {
+		printk(KERN_ERR "no sysmmu_l found\n");
+		return -ENODEV;
+	}
+	platform_set_sysmmu(&pds->dev, mfc_l);
+	mapping = s5p_create_iommu_mapping(mfc_l, 0x20000000,
+						SZ_128M, 4, NULL);
+	if (mapping == NULL) {
+		printk(KERN_ERR "IOMMU mapping failed\n");
+		return -ENOMEM;
+	}
+
+	pds = find_sysmmu_dt(pdev, "sysmmu_r");
+	if (pds == NULL) {
+		printk(KERN_ERR "no sysmmu_r found\n");
+		return -ENODEV;
+	}
+	platform_set_sysmmu(&pds->dev, mfc_r);
+	if (!s5p_create_iommu_mapping(mfc_r, 0x20000000,
+					SZ_128M, 4, mapping)) {
+		printk(KERN_ERR "IOMMU mapping failed\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+#endif
+
 static void *mfc_get_drv_data(struct platform_device *pdev);
 
 /* MFC probe function */
@@ -1022,7 +1065,6 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	struct video_device *vfd;
 	struct resource *res;
 	int ret;
-	unsigned int mem_info[2];
 
 	pr_debug("%s++\n", __func__);
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
@@ -1070,6 +1112,28 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 
 	if (pdev->dev.of_node) {
+#if defined(S5P_MFC_USE_34_BACKPORT) && defined(CONFIG_EXYNOS_IOMMU)
+		dev->mem_dev_l = kzalloc(sizeof(struct device), GFP_KERNEL);
+		if (!dev->mem_dev_l) {
+			mfc_err("Not enough memory\n");
+			ret = -ENOMEM;
+			goto err_res;
+		}
+		dev->mem_dev_r = kzalloc(sizeof(struct device), GFP_KERNEL);
+		if (!dev->mem_dev_r) {
+			mfc_err("Not enough memory\n");
+			ret = -ENOMEM;
+			goto err_res;
+		}
+		dev->mem_dev_l->init_name = "mfc_l";
+		dev->mem_dev_r->init_name = "mfc_r";
+		ret = iommu_init(pdev, dev->mem_dev_r, dev->mem_dev_l);
+		if (ret) {
+			v4l2_err(&dev->v4l2_dev, "failed to initialize IOMMU\n");
+			goto err_res;
+		}
+#else
+		unsigned int mem_info[2];
 		dev->mem_dev_l = kzalloc(sizeof(struct device), GFP_KERNEL);
 		if (!dev->mem_dev_l) {
 			mfc_err("Not enough memory\n");
@@ -1103,6 +1167,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 			ret = -ENOMEM;
 			goto err_res;
 		}
+#endif
 	} else {
 		dev->mem_dev_l = device_find_child(&dev->plat_dev->dev,
 				"s5p-mfc-l", match_child);
