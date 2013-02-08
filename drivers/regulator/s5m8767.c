@@ -24,7 +24,9 @@
 #include <linux/mfd/s5m87xx/s5m-core.h>
 #include <linux/mfd/s5m87xx/s5m-pmic.h>
 
-#define S5M8767_OPMODE_MASK			0x3
+#define S5M8767_OPMODE_MASK	0x3
+#define S5M8767_OPMODE_SHIFT	6
+#define S5M8767_OPMODE_SM       (S5M8767_OPMODE_MASK << S5M8767_OPMODE_SHIFT)
 
 struct s5m8767_info {
 	struct device *dev;
@@ -144,9 +146,25 @@ static int s5m8767_list_voltage(struct regulator_dev *rdev,
 	return val;
 }
 
-static int s5m8767_get_register(struct regulator_dev *rdev, int *reg)
+static int s5m8767_get_register(struct regulator_dev *rdev,
+				int *reg, int *pattern)
 {
 	int reg_id = rdev_get_id(rdev);
+	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
+	int i;
+	int op_mode = 0x3;
+	for (i = 0; i < s5m8767->iodev->pdata->num_regulators; i++)
+		if (reg_id == s5m8767->iodev->pdata->regulators[i].id)
+			break;
+
+	if (i == s5m8767->iodev->pdata->num_regulators) {
+		dev_err(s5m8767->iodev->dev, "No matching regulators\n");
+		return -ENODEV;
+	}
+#ifdef CONFIG_OF
+	op_mode = s5m8767->iodev->pdata->regulators[i].reg_op_mode;
+#endif
+	*pattern = op_mode << S5M8767_OPMODE_SHIFT;
 
 	switch (reg_id) {
 	case S5M8767_LDO1 ... S5M8767_LDO2:
@@ -177,11 +195,10 @@ static int s5m8767_get_register(struct regulator_dev *rdev, int *reg)
 static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg;
-	int mask = 0xc0, pattern = 0xc0;
+	int ret, reg, pattern;
 	u8 val;
 
-	ret = s5m8767_get_register(rdev, &reg);
+	ret = s5m8767_get_register(rdev, &reg, &pattern);
 	if (ret == -EINVAL)
 		return 1;
 	else if (ret)
@@ -191,33 +208,31 @@ static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	return (val & mask) == pattern;
+	return (val & S5M8767_OPMODE_SM) == pattern;
 }
 
 static int s5m8767_reg_enable(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg;
-	int mask = 0xc0, pattern = 0xc0;
+	int ret, reg, pattern;
 
-	ret = s5m8767_get_register(rdev, &reg);
+	ret = s5m8767_get_register(rdev, &reg, &pattern);
 	if (ret)
 		return ret;
 
-	return s5m_reg_update(s5m8767->iodev, reg, pattern, mask);
+	return s5m_reg_update(s5m8767->iodev, reg, pattern, S5M8767_OPMODE_SM);
 }
 
 static int s5m8767_reg_disable(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg;
-	int  mask = 0xc0, pattern = 0xc0;
+	int ret, reg, pattern;
 
-	ret = s5m8767_get_register(rdev, &reg);
+	ret = s5m8767_get_register(rdev, &reg, &pattern);
 	if (ret)
 		return ret;
 
-	return s5m_reg_update(s5m8767->iodev, reg, ~pattern, mask);
+	return s5m_reg_update(s5m8767->iodev, reg, ~pattern, S5M8767_OPMODE_SM);
 }
 
 static int s5m8767_get_voltage_register(struct regulator_dev *rdev, int *_reg)
