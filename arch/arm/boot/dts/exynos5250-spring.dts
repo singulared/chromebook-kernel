@@ -122,7 +122,7 @@
 					regulator-min-microvolt = <1000000>;
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
-					reg_op_mode = <0>; /* Off Mode */
+					reg_op_mode = <1>; /* Standby Mode */
 				};
 				s5m_ldo7_reg: LDO7 {
 					regulator-name = "vdd_ldo7";
@@ -187,6 +187,13 @@
 					regulator-always-on;
 					reg_op_mode = <1>; /* Standby Mode */
 				};
+				s5m_ldo17_reg: LDO17 {
+					regulator-name = "vdd_ldo17";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+					regulator-always-on;
+					reg_op_mode = <0>; /* Off Mode */
+				};
 				s5m_ldo25_reg: LDO25 {
 					regulator-name = "vdd_bridge";
 					regulator-min-microvolt = <1200000>;
@@ -194,7 +201,6 @@
 					regulator-always-on;
 					reg_op_mode = <3>; /* Normal Mode */
 				};
-
 				s5m_buck1_reg: BUCK1 {
 					regulator-name = "vdd_mif";
 					regulator-min-microvolt = <950000>;
@@ -234,17 +240,24 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					regulator-boot-on;
-					/* No Standby/Low Power mode for BUCK5 */
 					reg_op_mode = <3>; /* Normal Mode */
 				};
 
-				s5m_buck8_reg: BUCK8 {
+				s5m_buck6_reg: BUCK6 {
+					regulator-name = "vdd_buck6";
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1200000>;
+					regulator-always-on;
+					regulator-boot-on;
+					reg_op_mode = <0>; /* Off Mode */
+				};
+
+				s5m_buck9_reg: BUCK9 {
 					regulator-name = "vdd_ummc";
 					regulator-min-microvolt = <900000>;
 					regulator-max-microvolt = <3000000>;
 					regulator-always-on;
 					regulator-boot-on;
-					/* Turn BUCK8 off when ENB8 is low */
 					reg_op_mode = <1>;
 				};
 
