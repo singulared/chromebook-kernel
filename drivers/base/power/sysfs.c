@@ -398,6 +398,55 @@ static ssize_t wakeup_last_time_show(struct device *dev,
 }
 
 static DEVICE_ATTR(wakeup_last_time_ms, 0444, wakeup_last_time_show, NULL);
+
+
+static ssize_t dark_resume_active_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return dev->power.use_dark_resume ? sprintf(buf, "%s\n", enabled) :
+			sprintf(buf, "%s\n", disabled);
+}
+
+static ssize_t dark_resume_active_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t n)
+{
+	if (sysfs_streq(enabled, buf))
+		dev->power.use_dark_resume = true;
+	else if (sysfs_streq(disabled, buf))
+		dev->power.use_dark_resume = false;
+	else
+		return -EINVAL;
+	return n;
+}
+
+static DEVICE_ATTR(dark_resume_active, 0644,
+		   dark_resume_active_show, dark_resume_active_store);
+
+static ssize_t dark_resume_source_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return dev->power.dpd && dev->power.dpd->is_source ?
+			sprintf(buf, "%s\n", enabled) :
+			sprintf(buf, "%s\n", disabled);
+}
+
+static ssize_t dark_resume_source_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t n)
+{
+	if (sysfs_streq(enabled, buf) && dev->power.dpd)
+		dpm_set_dark_source(dev->power.dpd, true);
+	else if (sysfs_streq(disabled, buf) && dev->power.dpd)
+		dpm_set_dark_source(dev->power.dpd, false);
+	else
+		return -EINVAL;
+	return n;
+}
+
+static DEVICE_ATTR(dark_resume_source, 0644,
+		   dark_resume_source_show, dark_resume_source_store);
+
 #endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_PM_ADVANCED_DEBUG
@@ -491,7 +540,9 @@ static struct attribute *wakeup_attrs[] = {
 	&dev_attr_wakeup_total_time_ms.attr,
 	&dev_attr_wakeup_max_time_ms.attr,
 	&dev_attr_wakeup_last_time_ms.attr,
-#endif
+	&dev_attr_dark_resume_active.attr,
+	&dev_attr_dark_resume_source.attr,
+#endif /* CONFIG_PM_SLEEP */
 	NULL,
 };
 static struct attribute_group pm_wakeup_attr_group = {
