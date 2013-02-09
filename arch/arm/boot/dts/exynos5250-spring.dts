@@ -273,8 +273,8 @@
 					reg_op_mode = <1>; /* Normal Mode */
 				};
 
-				s5m_enp32kh: ENP32KHZ {
-					regulator-name = "enp32khz";
+				s5m_en32khz_bt: EN32KHZ_BT {
+					regulator-name = "en32khz_bt";
 					regulator-boot-on;
 					reg_op_mode = <1>; /* Normal Mode */
 				};
