@@ -123,6 +123,9 @@ static const struct s5m_voltage_desc *reg_voltage_map[] = {
 	[S5M8767_BUCK7] = NULL,
 	[S5M8767_BUCK8] = NULL,
 	[S5M8767_BUCK9] = &buck_voltage_val3,
+	[S5M8767_EN32KHZ_AP] = NULL,
+	[S5M8767_EN32KHZ_CP] = NULL,
+	[S5M8767_EN32KHZ_BT] = NULL,
 };
 
 static int s5m8767_list_voltage(struct regulator_dev *rdev,
@@ -147,7 +150,7 @@ static int s5m8767_list_voltage(struct regulator_dev *rdev,
 }
 
 static int s5m8767_get_register(struct regulator_dev *rdev,
-				int *reg, int *pattern)
+				int *reg, int *mask, int *pattern)
 {
 	int reg_id = rdev_get_id(rdev);
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
@@ -165,6 +168,7 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 	op_mode = s5m8767->iodev->pdata->regulators[i].reg_op_mode;
 #endif
 	*pattern = op_mode << S5M8767_OPMODE_SHIFT;
+	*mask = S5M8767_OPMODE_SM;
 
 	switch (reg_id) {
 	case S5M8767_LDO1 ... S5M8767_LDO2:
@@ -185,6 +189,11 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 	case S5M8767_BUCK6 ... S5M8767_BUCK9:
 		*reg = S5M8767_REG_BUCK6CTRL1 + (reg_id - S5M8767_BUCK6) * 2;
 		break;
+	case S5M8767_EN32KHZ_AP...S5M8767_EN32KHZ_BT:
+		*reg = S5M8767_REG_CTRL1;
+		*pattern = 1 << (reg_id - S5M8767_EN32KHZ_AP);
+		*mask = 1 << (reg_id - S5M8767_EN32KHZ_AP);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -195,10 +204,10 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg, pattern;
+	int ret, reg, mask, pattern;
 	u8 val;
 
-	ret = s5m8767_get_register(rdev, &reg, &pattern);
+	ret = s5m8767_get_register(rdev, &reg, &mask, &pattern);
 	if (ret == -EINVAL)
 		return 1;
 	else if (ret)
@@ -208,31 +217,31 @@ static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	return (val & S5M8767_OPMODE_SM) == pattern;
+	return (val & mask) == pattern;
 }
 
 static int s5m8767_reg_enable(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg, pattern;
+	int ret, reg, mask, pattern;
 
-	ret = s5m8767_get_register(rdev, &reg, &pattern);
+	ret = s5m8767_get_register(rdev, &reg, &mask, &pattern);
 	if (ret)
 		return ret;
 
-	return s5m_reg_update(s5m8767->iodev, reg, pattern, S5M8767_OPMODE_SM);
+	return s5m_reg_update(s5m8767->iodev, reg, pattern, mask);
 }
 
 static int s5m8767_reg_disable(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
-	int ret, reg, pattern;
+	int ret, reg, mask, pattern;
 
-	ret = s5m8767_get_register(rdev, &reg, &pattern);
+	ret = s5m8767_get_register(rdev, &reg, &mask, &pattern);
 	if (ret)
 		return ret;
 
-	return s5m_reg_update(s5m8767->iodev, reg, ~pattern, S5M8767_OPMODE_SM);
+	return s5m_reg_update(s5m8767->iodev, reg, ~pattern, mask);
 }
 
 static int s5m8767_get_voltage_register(struct regulator_dev *rdev, int *_reg)
@@ -488,6 +497,13 @@ static struct regulator_ops s5m8767_buck_ops = {
 	.set_voltage_time_sel	= s5m8767_set_voltage_time_sel,
 };
 
+static struct regulator_ops s5m8767_32k_ops = {
+	.list_voltage		= s5m8767_list_voltage,
+	.is_enabled		= s5m8767_reg_is_enabled,
+	.enable			= s5m8767_reg_enable,
+	.disable		= s5m8767_reg_disable,
+};
+
 #define regulator_desc_ldo(num)		{	\
 	.name		= "LDO"#num,		\
 	.id		= S5M8767_LDO##num,	\
@@ -501,6 +517,13 @@ static struct regulator_ops s5m8767_buck_ops = {
 	.ops		= &s5m8767_buck_ops,	\
 	.type		= REGULATOR_VOLTAGE,	\
 	.owner		= THIS_MODULE,		\
+}
+#define regulator_desc_32khz(x)	{			\
+	.name		= "EN32KHZ_" __stringify(x),	\
+	.id		= S5M8767_EN32KHZ_##x,		\
+	.ops		= &s5m8767_32k_ops,		\
+	.type		= REGULATOR_VOLTAGE,		\
+	.owner		= THIS_MODULE,			\
 }
 
 static struct regulator_desc regulators[] = {
@@ -541,6 +564,9 @@ static struct regulator_desc regulators[] = {
 	regulator_desc_buck(7),
 	regulator_desc_buck(8),
 	regulator_desc_buck(9),
+	regulator_desc_32khz(AP),
+	regulator_desc_32khz(CP),
+	regulator_desc_32khz(BT),
 };
 
 #ifdef CONFIG_OF
