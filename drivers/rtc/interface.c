@@ -493,6 +493,13 @@ out:
 }
 EXPORT_SYMBOL_GPL(rtc_update_irq_enable);
 
+int rtc_get_wake_irq(struct rtc_device *rtc)
+{
+	if (!rtc->ops->get_wake_irq)
+		return -EINVAL;
+	return rtc->ops->get_wake_irq(rtc->dev.parent);
+}
+EXPORT_SYMBOL_GPL(rtc_get_wake_irq);
 
 /**
  * rtc_handle_legacy_irq - AIE, UIE and PIE event hook
