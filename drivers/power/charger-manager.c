@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/power/charger-manager.h>
 #include <linux/regulator/consumer.h>
+#include <linux/suspend.h>
 
 static const char * const default_event_names[] = {
 	[CM_EVENT_UNKNOWN] = "Unknown",
@@ -56,6 +57,8 @@ static DEFINE_MUTEX(cm_list_mtx);
 
 /* About in-suspend (suspend-again) monitoring */
 static struct rtc_device *rtc_dev;
+int rtc_wake_irq;		/* Wake interrupt number from rtc */
+
 /*
  * Backup RTC alarm
  * Save the wakeup alarm before entering suspend-to-RAM
@@ -994,6 +997,71 @@ static void _cm_fbchk_in_suspend(struct charger_manager *cm)
 		fullbatt_vchk(&cm->fullbatt_vchk_work.work);
 }
 
+#define CM_MAX_SUSPEND		20
+
+struct device_list {
+	struct device *dev[CM_MAX_SUSPEND];
+	int count;
+};
+
+/**
+ * cm_add_resume_device() - Add device and parents to resume list
+ *
+ * @dlist: List of devices
+ * @dev: Device to add
+ *
+ * Add a device and all its parents to the device list. This algorithm is
+ * not particularly efficient, but is acceptable for small numbers of devices.
+ *
+ * The device is added first, then its parent, then its grandparent, etc.
+ */
+static void cm_add_resume_device(struct device_list *dlist,
+				 struct device *dev)
+{
+	int i;
+
+	for (; dev; dev = dev->parent) {
+		/* Check if already in list */
+		for (i = 0; i < dlist->count; i++)
+			if (dlist->dev[i] == dev)
+				break;
+		if (dlist->count < CM_MAX_SUSPEND && i == dlist->count)
+			dlist->dev[dlist->count++] = dev;
+	}
+}
+
+/*
+ * Resume all the devices, starting at the end, so that parents are
+ * done before children
+ */
+static void cm_resume_list(struct device_list *dlist)
+{
+	int i;
+
+	for (i = dlist->count - 1; i >= 0; i--)
+		dev_dbg(dlist->dev[i], "   - resume\n");
+	for (i = dlist->count - 1; i >= 0; i--)
+		pm_generic_resume(dlist->dev[i]);
+	for (i = dlist->count - 1; i >= 0; i--)
+		pm_generic_complete(dlist->dev[i]);
+}
+
+/*
+ * Suspend all the devices, starting at the start, so that parents are
+ * done after children
+ */
+static void cm_suspend_list(struct device_list *dlist)
+{
+	int i;
+
+	for (i = 0; i < dlist->count; i++)
+		dev_dbg(dlist->dev[i], "   - suspend\n");
+	for (i = 0; i < dlist->count; i++)
+		pm_generic_prepare(dlist->dev[i]);
+	for (i = 0; i < dlist->count; i++)
+		pm_generic_suspend(dlist->dev[i]);
+}
+
 /**
  * cm_suspend_again - Determine whether suspend again or not
  *
@@ -1003,12 +1071,36 @@ static void _cm_fbchk_in_suspend(struct charger_manager *cm)
 bool cm_suspend_again(void)
 {
 	struct charger_manager *cm;
+	struct device_list dlist;
 	bool ret = false;
 
 	suspend_again_count++;
-	if (!g_desc || !g_desc->rtc_only_wakeup || !g_desc->rtc_only_wakeup() ||
-	    !cm_rtc_set)
+	if (!g_desc || !g_desc->rtc_only_wakeup ||
+			!g_desc->rtc_only_wakeup(rtc_wake_irq) ||
+			!cm_rtc_set)
 		return false;
+	dlist.count = 0;
+	cm_add_resume_device(&dlist, &rtc_dev->dev);
+
+	mutex_lock(&cm_list_mtx);
+
+	list_for_each_entry(cm, &cm_list, entry) {
+		struct device *dev;
+
+		if (cm->fuel_gauge->to_bus_dev) {
+			dev = cm->fuel_gauge->to_bus_dev(cm->fuel_gauge);
+			cm_add_resume_device(&dlist, dev);
+		}
+	}
+
+	mutex_unlock(&cm_list_mtx);
+
+	if (dlist.count >= CM_MAX_SUSPEND) {
+		pr_err("charger-manager: Too many devices to suspend\n");
+		goto out_no_suspend;
+	}
+
+	cm_resume_list(&dlist);
 
 	if (cm_monitor())
 		goto out;
@@ -1021,6 +1113,10 @@ bool cm_suspend_again(void)
 		if (cm->status_save_ext_pwr_inserted != is_ext_pwr_online(cm) ||
 		    cm->status_save_batt != is_batt_present(cm)) {
 			ret = false;
+			dev_warn(cm->dev, "power change %d %d\n",
+				cm->status_save_ext_pwr_inserted !=
+					is_ext_pwr_online(cm),
+				cm->status_save_batt != is_batt_present(cm));
 			break;
 		}
 	}
@@ -1038,8 +1134,12 @@ out:
 
 		if (rtc_wkalarm_save_time &&
 		    now + CM_RTC_SMALL >= rtc_wkalarm_save_time)
-			return false;
+			ret = false;
 	}
+	cm_suspend_list(&dlist);
+out_no_suspend:
+	pr_debug("cm_suspend_again returns %d\n", ret);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(cm_suspend_again);
