@@ -363,6 +363,11 @@ static int s3c_rtc_proc(struct device *dev, struct seq_file *seq)
 	return 0;
 }
 
+static int s3c_rtc_get_wake_irq(struct device *dev)
+{
+	return s3c_rtc_alarmno;
+}
+
 static const struct rtc_class_ops s3c_rtcops = {
 	.read_time	= s3c_rtc_gettime,
 	.set_time	= s3c_rtc_settime,
@@ -370,6 +375,7 @@ static const struct rtc_class_ops s3c_rtcops = {
 	.set_alarm	= s3c_rtc_setalarm,
 	.proc		= s3c_rtc_proc,
 	.alarm_irq_enable = s3c_rtc_setaie,
+	.get_wake_irq	= s3c_rtc_get_wake_irq,
 };
 
 static void s3c_rtc_enable(struct platform_device *pdev, int en)
