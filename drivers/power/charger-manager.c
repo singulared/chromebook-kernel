@@ -1164,17 +1164,6 @@ int setup_charger_manager(struct charger_global_desc *gd)
 		return -EINVAL;
 	}
 
-	if (gd->rtc_name) {
-		rtc_dev = rtc_class_open(gd->rtc_name);
-		if (IS_ERR_OR_NULL(rtc_dev)) {
-			rtc_dev = NULL;
-			/* Retry at probe. RTC may be not registered yet */
-		}
-	} else {
-		pr_warn("No wakeup timer is given for charger manager."
-			"In-suspend monitoring won't work.\n");
-	}
-
 	g_desc = gd;
 	return 0;
 }
@@ -1192,62 +1181,162 @@ bool is_charger_manager_active(void)
 }
 EXPORT_SYMBOL_GPL(is_charger_manager_active);
 
-static int charger_manager_probe(struct platform_device *pdev)
+static int cm_decode_pdata(struct device *dev, struct charger_manager *cm,
+			  struct charger_desc *desc)
 {
-	struct charger_desc *desc = dev_get_platdata(&pdev->dev);
-	struct charger_manager *cm;
-	int ret = 0, i = 0;
-	union power_supply_propval val;
-	struct device_node *of_node;
+	int ret, i = 0;
 
-	of_node = of_find_compatible_node(NULL, NULL, "google,battery-system");
-	if (!of_node) {
-		pr_warn("%s: No fdt node found\n", __func__);
-		goto err_no_node;
+	cm->fuel_gauge = power_supply_get_by_name(desc->psy_fuel_gauge);
+	if (!cm->fuel_gauge) {
+		dev_err(dev, "Cannot find power supply '%s'\n",
+				desc->psy_fuel_gauge);
+		return -ENODEV;
 	}
 
-	if (!of_device_is_available(of_node)) {
-		pr_warn("%s: Disabled by fdt\n", __func__);
-		goto err_not_enabled;
+	if (!desc->psy_charger_stat || !desc->psy_charger_stat[0]) {
+		dev_err(dev, "No power supply defined.\n");
+		return -EINVAL;
 	}
 
-	/* TODO(sjg@chromium.org): Read parameters from fdt node */
-	of_node_put(of_node);
+	/* Counting index only */
+	while (desc->psy_charger_stat[i])
+		i++;
 
-	if (g_desc && !rtc_dev && g_desc->rtc_name) {
-		rtc_dev = rtc_class_open(g_desc->rtc_name);
-		if (IS_ERR_OR_NULL(rtc_dev)) {
-			rtc_dev = NULL;
-			dev_err(&pdev->dev, "Cannot get RTC %s.\n",
-				g_desc->rtc_name);
+
+	dev_dbg(dev, "Found %d power supplies\n", i);
+	cm->charger_stat = devm_kzalloc(dev,
+				sizeof(struct power_supply *) * (i + 1),
+				GFP_KERNEL);
+	if (!cm->charger_stat)
+		return -ENOMEM;
+
+	for (i = 0; desc->psy_charger_stat[i]; i++) {
+		cm->charger_stat[i] = power_supply_get_by_name(
+					desc->psy_charger_stat[i]);
+		if (!cm->charger_stat[i]) {
+			dev_err(dev, "Cannot find power supply '%s'\n",
+					desc->psy_charger_stat[i]);
 			ret = -ENODEV;
-			goto err_alloc;
+			goto err_chg_stat;
 		}
 	}
 
+	if (!desc->psy_name)
+		cm->psy_name = psy_default.name;
+	else
+		cm->psy_name = desc->psy_name;		/* strdup() needed? */
+
+	return 0;
+
+err_chg_stat:
+	return ret;
+}
+
+/**
+ * cm_of_populate_pdata() - Get a copy of platform data, or device device node
+ * @pdev:	Platform device
+ * @cm:		Charger manager structure to fill in
+ * @return -ve on error, 0 if ok (in which case cm->desc is non-NULL if the
+ * platform data is available)
+ */
+static int cm_of_populate_pdata(struct platform_device *pdev,
+				struct charger_manager *cm)
+{
+	struct charger_desc *desc, *pdata = dev_get_platdata(&pdev->dev);
+	int ret = 0;
+
+	desc = devm_kzalloc(&pdev->dev, sizeof(struct charger_desc),
+				GFP_KERNEL);
 	if (!desc) {
-		dev_err(&pdev->dev, "No platform data (desc) found.\n");
+		dev_err(&pdev->dev, "Cannot allocate memory\n");
+		return -ENOMEM;
+	}
+	if (pdata) {
+		dev_dbg(&pdev->dev, "Found pdata\n");
+		*desc = *pdata;
+		ret = cm_decode_pdata(&pdev->dev, cm, desc);
+		if (ret)
+			return ret;
+
+	} else {
+		return 0;
+	}
+	cm->desc = desc;
+	dev_dbg(&pdev->dev, "Device data populated\n");
+
+	return 0;
+}
+
+static int cm_probe_rtc(struct platform_device *pdev)
+{
+	int skip_rtc = 0;
+	int ret = 0;
+
+	if (rtc_dev)
+		return 0;
+	if (g_desc->rtc_name)
+		rtc_dev = rtc_class_open(g_desc->rtc_name);
+	else
+		skip_rtc = 1;
+
+	if (!skip_rtc && IS_ERR_OR_NULL(rtc_dev)) {
+		rtc_dev = NULL;
+		dev_err(&pdev->dev, "Cannot get RTC %s\n",
+			g_desc->rtc_name ? g_desc->rtc_name : "none");
 		ret = -ENODEV;
-		goto err_alloc;
 	}
 
-	cm = kzalloc(sizeof(struct charger_manager), GFP_KERNEL);
+	if (rtc_dev) {
+		rtc_wake_irq = rtc_get_wake_irq(rtc_dev);
+		dev_dbg(&pdev->dev, "rtc %s, wake_irq=%d\n",
+			rtc_dev ? rtc_dev->name : "<none>", rtc_wake_irq);
+	} else {
+		dev_warn(&pdev->dev, "No wakeup timer is given for charger"
+			" manager. In-suspend monitoring won't work.\n");
+	}
+
+	return ret;
+}
+
+static int charger_manager_probe(struct platform_device *pdev)
+{
+	struct charger_desc *desc;
+	struct charger_manager *cm;
+	int ret = 0;
+	union power_supply_propval val;
+
+	if (!g_desc) {
+		dev_err(&pdev->dev, "No charger manager global data\n");
+		return -EINVAL;
+	}
+	cm = devm_kzalloc(&pdev->dev, sizeof(struct charger_manager),
+			  GFP_KERNEL);
 	if (!cm) {
-		dev_err(&pdev->dev, "Cannot allocate memory.\n");
+		dev_err(&pdev->dev, "Cannot allocate memory\n");
 		ret = -ENOMEM;
-		goto err_alloc;
+		goto err_mem;
+	}
+
+	if (!rtc_dev) {
+		ret = cm_probe_rtc(pdev);
+		if (ret)
+			goto err_rtc;
+	}
+
+	ret = cm_of_populate_pdata(pdev, cm);
+	if (!cm->desc)
+		goto err_no_data;
+	desc = cm->desc;
+
+	if (!desc->charger_regulators || desc->num_charger_regulators < 1) {
+		dev_err(&pdev->dev, "charger_regulators undefined.\n");
+		return -EINVAL;
 	}
 
 	/* Basic Values. Unspecified are Null or 0 */
 	cm->dev = &pdev->dev;
-	cm->desc = kzalloc(sizeof(struct charger_desc), GFP_KERNEL);
-	if (!cm->desc) {
-		dev_err(&pdev->dev, "Cannot allocate memory.\n");
-		ret = -ENOMEM;
-		goto err_alloc_desc;
-	}
-	memcpy(cm->desc, desc, sizeof(struct charger_desc));
 	cm->last_temp_mC = INT_MIN; /* denotes "unmeasured, yet" */
+	cm->temp_state = CM_TEMP_OK;
 
 	/*
 	 * The following two do not need to be errors.
@@ -1262,49 +1351,6 @@ static int charger_manager_probe(struct platform_device *pdev)
 				"checking mechanism as it is not supplied.");
 		desc->fullbatt_vchkdrop_ms = 0;
 		desc->fullbatt_vchkdrop_uV = 0;
-	}
-
-	if (!desc->charger_regulators || desc->num_charger_regulators < 1) {
-		ret = -EINVAL;
-		dev_err(&pdev->dev, "charger_regulators undefined.\n");
-		goto err_no_charger;
-	}
-
-	if (!desc->psy_charger_stat || !desc->psy_charger_stat[0]) {
-		dev_err(&pdev->dev, "No power supply defined.\n");
-		ret = -EINVAL;
-		goto err_no_charger_stat;
-	}
-
-	/* Counting index only */
-	while (desc->psy_charger_stat[i])
-		i++;
-
-	cm->charger_stat = kzalloc(sizeof(struct power_supply *) * (i + 1),
-				   GFP_KERNEL);
-	if (!cm->charger_stat) {
-		ret = -ENOMEM;
-		goto err_no_charger_stat;
-	}
-
-	for (i = 0; desc->psy_charger_stat[i]; i++) {
-		cm->charger_stat[i] = power_supply_get_by_name(
-					desc->psy_charger_stat[i]);
-		if (!cm->charger_stat[i]) {
-			dev_err(&pdev->dev, "Cannot find power supply "
-					"\"%s\"\n",
-					desc->psy_charger_stat[i]);
-			ret = -ENODEV;
-			goto err_chg_stat;
-		}
-	}
-
-	cm->fuel_gauge = power_supply_get_by_name(desc->psy_fuel_gauge);
-	if (!cm->fuel_gauge) {
-		dev_err(&pdev->dev, "Cannot find power supply \"%s\"\n",
-				desc->psy_fuel_gauge);
-		ret = -ENODEV;
-		goto err_chg_stat;
 	}
 
 	if (desc->polling_interval_ms == 0 ||
@@ -1322,10 +1368,11 @@ static int charger_manager_probe(struct platform_device *pdev)
 		cm->charger_psy.name = desc->psy_name;
 
 	/* Allocate for psy properties because they may vary */
-	cm->charger_psy.properties = kzalloc(sizeof(enum power_supply_property)
+	cm->charger_psy.properties = devm_kzalloc(&pdev->dev,
+			sizeof(enum power_supply_property)
 				* (ARRAY_SIZE(default_charger_props) +
-				NUM_CHARGER_PSY_OPTIONAL),
-				GFP_KERNEL);
+					NUM_CHARGER_PSY_OPTIONAL),
+			GFP_KERNEL);
 	if (!cm->charger_psy.properties) {
 		dev_err(&pdev->dev, "Cannot allocate for psy properties.\n");
 		ret = -ENOMEM;
@@ -1405,18 +1452,11 @@ err_chg_enable:
 err_bulk_get:
 	power_supply_unregister(&cm->charger_psy);
 err_register:
-	kfree(cm->charger_psy.properties);
 err_chg_stat:
-	kfree(cm->charger_stat);
-err_no_charger_stat:
-err_no_charger:
-	kfree(cm->desc);
-err_alloc_desc:
-	kfree(cm);
-err_alloc:
-err_not_enabled:
-	of_node_put(of_node);
-err_no_node:
+err_no_data:
+err_rtc:
+err_mem:
+	dev_err(&pdev->dev, "cm error %d\n", ret);
 	return ret;
 }
 
@@ -1440,11 +1480,6 @@ static int __devexit charger_manager_remove(struct platform_device *pdev)
 	power_supply_unregister(&cm->charger_psy);
 
 	try_charger_enable(cm, false);
-
-	kfree(cm->charger_psy.properties);
-	kfree(cm->charger_stat);
-	kfree(cm->desc);
-	kfree(cm);
 
 	return 0;
 }
