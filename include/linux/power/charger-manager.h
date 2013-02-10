@@ -50,6 +50,7 @@ enum cm_event_types {
  *	rtc_only_wakeup() returning false.
  *	If the RTC given to CM is the only wakeup reason,
  *	rtc_only_wakeup should return true.
+ *	@wake_irq: Interrupt number assigned to the rtc
  * @assume_timer_stops_in_suspend:
  *	Assume that the jiffy timer stops in suspend-to-RAM.
  *	When enabled, CM does not rely on jiffies value in
@@ -59,7 +60,7 @@ enum cm_event_types {
 struct charger_global_desc {
 	char *rtc_name;
 
-	bool (*rtc_only_wakeup)(void);
+	bool (*rtc_only_wakeup)(int wake_irq);
 
 	bool assume_timer_stops_in_suspend;
 };
