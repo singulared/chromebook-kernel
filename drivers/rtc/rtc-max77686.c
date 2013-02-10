@@ -400,12 +400,21 @@ static irqreturn_t max77686_rtc_alarm_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int max77686_get_wake_irq(struct device *dev)
+{
+	struct max77686_rtc_info *info = dev_get_drvdata(dev);
+	struct max77686_dev *max77686 = dev_get_drvdata(info->dev->parent);
+
+	return max77686->irq;
+}
+
 static const struct rtc_class_ops max77686_rtc_ops = {
 	.read_time = max77686_rtc_read_time,
 	.set_time = max77686_rtc_set_time,
 	.read_alarm = max77686_rtc_read_alarm,
 	.set_alarm = max77686_rtc_set_alarm,
 	.alarm_irq_enable = max77686_rtc_alarm_irq_enable,
+	.get_wake_irq = max77686_get_wake_irq,
 };
 
 static int max77686_rtc_init_reg(struct max77686_rtc_info *info)
