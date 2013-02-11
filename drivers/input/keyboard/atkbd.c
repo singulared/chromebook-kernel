@@ -684,6 +684,7 @@ static int atkbd_probe(struct atkbd *atkbd)
 {
 	struct ps2dev *ps2dev = &atkbd->ps2dev;
 	unsigned char param[2];
+	int getid_attempts_left = 5;
 
 /*
  * Some systems, where the bit-twiddling when testing the io-lines of the
@@ -704,8 +705,16 @@ static int atkbd_probe(struct atkbd *atkbd)
  * should make sure we don't try to set the LEDs on it.
  */
 
+/* Chrome OS workaround only: we have a bug in the EC that causes keystrokes to
+ * be enabled too early, so we may read scancodes instead of the GETID
+ * response.  In that case, instead of failing, retry a few times.
+ */
+
+getid_retry:
+	getid_attempts_left--;
 	param[0] = param[1] = 0xa5;	/* initialize with invalid values */
 	if (ps2_command(ps2dev, param, ATKBD_CMD_GETID)) {
+		dev_warn(&ps2dev->serio->dev, "GETID failed");
 
 /*
  * If the get ID command failed, we check if we can at least set the LEDs on
@@ -713,14 +722,24 @@ static int atkbd_probe(struct atkbd *atkbd)
  * the LEDs off, which we want anyway.
  */
 		param[0] = 0;
-		if (ps2_command(ps2dev, param, ATKBD_CMD_SETLEDS))
-			return -1;
+		if (ps2_command(ps2dev, param, ATKBD_CMD_SETLEDS)) {
+			dev_warn(&ps2dev->serio->dev, "atkbd: SETLEDS failed");
+			if (getid_attempts_left <= 0)
+				return -1;
+			else
+				goto getid_retry;
+		}
 		atkbd->id = 0xabba;
 		return 0;
 	}
 
-	if (!ps2_is_keyboard_id(param[0]))
-		return -1;
+	if (!ps2_is_keyboard_id(param[0])) {
+		dev_warn(&ps2dev->serio->dev, "bad keyboard id %d", param[0]);
+		if (getid_attempts_left <= 0)
+			return -1;
+		else
+			goto getid_retry;
+	}
 
 	atkbd->id = (param[0] << 8) | param[1];
 
@@ -1144,6 +1163,7 @@ static int atkbd_connect(struct serio *serio, struct serio_driver *drv)
 	if (atkbd->write) {
 
 		if (atkbd_probe(atkbd)) {
+			dev_err(&serio->dev, "probe failed");
 			err = -ENODEV;
 			goto fail3;
 		}
@@ -1202,8 +1222,10 @@ static int atkbd_reconnect(struct serio *serio)
 	atkbd_disable(atkbd);
 
 	if (atkbd->write) {
-		if (atkbd_probe(atkbd))
+		if (atkbd_probe(atkbd)) {
+			dev_err(&serio->dev, "reconnect: probe failed");
 			goto out;
+		}
 
 		if (atkbd->set != atkbd_select_set(atkbd, atkbd->set, atkbd->extra))
 			goto out;
