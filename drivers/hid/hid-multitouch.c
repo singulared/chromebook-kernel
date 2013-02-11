@@ -744,6 +744,9 @@ static const struct hid_device_id mt_devices[] = {
 	/* Advanced Silicon panels */
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_ADVANCED_SILICON,
+			USB_DEVICE_ID_ADVANCED_SILICON_2303) },
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_ADVANCED_SILICON,
 			USB_DEVICE_ID_ADVANCED_SILICON_2306) },
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_ADVANCED_SILICON,
