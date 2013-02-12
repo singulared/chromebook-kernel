@@ -350,6 +350,7 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 
 	exynos_drm_driver.num_ioctls = DRM_ARRAY_SIZE(exynos_ioctls);
 
+	pm_vt_switch_required(dev, false);
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
 
@@ -368,6 +369,7 @@ static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
+	pm_vt_switch_unregister(dev);
 	pm_runtime_disable(dev);
 
 	drm_platform_exit(&exynos_drm_driver, pdev);
