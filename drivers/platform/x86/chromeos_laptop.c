@@ -34,11 +34,15 @@ static struct i2c_client *tp;
 
 const char *i2c_adapter_names[] = {
 	"SMBus I801 adapter",
+	"i915 gmbus vga",
+	"i915 gmbus panel",
 };
 
 /* Keep this enum consistent with i2c_adapter_names */
 enum i2c_adapter_type {
 	I2C_ADAPTER_SMBUS = 0,
+	I2C_ADAPTER_VGADDC,
+	I2C_ADAPTER_PANEL,
 };
 
 static struct i2c_board_info __initdata cyapa_device = {
