@@ -205,7 +205,7 @@ static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 {
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
 	int ret, reg, mask, pattern;
-	u8 val;
+	unsigned int val;
 
 	ret = s5m8767_get_register(rdev, &reg, &mask, &pattern);
 	if (ret == -EINVAL)
@@ -295,7 +295,7 @@ static int s5m8767_get_voltage_sel(struct regulator_dev *rdev)
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
 	int reg, mask, ret;
 	int reg_id = rdev_get_id(rdev);
-	u8 val;
+	unsigned int val;
 
 	ret = s5m8767_get_voltage_register(rdev, &reg);
 	if (ret)
@@ -339,7 +339,7 @@ static int s5m8767_set_voltage(struct regulator_dev *rdev,
 	const struct s5m_voltage_desc *desc;
 	int reg_id = rdev_get_id(rdev);
 	int sel, reg, mask, ret;
-	u8 val;
+	unsigned int val;
 
 	switch (reg_id) {
 	case S5M8767_LDO1 ... S5M8767_LDO28:
