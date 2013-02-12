@@ -35,6 +35,10 @@ extern void (*pm_idle)(void);
 extern void (*pm_power_off)(void);
 extern void (*pm_power_off_prepare)(void);
 
+struct device; /* we have a circular dep with device.h */
+extern void pm_vt_switch_required(struct device *dev, bool required);
+extern void pm_vt_switch_unregister(struct device *dev);
+
 /*
  * Globals that might change at suspend time should be stored in a special
  * section.  This allows us to detect memory corruption by doing a checksum
