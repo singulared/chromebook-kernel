@@ -24,8 +24,6 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 
-#include "core.h"
-
 struct dwc3_exynos {
 	struct platform_device	*dwc3;
 	struct platform_device	*usb2_phy;
