@@ -483,7 +483,13 @@ static void exit_mm(struct task_struct * tsk)
 			set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 			if (!self.task) /* see coredump_finish() */
 				break;
-			schedule();
+			/*
+			 * If core_pattern is set to pipe, we could wait here
+			 * for unbounded time. We don't want to prevent suspend.
+			 * We also don't want to trigger the hung_task detector.
+			 * So skip freezer.
+			 */
+			freezable_schedule();
 		}
 		__set_task_state(tsk, TASK_RUNNING);
 		down_read(&mm->mmap_sem);
