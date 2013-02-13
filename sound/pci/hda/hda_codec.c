@@ -3516,9 +3516,11 @@ static void hda_call_codec_resume(struct hda_codec *codec)
 	 * in the resume / power-save sequence
 	 */
 	hda_keep_power_on(codec);
+	msleep(10);
 	hda_set_power_state(codec,
 			    codec->afg ? codec->afg : codec->mfg,
 			    AC_PWRST_D0);
+	msleep(10);
 	restore_pincfgs(codec); /* restore all current pin configs */
 	restore_shutup_pins(codec);
 	hda_exec_init_verbs(codec);
