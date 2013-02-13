@@ -120,7 +120,7 @@ static struct exynos_drm_panel_info *fimd_get_panel(void *ctx)
 
 static int fimd_power_on(struct fimd_context *ctx, bool enable);
 
-static int fimd_power(void *ctx, int mode)
+static int fimd_dpms(void *ctx, int mode)
 {
 	struct fimd_context *fimd_ctx = ctx;
 	bool enable;
@@ -696,7 +696,7 @@ static struct exynos_controller_ops fimd_controller_ops = {
 	.get_panel = fimd_get_panel,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
-	.power = fimd_power,
+	.dpms = fimd_dpms,
 	.mode_set = fimd_win_mode_set,
 	.commit = fimd_commit,
 	.win_commit = fimd_win_commit,
@@ -961,7 +961,7 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, fimd_ctx);
 
-	fimd_power(fimd_ctx, DRM_MODE_DPMS_ON);
+	fimd_dpms(fimd_ctx, DRM_MODE_DPMS_ON);
 
 	for (win = 0; win < WINDOWS_NR; win++)
 		fimd_clear_win(fimd_ctx, win);
@@ -1013,7 +1013,7 @@ static int __devexit fimd_remove(struct platform_device *pdev)
 	clk_disable(ctx->lcd_clk);
 	clk_disable(ctx->bus_clk);
 
-	fimd_power(ctx, DRM_MODE_DPMS_OFF);
+	fimd_dpms(ctx, DRM_MODE_DPMS_OFF);
 
 out:
 	clk_put(ctx->lcd_clk);

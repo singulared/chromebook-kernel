@@ -1038,10 +1038,10 @@ static void mixer_resource_poweron(struct mixer_context *mctx)
 		clk_enable(res->sclk_mixer);
 	}
 
+	mctx->is_mixer_powered_on = true;
+
 	mixer_win_reset(mctx);
 	mixer_enable_vblank(mctx, mctx->pipe);
-
-	mctx->is_mixer_powered_on = true;
 	mixer_apply(mctx);
 }
 
@@ -1062,7 +1062,7 @@ static void mixer_resource_poweroff(struct mixer_context *mctx)
 	mctx->is_mixer_powered_on = false;
 }
 
-static int mixer_power(void *ctx, int mode)
+static int mixer_dpms(void *ctx, int mode)
 {
 	struct mixer_context *mctx = ctx;
 
@@ -1099,7 +1099,7 @@ static struct exynos_controller_ops mixer_ops = {
 	.subdrv_probe		= mixer_subdrv_probe,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
-	.power			= mixer_power,
+	.dpms			= mixer_dpms,
 
 	/* overlay */
 	.mode_set		= mixer_win_mode_set,

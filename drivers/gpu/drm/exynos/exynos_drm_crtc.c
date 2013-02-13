@@ -62,7 +62,6 @@ struct exynos_drm_flip_desc {
  *	drm framework doesn't support multiple irq yet.
  *	we can refer to the crtc to current hardware interrupt occured through
  *	this pipe value.
- * @dpms: store the crtc dpms value
  * @flip_pending: there is a flip pending that we need to process next vblank
  */
 struct exynos_drm_crtc {
@@ -72,7 +71,6 @@ struct exynos_drm_crtc {
 	DECLARE_KFIFO(flip_fifo, struct exynos_drm_flip_desc, 2);
 	struct exynos_drm_flip_desc	scanout_desc;
 	unsigned int			pipe;
-	unsigned int			dpms;
 	atomic_t			flip_pending;
 };
 
@@ -293,40 +291,12 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 
 static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 {
-	struct drm_device *dev = crtc->dev;
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-
 	DRM_DEBUG_KMS("crtc[%d] mode[%d]\n", crtc->base.id, mode);
 
-	if (exynos_crtc->dpms == mode) {
-		DRM_DEBUG_KMS("desired dpms mode is same as previous one.\n");
-		return;
-	}
-
-	mutex_lock(&dev->struct_mutex);
-
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		exynos_drm_fn_encoder(crtc, &mode,
-				exynos_drm_encoder_crtc_dpms);
-		exynos_crtc->dpms = mode;
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		exynos_drm_fn_encoder(crtc, &mode,
-				exynos_drm_encoder_crtc_dpms);
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (mode != DRM_MODE_DPMS_ON)
 		exynos_drm_crtc_release_flips(crtc);
 #endif
-		exynos_crtc->dpms = mode;
-		break;
-	default:
-		DRM_ERROR("unspecified mode %d\n", mode);
-		break;
-	}
-
-	mutex_unlock(&dev->struct_mutex);
 }
 
 static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
@@ -352,8 +322,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 {
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	int ret;
+	int ret, mode = DRM_MODE_DPMS_ON;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -363,27 +332,9 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 	 * no power on then crtc->dpms should be called
 	 * with DRM_MODE_DPMS_ON for the hardware power to be on.
 	 */
-	if (exynos_crtc->dpms != DRM_MODE_DPMS_ON) {
-		int mode = DRM_MODE_DPMS_ON;
+	exynos_drm_crtc_dpms(crtc, mode);
 
-		/*
-		 * TODO(seanpaul): This has the nasty habit of calling the
-		 * underlying dpms/power callbacks twice on boot. This code
-		 * needs to be cleaned up so this doesn't happen.
-		 */
-
-		/*
-		 * enable hardware(power on) to all encoders hdmi connected
-		 * to current crtc.
-		 */
-		exynos_drm_crtc_dpms(crtc, mode);
-		/*
-		 * enable dma to all encoders connected to current crtc and
-		 * lcd panel.
-		 */
-		exynos_drm_fn_encoder(crtc, &mode,
-					exynos_drm_encoder_dpms_from_crtc);
-	}
+	exynos_drm_fn_encoder(crtc, &mode, exynos_drm_encoder_crtc_dpms);
 
 	ret = exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
 	if (ret)
@@ -699,7 +650,6 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 
 	INIT_KFIFO(exynos_crtc->flip_fifo);
 	exynos_crtc->pipe = nr;
-	exynos_crtc->dpms = DRM_MODE_DPMS_OFF;
 	exynos_crtc->overlay.zpos = DEFAULT_ZPOS;
 	crtc = &exynos_crtc->drm_crtc;
 
@@ -714,13 +664,8 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 {
 	struct exynos_drm_private *private = dev->dev_private;
-	struct exynos_drm_crtc *exynos_crtc =
-		to_exynos_crtc(private->crtc[crtc]);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (exynos_crtc->dpms != DRM_MODE_DPMS_ON)
-		return -EPERM;
 
 	exynos_drm_fn_encoder(private->crtc[crtc], &crtc,
 			exynos_drm_enable_vblank);
@@ -731,13 +676,8 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc)
 {
 	struct exynos_drm_private *private = dev->dev_private;
-	struct exynos_drm_crtc *exynos_crtc =
-		to_exynos_crtc(private->crtc[crtc]);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (exynos_crtc->dpms != DRM_MODE_DPMS_ON)
-		return;
 
 	exynos_drm_fn_encoder(private->crtc[crtc], &crtc,
 			exynos_drm_disable_vblank);

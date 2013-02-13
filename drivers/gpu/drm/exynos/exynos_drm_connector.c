@@ -310,6 +310,7 @@ struct drm_connector *exynos_drm_connector_create(struct drm_device *dev,
 	}
 
 	connector = &exynos_connector->drm_connector;
+	connector->dpms = DRM_MODE_DPMS_OFF;
 
 	switch (display->display_type) {
 	case EXYNOS_DRM_DISPLAY_TYPE_MIXER:

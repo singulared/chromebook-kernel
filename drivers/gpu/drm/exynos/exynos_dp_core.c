@@ -1024,7 +1024,7 @@ static int exynos_dp_power_on(struct exynos_dp_device *dp)
 	return 0;
 }
 
-static int exynos_dp_power(void *ctx, int mode)
+static int exynos_dp_dpms(void *ctx, int mode)
 {
 	struct exynos_dp_device *dp = ctx;
 
@@ -1070,7 +1070,7 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 
 	dp->drm_dev = drm_dev;
 
-	exynos_dp_power(dp, DRM_MODE_DPMS_ON);
+	exynos_dp_dpms(dp, DRM_MODE_DPMS_ON);
 
 	return 0;
 }
@@ -1079,7 +1079,7 @@ static struct exynos_panel_ops dp_panel_ops = {
 	.subdrv_probe = exynos_dp_subdrv_probe,
 	.is_connected = exynos_dp_is_connected,
 	.check_timing = exynos_dp_check_timing,
-	.power = exynos_dp_power,
+	.dpms = exynos_dp_dpms,
 };
 
 static int __devinit exynos_dp_probe(struct platform_device *pdev)
@@ -1199,7 +1199,7 @@ static int __devexit exynos_dp_remove(struct platform_device *pdev)
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
 
 	/* power_off will take care of flushing the hotplug_work */
-	exynos_dp_power(dp, DRM_MODE_DPMS_OFF);
+	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
 
 	if (gpio_is_valid(dp->hpd_gpio))
 		gpio_free(dp->hpd_gpio);

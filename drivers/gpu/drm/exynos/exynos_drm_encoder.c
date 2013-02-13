@@ -53,51 +53,42 @@ struct exynos_drm_encoder {
 
 static void exynos_drm_display_power(struct drm_encoder *encoder, int mode)
 {
-	struct drm_device *dev = encoder->dev;
-	struct drm_connector *connector;
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
+	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		if (connector->encoder != encoder)
-			continue;
+	/*
+	 * We want to make sure we order things correctly here. When
+	 * turning on, start the controller, then the panel. When
+	 * turning off, do the reverse.
+	 */
+	switch (mode) {
+	case DRM_MODE_DPMS_ON:
+		if (display->controller_ops->dpms)
+			display->controller_ops->dpms(
+					display->controller_ctx, mode);
 
-		DRM_DEBUG_KMS("connector[%d] dpms[%d]\n", connector->base.id,
-				mode);
+		if (display->panel_ops->dpms)
+			display->panel_ops->dpms(display->panel_ctx,
+					mode);
 
-		/* We want to make sure we order things correctly here. When
-		 * turning on, start the controller, then the panel. When
-		 * turning off, do the reverse.
-		 */
-		switch (mode) {
-		case DRM_MODE_DPMS_ON:
-			if (display->controller_ops->power)
-				display->controller_ops->power(
-						display->controller_ctx, mode);
+		exynos_encoder->dpms = mode;
+		break;
+	case DRM_MODE_DPMS_STANDBY:
+	case DRM_MODE_DPMS_SUSPEND:
+	case DRM_MODE_DPMS_OFF:
+		if (display->panel_ops->dpms)
+			display->panel_ops->dpms(display->panel_ctx,
+					mode);
 
-			if (display->panel_ops->power)
-				display->panel_ops->power(display->panel_ctx,
-						mode);
+		if (display->controller_ops->dpms)
+			display->controller_ops->dpms(
+					display->controller_ctx, mode);
 
-			exynos_encoder->dpms = mode;
+		exynos_encoder->dpms = mode;
+		break;
+	default:
+		DRM_ERROR("Unknown dpms mode: %d\n", mode);
 			break;
-		case DRM_MODE_DPMS_STANDBY:
-		case DRM_MODE_DPMS_SUSPEND:
-		case DRM_MODE_DPMS_OFF:
-			if (display->panel_ops->power)
-				display->panel_ops->power(display->panel_ctx,
-						mode);
-
-			if (display->controller_ops->power)
-				display->controller_ops->power(
-						display->controller_ctx, mode);
-
-			exynos_encoder->dpms = mode;
-			break;
-		default:
-			DRM_ERROR("Unknown dpms mode: %d\n", mode);
-			break;
-		}
 	}
 }
 
@@ -114,10 +105,18 @@ int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder)
 	return mode;
 }
 
+void exynos_drm_encoder_crtc_dpms(struct drm_encoder *encoder, void *data)
+{
+	int mode = *(int *)data;
+
+	exynos_drm_encoder_dpms(encoder, mode);
+}
+
 void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
 	struct drm_device *dev = encoder->dev;
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
+	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
 
@@ -129,19 +128,15 @@ void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 		return;
 	}
 
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		exynos_drm_display_power(encoder, mode);
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		exynos_drm_display_power(encoder, mode);
-		break;
-	default:
-		DRM_ERROR("unspecified mode %d\n", mode);
-		break;
-	}
+	exynos_drm_display_power(encoder, mode);
+
+	/*
+	 * if this condition is ok then it means that the crtc is already
+	 * detached from encoder and last function for detaching is properly
+	 * done, so clear pipe from display to prevent repeated call.
+	 */
+	if (mode > DRM_MODE_DPMS_ON && !encoder->crtc)
+		display->pipe = -1;
 
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -347,8 +342,12 @@ void exynos_drm_fn_encoder(struct drm_crtc *crtc, void *data,
 
 void exynos_drm_enable_vblank(struct drm_encoder *encoder, void *data)
 {
+	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 	int crtc = *(int *)data;
+
+	if (exynos_encoder->dpms != DRM_MODE_DPMS_ON)
+		return;
 
 	if (display->pipe == -1)
 		display->pipe = crtc;
@@ -361,8 +360,12 @@ void exynos_drm_enable_vblank(struct drm_encoder *encoder, void *data)
 
 void exynos_drm_disable_vblank(struct drm_encoder *encoder, void *data)
 {
+	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 	int crtc = *(int *)data;
+
+	if (exynos_encoder->dpms != DRM_MODE_DPMS_ON)
+		return;
 
 	/*
 	 * TODO(seanpaul): This seems like a hack. I don't think it's actually
@@ -409,73 +412,6 @@ void exynos_drm_encoder_crtc_commit(struct drm_encoder *encoder, void *data)
 	display->pipe = crtc;
 
 	exynos_drm_encoder_crtc_plane_commit(encoder, &zpos);
-}
-
-void exynos_drm_encoder_dpms_from_crtc(struct drm_encoder *encoder, void *data)
-{
-	int mode = *(int *)data;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	exynos_drm_encoder_dpms(encoder, mode);
-}
-
-void exynos_drm_encoder_crtc_dpms(struct drm_encoder *encoder, void *data)
-{
-	struct drm_device *dev = encoder->dev;
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	struct exynos_drm_display *display = exynos_encoder->display;
-	struct drm_connector *connector;
-	int mode = *(int *)data;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/* We want to make sure we order things correctly here. When turning on,
-	 * start the controller, then the panel. When turning off, do the
-	 * reverse.
-	 */
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		if (display->controller_ops->dpms)
-			display->controller_ops->dpms(display->controller_ctx,
-					mode);
-
-		if (display->panel_ops->dpms)
-			display->panel_ops->dpms(display->panel_ctx, mode);
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		if (display->panel_ops->dpms)
-			display->panel_ops->dpms(display->panel_ctx, mode);
-
-		if (display->controller_ops->dpms)
-			display->controller_ops->dpms(display->controller_ctx,
-					mode);
-		break;
-	default:
-		DRM_ERROR("Unknown dpms mode: %d\n", mode);
-		break;
-	}
-
-	/*
-	 * set current dpms mode to the connector connected to
-	 * current encoder. connector->dpms would be checked
-	 * at drm_helper_connector_dpms()
-	 */
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head)
-		if (connector->encoder == encoder)
-			connector->dpms = mode;
-
-	/*
-	 * if this condition is ok then it means that the crtc is already
-	 * detached from encoder and last function for detaching is properly
-	 * done, so clear pipe from display to prevent repeated call.
-	 */
-	if (mode > DRM_MODE_DPMS_ON) {
-		if (!encoder->crtc)
-			display->pipe = -1;
-	}
 }
 
 void exynos_drm_encoder_crtc_mode_set(struct drm_encoder *encoder, void *data)

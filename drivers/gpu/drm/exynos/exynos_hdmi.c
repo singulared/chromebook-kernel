@@ -2037,7 +2037,7 @@ static void hdmi_resource_poweroff(struct hdmi_context *hdata)
 	regulator_bulk_disable(res->regul_count, res->regul_bulk);
 }
 
-static int hdmi_power(void *ctx, int mode)
+static int hdmi_dpms(void *ctx, int mode)
 {
 	struct hdmi_context *hdata = ctx;
 
@@ -2078,7 +2078,7 @@ static struct exynos_panel_ops hdmi_ops = {
 	.is_connected	= hdmi_is_connected,
 	.get_edid	= hdmi_get_edid,
 	.check_timing	= hdmi_check_timing,
-	.power		= hdmi_power,
+	.dpms		= hdmi_dpms,
 
 	/* manager */
 	.mode_fixup	= hdmi_mode_fixup,

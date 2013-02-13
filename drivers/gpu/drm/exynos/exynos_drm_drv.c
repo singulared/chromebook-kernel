@@ -478,12 +478,12 @@ static int exynos_drm_resume_displays(void)
 
 	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
 		struct exynos_drm_display *display = displays[i];
-		struct drm_encoder *encoder = display->subdrv->encoder;
+		struct drm_connector *connector = display->subdrv->connector;
 
-		if (!encoder)
+		if (!connector || !connector->funcs->dpms)
 			continue;
 
-		exynos_drm_encoder_dpms(encoder, display->suspend_dpms);
+		connector->funcs->dpms(connector, display->suspend_dpms);
 	}
 	return 0;
 }
@@ -494,13 +494,14 @@ static int exynos_drm_suspend_displays(void)
 
 	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
 		struct exynos_drm_display *display = displays[i];
-		struct drm_encoder *encoder = display->subdrv->encoder;
+		struct drm_connector *connector = display->subdrv->connector;
 
-		if (!encoder)
+		if (!connector)
 			continue;
 
-		display->suspend_dpms = exynos_drm_encoder_get_dpms(encoder);
-		exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
+		display->suspend_dpms = connector->dpms;
+		if (connector->funcs->dpms)
+			connector->funcs->dpms(connector,  DRM_MODE_DPMS_OFF);
 	}
 	return 0;
 }

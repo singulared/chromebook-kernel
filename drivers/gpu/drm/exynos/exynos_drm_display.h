@@ -21,8 +21,7 @@
  * @is_connected: Returns true if the panel is connected
  * @get_edid: Returns an edid with mode data from the panel
  * @check_timing: Returns 0 if the given timing is valid for the panel
- * @power: Sets the panel's power to mode
- * @dpms: Same as power, but called in different places. Best to avoid it
+ * @dpms: Sets the panel's power to mode
  * @mode_fixup: Copies and optionally alters mode to adjusted_mode
  * @mode_set: Sets the panel to output mode
  * @commit: Commits changes to the panel from mode_set
@@ -33,7 +32,6 @@ struct exynos_panel_ops {
 	bool (*is_connected)(void *ctx);
 	struct edid *(*get_edid)(void *ctx, struct drm_connector *connector);
 	int (*check_timing)(void *ctx, void *timing);
-	int (*power)(void *ctx, int mode);
 	int (*dpms)(void *ctx, int mode);
 	void (*mode_fixup)(void *ctx, struct drm_connector *connector,
 				struct drm_display_mode *mode,
@@ -51,8 +49,7 @@ struct exynos_panel_ops {
  * @get_panel: If we're not using edid, return the panel info
  * @enable_vblank: Enable the controller's vblank interrupt and set pipe
  * @disable_vblank: Disable the controller's vblank interrupt
- * @power: Sets the controller's power to mode
- * @dpms: Same as power, but called in different places. Best to avoid it
+ * @dpms: Sets the controller's power to mode
  * @mode_set: Sets the controller to output mode
  * @commit: Applies controller level settings (as opposed to window level)
  * @win_commit: Commits the changes on only one window
@@ -63,7 +60,6 @@ struct exynos_controller_ops {
 	struct exynos_drm_panel_info *(*get_panel)(void *ctx);
 	int (*enable_vblank)(void *ctx, int pipe);
 	void (*disable_vblank)(void *ctx);
-	int (*power)(void *ctx, int mode);
 	int (*dpms)(void *ctx, int mode);
 	void (*mode_set)(void *ctx, struct exynos_drm_overlay *overlay);
 	void (*commit)(void *ctx);
