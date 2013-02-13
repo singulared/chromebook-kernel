@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
+#include <linux/freezer.h>
 #include <linux/mm.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
@@ -2044,10 +2045,24 @@ static void wait_for_dump_helpers(struct file *file)
 	pipe->readers++;
 	pipe->writers--;
 
-	while ((pipe->readers > 1) && (!fatal_signal_pending(current))) {
+	while (pipe->readers > 1) {
+		unsigned long flags;
+
 		wake_up_interruptible_sync(&pipe->wait);
 		kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
 		pipe_wait(pipe);
+
+		pipe_unlock(pipe);
+		try_to_freeze();
+		pipe_lock(pipe);
+
+		if (fatal_signal_pending(current))
+			break;
+
+		/* Clear fake signal from freeze_task(). */
+		spin_lock_irqsave(&current->sighand->siglock, flags);
+		recalc_sigpending();
+		spin_unlock_irqrestore(&current->sighand->siglock, flags);
 	}
 
 	pipe->readers--;
