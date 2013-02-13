@@ -364,6 +364,11 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 		if (itype != SYSMMU_FAULT_UNKNOWN)
 			base = __raw_readl(
 					data->sfrbases[i] + REG_PT_BASE_ADDR);
+
+		pr_err("%s: %s on %#0lx by dev %s (pdev %s)\n",
+			__func__, sysmmu_fault_name[itype], addr,
+			dev_name(data->dev), pdev->name);
+
 		ret = data->fault_handler(itype, base, addr);
 	}
 
