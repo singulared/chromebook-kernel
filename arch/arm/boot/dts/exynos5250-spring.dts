@@ -282,6 +282,23 @@
 		};
 	};
 
+	i2c@12C70000 {
+		trackpad-alt {
+			reg=<0x4b>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<10 0>;
+			interrupt-parent=<&wakeup_eint>;
+			wakeup-source;
+		};
+		trackpad-bootloader {
+			reg=<0x25>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<10 0>;
+			interrupt-parent=<&wakeup_eint>;
+			wakeup-source;
+		};
+	};
+
 	i2c@12CD0000 {
 		ps8622-bridge@8 {
 			compatible = "parade,ps8622";
