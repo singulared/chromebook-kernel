@@ -1050,18 +1050,26 @@ static void __init exynos5250_dt_machine_init(void)
 	}
 
 	/*
-	 * Request lcd_bl_en GPIO for smdk5250_bl_notify().
-	 * TODO: Fix this so we are not at risk of requesting the GPIO
-	 * multiple times, this should be done with device tree, and
-	 * likely integrated into the plat-samsung/dev-backlight.c init.
+	 * Set the backlight on LCD_PWM pin only for boards not using the
+	 * Parade eDP bridge which has an internal PWN for the backlight.
 	 */
-	gpio_request_one(EXYNOS5_GPX3(0), GPIOF_OUT_INIT_HIGH, "lcd_bl_en");
+	if (!of_find_compatible_node(NULL, NULL, "parade,ps8622")) {
+		if (of_machine_is_compatible("google,snow")) {
+			smdk5250_bl_data.max_brightness = 2800;
+			smdk5250_bl_data.dft_brightness = 2800;
+		}
 
-	if (of_machine_is_compatible("google,snow")) {
-		smdk5250_bl_data.max_brightness = 2800;
-		smdk5250_bl_data.dft_brightness = 2800;
+		/*
+		 * Request lcd_bl_en GPIO for smdk5250_bl_notify().
+		 * TODO: Fix this so we are not at risk of requesting the GPIO
+		 * multiple times, this should be done with device tree, and
+		 * likely integrated into the plat-samsung/dev-backlight.c init.
+		 */
+		gpio_request_one(EXYNOS5_GPX3(0), GPIOF_OUT_INIT_HIGH,
+				 "lcd_bl_en");
+
+		samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
 	}
-	samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
 
 	/*
 	 * HACK ALERT! TODO: FIXME!
