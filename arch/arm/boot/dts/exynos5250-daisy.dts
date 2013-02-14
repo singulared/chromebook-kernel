@@ -59,6 +59,19 @@
 		};
 	};
 
+	i2c@12CD0000 {
+		codec {
+			compatible = "maxim,max98095";
+			reg = <0x11>;
+			mic-left-digital;
+			mic-right-digital;
+		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98095";
+	};
+
 	xhci {
 		phy {
 			compatible = "samsung,exynos-usbphy";
