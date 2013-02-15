@@ -88,6 +88,13 @@ config REGULATOR_AAT2870
 	  If you have a AnalogicTech AAT2870 say Y to enable the
 	  regulator driver.
 
+config REGULATOR_CHROMEOS_EC_TPS65090
+	tristate "Chromeos EC regulator"
+	depends on MFD_CHROMEOS_EC
+	help
+	  Provides simple access to TPS65090 behind Chromeos EC.  Presently
+	  only enables FET switch control.
+
 config REGULATOR_DA903X
 	tristate "Dialog Semiconductor DA9030/DA9034 regulators"
 	depends on PMIC_DA903X
