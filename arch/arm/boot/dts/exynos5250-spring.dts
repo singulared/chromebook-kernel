@@ -345,8 +345,8 @@
 		};
 
 		codec {
-			compatible = "maxim,max98095";
-			reg = <0x11>;
+			compatible = "maxim,max98089", "maxim,max98088";
+			reg = <0x10>;
 			mic-left-digital;
 			mic-right-digital;
 			mclk-pin = <2>;
@@ -359,7 +359,7 @@
 	};
 
 	sound {
-		compatible = "google,daisy-audio-max98095";
+		compatible = "google,daisy-audio-max98089";
 		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
 		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
 	};
