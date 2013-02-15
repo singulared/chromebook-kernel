@@ -1,5 +1,6 @@
 /*
- * Exynos machine ASoC driver for boards using MAX98095 codec.
+ * Exynos machine ASoC driver for boards using MAX98095 or MAX98088
+ * codec.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -32,6 +33,7 @@
 #include <sound/pcm_params.h>
 #include <sound/jack.h>
 #include <sound/max98095.h>
+#include <sound/max98088.h>
 
 #include <mach/regs-clock.h>
 #include <mach/gpio.h>
@@ -39,6 +41,7 @@
 #include "i2s.h"
 #include "s3c-i2s-v2.h"
 #include "../codecs/max98095.h"
+#include "../codecs/max98088.h"
 #include "codec_plugin.h"
 
 #define DRV_NAME "daisy-snd-max98095"
@@ -527,8 +530,11 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
-	if (!dn)
-		return -ENODEV;
+	if (!dn) {
+		dn = of_find_compatible_node(NULL, NULL, "maxim,max98088");
+		if (!dn)
+			return -ENODEV;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++)
 		daisy_dai[i].codec_of_node = of_node_get(dn);
@@ -586,6 +592,7 @@ static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
 
 static const struct of_device_id daisy_max98095_of_match[] __devinitconst = {
 	{ .compatible = "google,daisy-audio-max98095", },
+	{ .compatible = "google,daisy-audio-max98088", },
 	{},
 };
 

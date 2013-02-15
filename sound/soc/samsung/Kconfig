@@ -223,9 +223,10 @@ config SND_SOC_LITTLEMILL
 	select SND_SOC_WM8994
 
 config SND_SOC_EXYNOS_MAX98095
-       tristate "SoC I2S Audio support for MAX98095 on EXYNOS5"
+       tristate "SoC I2S Audio support for MAX98095 or MAX98088 on EXYNOS5"
        depends on SND_SOC_SAMSUNG && SOC_EXYNOS5250
        select SND_SOC_MAX98095
+       select SND_SOC_MAX98088
        select SND_SAMSUNG_I2S
        help
-               Say Y if you want to add support for SoC audio for max98095 on exynos5.
+               Say Y if you want to add support for SoC audio for max98095 or max98088 on exynos5.
