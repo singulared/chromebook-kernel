@@ -3057,6 +3057,13 @@ static __init int samsung_gpiolib_init(void)
 		}
 		samsung_gpiolib_add_4bit_chips(exynos5_gpios_4,
 					       nr_chips, gpio_base4);
+#ifdef CONFIG_S5P_GPIO_INT
+		s5p_register_gpioint_bank(EXYNOS5_IRQ_GPIO_XA, 0,
+					  EXYNOS5_IRQ_GPIO1_NR_GROUPS);
+		s5p_register_gpioint_bank(EXYNOS5_IRQ_GPIO_XB,
+					  EXYNOS5_IRQ_GPIO1_NR_GROUPS,
+					  EXYNOS5_IRQ_GPIO2_NR_GROUPS);
+#endif
 #endif	/* CONFIG_SOC_EXYNOS5250 */
 	} else {
 		WARN(1, "Unknown SoC in gpio-samsung, no GPIOs added\n");

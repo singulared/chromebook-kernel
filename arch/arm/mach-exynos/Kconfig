@@ -426,6 +426,7 @@ config MACH_EXYNOS5_DT
 	select SAMSUNG_DEV_BACKLIGHT
 	select SAMSUNG_DEV_PWM
 	select EXYNOS4_SETUP_TVOUT
+	select S5P_GPIO_INT
 	help
 	  Machine support for Samsung Exynos4 machine with device tree enabled.
 	  Select this if a fdt blob is available for the EXYNOS4 SoC based board.
