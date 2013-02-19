@@ -1901,11 +1901,6 @@ static void hdmi_commit(void *ctx)
 	hdata->enabled = true;
 }
 
-static void hdmi_apply(void *ctx)
-{
-	hdmi_commit(ctx);
-}
-
 static int hdmiphy_update_bits(struct i2c_client *client, u8 *reg_cache,
 			       u8 reg, u8 mask, u8 val)
 {
@@ -2089,7 +2084,6 @@ static struct exynos_panel_ops hdmi_ops = {
 	.mode_fixup	= hdmi_mode_fixup,
 	.mode_set	= hdmi_mode_set,
 	.commit		= hdmi_commit,
-	.apply		= hdmi_apply,
 };
 
 /*

@@ -117,7 +117,6 @@ int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder)
 void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
 	struct drm_device *dev = encoder->dev;
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
@@ -132,12 +131,6 @@ void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
-		if (display->controller_ops->apply)
-			display->controller_ops->apply(display->controller_ctx);
-
-		if (display->panel_ops->apply)
-			display->panel_ops->apply(display->panel_ctx);
-
 		exynos_drm_display_power(encoder, mode);
 		break;
 	case DRM_MODE_DPMS_STANDBY:

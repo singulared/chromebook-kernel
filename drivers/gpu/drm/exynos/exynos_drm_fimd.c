@@ -699,7 +699,6 @@ static struct exynos_controller_ops fimd_controller_ops = {
 	.power = fimd_power,
 	.mode_set = fimd_win_mode_set,
 	.commit = fimd_commit,
-	.apply = fimd_apply,
 	.win_commit = fimd_win_commit,
 	.win_disable = fimd_win_disable,
 };

@@ -26,7 +26,6 @@
  * @mode_fixup: Copies and optionally alters mode to adjusted_mode
  * @mode_set: Sets the panel to output mode
  * @commit: Commits changes to the panel from mode_set
- * @apply: Same as commit in most cases
  * @get_max_res: Returns the maximum resolution in width/height
  */
 struct exynos_panel_ops {
@@ -41,7 +40,6 @@ struct exynos_panel_ops {
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
 	void (*commit)(void *ctx);
-	void (*apply)(void *ctx);
 	void (*get_max_res)(void *ctx, unsigned int *width,
 				unsigned int *height);
 };
@@ -57,7 +55,6 @@ struct exynos_panel_ops {
  * @dpms: Same as power, but called in different places. Best to avoid it
  * @mode_set: Sets the controller to output mode
  * @commit: Applies controller level settings (as opposed to window level)
- * @apply: Commits the changes on all of the controller's windows
  * @win_commit: Commits the changes on only one window
  * @win_disable: Disables one of the controller's windows
  */
@@ -70,7 +67,6 @@ struct exynos_controller_ops {
 	int (*dpms)(void *ctx, int mode);
 	void (*mode_set)(void *ctx, struct exynos_drm_overlay *overlay);
 	void (*commit)(void *ctx);
-	void (*apply)(void *ctx);
 	void (*win_commit)(void *ctx, int zpos);
 	void (*win_disable)(void *ctx, int zpos);
 };

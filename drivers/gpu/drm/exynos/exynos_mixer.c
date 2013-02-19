@@ -1042,7 +1042,7 @@ static void mixer_resource_poweron(struct mixer_context *mctx)
 	mixer_enable_vblank(mctx, mctx->pipe);
 
 	mctx->is_mixer_powered_on = true;
-	mixer_win_commit(mctx, 0);
+	mixer_apply(mctx);
 }
 
 static void mixer_resource_poweroff(struct mixer_context *mctx)
@@ -1103,7 +1103,6 @@ static struct exynos_controller_ops mixer_ops = {
 
 	/* overlay */
 	.mode_set		= mixer_win_mode_set,
-	.apply			= mixer_apply,
 	.win_commit		= mixer_win_commit,
 	.win_disable		= mixer_win_disable,
 };
