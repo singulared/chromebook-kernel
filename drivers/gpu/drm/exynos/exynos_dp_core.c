@@ -34,6 +34,7 @@
 #endif
 
 #include <plat/cpu.h>
+#include <plat/gpio-cfg.h>
 
 #include "exynos_dp_core.h"
 
@@ -1143,6 +1144,14 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 		ret = gpio_request_one(dp->hpd_gpio, GPIOF_IN, "dp_hpd");
 		if (ret)
 			goto err_ioremap;
+#ifdef CONFIG_S5P_GPIO_INT
+		ret = s5p_register_gpio_interrupt(dp->hpd_gpio);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "cannot register/get GPIO irq\n");
+			goto err_gpio;
+		}
+		s3c_gpio_cfgpin(dp->hpd_gpio, S3C_GPIO_SFN(0xf));
+#endif
 		dp->irq = gpio_to_irq(dp->hpd_gpio);
 		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	} else {
