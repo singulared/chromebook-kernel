@@ -241,7 +241,7 @@ static int s5m8767_reg_disable(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	return s5m_reg_update(s5m8767->iodev, reg, ~pattern, mask);
+	return s5m_reg_update(s5m8767->iodev, reg, ~mask, mask);
 }
 
 static int s5m8767_get_voltage_register(struct regulator_dev *rdev, int *_reg)
