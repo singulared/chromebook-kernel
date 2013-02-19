@@ -891,11 +891,6 @@ static void mixer_win_disable(void *ctx, int zpos)
 	mixer_vsync_set_update(mctx, true);
 
 	spin_unlock_irqrestore(&res->reg_slock, flags);
-
-	if (win == MIXER_DEFAULT_WIN) {
-		mixer_win_reset(mctx);
-		mixer_enable_vblank(mctx, mctx->pipe);
-	}
 }
 
 /* for pageflip event */
