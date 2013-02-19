@@ -1891,8 +1891,6 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 
 	regulator_bulk_enable(res->regul_count, res->regul_bulk);
 	clk_enable(res->hdmiphy);
-	clk_enable(res->hdmi);
-	clk_enable(res->sclk_hdmi);
 
 	hdmiphy_poweron(hdata);
 
@@ -1915,8 +1913,6 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	hdmiphy_conf_reset(hdata);
 	hdmiphy_poweroff(hdata);
 
-	clk_disable(res->sclk_hdmi);
-	clk_disable(res->hdmi);
 	clk_disable(res->hdmiphy);
 	regulator_bulk_disable(res->regul_count, res->regul_bulk);
 
@@ -2034,6 +2030,14 @@ static int hdmi_resources_init(struct hdmi_context *hdata)
 		goto fail;
 	}
 	res->regul_count = ARRAY_SIZE(supply);
+
+	/*
+	 * These two clocks are not moved into hdmi_poweron/off since system
+	 * fails to suspend if VPLL clock of 70.5 MHz is used and these
+	 * clocks are disabled before suspend. So enable them here.
+	 */
+	clk_enable(res->sclk_hdmi);
+	clk_enable(res->hdmi);
 
 	return 0;
 fail:
@@ -2310,6 +2314,7 @@ static int hdmi_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct exynos_drm_hdmi_context *ctx = platform_get_drvdata(pdev);
 	struct hdmi_context *hdata = ctx->ctx;
+	struct hdmi_resources *res = &hdata->res;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
@@ -2318,6 +2323,8 @@ static int hdmi_remove(struct platform_device *pdev)
 
 	free_irq(hdata->irq, hdata);
 
+	clk_disable(res->sclk_hdmi);
+	clk_disable(res->hdmi);
 
 	put_device(&hdata->hdmiphy_port->dev);
 	put_device(&hdata->ddc_port->dev);
