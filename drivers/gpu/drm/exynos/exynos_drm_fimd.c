@@ -977,7 +977,14 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 		if (dp_dev)
 			exynos_dp_suspend(dp_dev);
 
+		/*
+		 * We need to make sure that all windows are disabled before we
+		 * suspend that connector. Otherwise we might try to scan from
+		 * a destroyed buffer later.
+		 */
 		fimd_window_suspend(dev);
+
+		fimd_disable_vblank(dev);
 
 		fimd_clock(ctx, false);
 		ctx->suspended = true;
