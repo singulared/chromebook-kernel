@@ -16,5 +16,6 @@ obj-$(CONFIG_ARM_TIMER_SP804)	+= timer-sp.o
 obj-$(CONFIG_MCPM)		+= mcpm_head.o mcpm_entry.o mcpm_platsmp.o vlock.o
 AFLAGS_mcpm_head.o		:= -march=armv7-a
 AFLAGS_vlock.o			:= -march=armv7-a
+CFLAGS_REMOVE_mcpm_entry.o	= -pg
 obj-$(CONFIG_BL_SWITCHER)	+= bL_switcher.o
 obj-$(CONFIG_BL_SWITCHER_DUMMY_IF) += bL_switcher_dummy_if.o
