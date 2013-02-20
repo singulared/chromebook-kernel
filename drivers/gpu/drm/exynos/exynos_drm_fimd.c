@@ -100,7 +100,6 @@ struct fimd_context {
 	void __iomem			*regs_mie;
 	struct fimd_win_data		win_data[WINDOWS_NR];
 	unsigned int			default_win;
-	unsigned long			irq_flags;
 	u32				vidcon0;
 	u32				vidcon1;
 	bool				suspended;
@@ -211,19 +210,17 @@ static int fimd_enable_vblank(void *ctx, int pipe)
 	if (fimd_ctx->suspended)
 		return -EPERM;
 
-	if (!test_and_set_bit(0, &fimd_ctx->irq_flags)) {
-		val = readl(fimd_ctx->regs + VIDINTCON0);
+	val = readl(fimd_ctx->regs + VIDINTCON0);
 
-		val |= VIDINTCON0_INT_ENABLE;
-		val |= VIDINTCON0_INT_FRAME;
+	val |= VIDINTCON0_INT_ENABLE;
+	val |= VIDINTCON0_INT_FRAME;
 
-		val &= ~VIDINTCON0_FRAMESEL0_MASK;
-		val |= VIDINTCON0_FRAMESEL0_VSYNC;
-		val &= ~VIDINTCON0_FRAMESEL1_MASK;
-		val |= VIDINTCON0_FRAMESEL1_NONE;
+	val &= ~VIDINTCON0_FRAMESEL0_MASK;
+	val |= VIDINTCON0_FRAMESEL0_VSYNC;
+	val &= ~VIDINTCON0_FRAMESEL1_MASK;
+	val |= VIDINTCON0_FRAMESEL1_NONE;
 
-		writel(val, fimd_ctx->regs + VIDINTCON0);
-	}
+	writel(val, fimd_ctx->regs + VIDINTCON0);
 
 	return 0;
 }
@@ -238,14 +235,12 @@ static void fimd_disable_vblank(void *ctx)
 	if (fimd_ctx->suspended)
 		return;
 
-	if (test_and_clear_bit(0, &fimd_ctx->irq_flags)) {
-		val = readl(fimd_ctx->regs + VIDINTCON0);
+	val = readl(fimd_ctx->regs + VIDINTCON0);
 
-		val &= ~VIDINTCON0_INT_FRAME;
-		val &= ~VIDINTCON0_INT_ENABLE;
+	val &= ~VIDINTCON0_INT_FRAME;
+	val &= ~VIDINTCON0_INT_ENABLE;
 
-		writel(val, fimd_ctx->regs + VIDINTCON0);
-	}
+	writel(val, fimd_ctx->regs + VIDINTCON0);
 }
 
 static int fimd_calc_clkdiv(struct fimd_context *fimd_ctx,
@@ -779,9 +774,7 @@ static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 
 		fimd_ctx->suspended = false;
 
-		/* if vblank was enabled status, enable it again. */
-		if (test_and_clear_bit(0, &fimd_ctx->irq_flags))
-			fimd_enable_vblank(fimd_ctx, fimd_ctx->pipe);
+		fimd_enable_vblank(fimd_ctx, fimd_ctx->pipe);
 
 		fimd_apply(fimd_ctx);
 		fimd_commit(fimd_ctx);
