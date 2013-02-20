@@ -25,6 +25,7 @@
 #include <linux/mfd/samsung/core.h>
 #include <linux/mfd/samsung/irq.h>
 #include <linux/mfd/samsung/rtc.h>
+#include <linux/mfd/samsung/s5m8767.h>
 #include <linux/regmap.h>
 
 static struct mfd_cell s5m8751_devs[] = {
@@ -136,6 +137,14 @@ static struct sec_platform_data *sec_pmic_i2c_parse_dt_pdata(
 	 * not parsed here.
 	 */
 
+	if (of_get_property(dev->of_node, "s5m-core,enable-low-jitter", NULL)) {
+		if (!(pd->device_type == S5M8767X))
+			dev_warn(dev, "no low-jitter for this PMIC type\n");
+		else
+			pd->low_jitter = true;
+	}
+	dev_dbg(dev, "OF low-jitter property: %u\n", pd->low_jitter);
+
 	return pd;
 }
 #else
@@ -157,6 +166,16 @@ static inline int sec_i2c_get_driver_data(struct i2c_client *i2c,
 	}
 #endif
 	return (int)id->driver_data;
+}
+
+static int sec_pmic_set_low_jitter(struct sec_pmic_dev *sec_pmic)
+{
+	if (!sec_pmic->pdata->low_jitter)
+		return 0;
+
+	return sec_reg_update(sec_pmic, S5M8767_REG_CTRL1,
+			      S5M8767_LOW_JITTER_MASK,
+			      S5M8767_LOW_JITTER_MASK);
 }
 
 static int sec_pmic_probe(struct i2c_client *i2c,
@@ -235,6 +254,12 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 
 	if (ret < 0)
 		goto err;
+
+	if (sec_pmic_set_low_jitter(sec_pmic) < 0) {
+		dev_err(sec_pmic->dev, "failed to configure low-jitter\n");
+		ret = -EIO;
+		goto err;
+	}
 
 	return ret;
 

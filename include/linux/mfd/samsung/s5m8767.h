@@ -186,4 +186,6 @@ enum s5m8767_regulators {
 
 #define S5M8767_ENCTRL_SHIFT  6
 
+#define S5M8767_LOW_JITTER_MASK		(1 << 3)
+
 #endif /* __LINUX_MFD_S5M8767_H */
