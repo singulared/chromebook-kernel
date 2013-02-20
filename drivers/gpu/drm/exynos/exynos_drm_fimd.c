@@ -791,6 +791,8 @@ static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 		 */
 		fimd_window_suspend(fimd_ctx);
 
+		fimd_disable_vblank(fimd_ctx);
+
 		if (fimd_ctx->panel_type == DP_LCD)
 			writel(0, fimd_ctx->regs + DPCLKCON);
 
