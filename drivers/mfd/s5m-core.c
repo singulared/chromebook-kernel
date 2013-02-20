@@ -123,20 +123,38 @@ static struct s5m_platform_data *s5m87xx_i2c_parse_dt_pdata(struct device *dev)
 	if (of_property_read_u32(dev->of_node, "s5m-core,device_type",
 				 &pd->device_type)) {
 		dev_warn(dev, "no OF device_type property");
-	} else {
-		dev_dbg(dev, "OF device_type property = %u", pd->device_type);
 	}
+	dev_dbg(dev, "OF device_type property = %u", pd->device_type);
+
+	if (of_get_property(dev->of_node, "s5m-core,enable-low-jitter", NULL)) {
+		if (!(pd->device_type == S5M8767X))
+			dev_warn(dev, "no low-jitter for this PMIC type\n");
+		else
+			pd->low_jitter = true;
+	}
+	dev_dbg(dev, "OF low-jitter property: %u\n", pd->low_jitter);
+
 	return pd;
 }
 #else
-static struct s5m_platform_data *s5m8767_i2c_parse_dt_pdata(struct device *dev)
+static struct s5m_platform_data *s5m87xx_i2c_parse_dt_pdata(struct device *dev)
 {
 	return 0;
 }
 #endif
 
-static int s5m87xx_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static int s5m87xx_set_low_jitter(struct s5m87xx_dev *s5m87xx)
+{
+	if (!s5m87xx->pdata->low_jitter)
+		return 0;
+
+	return s5m_reg_update(s5m87xx, S5M8767_REG_CTRL1,
+			      S5M8767_LOW_JITTER_MASK,
+			      S5M8767_LOW_JITTER_MASK);
+}
+
+static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
+				       const struct i2c_device_id *id)
 {
 	struct s5m_platform_data *pdata = i2c->dev.platform_data;
 	struct s5m87xx_dev *s5m87xx;
@@ -202,15 +220,15 @@ static int s5m87xx_i2c_probe(struct i2c_client *i2c,
 	switch (s5m87xx->device_type) {
 	case S5M8751X:
 		ret = mfd_add_devices(s5m87xx->dev, -1, s5m8751_devs,
-					ARRAY_SIZE(s5m8751_devs), NULL, 0);
+				      ARRAY_SIZE(s5m8751_devs), NULL, 0);
 		break;
 	case S5M8763X:
 		ret = mfd_add_devices(s5m87xx->dev, -1, s5m8763_devs,
-					ARRAY_SIZE(s5m8763_devs), NULL, 0);
+				      ARRAY_SIZE(s5m8763_devs), NULL, 0);
 		break;
 	case S5M8767X:
 		ret = mfd_add_devices(s5m87xx->dev, -1, s5m8767_devs,
-					ARRAY_SIZE(s5m8767_devs), NULL, 0);
+				      ARRAY_SIZE(s5m8767_devs), NULL, 0);
 		break;
 	default:
 		/* If this happens the probe function is problem */
@@ -219,6 +237,12 @@ static int s5m87xx_i2c_probe(struct i2c_client *i2c,
 
 	if (ret < 0)
 		goto err;
+
+	if (s5m87xx_set_low_jitter(s5m87xx) < 0) {
+		dev_err(s5m87xx->dev, "failed to configure low-jitter\n");
+		ret = -EIO;
+		goto err;
+	}
 
 	return ret;
 

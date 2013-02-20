@@ -241,6 +241,8 @@ enum s5m8767_irq {
 #define S5M8767_IRQ_RTC1S_MASK		(1 << 4)
 #define S5M8767_IRQ_WTSR_MASK		(1 << 5)
 
+#define S5M8767_LOW_JITTER_MASK		(1 << 3)
+
 enum s5m8763_irq {
 	S5M8763_IRQ_DCINF,
 	S5M8763_IRQ_DCINR,
@@ -370,6 +372,8 @@ struct s5m_platform_data {
 	bool                            buck2_ramp_enable;
 	bool                            buck3_ramp_enable;
 	bool                            buck4_ramp_enable;
+
+	bool				low_jitter;
 };
 
 #endif /*  __LINUX_MFD_S5M_CORE_H */
