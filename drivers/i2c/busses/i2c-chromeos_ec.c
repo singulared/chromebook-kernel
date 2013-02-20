@@ -23,6 +23,7 @@
 #include <linux/i2c.h>
 #include <linux/mfd/chromeos_ec.h>
 #include <linux/mfd/chromeos_ec_commands.h>
+#include <linux/of_i2c.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
@@ -32,10 +33,61 @@ struct ec_i2c_device {
 	struct chromeos_ec_device *ec;
 };
 
+#define CHECK_I2C_WR(num, length) \
+	(((msgs[num].flags & I2C_M_RD) == 0) && (msgs[num].len == length))
+
+#define CHECK_I2C_RD(num, length) \
+	((msgs[num].flags & I2C_M_RD) && (msgs[num].len == length))
+
+/* Standard I2C address for smart batteries */
+#define SBS_I2C_ADDR 0xB
+
+static int ec_forward_to_sbs(struct i2c_adapter *adap, struct i2c_msg msgs[],
+			     int num)
+{
+	struct ec_i2c_device *bus = adap->algo_data;
+
+	/* Battery device probing */
+	if ((num == 1) && (msgs[0].len == 0))
+		return bus->ec->command_sendrecv(bus->ec, EC_CMD_SB_READ_WORD,
+			msgs[0].buf, msgs[0].len, msgs[1].buf, msgs[1].len);
+	/* Read a word-sized register */
+	if ((num == 1) && CHECK_I2C_WR(0, 3))
+		return bus->ec->command_send(bus->ec, EC_CMD_SB_WRITE_WORD,
+			 msgs[0].buf, msgs[0].len);
+	/* Write a word-sized register */
+	if ((num == 2) && CHECK_I2C_WR(0, 1) && CHECK_I2C_RD(1, 2))
+		return bus->ec->command_sendrecv(bus->ec, EC_CMD_SB_READ_WORD,
+			msgs[0].buf, msgs[0].len, msgs[1].buf, msgs[1].len);
+	/* Retrieve string data length */
+	if ((num == 2) && CHECK_I2C_WR(0, 1) && CHECK_I2C_RD(1, 1)) {
+		msgs[1].buf[0] = I2C_SMBUS_BLOCK_MAX;
+		return 0;
+	}
+	/* Read string data */
+	if ((num == 2) && CHECK_I2C_WR(0, 1) &&
+			  CHECK_I2C_RD(1, I2C_SMBUS_BLOCK_MAX)) {
+		char tmpblock[I2C_SMBUS_BLOCK_MAX + 1];
+		int ret = bus->ec->command_sendrecv(bus->ec,
+			EC_CMD_SB_READ_BLOCK, msgs[0].buf, msgs[0].len,
+			tmpblock, I2C_SMBUS_BLOCK_MAX);
+		tmpblock[I2C_SMBUS_BLOCK_MAX] = 0;
+		/* real string length */
+		msgs[1].buf[0] = strlen(tmpblock);
+		strlcpy(&msgs[1].buf[1], tmpblock, msgs[1].len);
+		return ret;
+	}
+
+	return -EIO;
+}
+
 static int ec_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg i2c_msgs[],
 		       int num)
 {
 	struct ec_i2c_device *bus = adap->algo_data;
+
+	if (num && (i2c_msgs[0].addr == SBS_I2C_ADDR))
+		return ec_forward_to_sbs(adap, i2c_msgs, num);
 
 	return bus->ec->command_i2c(bus->ec, i2c_msgs, num);
 }
@@ -76,6 +128,8 @@ static int __devinit ec_i2c_probe(struct platform_device *pdev)
 	bus->adap.algo = &ec_i2c_algorithm;
 	bus->adap.algo_data = bus;
 	bus->adap.dev.parent = &pdev->dev;
+	bus->adap.dev.of_node = of_find_compatible_node(dev->of_node, NULL,
+							"google,cros_ec-i2c");
 	err = i2c_add_adapter(&bus->adap);
 	if (err) {
 		dev_err(dev, "cannot register i2c adapter\n");
@@ -85,6 +139,9 @@ static int __devinit ec_i2c_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s: Chrome EC I2C pass-through adapter\n",
 		 dev_name(bus->dev));
+
+	of_i2c_register_devices(&bus->adap);
+
 	return 0;
 fail_reg:
 	kfree(bus);
