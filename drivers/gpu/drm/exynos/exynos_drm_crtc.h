@@ -33,12 +33,17 @@
 #include "drm.h"
 #include "drm_crtc.h"
 
+struct exynos_drm_display;
+
 struct exynos_drm_overlay *get_exynos_drm_overlay(struct drm_device *dev,
 		struct drm_crtc *crtc);
-int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr);
+int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr,
+		struct exynos_drm_display *display);
 int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc);
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc);
-
+void exynos_drm_overlay_disable(struct drm_crtc *crtc, int zpos);
+void exynos_drm_crtc_apply(struct drm_crtc *crtc,
+		struct exynos_drm_overlay *overlay);
 void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx);
 
 /*

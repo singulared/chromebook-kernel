@@ -14,6 +14,8 @@
 #ifndef _EXYNOS_DRM_PANEL_H_
 #define _EXYNOS_DRM_PANEL_H_
 
+struct exynos_drm_overlay;
+
 /*
  * Callbacks used to manipulate the panel (DP/HDMI/MIPI)
  *
@@ -65,13 +67,6 @@ struct exynos_controller_ops {
 	void (*commit)(void *ctx);
 	void (*win_commit)(void *ctx, int zpos);
 	void (*win_disable)(void *ctx, int zpos);
-};
-
-enum exynos_drm_display_type {
-	EXYNOS_DRM_DISPLAY_TYPE_FIMD,
-	EXYNOS_DRM_DISPLAY_TYPE_MIXER,
-	EXYNOS_DRM_DISPLAY_TYPE_VIDI,
-	EXYNOS_DRM_DISPLAY_NUM_DISPLAYS,
 };
 
 /*

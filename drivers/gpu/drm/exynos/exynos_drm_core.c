@@ -68,7 +68,7 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 
 	/* create and initialize a encoder for this sub driver. */
 	encoder = exynos_drm_encoder_create(dev, subdrv->display,
-			(1 << MAX_CRTC) - 1);
+			(1 << EXYNOS_DRM_DISPLAY_NUM_DISPLAYS) - 1);
 	if (!encoder) {
 		DRM_ERROR("failed to create encoder\n");
 		return -EFAULT;

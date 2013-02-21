@@ -45,7 +45,6 @@
 #include <linux/dma-buf.h>
 #endif
 
-#define MAX_CRTC	3
 #define MAX_PLANE	5
 #define MAX_FB_BUFFER	4
 #define DEFAULT_ZPOS	-1
@@ -54,9 +53,16 @@ struct drm_device;
 struct exynos_drm_overlay;
 struct drm_connector;
 struct exynos_drm_gem_object;
-struct exynos_drm_display;
 
 extern unsigned int drm_vblank_offdelay;
+
+/* The different display types that are supported by the exynos drm driver */
+enum exynos_drm_display_type {
+	EXYNOS_DRM_DISPLAY_TYPE_FIMD = 0,
+	EXYNOS_DRM_DISPLAY_TYPE_MIXER,
+	EXYNOS_DRM_DISPLAY_TYPE_VIDI,
+	EXYNOS_DRM_DISPLAY_NUM_DISPLAYS,
+};
 
 /*
  * Exynos drm common overlay structure.
@@ -136,7 +142,7 @@ struct exynos_drm_private {
 	 * created crtc object would be contained at this array and
 	 * this array is used to be aware of which crtc did it request vblank.
 	 */
-	struct drm_crtc *crtc[MAX_CRTC];
+	struct drm_crtc *crtc[EXYNOS_DRM_DISPLAY_NUM_DISPLAYS];
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_callback kds_cb;
@@ -222,7 +228,6 @@ int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file);
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file);
 
 void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode);
-int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder);
 
 /*
  * exynos specific framebuffer structure.

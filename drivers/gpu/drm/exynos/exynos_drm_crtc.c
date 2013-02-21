@@ -35,6 +35,7 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_encoder.h"
+#include "exynos_drm_display.h"
 #include "exynos_drm_gem.h"
 #include "exynos_trace.h"
 
@@ -70,6 +71,7 @@ struct exynos_drm_crtc {
 	struct drm_pending_vblank_event *event;
 	DECLARE_KFIFO(flip_fifo, struct exynos_drm_flip_desc, 2);
 	struct exynos_drm_flip_desc	scanout_desc;
+	struct exynos_drm_display	*display;
 	unsigned int			pipe;
 	atomic_t			flip_pending;
 };
@@ -77,15 +79,21 @@ struct exynos_drm_crtc {
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
 				drm_crtc)
 
-static void exynos_drm_crtc_apply(struct drm_crtc *crtc)
+void exynos_drm_crtc_apply(struct drm_crtc *crtc,
+		struct exynos_drm_overlay *overlay)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct exynos_drm_overlay *overlay = &exynos_crtc->overlay;
+	struct exynos_drm_display *display = exynos_crtc->display;
 
-	exynos_drm_fn_encoder(crtc, overlay,
-			exynos_drm_encoder_crtc_mode_set);
-	exynos_drm_fn_encoder(crtc, &exynos_crtc->pipe,
-			exynos_drm_encoder_crtc_commit);
+	if (display->controller_ops && display->controller_ops->mode_set)
+		display->controller_ops->mode_set(display->controller_ctx,
+				overlay);
+
+	display->pipe = exynos_crtc->pipe;
+
+	if (display->controller_ops && display->controller_ops->win_commit)
+		display->controller_ops->win_commit(display->controller_ctx,
+				overlay->zpos);
 }
 
 void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
@@ -140,6 +148,16 @@ void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 	DRM_DEBUG_KMS("overlay : offset_x/y(%d,%d), width/height(%d,%d)",
 			overlay->crtc_x, overlay->crtc_y,
 			overlay->crtc_width, overlay->crtc_height);
+}
+
+void exynos_drm_overlay_disable(struct drm_crtc *crtc, int zpos)
+{
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_display *display = exynos_crtc->display;
+
+	if (display->controller_ops && display->controller_ops->win_disable)
+		display->controller_ops->win_disable(display->controller_ctx,
+				zpos);
 }
 
 static void exynos_drm_crtc_update(struct drm_crtc *crtc,
@@ -277,7 +295,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 
 	to_exynos_fb(next_desc.fb)->rendered = true;
 	exynos_drm_crtc_update(crtc, next_desc.fb);
-	exynos_drm_crtc_apply(crtc);
+	exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
 	to_exynos_fb(next_desc.fb)->prepared = true;
 
 	if (exynos_crtc->event) {
@@ -291,7 +309,13 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 
 static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 {
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_display *display = exynos_crtc->display;
+
 	DRM_DEBUG_KMS("crtc[%d] mode[%d]\n", crtc->base.id, mode);
+
+	if (display->controller_ops && display->controller_ops->dpms)
+		display->controller_ops->dpms(display->controller_ctx, mode);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (mode != DRM_MODE_DPMS_ON)
@@ -312,23 +336,26 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 {
-	int ret, mode = DRM_MODE_DPMS_ON;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_display *display = exynos_crtc->display;
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	/*
 	 * when set_crtc is requested from user or at booting time,
-	 * crtc->commit would be called without dpms call so if dpms is
-	 * no power on then crtc->dpms should be called
-	 * with DRM_MODE_DPMS_ON for the hardware power to be on.
+	 * crtc->commit would be called without dpms call so crtc->dpms
+	 * should be called with DRM_MODE_DPMS_ON for the controller power
+	 * to be on.
 	 */
-	exynos_drm_crtc_dpms(crtc, mode);
-
-	exynos_drm_fn_encoder(crtc, &mode, exynos_drm_encoder_crtc_dpms);
+	exynos_drm_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
 
 	ret = exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
 	if (ret)
 		DRM_ERROR("page_flip failed\n");
+
+	if (display->controller_ops && display->controller_ops->commit)
+		display->controller_ops->commit(display->controller_ctx);
 }
 
 static bool
@@ -349,6 +376,7 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 {
 	struct exynos_drm_private *dev_priv = crtc->dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_display *display = exynos_crtc->display;
 	struct drm_framebuffer *fb = crtc->fb;
 	int ret;
 
@@ -371,6 +399,10 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 		DRM_ERROR("Timed out waiting for flips to complete\n");
 
 	exynos_drm_crtc_update(crtc, fb);
+
+	if (display->controller_ops && display->controller_ops->mode_set)
+		display->controller_ops->mode_set(display->controller_ctx,
+				&exynos_crtc->overlay);
 
 	return 0;
 }
@@ -439,7 +471,7 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
 		exynos_drm_crtc_update(crtc, fb);
-		exynos_drm_crtc_apply(crtc);
+		exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
 		to_exynos_fb(fb)->prepared = true;
 	}
 }
@@ -588,7 +620,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 		if (unlikely(to_exynos_fb(next_desc.fb)->rendered) &&
 		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
 			exynos_drm_crtc_update(crtc, next_desc.fb);
-			exynos_drm_crtc_apply(crtc);
+			exynos_drm_crtc_apply(crtc, &exynos_crtc->overlay);
 			to_exynos_fb(next_desc.fb)->prepared = true;
 		}
 	}
@@ -615,15 +647,8 @@ static struct drm_crtc_funcs exynos_crtc_funcs = {
 	.destroy	= exynos_drm_crtc_destroy,
 };
 
-struct exynos_drm_overlay *get_exynos_drm_overlay(struct drm_device *dev,
-		struct drm_crtc *crtc)
-{
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-
-	return &exynos_crtc->overlay;
-}
-
-int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
+int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr,
+		struct exynos_drm_display *display)
 {
 	struct exynos_drm_crtc *exynos_crtc;
 	struct exynos_drm_private *private = dev->dev_private;
@@ -639,6 +664,7 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 
 	INIT_KFIFO(exynos_crtc->flip_fifo);
 	exynos_crtc->pipe = nr;
+	exynos_crtc->display = display;
 	exynos_crtc->overlay.zpos = DEFAULT_ZPOS;
 	crtc = &exynos_crtc->drm_crtc;
 
@@ -653,21 +679,42 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 {
 	struct exynos_drm_private *private = dev->dev_private;
+	struct exynos_drm_crtc *exynos_crtc =
+		to_exynos_crtc(private->crtc[crtc]);
+	struct exynos_drm_display *display = exynos_crtc->display;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_drm_fn_encoder(private->crtc[crtc], &crtc,
-			exynos_drm_enable_vblank);
+	if (display->pipe == -1)
+		display->pipe = crtc;
 
+	if (display->controller_ops && display->controller_ops->enable_vblank)
+		display->controller_ops->enable_vblank(display->controller_ctx,
+				crtc);
 	return 0;
 }
 
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc)
 {
 	struct exynos_drm_private *private = dev->dev_private;
+	struct exynos_drm_crtc *exynos_crtc =
+		to_exynos_crtc(private->crtc[crtc]);
+	struct exynos_drm_display *display = exynos_crtc->display;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_drm_fn_encoder(private->crtc[crtc], &crtc,
-			exynos_drm_disable_vblank);
+	/*
+	 * TODO(seanpaul): This seems like a hack. I don't think it's actually
+	 * needed for 2 reasons:
+	 *   (1) disable_vblank implies vblank has been enabled. If
+	 *       enable_vblank hasn't already been called, that's a bug.
+	 *   (2) Even if (1) isn't true, this function should just disable an
+	 *       interrupt, and shouldn't affect pipe.
+	 */
+	if (display->pipe == -1)
+		display->pipe = crtc;
+
+	if (display->controller_ops && display->controller_ops->disable_vblank)
+		display->controller_ops->disable_vblank(
+				display->controller_ctx);
 }

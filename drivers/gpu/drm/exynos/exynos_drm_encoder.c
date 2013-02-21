@@ -43,102 +43,23 @@
  * @drm_encoder: encoder object.
  * @display: specific encoder has its own display to control a hardware
  *	appropriately and we can access a hardware drawing on this display.
- * @dpms: store the encoder dpms value.
  */
 struct exynos_drm_encoder {
 	struct drm_encoder drm_encoder;
 	struct exynos_drm_display *display;
-	int dpms;
 };
-
-static void exynos_drm_display_power(struct drm_encoder *encoder, int mode)
-{
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-
-	/*
-	 * We want to make sure we order things correctly here. When
-	 * turning on, start the controller, then the panel. When
-	 * turning off, do the reverse.
-	 */
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		if (display->controller_ops->dpms)
-			display->controller_ops->dpms(
-					display->controller_ctx, mode);
-
-		if (display->panel_ops->dpms)
-			display->panel_ops->dpms(display->panel_ctx,
-					mode);
-
-		exynos_encoder->dpms = mode;
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		if (display->panel_ops->dpms)
-			display->panel_ops->dpms(display->panel_ctx,
-					mode);
-
-		if (display->controller_ops->dpms)
-			display->controller_ops->dpms(
-					display->controller_ctx, mode);
-
-		exynos_encoder->dpms = mode;
-		break;
-	default:
-		DRM_ERROR("Unknown dpms mode: %d\n", mode);
-			break;
-	}
-}
-
-int exynos_drm_encoder_get_dpms(struct drm_encoder *encoder)
-{
-	struct drm_device *dev = encoder->dev;
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	int mode;
-
-	mutex_lock(&dev->struct_mutex);
-	mode = exynos_encoder->dpms;
-	mutex_unlock(&dev->struct_mutex);
-
-	return mode;
-}
-
-void exynos_drm_encoder_crtc_dpms(struct drm_encoder *encoder, void *data)
-{
-	int mode = *(int *)data;
-
-	exynos_drm_encoder_dpms(encoder, mode);
-}
 
 void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
-	struct drm_device *dev = encoder->dev;
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
 
-	mutex_lock(&dev->struct_mutex);
-
-	if (exynos_encoder->dpms == mode) {
-		DRM_DEBUG_KMS("desired dpms mode is same as previous one.\n");
-		mutex_unlock(&dev->struct_mutex);
+	if (!drm_helper_encoder_in_use(encoder))
 		return;
-	}
 
-	exynos_drm_display_power(encoder, mode);
-
-	/*
-	 * if this condition is ok then it means that the crtc is already
-	 * detached from encoder and last function for detaching is properly
-	 * done, so clear pipe from display to prevent repeated call.
-	 */
-	if (mode > DRM_MODE_DPMS_ON && !encoder->crtc)
-		display->pipe = -1;
-
-	mutex_unlock(&dev->struct_mutex);
+	if (display->panel_ops->dpms)
+		display->panel_ops->dpms(display->panel_ctx, mode);
 }
 
 static bool
@@ -168,26 +89,15 @@ static void exynos_drm_encoder_mode_set(struct drm_encoder *encoder,
 					 struct drm_display_mode *mode,
 					 struct drm_display_mode *adjusted_mode)
 {
-	struct drm_device *dev = encoder->dev;
-	struct drm_connector *connector;
 	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	struct exynos_drm_overlay *overlay = get_exynos_drm_overlay(dev,
-						encoder->crtc);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		if (connector->encoder != encoder)
-			continue;
+	if (!drm_helper_encoder_in_use(encoder))
+		return;
 
-		if (display->panel_ops->mode_set)
-			display->panel_ops->mode_set(display->panel_ctx,
-					adjusted_mode);
-
-		if (display->controller_ops->mode_set)
-			display->controller_ops->mode_set(
-					display->controller_ctx, overlay);
-	}
+	if (display->panel_ops->mode_set)
+		display->panel_ops->mode_set(display->panel_ctx, adjusted_mode);
 }
 
 static void exynos_drm_encoder_prepare(struct drm_encoder *encoder)
@@ -202,8 +112,8 @@ static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
-	if (display->controller_ops->commit)
-		display->controller_ops->commit(display->controller_ctx);
+
+	exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_ON);
 
 	if (display->panel_ops->commit)
 		display->panel_ops->commit(display->panel_ctx);
@@ -292,7 +202,6 @@ exynos_drm_encoder_create(struct drm_device *dev,
 		return NULL;
 	}
 
-	exynos_encoder->dpms = DRM_MODE_DPMS_OFF;
 	exynos_encoder->display = display;
 	encoder = &exynos_encoder->drm_encoder;
 	encoder->possible_crtcs = possible_crtcs;
@@ -312,129 +221,4 @@ exynos_drm_encoder_create(struct drm_device *dev,
 struct exynos_drm_display *exynos_drm_get_display(struct drm_encoder *encoder)
 {
 	return to_exynos_encoder(encoder)->display;
-}
-
-void exynos_drm_fn_encoder(struct drm_crtc *crtc, void *data,
-			    void (*fn)(struct drm_encoder *, void *))
-{
-	struct drm_device *dev = crtc->dev;
-	struct drm_encoder *encoder;
-	struct exynos_drm_private *private = dev->dev_private;
-	struct exynos_drm_display *display;
-
-	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
-		/*
-		 * if crtc is detached from encoder, check pipe,
-		 * otherwise check crtc attached to encoder
-		 */
-		if (!encoder->crtc) {
-			display = exynos_drm_get_display(encoder);
-			if (display->pipe < 0 ||
-					private->crtc[display->pipe] != crtc)
-				continue;
-		} else if (encoder->crtc != crtc) {
-			continue;
-		}
-
-		fn(encoder, data);
-	}
-}
-
-void exynos_drm_enable_vblank(struct drm_encoder *encoder, void *data)
-{
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	int crtc = *(int *)data;
-
-	if (exynos_encoder->dpms != DRM_MODE_DPMS_ON)
-		return;
-
-	if (display->pipe == -1)
-		display->pipe = crtc;
-
-	/* TODO(seanpaul): Fix the pipe interaction here */
-	if (display->controller_ops->enable_vblank)
-		display->controller_ops->enable_vblank(display->controller_ctx,
-				display->pipe);
-}
-
-void exynos_drm_disable_vblank(struct drm_encoder *encoder, void *data)
-{
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	int crtc = *(int *)data;
-
-	if (exynos_encoder->dpms != DRM_MODE_DPMS_ON)
-		return;
-
-	/*
-	 * TODO(seanpaul): This seems like a hack. I don't think it's actually
-	 * needed for 2 reasons:
-	 *   (1) disable_vblank implies vblank has been enabled. If
-	 *       enable_vblank hasn't already been called, that's a bug.
-	 *   (2) Even if (1) isn't true, this function should just disable an
-	 *       interrupt, and shouldn't affect pipe.
-	 */
-	if (display->pipe == -1)
-		display->pipe = crtc;
-
-	if (display->controller_ops->disable_vblank)
-		display->controller_ops->disable_vblank(
-				display->controller_ctx);
-}
-
-void exynos_drm_encoder_crtc_plane_commit(struct drm_encoder *encoder,
-					  void *data)
-{
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	int zpos = DEFAULT_ZPOS;
-
-	if (data)
-		zpos = *(int *)data;
-
-	if (display->controller_ops->win_commit)
-		display->controller_ops->win_commit(display->controller_ctx,
-				zpos);
-}
-
-void exynos_drm_encoder_crtc_commit(struct drm_encoder *encoder, void *data)
-{
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	int crtc = *(int *)data;
-	int zpos = DEFAULT_ZPOS;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/*
-	 * when crtc is detached from encoder, this pipe is used
-	 * to select display operation
-	 */
-	display->pipe = crtc;
-
-	exynos_drm_encoder_crtc_plane_commit(encoder, &zpos);
-}
-
-void exynos_drm_encoder_crtc_mode_set(struct drm_encoder *encoder, void *data)
-{
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	struct exynos_drm_overlay *overlay = data;
-
-	if (display->controller_ops->mode_set)
-		display->controller_ops->mode_set(display->controller_ctx,
-				overlay);
-}
-
-void exynos_drm_encoder_crtc_disable(struct drm_encoder *encoder, void *data)
-{
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-	int zpos = DEFAULT_ZPOS;
-
-	DRM_DEBUG_KMS("\n");
-
-	if (data)
-		zpos = *(int *)data;
-
-	if (display->controller_ops->win_disable)
-		display->controller_ops->win_disable(display->controller_ctx,
-				zpos);
 }

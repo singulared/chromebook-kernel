@@ -61,11 +61,7 @@ exynos_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 
 	/* TODO: scale feature */
 	exynos_drm_overlay_update(overlay, fb, &crtc->mode, &pos);
-
-	exynos_drm_fn_encoder(crtc, overlay,
-			exynos_drm_encoder_crtc_mode_set);
-	exynos_drm_fn_encoder(crtc, &overlay->zpos,
-			exynos_drm_encoder_crtc_plane_commit);
+	exynos_drm_crtc_apply(crtc, overlay);
 
 	exynos_plane->enabled = true;
 
@@ -83,9 +79,7 @@ static int exynos_disable_plane(struct drm_plane *plane)
 	if (!exynos_plane->enabled)
 		return 0;
 
-	exynos_drm_fn_encoder(plane->crtc, &overlay->zpos,
-			exynos_drm_encoder_crtc_disable);
-
+	exynos_drm_overlay_disable(plane->crtc, overlay->zpos);
 	exynos_plane->enabled = false;
 
 	return 0;
@@ -119,7 +113,7 @@ int exynos_plane_init(struct drm_device *dev, unsigned int nr)
 		return -ENOMEM;
 
 	/* all CRTCs are available */
-	possible_crtcs = (1 << MAX_CRTC) - 1;
+	possible_crtcs = (1 << EXYNOS_DRM_DISPLAY_NUM_DISPLAYS) - 1;
 
 	exynos_plane->overlay.zpos = DEFAULT_ZPOS;
 

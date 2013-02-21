@@ -50,6 +50,16 @@
 
 #define VBLANK_OFF_DELAY	50000
 
+/* TODO (seanpaul): Once we remove platform drivers, we'll be calling the
+ * various panel/controller init functions directly. These init functions will
+ * return to us the ops and context, so we can get rid of these attach
+ * functions. Once the attach functions are gone, we can move this array of
+ * display pointers into the drm device's platform data.
+ *
+ * For now, we'll use a global to keep track of things.
+ */
+static struct exynos_drm_display *displays[EXYNOS_DRM_DISPLAY_NUM_DISPLAYS];
+
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
 	struct exynos_drm_private *private;
@@ -88,8 +98,8 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	 * EXYNOS4 is enough to have two CRTCs and each crtc would be used
 	 * without dependency of hardware.
 	 */
-	for (nr = 0; nr < MAX_CRTC; nr++) {
-		ret = exynos_drm_crtc_create(dev, nr);
+	for (nr = 0; nr < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; nr++) {
+		ret = exynos_drm_crtc_create(dev, nr, displays[nr]);
 		if (ret)
 			goto err_crtc;
 	}
@@ -100,7 +110,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 			goto err_crtc;
 	}
 
-	ret = drm_vblank_init(dev, MAX_CRTC);
+	ret = drm_vblank_init(dev, EXYNOS_DRM_DISPLAY_NUM_DISPLAYS);
 	if (ret)
 		goto err_crtc;
 
@@ -380,16 +390,6 @@ static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/* TODO (seanpaul): Once we remove platform drivers, we'll be calling the
- * various panel/controller init functions directly. These init functions will
- * return to us the ops and context, so we can get rid of these attach
- * functions. Once the attach functions are gone, we can move this array of
- * display pointers into the drm device's platform data.
- *
- * For now, we'll use a global to keep track of things.
- */
-static struct exynos_drm_display *displays[EXYNOS_DRM_DISPLAY_NUM_DISPLAYS];
-
 void exynos_display_attach_panel(enum exynos_drm_display_type type,
 		struct exynos_panel_ops *ops, void *ctx)
 {
@@ -501,7 +501,7 @@ static int exynos_drm_suspend_displays(void)
 
 		display->suspend_dpms = connector->dpms;
 		if (connector->funcs->dpms)
-			connector->funcs->dpms(connector,  DRM_MODE_DPMS_OFF);
+			connector->funcs->dpms(connector, DRM_MODE_DPMS_OFF);
 	}
 	return 0;
 }

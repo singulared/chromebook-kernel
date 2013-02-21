@@ -745,6 +745,9 @@ static int mixer_enable_vblank(void *ctx, int pipe)
 	if (pipe < 0)
 		return -EINVAL;
 
+	if (!mctx->is_mixer_powered_on)
+		return -EPERM;
+
 	mctx->pipe = pipe;
 
 	/* enable vsync interrupt */
@@ -760,6 +763,9 @@ static void mixer_disable_vblank(void *ctx)
 	struct mixer_resources *res = &mctx->mixer_res;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+
+	if (!mctx->is_mixer_powered_on)
+		return;
 
 	/* disable vsync interrupt */
 	mixer_reg_writemask(res, MXR_INT_EN, 0, MXR_INT_EN_VSYNC);
