@@ -877,6 +877,9 @@ static void mixer_win_disable(void *ctx, int zpos)
 		return;
 	}
 
+	if (!mctx->is_mixer_powered_on)
+		return;
+
 	mixer_wait_for_vsync(mctx);
 
 	spin_lock_irqsave(&res->reg_slock, flags);
