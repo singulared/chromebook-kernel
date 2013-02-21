@@ -56,6 +56,13 @@ static struct usb_driver btusb_driver;
 #define BTUSB_WRONG_SCO_MTU	0x40
 #define BTUSB_ATH3012		0x80
 
+/* Hack to deal with USB controllers/devices which */
+/* DMA after we shut the device down and kill the URB */
+static struct kmem_cache *btusb_intr_buf_cache;
+
+/* Max interrupt packet size for a full-speed device is 64 bytes */
+#define BTUSB_INTR_BUF_SIZE (64)
+
 static struct usb_device_id btusb_table[] = {
 	/* Generic Bluetooth USB device */
 	{ USB_DEVICE_INFO(0xe0, 0x01, 0x01) },
@@ -317,7 +324,8 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 
 	size = le16_to_cpu(data->intr_ep->wMaxPacketSize);
 
-	buf = kmalloc(size, mem_flags);
+	BUG_ON(size > BTUSB_INTR_BUF_SIZE);
+	buf = kmem_cache_alloc(btusb_intr_buf_cache, mem_flags);
 	if (!buf) {
 		usb_free_urb(urb);
 		return -ENOMEM;
@@ -329,7 +337,8 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 						btusb_intr_complete, hdev,
 						data->intr_ep->bInterval);
 
-	urb->transfer_flags |= URB_FREE_BUFFER;
+	/* HACK: intentionally leak this buffer due to DMA after free */
+	/* urb->transfer_flags |= URB_FREE_BUFFER; */
 
 	usb_anchor_urb(urb, &data->intr_anchor);
 
@@ -919,6 +928,16 @@ static int btusb_probe(struct usb_interface *intf,
 	int i, err;
 
 	BT_DBG("intf %p id %p", intf, id);
+
+	if (!btusb_intr_buf_cache) {
+		btusb_intr_buf_cache = kmem_cache_create("btusb_intr_buf",
+							 BTUSB_INTR_BUF_SIZE,
+							 BTUSB_INTR_BUF_SIZE,
+							 SLAB_RED_ZONE |
+							 SLAB_POISON,
+							 NULL);
+		BUG_ON(!btusb_intr_buf_cache);
+	}
 
 	/* interface numbers are hardcoded in the spec */
 	if (intf->cur_altsetting->desc.bInterfaceNumber != 0)
