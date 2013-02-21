@@ -65,8 +65,6 @@ struct timekeeper {
 	/* The current UTC to TAI offset in seconds */
 	s32			tai_offset;
 
-	/* Seqlock for all timekeeper values */
-	seqlock_t		lock;
 };
 
 static inline struct timespec tk_xtime(struct timekeeper *tk)
