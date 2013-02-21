@@ -77,6 +77,16 @@ static int s5p_gpioint_set_type(struct irq_data *d, unsigned int type)
 	return 0;
 }
 
+static void s5p_gpioint_resume(struct irq_data *data)
+{
+	struct irq_chip_generic *gc = irq_data_get_irq_chip_data(data);
+	struct irq_chip_regs *regs =
+		&container_of(data->chip, struct irq_chip_type, chip)->regs;
+
+	irq_reg_writel(gc->mask_cache, gc->reg_base + regs->mask);
+	irq_reg_writel(gc->type_cache, gc->reg_base + regs->type);
+}
+
 static void s5p_gpioint_handler(unsigned int irq, struct irq_desc *desc)
 {
 	struct s5p_gpioint_bank *bank = irq_get_handler_data(irq);
@@ -162,7 +172,8 @@ static __init int s5p_gpioint_add(struct samsung_gpio_chip *chip)
 	ct->chip.irq_ack = irq_gc_ack_set_bit;
 	ct->chip.irq_mask = irq_gc_mask_set_bit;
 	ct->chip.irq_unmask = irq_gc_mask_clr_bit;
-	ct->chip.irq_set_type = s5p_gpioint_set_type,
+	ct->chip.irq_set_type = s5p_gpioint_set_type;
+	ct->chip.irq_resume = s5p_gpioint_resume;
 	ct->regs.ack = PEND_OFFSET + REG_OFFSET(group - bank->start);
 	ct->regs.mask = MASK_OFFSET + REG_OFFSET(group - bank->start);
 	ct->regs.type = CON_OFFSET + REG_OFFSET(group - bank->start);
