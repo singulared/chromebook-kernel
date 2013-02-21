@@ -24,16 +24,6 @@
 		status = "disabled";
 	};
 
-	/*
-	 * always de-activate the OHCI controller else it will force turning on
-	 * the VBUS power on port 0 triggering an electrical conflict.
-	 * We can remove this workaround (and support USB1.1 peripherals)
-	 * once the next revision of hardware will modify the VBUS control.
-	 */
-	ohci {
-		status = "disabled";
-	};
-
 	gpio-keys {
 		compatible = "gpio-keys";
 
@@ -476,13 +466,5 @@
 		gpz: gpio-controller@03860000 {
 			powerdown-settings = <6 3 6 6 6 3 3>;
 		};
-	};
-
-	ehci {
-		/*
-		 * disable port 0 to avoid electrical conflict on VBUS
-		 * port 2 is not used
-		 */
-		samsung,port_used_bitmap = <0x2>;
 	};
 };
