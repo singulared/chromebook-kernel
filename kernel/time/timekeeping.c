@@ -1251,7 +1251,6 @@ static void update_wall_time(void)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&timekeeper_lock, flags);
-	write_seqcount_begin(&timekeeper_seq);
 
 	/* Make sure we're fully resumed: */
 	if (unlikely(timekeeping_suspended))
@@ -1303,6 +1302,7 @@ static void update_wall_time(void)
 	 */
 	accumulate_nsecs_to_secs(tk);
 
+	write_seqcount_begin(&timekeeper_seq);
 	/* Update clock->cycle_last with the new value */
 	clock->cycle_last = tk->cycle_last;
 	/*
@@ -1317,9 +1317,8 @@ static void update_wall_time(void)
 	 */
 	memcpy(real_tk, tk, sizeof(*tk));
 	timekeeping_update(real_tk, false, false);
-
-out:
 	write_seqcount_end(&timekeeper_seq);
+out:
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 }
 
