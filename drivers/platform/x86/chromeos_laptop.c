@@ -29,15 +29,15 @@
 
 #define ATMEL_TP_I2C_ADDR	0x4b
 #define ATMEL_TP_I2C_BL_ADDR	0x25
-#define ATMEL_TP2_I2C_ADDR	0x4a
-#define ATMEL_TP2_I2C_BL_ADDR	0x26
+#define ATMEL_TS_I2C_ADDR	0x4a
+#define ATMEL_TS_I2C_BL_ADDR	0x26
 #define CYAPA_TP_I2C_ADDR	0x67
 #define ISL_ALS_I2C_ADDR	0x44
 #define TAOS_ALS_I2C_ADDR	0x29
 
 static struct i2c_client *als;
 static struct i2c_client *tp;
-static struct i2c_client *tp2;
+static struct i2c_client *ts;
 
 const char *i2c_adapter_names[] = {
 	"SMBus I801 adapter",
@@ -138,10 +138,9 @@ static struct i2c_board_info __initdata atmel_224s_tp_device = {
 	.flags		= I2C_CLIENT_WAKE,
 };
 
-static struct i2c_board_info __initdata atmel_tp2_device = {
-	I2C_BOARD_INFO("atmel_mxt_ts", ATMEL_TP2_I2C_ADDR),
+static struct i2c_board_info __initdata atmel_1664s_device = {
+	I2C_BOARD_INFO("atmel_mxt_ts", ATMEL_TS_I2C_ADDR),
 	.platform_data = NULL,
-	.irq = 22,
 	.flags		= I2C_CLIENT_WAKE,
 };
 
@@ -269,16 +268,16 @@ static __init struct i2c_client *add_smbus_device(const char *name,
 	return chromeos_laptop_add_i2c_device(name, I2C_ADAPTER_SMBUS, info);
 }
 
-static int __init setup_link_tp2(const struct dmi_system_id *id)
+static int __init setup_atmel_1664s_ts(const struct dmi_system_id *id)
 {
-	const unsigned short addr_list[] = { ATMEL_TP2_I2C_BL_ADDR,
-					     ATMEL_TP2_I2C_ADDR,
+	const unsigned short addr_list[] = { ATMEL_TS_I2C_BL_ADDR,
+					     ATMEL_TS_I2C_ADDR,
 					     I2C_CLIENT_END };
 
-	tp2 = chromeos_laptop_add_probed_i2c_device(NULL,
-						    I2C_ADAPTER_PANEL,
-						    &atmel_tp2_device,
-						    addr_list);
+	ts = chromeos_laptop_add_probed_i2c_device("touchscreen",
+						   I2C_ADAPTER_PANEL,
+						   &atmel_1664s_device,
+						   addr_list);
 	return 0;
 }
 
@@ -289,7 +288,7 @@ static int __init setup_cyapa_smbus_tp(const struct dmi_system_id *id)
 	return 0;
 }
 
-static int __init setup_link_tp(const struct dmi_system_id *id)
+static int __init setup_atmel_224s_tp(const struct dmi_system_id *id)
 {
 	const unsigned short atmel_addr_list[] = { ATMEL_TP_I2C_BL_ADDR,
 						   ATMEL_TP_I2C_ADDR,
@@ -370,18 +369,18 @@ static const struct __initdata dmi_system_id chromeos_laptop_dmi_table[] = {
 		.callback = setup_lumpy_tp,
 	},
 	{
-		.ident = "Link - Touchpads2",
+		.ident = "Chromebook Pixel - Touchscreen",
 		.matches = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "Link"),
 		},
-		.callback = setup_link_tp2,
+		.callback = setup_atmel_1664s_ts,
 	},
 	{
-		.ident = "Link - Touchpads",
+		.ident = "Chromebook Pixel - Touchpad",
 		.matches = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "Link"),
 		},
-		.callback = setup_link_tp,
+		.callback = setup_atmel_224s_tp,
 	},
 	{
 		.ident = "isl29018 - Light Sensor",
@@ -433,7 +432,7 @@ static const struct __initdata dmi_system_id chromeos_laptop_dmi_table[] = {
 		.callback = setup_tsl2563_als,
 	},
 	{
-		.ident = "Link - Keyboard backlight",
+		.ident = "Chromebook Pixel - Keyboard backlight",
 		.matches = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "Link"),
 		},
@@ -457,8 +456,8 @@ static void __exit chromeos_laptop_exit(void)
 		i2c_unregister_device(als);
 	if (tp)
 		i2c_unregister_device(tp);
-	if (tp2)
-		i2c_unregister_device(tp2);
+	if (ts)
+		i2c_unregister_device(ts);
 	if (kb_backlight_device)
 		platform_device_unregister(kb_backlight_device);
 }
