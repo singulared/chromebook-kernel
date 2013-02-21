@@ -1315,6 +1315,14 @@ static int mixer_resume(struct device *dev)
 	if (ctx->pipe != -1 && drm_dev->vblank_enabled[ctx->pipe])
 		mixer_enable_vblank(ctx, ctx->pipe);
 
+	/*
+	 * in case of dpms on(standby), mixer_apply function will
+	 * be called by encoder's dpms callback to update mixer's
+	 * registers but in case of sleep wakeup, it's not.
+	 * so mixer_apply function should be called here.
+	 */
+	mixer_apply(ctx);
+
 	return 0;
 }
 #endif

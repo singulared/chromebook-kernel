@@ -2343,8 +2343,6 @@ static int hdmi_suspend(struct device *dev)
 	disable_irq(hdata->irq);
 
 	hdata->hpd = false;
-	if (ctx->drm_dev)
-		drm_helper_hpd_irq_event(ctx->drm_dev);
 
 	if (pm_runtime_suspended(dev)) {
 		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
@@ -2376,6 +2374,14 @@ static int hdmi_resume(struct device *dev)
 	}
 
 	hdmi_poweron(hdata);
+
+	/*
+	 * in case of dpms on(standby), hdmi commit function will
+	 * be called by encoder's dpms callback to update hdmi's
+	 * registers but in case of sleep wakeup, it's not.
+	 * so hdmi_commit function should be called here.
+	 */
+	hdmi_commit(hdata);
 
 	return 0;
 }
