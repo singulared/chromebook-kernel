@@ -26,6 +26,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/chromeos_ec.h>
 #include <linux/mfd/chromeos_ec_commands.h>
+#include <linux/of_platform.h>
 
 int cros_ec_prepare_tx(struct chromeos_ec_device *ec_dev,
 		       struct chromeos_ec_msg *msg)
@@ -129,25 +130,14 @@ static struct mfd_cell cros_devs[] = {
 		.name = "cros_ec-fw",
 		.id = 2,
 	},
-	{
-		.name = "cros_ec-i2c",
-		.id = 3,
-	},
-	/*
-	 * TODO(clchiou): We should look for EC specification in device tree
-	 * and add this mfd sub-device optionally.  But for now, this should
-	 * be fine.
-	 */
-	{
-		.name = "chromeos_vbc_ec",
-		.id = 4,
-	},
 };
 
 int __devinit cros_ec_register(struct chromeos_ec_device *ec_dev)
 {
 	struct device *dev = ec_dev->dev;
 	int err = 0;
+	struct device_node *node;
+	int id = 0;
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&ec_dev->event_notifier);
 	BLOCKING_INIT_NOTIFIER_HEAD(&ec_dev->wake_notifier);
@@ -197,6 +187,26 @@ int __devinit cros_ec_register(struct chromeos_ec_device *ec_dev)
 			      NULL, ec_dev->irq);
 	if (err)
 		goto fail_mfd;
+
+	/* adding sub-devices declared in the device tree */
+	for_each_child_of_node(dev->of_node, node) {
+		char name[128];
+		struct mfd_cell cell = {
+			.id = id++,
+			.name = name,
+		};
+
+		dev_dbg(dev, "adding MFD sub-device %s\n", node->name);
+		if (of_modalias_node(node, name, sizeof(name)) < 0) {
+			dev_err(dev, "modalias failure on %s\n",
+				node->full_name);
+			continue;
+		}
+
+		err = mfd_add_devices(dev, 0x10, &cell, 1, NULL, 0);
+		if (err)
+			dev_err(dev, "fail to add %s\n", node->full_name);
+	}
 
 	dev_info(dev, "Chrome EC (%s)\n", ec_dev->name);
 
