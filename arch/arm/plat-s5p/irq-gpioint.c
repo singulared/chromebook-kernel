@@ -120,7 +120,7 @@ static void s5p_gpioint_handler(unsigned int irq, struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
-static __init int s5p_gpioint_add(struct samsung_gpio_chip *chip)
+static __devinit int s5p_gpioint_add(struct samsung_gpio_chip *chip)
 {
 	static int used_gpioint_groups = 0;
 	int group = chip->group;
@@ -183,7 +183,7 @@ static __init int s5p_gpioint_add(struct samsung_gpio_chip *chip)
 	return 0;
 }
 
-int __init s5p_register_gpio_interrupt(int pin)
+int __devinit s5p_register_gpio_interrupt(int pin)
 {
 	struct samsung_gpio_chip *my_chip = samsung_gpiolib_getchip(pin);
 	int offset, group;
@@ -210,7 +210,8 @@ int __init s5p_register_gpio_interrupt(int pin)
 	return ret;
 }
 
-int __init s5p_register_gpioint_bank(int chain_irq, int start, int nr_groups)
+int __devinit s5p_register_gpioint_bank(int chain_irq, int start,
+					int nr_groups)
 {
 	struct s5p_gpioint_bank *bank;
 
