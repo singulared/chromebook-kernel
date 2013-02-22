@@ -218,9 +218,8 @@ struct dw_mci_dma_ops {
 #define DW_MCI_QUIRK_NO_WRITE_PROTECT		BIT(4)
 /* Only support SD cards, not MMC */
 #define DW_MCI_QUIRK_DISABLE_MMC		BIT(5)
-
 /* No detect end bit during read */
-#define DW_MCI_QUIRK_NO_DETECT_EBIT             BIT(6)
+#define DW_MCI_QUIRK_NO_DETECT_EBE		BIT(6)
 
 struct dma_pdata;
 

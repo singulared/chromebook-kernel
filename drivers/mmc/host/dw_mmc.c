@@ -611,7 +611,7 @@ static void dw_mci_submit_data(struct dw_mci *host, struct mmc_data *data)
 	host->data = data;
 
 	/* Only enable "End-Bit error" detection if host controller supports. */
-	if (host->quirks & DW_MCI_QUIRK_NO_DETECT_EBIT) {
+	if (host->quirks & DW_MCI_QUIRK_NO_DETECT_EBE) {
 		temp = mci_readl(host, INTMASK);
 		if (data->flags & MMC_DATA_READ)
 			temp &= ~SDMMC_INT_EBE;
