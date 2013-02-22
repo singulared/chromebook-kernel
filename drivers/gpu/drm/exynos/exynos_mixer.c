@@ -1325,7 +1325,8 @@ static int mixer_suspend(struct device *dev)
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
 	if (pm_runtime_suspended(dev)) {
-		DRM_DEBUG_KMS("%s : Already suspended\n", __func__);
+		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
+			__func__);
 		return 0;
 	}
 
@@ -1342,8 +1343,10 @@ static int mixer_resume(struct device *dev)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (!pm_runtime_suspended(dev)) {
-		DRM_DEBUG_KMS("%s : Already resumed\n", __func__);
+	if (pm_runtime_suspended(dev)) {
+		/* dpms callback should resume the mixer. */
+		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
+		__func__);
 		return 0;
 	}
 

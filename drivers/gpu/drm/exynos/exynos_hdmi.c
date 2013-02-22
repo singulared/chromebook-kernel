@@ -2353,7 +2353,8 @@ static int hdmi_suspend(struct device *dev)
 		drm_helper_hpd_irq_event(ctx->drm_dev);
 
 	if (pm_runtime_suspended(dev)) {
-		DRM_DEBUG_KMS("%s : Already suspended\n", __func__);
+		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
+			__func__);
 		return 0;
 	}
 
@@ -2373,8 +2374,10 @@ static int hdmi_resume(struct device *dev)
 
 	enable_irq(hdata->irq);
 
-	if (!pm_runtime_suspended(dev)) {
-		DRM_DEBUG_KMS("%s : Already resumed\n", __func__);
+	if (pm_runtime_suspended(dev)) {
+		/* dpms callback should resume the hdmi. */
+		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
+		__func__);
 		return 0;
 	}
 
