@@ -46,6 +46,7 @@ struct drm_framebuffer;
 #define DRM_MODE_OBJECT_FB 0xfbfbfbfb
 #define DRM_MODE_OBJECT_BLOB 0xbbbbbbbb
 #define DRM_MODE_OBJECT_PLANE 0xeeeeeeee
+#define DRM_MODE_OBJECT_BRIDGE 0xbdbdbdbd
 
 struct drm_mode_object {
 	uint32_t id;
@@ -282,6 +283,7 @@ struct drm_connector;
 struct drm_encoder;
 struct drm_pending_vblank_event;
 struct drm_plane;
+struct drm_bridge;
 
 /**
  * drm_crtc_funcs - control CRTCs for a given device
@@ -528,6 +530,7 @@ enum drm_connector_force {
  * @force: a %DRM_FORCE_<foo> state for forced mode sets
  * @encoder_ids: valid encoders for this connector
  * @encoder: encoder driving this connector, if any
+ * @bridge: bridge connected to this connector
  * @eld: EDID-like data, if present
  * @dvi_dual: dual link DVI, if found
  * @max_tmds_clock: max clock rate, if found
@@ -579,6 +582,7 @@ struct drm_connector {
 	enum drm_connector_force force;
 	uint32_t encoder_ids[DRM_CONNECTOR_MAX_ENCODER];
 	struct drm_encoder *encoder; /* currently active encoder */
+	struct drm_bridge *bridge; /* currently active bridge */
 
 	/* EDID bits */
 	uint8_t eld[MAX_ELD_BYTES];
@@ -647,6 +651,38 @@ struct drm_plane {
 };
 
 /**
+ * drm_bridge_funcs - drm_bridge control functions
+ * @destroy: make object go away
+ */
+struct drm_bridge_funcs {
+	void (*destroy)(struct drm_bridge *bridge);
+};
+
+/**
+ * drm_bridge - central DRM bridge control structure
+ * @dev: DRM device this bridge belongs to
+ * @head: list management
+ * @base: base mode object
+ * @crtc: crtc we're currently attached to
+ * @connector_type: the type of connector this bridge can attach to
+ * @funcs: control functions
+ * @helper_private: mid-layer private data
+ */
+struct drm_bridge {
+	struct drm_device *dev;
+	struct list_head head;
+
+	struct drm_mode_object base;
+
+	struct drm_crtc *crtc;
+
+	int connector_type;
+
+	const struct drm_bridge_funcs *funcs;
+	void *helper_private;
+};
+
+/**
  * drm_mode_set - new values for a CRTC config change
  * @head: list management
  * @fb: framebuffer to use for new config
@@ -708,6 +744,7 @@ struct drm_mode_group {
 	uint32_t num_crtcs;
 	uint32_t num_encoders;
 	uint32_t num_connectors;
+	uint32_t num_bridges;
 
 	/* list of object IDs for this group */
 	uint32_t *id_list;
@@ -722,6 +759,8 @@ struct drm_mode_group {
  * @fb_list: list of framebuffers available
  * @num_connector: number of connectors on this device
  * @connector_list: list of connector objects
+ * @num_bridge: number of bridges on this device
+ * @bridge_list: list of bridge objects
  * @num_encoder: number of encoders on this device
  * @encoder_list: list of encoder objects
  * @num_crtc: number of CRTCs on this device
@@ -749,6 +788,8 @@ struct drm_mode_config {
 	struct list_head fb_list;
 	int num_connector;
 	struct list_head connector_list;
+	int num_bridge;
+	struct list_head bridge_list;
 	int num_encoder;
 	struct list_head encoder_list;
 	int num_plane;
@@ -828,6 +869,10 @@ extern int drm_connector_init(struct drm_device *dev,
 extern void drm_connector_cleanup(struct drm_connector *connector);
 /* helper to unplug all connectors from sysfs for device */
 extern void drm_connector_unplug_all(struct drm_device *dev);
+
+extern int drm_bridge_init(struct drm_device *dev, struct drm_bridge *bridge,
+			   const struct drm_bridge_funcs *funcs);
+extern void drm_bridge_cleanup(struct drm_bridge *bridge);
 
 extern int drm_encoder_init(struct drm_device *dev,
 			    struct drm_encoder *encoder,

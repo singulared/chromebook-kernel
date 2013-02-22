@@ -102,6 +102,12 @@ struct drm_connector_helper_funcs {
 	int (*mode_valid)(struct drm_connector *connector,
 			  struct drm_display_mode *mode);
 	struct drm_encoder *(*best_encoder)(struct drm_connector *connector);
+	struct drm_bridge *(*best_bridge)(struct drm_connector *connector);
+};
+
+struct drm_bridge_helper_funcs {
+	void (*dpms)(struct drm_bridge *bridge, int mode);
+	void (*prepare)(struct drm_bridge *bridge);
 };
 
 extern int drm_helper_probe_single_connector_modes(struct drm_connector *connector, uint32_t maxX, uint32_t maxY);
@@ -113,6 +119,7 @@ extern bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 				     struct drm_framebuffer *old_fb);
 extern bool drm_helper_crtc_in_use(struct drm_crtc *crtc);
 extern bool drm_helper_encoder_in_use(struct drm_encoder *encoder);
+extern bool drm_helper_bridge_in_use(struct drm_bridge *bridge);
 
 extern void drm_helper_connector_dpms(struct drm_connector *connector, int mode);
 
@@ -135,6 +142,12 @@ static inline void drm_connector_helper_add(struct drm_connector *connector,
 					    const struct drm_connector_helper_funcs *funcs)
 {
 	connector->helper_private = (void *)funcs;
+}
+
+static inline void drm_bridge_helper_add(struct drm_bridge *bridge,
+		const struct drm_bridge_helper_funcs *funcs)
+{
+	bridge->helper_private = (void *)funcs;
 }
 
 extern int drm_helper_resume_force_mode(struct drm_device *dev);

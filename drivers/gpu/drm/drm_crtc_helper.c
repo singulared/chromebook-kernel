@@ -170,6 +170,29 @@ prune:
 EXPORT_SYMBOL(drm_helper_probe_single_connector_modes);
 
 /**
+ * drm_helper_bridge_in_use - check if a given bridge is in use
+ * @bridge: bridge to check
+ *
+ * LOCKING:
+ * Caller must hold mode config lock.
+ *
+ * Walk @bridge's DRM device's mode_config and see if it's in use.
+ *
+ * RETURNS:
+ * True if @bridge is part of the mode_config, false otherwise.
+ */
+bool drm_helper_bridge_in_use(struct drm_bridge *bridge)
+{
+	struct drm_connector *connector;
+	struct drm_device *dev = bridge->dev;
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head)
+		if (connector->bridge == bridge)
+			return true;
+	return false;
+}
+EXPORT_SYMBOL(drm_helper_bridge_in_use);
+
+/**
  * drm_helper_encoder_in_use - check if a given encoder is in use
  * @encoder: encoder to check
  *
@@ -239,6 +262,8 @@ drm_encoder_disable(struct drm_encoder *encoder)
  */
 void drm_helper_disable_unused_functions(struct drm_device *dev)
 {
+	struct drm_bridge *bridge;
+	struct drm_bridge_helper_funcs *bridge_funcs;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
 	struct drm_crtc *crtc;
@@ -248,6 +273,18 @@ void drm_helper_disable_unused_functions(struct drm_device *dev)
 			continue;
 		if (connector->status == connector_status_disconnected)
 			connector->encoder = NULL;
+	}
+
+	list_for_each_entry(bridge, &dev->mode_config.bridge_list, head) {
+		if (!drm_helper_bridge_in_use(bridge)) {
+			bridge_funcs = bridge->helper_private;
+
+			if (bridge_funcs->dpms)
+				bridge_funcs->dpms(bridge, DRM_MODE_DPMS_OFF);
+
+			/* disconnect crtc from the bridge */
+			bridge->crtc = NULL;
+		}
 	}
 
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
@@ -349,6 +386,8 @@ bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 	struct drm_display_mode *adjusted_mode, saved_mode, saved_hwmode;
 	struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
 	struct drm_encoder_helper_funcs *encoder_funcs;
+	struct drm_bridge *bridge;
+	struct drm_bridge_helper_funcs *bridge_funcs;
 	int saved_x, saved_y;
 	struct drm_encoder *encoder;
 	bool ret = true;
@@ -394,6 +433,15 @@ bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 		goto done;
 	}
 	DRM_DEBUG_KMS("[CRTC:%d]\n", crtc->base.id);
+
+	list_for_each_entry(bridge, &dev->mode_config.bridge_list, head) {
+		if (bridge->crtc != crtc)
+			continue;
+
+		bridge_funcs = bridge->helper_private;
+		if (bridge_funcs->prepare)
+			bridge_funcs->prepare(bridge);
+	}
 
 	/* Prepare the encoders and CRTCs before setting the mode. */
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
@@ -511,6 +559,7 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set)
 	struct drm_device *dev;
 	struct drm_crtc *save_crtcs, *new_crtc, *crtc;
 	struct drm_encoder *save_encoders, *new_encoder, *encoder;
+	struct drm_bridge *new_bridge;
 	struct drm_framebuffer *old_fb = NULL;
 	bool mode_changed = false; /* if true do a full mode set */
 	bool fb_changed = false; /* if true and !mode_changed just do a flip */
@@ -623,6 +672,31 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set)
 		mode_changed = true;
 	}
 
+	/* try to find a bridge for the connectors in the connector list */
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		struct drm_connector_helper_funcs *connector_funcs =
+			connector->helper_private;
+
+		new_bridge = connector->bridge;
+		for (ro = 0; ro < set->num_connectors; ro++) {
+			if (set->connectors[ro] != connector)
+				continue;
+
+			if (connector_funcs->best_bridge)
+				new_bridge = connector_funcs->best_bridge(
+						connector);
+			break;
+		}
+
+		if (new_bridge != connector->bridge) {
+			DRM_DEBUG_KMS("bridge changed, full mode switch\n");
+			mode_changed = true;
+			if (connector->bridge)
+				connector->bridge->crtc = NULL;
+			connector->bridge = new_bridge;
+		}
+	}
+
 	/* a) traverse passed in connector list and get encoders for them */
 	count = 0;
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
@@ -683,6 +757,11 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set)
 			DRM_DEBUG_KMS("crtc changed, full mode switch\n");
 			mode_changed = true;
 			connector->encoder->crtc = new_crtc;
+		}
+		if (connector->bridge && new_crtc != connector->bridge->crtc) {
+			DRM_DEBUG_KMS("crtc changed, full mode switch\n");
+			mode_changed = true;
+			connector->bridge->crtc = new_crtc;
 		}
 		if (new_crtc) {
 			DRM_DEBUG_KMS("[CONNECTOR:%d:%s] to [CRTC:%d]\n",
@@ -810,6 +889,8 @@ static int drm_helper_choose_crtc_dpms(struct drm_crtc *crtc)
 void drm_helper_connector_dpms(struct drm_connector *connector, int mode)
 {
 	struct drm_encoder *encoder = connector->encoder;
+	struct drm_bridge *bridge = connector->bridge;
+
 	struct drm_crtc *crtc = encoder ? encoder->crtc : NULL;
 	int old_dpms;
 
@@ -827,6 +908,13 @@ void drm_helper_connector_dpms(struct drm_connector *connector, int mode)
 				(*crtc_funcs->dpms) (crtc,
 						     drm_helper_choose_crtc_dpms(crtc));
 		}
+		if (bridge) {
+			struct drm_bridge_helper_funcs *bridge_funcs =
+				bridge->helper_private;
+
+			if (bridge_funcs->dpms)
+				(*bridge_funcs->dpms)(bridge, mode);
+		}
 		if (encoder) {
 			struct drm_encoder_helper_funcs *encoder_funcs = encoder->helper_private;
 			if (encoder_funcs->dpms)
@@ -842,6 +930,13 @@ void drm_helper_connector_dpms(struct drm_connector *connector, int mode)
 			if (encoder_funcs->dpms)
 				(*encoder_funcs->dpms) (encoder,
 							drm_helper_choose_encoder_dpms(encoder));
+		}
+		if (bridge) {
+			struct drm_bridge_helper_funcs *bridge_funcs =
+				bridge->helper_private;
+
+			if (bridge_funcs->dpms)
+				(*bridge_funcs->dpms)(bridge, mode);
 		}
 		if (crtc) {
 			struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
