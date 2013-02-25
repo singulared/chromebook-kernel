@@ -3,3 +3,8 @@ config DRM_PTN3460
 	depends on DRM && I2C
 	---help---
 	  Adds the driver for the NXP PTN3460 DP/LVDS bridge chip.
+
+config DRM_PS8622
+	tristate "Parade eDP/LVDS bridge"
+	---help---
+	  Adds the driver for the Parade PS8622 eDP/LVDS bridge chip.

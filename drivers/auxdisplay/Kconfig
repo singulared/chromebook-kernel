@@ -119,9 +119,4 @@ config CFAG12864B_RATE
 	  If you compile this as a module, you can still override this
 	  value using the module parameters.
 
-config PS8622
-	tristate "Parade eDP/LVDS bridge"
-	---help---
-	  Adds the driver for the Parade PS8622 eDP/LVDS bridge chip.
-
 endif # AUXDISPLAY
