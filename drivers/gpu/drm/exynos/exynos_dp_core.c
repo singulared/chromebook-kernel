@@ -944,13 +944,15 @@ static irqreturn_t exynos_dp_irq_handler(int irq, void *arg)
 static void exynos_dp_hotplug(struct work_struct *work)
 {
 	struct exynos_dp_device *dp;
-	int ret;
 
 	dp = container_of(work, struct exynos_dp_device, hotplug_work);
 
-	/* Cable is disconnected, skip dp initialization */
-	if (exynos_dp_detect_hpd(dp))
-		goto out;
+	drm_helper_hpd_irq_event(dp->drm_dev);
+}
+
+static void exynos_dp_train_link(struct exynos_dp_device *dp)
+{
+	int ret;
 
 #ifdef CONFIG_DRM_PTN3460
 	ret = ptn3460_wait_until_ready(30 * 1000);
@@ -985,14 +987,21 @@ static void exynos_dp_hotplug(struct work_struct *work)
 	exynos_dp_set_link_bandwidth(dp, dp->video_info->link_rate);
 
 	exynos_dp_init_video(dp);
-	exynos_dp_config_video(dp);
+}
 
-out:
-	drm_helper_hpd_irq_event(dp->drm_dev);
+static void exynos_dp_commit(void *ctx)
+{
+	struct exynos_dp_device *dp = ctx;
+
+	exynos_dp_config_video(dp);
 }
 
 static int exynos_dp_power_off(struct exynos_dp_device *dp)
 {
+	if (!dp->enabled)
+		return 0;
+
+	dp->enabled = false;
 	exynos_dp_disable_hpd(dp);
 
 	if (work_pending(&dp->hotplug_work))
@@ -1007,6 +1016,9 @@ static int exynos_dp_power_off(struct exynos_dp_device *dp)
 
 static int exynos_dp_power_on(struct exynos_dp_device *dp)
 {
+	if (dp->enabled)
+		return 0;
+
 	if (dp->phy_ops.phy_init)
 		dp->phy_ops.phy_init();
 
@@ -1022,6 +1034,16 @@ static int exynos_dp_power_on(struct exynos_dp_device *dp)
 	if (dp->irq < 0 && !exynos_dp_detect_hpd(dp))
 		schedule_work(&dp->hotplug_work);
 
+	/*
+	 * These calls are required to make sure we train the dp link when dpms
+	 * off/on is called from userspace. In the boot and resume cases, the
+	 * link training is handled via the modeset, but unfortunately modeset
+	 * isn't being called in the dpms off/on case.
+	 */
+	exynos_dp_train_link(dp);
+	exynos_dp_commit(dp);
+
+	dp->enabled = true;
 	return 0;
 }
 
@@ -1086,11 +1108,20 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 	return 0;
 }
 
+static void exynos_dp_mode_set(void *ctx, struct drm_display_mode *mode)
+{
+	struct exynos_dp_device *dp = ctx;
+
+	exynos_dp_train_link(dp);
+}
+
 static struct exynos_panel_ops dp_panel_ops = {
 	.subdrv_probe = exynos_dp_subdrv_probe,
 	.is_connected = exynos_dp_is_connected,
 	.check_timing = exynos_dp_check_timing,
 	.dpms = exynos_dp_dpms,
+	.mode_set = exynos_dp_mode_set,
+	.commit = exynos_dp_commit,
 };
 
 static int __devinit exynos_dp_probe(struct platform_device *pdev)
@@ -1169,6 +1200,7 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 		dp->irq_flags = 0;
 	}
 
+	dp->enabled = false;
 	dp->training_type = pdata->training_type;
 	dp->video_info = pdata->video_info;
 	dp->force_connected = pdata->force_connected;

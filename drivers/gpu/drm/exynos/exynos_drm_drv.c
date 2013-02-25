@@ -472,7 +472,7 @@ void exynos_display_remove(struct exynos_drm_display *display)
 	}
 }
 
-static int exynos_drm_resume_displays(void)
+static int exynos_drm_resume_displays(struct drm_device *dev)
 {
 	int i;
 
@@ -485,6 +485,9 @@ static int exynos_drm_resume_displays(void)
 
 		connector->funcs->dpms(connector, display->suspend_dpms);
 	}
+
+	drm_helper_resume_force_mode(dev);
+
 	return 0;
 }
 
@@ -517,17 +520,27 @@ static int exynos_drm_suspend(struct device *dev)
 
 static int exynos_drm_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(pdev);
+
 	if (pm_runtime_suspended(dev))
 		return 0;
 
-	return exynos_drm_resume_displays();
+	return exynos_drm_resume_displays(drm_dev);
 }
 #endif
 
 #ifdef CONFIG_PM_RUNTIME
 static int exynos_drm_runtime_resume(struct device *dev)
 {
-	return exynos_drm_resume_displays();
+	struct platform_device *pdev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(pdev);
+
+	/* Check drm_dev here since this function is called from probe */
+	if (!drm_dev)
+		return 0;
+
+	return exynos_drm_resume_displays(drm_dev);
 }
 
 static int exynos_drm_runtime_suspend(struct device *dev)
