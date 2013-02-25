@@ -228,10 +228,23 @@ struct drm_encoder *exynos_drm_best_encoder(struct drm_connector *connector)
 	return encoder;
 }
 
+struct drm_bridge *exynos_drm_best_bridge(struct drm_connector *connector)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_bridge *bridge;
+
+	list_for_each_entry(bridge, &dev->mode_config.bridge_list, head) {
+		if (bridge->connector_type == connector->connector_type)
+			return bridge;
+	}
+	return NULL;
+}
+
 static struct drm_connector_helper_funcs exynos_connector_helper_funcs = {
 	.get_modes	= exynos_drm_connector_get_modes,
 	.mode_valid	= exynos_drm_connector_mode_valid,
 	.best_encoder	= exynos_drm_best_encoder,
+	.best_bridge	= exynos_drm_best_bridge,
 };
 
 static int exynos_drm_connector_fill_modes(struct drm_connector *connector,

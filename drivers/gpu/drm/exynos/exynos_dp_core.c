@@ -29,10 +29,6 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_display.h"
 
-#ifdef CONFIG_DRM_PTN3460
-#include "i2c/ptn3460.h"
-#endif
-
 #include <plat/cpu.h>
 #include <plat/gpio-cfg.h>
 
@@ -953,14 +949,6 @@ static void exynos_dp_hotplug(struct work_struct *work)
 static void exynos_dp_train_link(struct exynos_dp_device *dp)
 {
 	int ret;
-
-#ifdef CONFIG_DRM_PTN3460
-	ret = ptn3460_wait_until_ready(30 * 1000);
-	if (ret) {
-		DRM_ERROR("PTN3460 is not ready, don't plug\n");
-		return;
-	}
-#endif
 
 	ret = exynos_dp_handle_edid(dp);
 	if (ret) {

@@ -42,6 +42,11 @@
 #include "exynos_drm_dmabuf.h"
 #include "exynos_drm_display.h"
 
+#include <linux/i2c.h>
+#include <linux/of_i2c.h>
+
+#include <drm/bridge/ptn3460.h>
+
 #define DRIVER_NAME	"exynos"
 #define DRIVER_DESC	"Samsung SoC DRM"
 #define DRIVER_DATE	"20110530"
@@ -60,11 +65,34 @@
  */
 static struct exynos_drm_display *displays[EXYNOS_DRM_DISPLAY_NUM_DISPLAYS];
 
+struct bridge_init {
+	struct i2c_client *client;
+	struct device_node *node;
+	bool valid;
+};
+
+static int find_bridge(const char *name, struct bridge_init *bridge)
+{
+	bridge->valid = false;
+	bridge->client = NULL;
+	bridge->node = of_find_node_by_name(NULL, name);
+	if (!bridge->node)
+		return 0;
+
+	bridge->client = of_find_i2c_device_by_node(bridge->node);
+	if (!bridge->client)
+		return -ENODEV;
+
+	bridge->valid = true;
+	return 0;
+}
+
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
 	struct exynos_drm_private *private;
 	int ret;
 	int nr;
+	struct bridge_init bridge;
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
@@ -113,6 +141,19 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = drm_vblank_init(dev, EXYNOS_DRM_DISPLAY_NUM_DISPLAYS);
 	if (ret)
 		goto err_crtc;
+
+	ret = find_bridge("ptn3460-bridge", &bridge);
+	if (ret) {
+		DRM_ERROR("Could not get PTN3460 bridge %d\n", ret);
+		goto err_kds;
+	}
+	if (bridge.valid) {
+		ret = ptn3460_init(dev, bridge.client, bridge.node);
+		if (ret) {
+			DRM_ERROR("Failed to initialize the ptn bridge\n");
+			goto err_kds;
+		}
+	}
 
 	/*
 	 * probe sub drivers such as display controller and hdmi driver,
