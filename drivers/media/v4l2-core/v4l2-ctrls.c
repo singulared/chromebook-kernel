@@ -455,6 +455,13 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 		"RGB full range (0-255)",
 		NULL,
 	};
+	static const char * const vpx_num_partitions[] = {
+		"1 partition",
+		"2 partitions",
+		"4 partitions",
+		"8 partitions",
+		NULL,
+	};
 
 
 	switch (id) {
@@ -542,6 +549,8 @@ const char * const *v4l2_ctrl_get_menu(u32 id)
 	case V4L2_CID_DV_TX_RGB_RANGE:
 	case V4L2_CID_DV_RX_RGB_RANGE:
 		return dv_rgb_range;
+	case V4L2_CID_VPX_NUM_PARTITIONS:
+		return vpx_num_partitions;
 
 	default:
 		return NULL;
@@ -801,6 +810,16 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_DV_RX_POWER_PRESENT:	return "Power Present";
 	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 
+	/* VPX controls */
+	case V4L2_CID_VPX_NUM_PARTITIONS:	return "VPX Number of partitions";
+	case V4L2_CID_VPX_IMD_DISABLE_4X4:	return "VPX Intra mode decision disable";
+	case V4L2_CID_VPX_NUM_OF_REF:		return "VPX Number of reference pictures for P frames";
+	case V4L2_CID_VPX_FILTER_LEVEL:		return "VPX Loop filter level range";
+	case V4L2_CID_VPX_FILTER_SHARPNESS:	return "VPX Deblocking effect control";
+	case V4L2_CID_VPX_GOLDEN_FRAME_REF_PERIOD:	return "VPX Golden frame refresh period";
+	case V4L2_CID_VPX_GOLDEN_FRAME_SEL:	return "VPX Golden frame indicator";
+	case V4L2_CID_VPX_HIERARCHICAL_CODING_LAYER:	return "VPX Number of hierarchical layer";
+	case V4L2_CID_VPX_HIERARCHICAL_QP_ENABLE:	return "VPX Hierarchical QP enable";
 	default:
 		return NULL;
 	}
@@ -906,6 +925,7 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_DV_TX_RGB_RANGE:
 	case V4L2_CID_DV_RX_RGB_RANGE:
 	case V4L2_CID_TEST_PATTERN:
+	case V4L2_CID_VPX_NUM_PARTITIONS:
 		*type = V4L2_CTRL_TYPE_MENU;
 		break;
 	case V4L2_CID_LINK_FREQ:

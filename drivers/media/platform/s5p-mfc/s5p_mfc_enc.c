@@ -1496,25 +1496,25 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_MPEG4_QPEL:
 		p->codec.mpeg4.quarter_pixel = ctrl->val;
 		break;
-	case V4L2_CID_VP8_NUM_PARTITIONS:
+	case V4L2_CID_VPX_NUM_PARTITIONS:
 		p->codec.vp8.num_partitions = ctrl->val;
 		break;
-	case V4L2_CID_VP8_IMD_DISABLE_4X4:
+	case V4L2_CID_VPX_IMD_DISABLE_4X4:
 		p->codec.vp8.imd_4x4 = ctrl->val;
 		break;
-	case V4L2_CID_VP8_NUM_OF_REF:
+	case V4L2_CID_VPX_NUM_OF_REF:
 		p->codec.vp8.num_ref = ctrl->val;
 		break;
-	case V4L2_CID_VP8_FILTER_LEVEL:
+	case V4L2_CID_VPX_FILTER_LEVEL:
 		p->codec.vp8.filter_level = ctrl->val;
 		break;
-	case V4L2_CID_VP8_FILTER_SHARPNESS:
+	case V4L2_CID_VPX_FILTER_SHARPNESS:
 		p->codec.vp8.filter_sharpness = ctrl->val;
 		break;
-	case V4L2_CID_VP8_GOLDEN_FRAME_REF_PERIOD:
+	case V4L2_CID_VPX_GOLDEN_FRAME_REF_PERIOD:
 		p->codec.vp8.golden_frame_ref_period = ctrl->val;
 		break;
-	case V4L2_CID_VP8_GOLDEN_FRAME_SEL:
+	case V4L2_CID_VPX_GOLDEN_FRAME_SEL:
 		p->codec.vp8.golden_frame_sel = ctrl->val;
 		break;
 	default:
