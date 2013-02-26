@@ -44,6 +44,7 @@ struct exynos_dp_device {
 	struct resource		*res;
 	struct clk		*clock;
 	int			irq;
+	int			irq_flags;
 	void __iomem		*reg_base;
 	int			hpd_gpio;
 	bool			force_connected;

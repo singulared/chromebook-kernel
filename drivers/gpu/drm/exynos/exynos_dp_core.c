@@ -1068,8 +1068,18 @@ static bool exynos_dp_is_connected(void *ctx)
 static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 {
 	struct exynos_dp_device *dp = ctx;
+	int ret;
 
 	dp->drm_dev = drm_dev;
+
+	if (dp->irq >= 0) {
+		ret = request_irq(dp->irq, exynos_dp_irq_handler, dp->irq_flags,
+				"exynos-dp", dp);
+		if (ret) {
+			dev_err(dp->dev, "failed to request irq\n");
+			return ret;
+		}
+	}
 
 	exynos_dp_dpms(dp, DRM_MODE_DPMS_ON);
 
@@ -1090,7 +1100,6 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 	struct exynos_dp_platdata *pdata;
 
 	int ret = 0;
-	int irqflags;
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
@@ -1153,11 +1162,11 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 		s3c_gpio_cfgpin(dp->hpd_gpio, S3C_GPIO_SFN(0xf));
 #endif
 		dp->irq = gpio_to_irq(dp->hpd_gpio);
-		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+		dp->irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	} else {
 		dp->hpd_gpio = -ENODEV;
 		dp->irq = platform_get_irq(pdev, 0);
-		irqflags = 0;
+		dp->irq_flags = 0;
 	}
 
 	dp->training_type = pdata->training_type;
@@ -1171,15 +1180,6 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 		dp->phy_ops.phy_exit = pdata->phy_exit;
 
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
-
-	if (dp->irq >= 0) {
-		ret = request_irq(dp->irq, exynos_dp_irq_handler, irqflags,
-				"exynos-dp", dp);
-		if (ret) {
-			dev_err(&pdev->dev, "failed to request irq\n");
-			goto err_gpio;
-		}
-	}
 
 	platform_set_drvdata(pdev, dp);
 
