@@ -821,10 +821,50 @@ int i915_reset(struct drm_device *dev, u8 flags)
 	return 0;
 }
 
+static ssize_t
+set_i2c_mutex(struct device* dev, struct device_attribute* attr, const char* buf, size_t count)
+{
+	struct pci_dev* pdev = to_pci_dev(dev);
+	struct drm_device* drm_dev = pci_get_drvdata(pdev);
+	struct drm_i915_private* p = drm_dev->dev_private;
+	u8 status;
+
+	if (kstrtou8(buf, 10, &status)) {
+		count = -EINVAL;
+		goto done;
+	}
+
+	if (status) {
+		if (mutex_trylock(&p->gmbus_mutex)) {
+			goto done;
+		} else {
+			DRM_ERROR("Could not lock I2C mutex\n");
+			count = -EBUSY;
+			goto done;
+		}
+	} else {
+		mutex_unlock(&p->gmbus_mutex);
+	}
+done:
+	return count;
+}
+
+static DEVICE_ATTR(i2c_mutex, S_IRUGO | S_IWUSR, NULL, set_i2c_mutex);
+
+static struct attribute* set_mutex_ctrl_attributes[] = {
+	&dev_attr_i2c_mutex.attr,
+	NULL
+};
+
+static const struct attribute_group mutex_ctrl_group = {
+	.attrs = set_mutex_ctrl_attributes
+};
 
 static int __devinit
 i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	int ret;
+
 	/* Only bind to function 0 of the device. Early generations
 	 * used function 1 as a placeholder for multi-head. This causes
 	 * us confusion instead, especially on the systems where both
@@ -833,7 +873,11 @@ i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (PCI_FUNC(pdev->devfn))
 		return -ENODEV;
 
-	return drm_get_pci_dev(pdev, ent, &driver);
+	ret = drm_get_pci_dev(pdev, ent, &driver);
+	if (ret == 0)
+		ret = sysfs_create_group(&pdev->dev.kobj, &mutex_ctrl_group);
+
+	return ret;
 }
 
 static void
