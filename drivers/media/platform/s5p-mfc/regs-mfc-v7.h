@@ -1,0 +1,39 @@
+/*
+ * Register definition file for Samsung MFC V7.x Interface (FIMV) driver
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com/
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#ifndef _REGS_MFC_V7_H
+#define _REGS_MFC_V7_H
+
+#include "regs-mfc-v6.h"
+
+/* Additional registers for v7 */
+#define S5P_FIMV_E_VP8_OPTIONS_V7		0xfdb0
+#define S5P_FIMV_E_VP8_FILTER_OPTIONS_V7	0xfdb4
+#define S5P_FIMV_E_VP8_GOLDEN_FRAME_OPTION_V7	0xfdb8
+#define S5P_FIMV_E_VP8_NUM_T_LAYER_V7		0xfdc4
+
+/* MFC Context buffer sizes */
+#define MFC_CTX_BUF_SIZE_V7		(25 * SZ_1K)	/*  25KB */
+#define MFC_H264_DEC_CTX_BUF_SIZE_V7	(2 * SZ_1M)	/*  2MB */
+#define MFC_OTHER_DEC_CTX_BUF_SIZE_V7	(20 * SZ_1K)	/*  20KB */
+#define MFC_H264_ENC_CTX_BUF_SIZE_V7	(100 * SZ_1K)	/* 100KB */
+#define MFC_OTHER_ENC_CTX_BUF_SIZE_V7	(10 * SZ_1K)	/*  10KB */
+
+/* MFCv7 variant defines */
+#define MAX_FW_SIZE_V7			(SZ_1M)		/* 1MB */
+#define MAX_CPB_SIZE_V7			(3 * SZ_1M)	/* 3MB */
+#define MFC_VERSION_V7			0x72
+#define MFC_NUM_PORTS_V7		1
+
+#define S5P_FIMV_SCRATCH_BUF_SIZE_VP8_ENC_V7(w, h) \
+			(((w) * 48) + (((w) + 1) / 2 * 128) + 144 + 8192)
+
+#endif /*_REGS_MFC_V7_H*/
