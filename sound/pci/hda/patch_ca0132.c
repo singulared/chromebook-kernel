@@ -2696,6 +2696,18 @@ static unsigned int ca0132_get_playback_latency(struct hda_codec *codec)
 	return latency;
 }
 
+/* Toggles the audio format to serial and back to parallel. Needed to make sure
+ * the codec does what we tell it. */
+static void ca0132_toggle_dac_format(struct hda_codec *codec)
+{
+	unsigned int aicr;
+	chipio_read(codec, 0x18B008, &aicr);
+	aicr = aicr | 0x8;
+	chipio_write(codec, 0x18B008, aicr);
+	aicr = aicr & ~0x8;
+	chipio_write(codec, 0x18B008, aicr);
+}
+
 static int ca0132_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
 				       struct hda_codec *codec,
 				       unsigned int stream_tag,
@@ -2714,7 +2726,10 @@ static int ca0132_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
 	runtime->delay = bytes_to_frames(runtime, (latency * runtime->rate *
 					runtime->byte_align) / 1000);
 
+	ca0132_toggle_dac_format(codec);
+
 	ca0132_setup_stream(codec, spec->dacs[0], stream_tag, 0, format);
+
 	return 0;
 }
 
