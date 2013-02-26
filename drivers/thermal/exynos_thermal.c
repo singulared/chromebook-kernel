@@ -828,7 +828,8 @@ static struct exynos_tmu_platform_data const exynos4210_default_tmu_data = {
 #define EXYNOS4210_TMU_DRV_DATA (NULL)
 #endif
 
-#if defined(CONFIG_SOC_EXYNOS5250) || defined(CONFIG_SOC_EXYNOS4412)
+#if defined(CONFIG_SOC_EXYNOS5250) || defined(CONFIG_SOC_EXYNOS4412) || \
+	defined(CONFIG_SOC_EXYNOS5420)
 static struct exynos_tmu_platform_data const exynos_default_tmu_data = {
 	.trigger_levels[0] = 85,	/* slow e.g. 800Mhz */
 	.trigger_levels[1] = 103,	/* very slow e.g. 200Mhz */
@@ -869,6 +870,10 @@ static const struct of_device_id exynos_tmu_match[] = {
 		.compatible = "samsung,exynos5250-tmu",
 		.data = (void *)EXYNOS_TMU_DRV_DATA,
 	},
+	{
+		.compatible = "samsung,exynos5420-tmu",
+		.data = (void *)EXYNOS_TMU_DRV_DATA,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, exynos_tmu_match);
@@ -883,6 +888,10 @@ static struct platform_device_id exynos_tmu_driver_ids[] = {
 	},
 	{
 		.name		= "exynos5250-tmu",
+		.driver_data    = (kernel_ulong_t)EXYNOS_TMU_DRV_DATA,
+	},
+	{
+		.name		= "exynos5420-tmu",
 		.driver_data    = (kernel_ulong_t)EXYNOS_TMU_DRV_DATA,
 	},
 	{ },
