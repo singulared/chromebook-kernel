@@ -3019,13 +3019,11 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	else
 		speed = usb_speed_string(udev->speed);
 
-	if (udev->speed != USB_SPEED_SUPER) {
+	if (udev->speed != USB_SPEED_SUPER)
 		dev_info(&udev->dev,
 				"%s %s USB device number %d using %s\n",
 				(udev->config) ? "reset" : "new", speed,
 				devnum, udev->bus->controller->driver->name);
-		WARN_ON(udev->config); /* for crosbug.com/p/17609 */
-	}
 
 	/* Set up TT records, if needed  */
 	if (hdev->tt) {
