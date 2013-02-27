@@ -25,39 +25,25 @@
 #include <linux/pm.h>
 #include <linux/regulator/consumer.h>
 
-struct ps8622_platform_data {
-	int gpio_slp_n;
-	int gpio_rst_n;
-};
+#include "drmP.h"
+#include "drm_crtc.h"
+#include "drm_crtc_helper.h"
 
-struct ps8622_dev {
-	struct device *dev;
-	struct backlight_device *bl;
-	struct ps8622_platform_data *pdata;
+struct ps8622_bridge {
+	struct drm_bridge bridge;
+
 	struct i2c_client *client;
 	struct regulator *v12;
+	struct backlight_device *bl;
+
+	int gpio_slp_n;
+	int gpio_rst_n;
+
+	bool enabled;
 };
 
 /* Brightness scale on the Parade chip */
 #define PS8622_MAX_BRIGHTNESS 0xff
-
-static struct ps8622_platform_data *ps8622_parse_dt_pdata(struct device *dev)
-{
-	struct ps8622_platform_data *pd;
-
-	pd = devm_kzalloc(dev, sizeof(struct ps8622_platform_data), GFP_KERNEL);
-	if (!pd) {
-		dev_err(dev, "Can't allocate platform data\n");
-		return ERR_PTR(-ENOMEM);
-	}
-
-	/* Fill platform data with device tree data */
-	pd->gpio_slp_n = of_get_named_gpio(dev->of_node, "sleep-gpio", 0);
-	pd->gpio_rst_n = of_get_named_gpio(dev->of_node, "reset-gpio", 0);
-
-	return pd;
-
-}
 
 static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 {
@@ -78,9 +64,9 @@ static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 	return !(ret == 1);
 }
 
-static int ps8622_send_config(struct ps8622_dev *ps8622)
+static int ps8622_send_config(struct ps8622_bridge *bridge)
 {
-	struct i2c_client *cl = ps8622->client;
+	struct i2c_client *cl = bridge->client;
 	int err = 0;
 
 	/* wait 20ms after power ON */
@@ -155,7 +141,7 @@ static int ps8622_send_config(struct ps8622_dev *ps8622)
 	err |= ps8622_set(cl, 0x01, 0xcb, 0x05); /* DPCD40B, Initial Code minor
 						  * revision '05' */
 	err |= ps8622_set(cl, 0x01, 0xa5, 0xa0); /* DPCD720, internal PWM */
-	err |= ps8622_set(cl, 0x01, 0xa7, ps8622->bl->props.brightness);
+	err |= ps8622_set(cl, 0x01, 0xa7, bridge->bl->props.brightness);
 						 /* FFh for 100% brightness,
 						  *  0h for 0% brightness */
 	err |= ps8622_set(cl, 0x01, 0xcc, 0x13); /* Set LVDS output as 6bit-VESA
@@ -174,67 +160,59 @@ static int ps8622_send_config(struct ps8622_dev *ps8622)
 	return err ? -EIO : 0;
 }
 
-static int ps8622_power_up(struct ps8622_dev *ps8622)
+static void ps8622_power_up(struct ps8622_bridge *bridge)
 {
-	struct ps8622_platform_data *pd = ps8622->pdata;
+	int ret;
 
-	if (ps8622->v12)
-		regulator_enable(ps8622->v12);
+	if (bridge->enabled)
+		return;
 
-	if (pd->gpio_slp_n > 0)
-		gpio_set_value(pd->gpio_slp_n, 1);
+	if (bridge->v12)
+		regulator_enable(bridge->v12);
 
-	if (pd->gpio_rst_n > 0) {
-		gpio_set_value(pd->gpio_rst_n, 0);
+	if (gpio_is_valid(bridge->gpio_slp_n))
+		gpio_set_value(bridge->gpio_slp_n, 1);
+
+	if (gpio_is_valid(bridge->gpio_rst_n)) {
+		gpio_set_value(bridge->gpio_rst_n, 0);
 		udelay(10);
-		gpio_set_value(pd->gpio_rst_n, 1);
+		gpio_set_value(bridge->gpio_rst_n, 1);
 	}
 
-	return ps8622_send_config(ps8622);
+	ret = ps8622_send_config(bridge);
+	if (ret)
+		DRM_ERROR("Failed to send config to bridge (%d)\n", ret);
+
+	bridge->enabled = true;
 }
 
-static int ps8622_power_down(struct ps8622_dev *ps8622)
+static void ps8622_power_down(struct ps8622_bridge *bridge)
 {
-	struct ps8622_platform_data *pd = ps8622->pdata;
+	if (!bridge->enabled)
+		return;
 
-	if (pd->gpio_rst_n > 0)
-		gpio_set_value(pd->gpio_rst_n, 1);
+	bridge->enabled = false;
 
-	if (pd->gpio_slp_n > 0)
-		gpio_set_value(pd->gpio_slp_n, 0);
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_set_value(bridge->gpio_rst_n, 1);
 
-	if (ps8622->v12)
-		regulator_disable(ps8622->v12);
+	if (gpio_is_valid(bridge->gpio_slp_n))
+		gpio_set_value(bridge->gpio_slp_n, 0);
 
-	return 0;
-}
-
-int ps8622_suspend(struct device *dev)
-{
-	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
-	struct ps8622_dev *ps8622 = i2c_get_clientdata(client);
-
-	return ps8622_power_down(ps8622);
-}
-
-int ps8622_resume(struct device *dev)
-{
-	struct i2c_client *client = container_of(dev, struct i2c_client, dev);
-	struct ps8622_dev *ps8622 = i2c_get_clientdata(client);
-
-	return ps8622_power_up(ps8622);
+	if (bridge->v12)
+		regulator_disable(bridge->v12);
 }
 
 static int ps8622_backlight_update(struct backlight_device *bl)
 {
-	struct ps8622_dev *ps8622 = dev_get_drvdata(&bl->dev);
+	struct ps8622_bridge *bridge = dev_get_drvdata(&bl->dev);
 	int brightness = bl->props.brightness;
 
 	if (bl->props.power != FB_BLANK_UNBLANK ||
 	    bl->props.state & (BL_CORE_SUSPENDED | BL_CORE_FBBLANK))
 		brightness = 0;
 
-	return ps8622_set(ps8622->client, 0x01, 0xa7, brightness);
+	return ps8622_set(bridge->client, 0x01, 0xa7, brightness);
 }
 
 static int ps8622_backlight_get(struct backlight_device *bl)
@@ -247,113 +225,121 @@ static const struct backlight_ops ps8622_backlight_ops = {
 	.get_brightness	= ps8622_backlight_get,
 };
 
-int ps8622_probe(struct i2c_client *client, const struct i2c_device_id *device)
+static void ps8622_dpms(struct drm_bridge *dbridge, int mode)
 {
-	struct device *dev = &client->dev;
-	struct ps8622_platform_data *pd = dev->platform_data;
-	struct ps8622_dev *ps8622;
-	int ret;
+	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
 
-	ps8622 = devm_kzalloc(dev, sizeof(struct ps8622_dev), GFP_KERNEL);
-	if (!ps8622) {
-		dev_err(dev, "could not allocate memory\n");
+	if (mode == DRM_MODE_DPMS_ON)
+		ps8622_power_up(bridge);
+	else
+		ps8622_power_down(bridge);
+}
+
+static void ps8622_prepare(struct drm_bridge *dbridge)
+{
+	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
+
+	ps8622_power_up(bridge);
+}
+
+struct drm_bridge_helper_funcs ps8622_bridge_helper_funcs = {
+	.dpms = ps8622_dpms,
+	.prepare = ps8622_prepare,
+};
+
+void ps8622_destroy(struct drm_bridge *dbridge)
+{
+	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
+
+	drm_bridge_cleanup(dbridge);
+	if (bridge->bl)
+		backlight_device_unregister(bridge->bl);
+	if (bridge->v12)
+		regulator_put(bridge->v12);
+	if (gpio_is_valid(bridge->gpio_slp_n))
+		gpio_free(bridge->gpio_slp_n);
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_free(bridge->gpio_rst_n);
+}
+
+struct drm_bridge_funcs ps8622_bridge_funcs = {
+	.destroy = ps8622_destroy,
+};
+
+int ps8622_init(struct drm_device *dev, struct i2c_client *client,
+		struct device_node *node)
+{
+	int ret;
+	struct ps8622_bridge *bridge;
+
+	bridge = devm_kzalloc(dev->dev, sizeof(*bridge), GFP_KERNEL);
+	if (!bridge) {
+		DRM_ERROR("could not allocate memory\n");
 		return -ENOMEM;
 	}
-	ps8622->dev = dev;
-	ps8622->client = client;
-	i2c_set_clientdata(client, ps8622);
 
-	if (dev->of_node) {
-		pd = ps8622_parse_dt_pdata(dev);
-		if (IS_ERR(pd)) {
-			ret = PTR_ERR(pd);
-			goto err;
-		}
-	}
-	if (!pd) {
-		ret = -ENODEV;
-		dev_warn(dev, "No platform data found\n");
-		goto err;
-	}
-	ps8622->pdata = pd;
-
-	ps8622->v12 = regulator_get(dev, "vdd_bridge");
-	if (IS_ERR(ps8622->v12)) {
-		dev_warn(dev, "no 1.2v regulator found for PS8622\n");
-		ps8622->v12 = NULL;
+	bridge->client = client;
+	bridge->v12 = regulator_get(&client->dev, "vdd_bridge");
+	if (IS_ERR(bridge->v12)) {
+		DRM_ERROR("no 1.2v regulator found for PS8622\n");
+		bridge->v12 = NULL;
 	}
 
-	if (pd->gpio_slp_n > 0) {
-		ret = gpio_request_one(pd->gpio_slp_n, GPIOF_OUT_INIT_HIGH,
+	bridge->gpio_slp_n = of_get_named_gpio(node, "sleep-gpio", 0);
+	if (gpio_is_valid(bridge->gpio_slp_n)) {
+		ret = gpio_request_one(bridge->gpio_slp_n, GPIOF_OUT_INIT_HIGH,
 					"PS8622_SLP_N");
 		if (ret)
-			goto err;
+			goto err_reg;
 	}
-	if (pd->gpio_rst_n > 0) {
+
+	bridge->gpio_rst_n = of_get_named_gpio(node, "reset-gpio", 0);
+	if (gpio_is_valid(bridge->gpio_rst_n)) {
 		/*
 		 * Request the reset pin low to avoid the bridge being
 		 * initialized prematurely
 		 */
-		ret = gpio_request_one(pd->gpio_rst_n, GPIOF_OUT_INIT_LOW,
+		ret = gpio_request_one(bridge->gpio_rst_n, GPIOF_OUT_INIT_LOW,
 					"PS8622_RST_N");
 		if (ret)
-			goto err;
+			goto err_gpio;
 	}
 
-	/* create a backlight interface for the bridge */
-	ps8622->bl = backlight_device_register("ps8622-backlight", dev, ps8622,
-					&ps8622_backlight_ops, NULL);
-	if (IS_ERR(ps8622->bl)) {
-		dev_err(dev, "failed to register backlight\n");
-		ret = PTR_ERR(ps8622->bl);
-		ps8622->bl = NULL;
+	bridge->bl = backlight_device_register("ps8622-backlight", dev->dev,
+			bridge, &ps8622_backlight_ops, NULL);
+	if (IS_ERR(bridge->bl)) {
+		DRM_ERROR("failed to register backlight\n");
+		ret = PTR_ERR(bridge->bl);
+		bridge->bl = NULL;
 		goto err;
 	}
-	ps8622->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
-	ps8622->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
+	bridge->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
+	bridge->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
 
-	ret = ps8622_power_up(ps8622);
-	if (ret)
+	ret = drm_bridge_init(dev, (struct drm_bridge *)bridge,
+			&ps8622_bridge_funcs);
+	if (ret) {
+		DRM_ERROR("Failed to initialize bridge with drm\n");
 		goto err;
+	}
+	drm_bridge_helper_add((struct drm_bridge *)bridge,
+			&ps8622_bridge_helper_funcs);
+	bridge->bridge.connector_type = DRM_MODE_CONNECTOR_eDP;
+	bridge->enabled = false;
 
 	return 0;
 
 err:
-	if (ps8622->bl)
-		backlight_device_unregister(ps8622->bl);
-	if (ps8622->v12)
-		regulator_put(ps8622->v12);
-	dev_err(dev, "device probe failed : %d\n", ret);
+	if (bridge->bl)
+		backlight_device_unregister(bridge->bl);
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_free(bridge->gpio_rst_n);
+err_gpio:
+	if (gpio_is_valid(bridge->gpio_slp_n))
+		gpio_free(bridge->gpio_slp_n);
+err_reg:
+	if (bridge->v12)
+		regulator_put(bridge->v12);
+	DRM_ERROR("device probe failed : %d\n", ret);
 	return ret;
 }
-
-int ps8622_remove(struct i2c_client *client)
-{
-	struct ps8622_dev *ps8622 = i2c_get_clientdata(client);
-
-	if (ps8622->bl)
-		backlight_device_unregister(ps8622->bl);
-	if (ps8622->v12)
-		regulator_put(ps8622->v12);
-	return 0;
-}
-
-static const struct i2c_device_id ps8622_ids[] = {
-	{ "ps8622", 0 },
-	{},
-};
-MODULE_DEVICE_TABLE(i2c, ps8622_ids);
-
-static SIMPLE_DEV_PM_OPS(ps8622_pm_ops, ps8622_suspend, ps8622_resume);
-
-static struct i2c_driver ps8622_driver = {
-	.id_table	= ps8622_ids,
-	.probe          = ps8622_probe,
-	.remove         = ps8622_remove,
-	.driver		= {
-		.name	= "ps8622",
-		.owner	= THIS_MODULE,
-		.pm	= &ps8622_pm_ops,
-	},
-};
-module_i2c_driver(ps8622_driver);

@@ -33,6 +33,7 @@
 #include <linux/of_i2c.h>
 
 #include <drm/bridge/ptn3460.h>
+#include <drm/bridge/ps8622.h>
 
 #define DRIVER_NAME	"exynos"
 #define DRIVER_DESC	"Samsung SoC DRM"
@@ -137,6 +138,21 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		if (ret) {
 			DRM_ERROR("Failed to initialize the ptn bridge\n");
 			goto err_freepriv;
+		}
+	} else {
+		ret = find_bridge("ps8622-bridge", &bridge);
+		if (ret) {
+			DRM_ERROR("Could not get PS8622 bridge %d\n", ret);
+			goto err_freepriv;
+		}
+
+		if (bridge.valid) {
+			ret = ps8622_init(dev, bridge.client, bridge.node);
+			if (ret) {
+				DRM_ERROR("Failed to initialize the Parade "
+					  "bridge\n");
+				goto err_freepriv;
+			}
 		}
 	}
 
