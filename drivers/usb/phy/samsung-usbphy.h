@@ -317,6 +317,7 @@ struct samsung_usbphy {
 	int		hsic_reset_gpio;
 	int		channel;
 	u32		tx_preemp_amptune;
+	int		phyclk_gpio;
 };
 
 #define phy_to_sphy(x)		container_of((x), struct samsung_usbphy, phy)

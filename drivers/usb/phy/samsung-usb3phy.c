@@ -24,6 +24,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_data/samsung-usbphy.h>
 
@@ -114,7 +115,7 @@ void samsung_usb3phy_tune(struct usb_phy *phy)
 /*
  * Sets the phy clk as EXTREFCLK (XXTI) which is internal clock from clock core.
  */
-static u32 samsung_usb3phy_set_refclk(struct samsung_usbphy *sphy)
+static u32 samsung_usb3phy_set_refclk_int(struct samsung_usbphy *sphy)
 {
 	u32 reg;
 	u32 refclk;
@@ -147,6 +148,20 @@ static u32 samsung_usb3phy_set_refclk(struct samsung_usbphy *sphy)
 	return reg;
 }
 
+/*
+ * Sets the phy clk as ref_pad_clk (XusbXTI) which is clock from external PLL.
+ */
+static u32 samsung_usb3phy_set_refclk_ext(void)
+{
+	u32 reg;
+
+	reg = PHYCLKRST_REFCLKSEL_PAD_REFCLK |
+		PHYCLKRST_FSEL_PAD_100MHZ |
+		PHYCLKRST_MPLL_MULTIPLIER_100MHZ_REF;
+
+	return reg;
+}
+
 static int samsung_exynos5_usb3phy_enable(struct samsung_usbphy *sphy)
 {
 	void __iomem *regs = sphy->regs;
@@ -156,13 +171,25 @@ static int samsung_exynos5_usb3phy_enable(struct samsung_usbphy *sphy)
 	u32 phybatchg;
 	u32 phytest;
 	u32 phyclkrst;
+	bool use_ext_clk = false;
+
+	/*
+	 * We check if we have a PHY ref_clk gpio available, then only
+	 * use XusbXTI (external PLL); otherwise use internal core clock
+	 * from XXTI.
+	 */
+	if (gpio_is_valid(sphy->phyclk_gpio))
+		use_ext_clk = true;
 
 	/* Reset USB 3.0 PHY */
 	writel(0x0, regs + EXYNOS5_DRD_PHYREG0);
 
 	phyparam0 = readl(regs + EXYNOS5_DRD_PHYPARAM0);
 	/* Select PHY CLK source */
-	phyparam0 &= ~PHYPARAM0_REF_USE_PAD;
+	if (use_ext_clk)
+		phyparam0 |= PHYPARAM0_REF_USE_PAD;
+	else
+		phyparam0 &= ~PHYPARAM0_REF_USE_PAD;
 	/* Set Loss-of-Signal Detector sensitivity */
 	phyparam0 &= ~PHYPARAM0_REF_LOSLEVEL_MASK;
 	phyparam0 |= PHYPARAM0_REF_LOSLEVEL;
@@ -200,7 +227,10 @@ static int samsung_exynos5_usb3phy_enable(struct samsung_usbphy *sphy)
 	/* UTMI Power Control */
 	writel(PHYUTMI_OTGDISABLE, regs + EXYNOS5_DRD_PHYUTMI);
 
-	phyclkrst = samsung_usb3phy_set_refclk(sphy);
+	if (use_ext_clk)
+		phyclkrst = samsung_usb3phy_set_refclk_ext();
+	else
+		phyclkrst = samsung_usb3phy_set_refclk_int(sphy);
 
 	phyclkrst |= PHYCLKRST_PORTRESET |
 			/* Digital power supply in normal operating mode */
@@ -248,6 +278,9 @@ static void samsung_exynos5_usb3phy_disable(struct samsung_usbphy *sphy)
 	writel(phytest, regs + EXYNOS5_DRD_PHYTEST);
 }
 
+/*
+ * The function passed to the usb driver for phy initialization
+ */
 static int samsung_usb3phy_init(struct usb_phy *phy)
 {
 	struct samsung_usbphy *sphy;

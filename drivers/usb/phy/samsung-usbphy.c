@@ -84,6 +84,24 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 				 &sphy->tx_preemp_amptune))
 		dev_info(sphy->dev, "No HS Tx Pre-Emp current control\n");
 
+	/* Getting PHY clk gpio here to enable/disable PHY clock PLL, if any */
+	sphy->phyclk_gpio = of_get_named_gpio(node,
+					      "samsung,phyclk-gpio", 0);
+	/*
+	 * We don't want to return error code here in case we don't get the
+	 * PHY clock gpio, some PHYs may not have it.
+	 */
+	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		if (devm_gpio_request_one(sphy->dev, sphy->phyclk_gpio,
+				GPIOF_INIT_HIGH, "samsung_usb_phy_clock_en")) {
+			dev_err(sphy->dev, "can't request phyclk gpio %d\n",
+						sphy->phyclk_gpio);
+			sphy->phyclk_gpio = -EINVAL;
+		}
+	} else {
+		dev_info(sphy->dev, "Can't get usb-phy clock gpio\n");
+	}
+
 	of_node_put(usbphy_sys);
 
 	return 0;
