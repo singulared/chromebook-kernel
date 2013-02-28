@@ -286,4 +286,135 @@ static inline const char *usb_phy_type_string(enum usb_phy_type type)
 		return "UNKNOWN PHY TYPE";
 	}
 }
+
+static inline void usb_phy_autopm_enable(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return;
+		}
+
+	pm_runtime_enable(x->dev);
+}
+
+static inline void usb_phy_autopm_disable(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return;
+	}
+
+	pm_runtime_disable(x->dev);
+}
+
+static inline int usb_phy_autopm_get(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_get(x->dev);
+}
+
+static inline int usb_phy_autopm_get_sync(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_get_sync(x->dev);
+}
+
+static inline int usb_phy_autopm_put(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_put(x->dev);
+}
+
+static inline int usb_phy_autopm_put_sync(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_put_sync(x->dev);
+}
+
+static inline void usb_phy_autopm_allow(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return;
+	}
+
+	pm_runtime_allow(x->dev);
+}
+
+static inline void usb_phy_autopm_forbid(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return;
+	}
+
+	pm_runtime_forbid(x->dev);
+}
+
+static inline int usb_phy_autopm_set_active(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_set_active(x->dev);
+}
+
+static inline void usb_phy_autopm_set_suspended(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return;
+	}
+
+	pm_runtime_set_suspended(x->dev);
+}
+
+static inline bool usb_phy_autopm_suspended(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return 0;
+	}
+
+	return pm_runtime_suspended(x->dev);
+}
+
+static inline int usb_phy_autopm_suspend(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_suspend(x->dev);
+}
+
+static inline int usb_phy_autopm_resume(struct usb_phy *x)
+{
+	if (!x || !x->dev) {
+		dev_err(x->dev, "no PHY or attached device available\n");
+		return -ENODEV;
+	}
+
+	return pm_runtime_resume(x->dev);
+}
+
 #endif /* __LINUX_USB_PHY_H */
