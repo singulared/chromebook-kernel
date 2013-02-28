@@ -24,6 +24,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/pm_runtime.h>
 #include <linux/platform_data/samsung-usbphy.h>
 
 #include "samsung-usbphy.h"
@@ -363,6 +364,9 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 
 	mutex_init(&sphy->mutex);
 
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+
 	platform_set_drvdata(pdev, sphy);
 
 	return usb_add_phy_dev(&sphy->phy);
@@ -371,6 +375,8 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 static int samsung_usb3phy_remove(struct platform_device *pdev)
 {
 	struct samsung_usbphy *sphy = platform_get_drvdata(pdev);
+
+	pm_runtime_disable(&pdev->dev);
 
 	usb_remove_phy(&sphy->phy);
 
