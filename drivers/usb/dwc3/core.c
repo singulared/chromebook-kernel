@@ -743,11 +743,44 @@ static int dwc3_resume(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int dwc3_runtime_suspend(struct device *dev)
+{
+	struct dwc3	*dwc = dev_get_drvdata(dev);
+	int ret = 0;
+
+	ret = usb_phy_autopm_put_sync(dwc->usb3_phy);
+	if (ret)
+		dev_warn(dev, "Can't autosuspend usb3-phy\n");
+
+	return ret;
+}
+
+static int dwc3_runtime_resume(struct device *dev)
+{
+	struct dwc3	*dwc = dev_get_drvdata(dev);
+	int ret = 0;
+
+	ret = usb_phy_autopm_get_sync(dwc->usb3_phy);
+	if (ret) {
+		dev_err(dev, "usb3-phy: get sync failed with err %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+#else
+#define dwc3_runtime_suspend		NULL
+#define dwc3_runtime_resume		NULL
+#endif
+
 static const struct dev_pm_ops dwc3_dev_pm_ops = {
 	.prepare	= dwc3_prepare,
 	.complete	= dwc3_complete,
 
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
+	SET_RUNTIME_PM_OPS(dwc3_runtime_suspend,
+				dwc3_runtime_resume, NULL)
 };
 
 #define DWC3_PM_OPS	&(dwc3_dev_pm_ops)
