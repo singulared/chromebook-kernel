@@ -531,7 +531,7 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
 	if (!dn) {
-		dn = of_find_compatible_node(NULL, NULL, "maxim,max98088");
+		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089");
 		if (!dn)
 			return -ENODEV;
 	}
@@ -592,7 +592,7 @@ static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
 
 static const struct of_device_id daisy_max98095_of_match[] __devinitconst = {
 	{ .compatible = "google,daisy-audio-max98095", },
-	{ .compatible = "google,daisy-audio-max98088", },
+	{ .compatible = "google,daisy-audio-max98089", },
 	{},
 };
 
