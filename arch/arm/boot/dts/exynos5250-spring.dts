@@ -122,7 +122,7 @@
 					reg_op_mode = <0>; /* Off Mode */
 				};
 				s5m_ldo6_reg: LDO6 {
-					regulator-name = "vdd_ldo6";
+					regulator-name = "vdd_mydp";
 					regulator-min-microvolt = <1000000>;
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
@@ -370,6 +370,16 @@
 			compatible = "gmt,g781";
 			reg = <0x4c>;
 		};
+
+		anx7808-bridge@38 {
+			compatible = "analogix,anx7808";
+			reg = <0x38>;
+			pd-gpio = <&gpe0 6 1 0 0>;
+			reset-gpio = <&gpe0 7 1 0 0>;
+			cable-det-gpio = <&gpx0 7 0 0 0>;
+			intp-gpio = <&gpf0 0 0 0 0>;
+		};
+
 	};
 
 	sound {

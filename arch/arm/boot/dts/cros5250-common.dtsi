@@ -67,11 +67,11 @@
 
 			voltage-regulators {
 				ldo6_reg: LDO6 {
-					regulator-name = "vdd_ldo6";
+					regulator-name = "vdd_mydp";
 					regulator-min-microvolt = <1000000>;
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
-					reg_op_mode = <0>; /* Off Mode */
+					reg_op_mode = <1>;
 				};
 				ldo7_reg: LDO7 {
 					regulator-name = "vdd_ldo7";
