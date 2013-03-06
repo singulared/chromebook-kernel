@@ -39,7 +39,7 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 	struct scatterlist *sgl;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s] flags: 0x%x\n", dev->devname, flags);
 
 	if (IS_NONCONTIG_BUFFER(flags)) {
 		DRM_DEBUG_KMS("not support allocation type.\n");
@@ -124,7 +124,7 @@ err1:
 static void lowlevel_buffer_deallocate(struct drm_device *dev,
 		unsigned int flags, struct exynos_drm_gem_buf *buf)
 {
-	DRM_DEBUG_KMS("%s.\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s] flags: 0x%x\n", dev->devname, flags);
 
 	/*
 	 * release only physically continuous memory and
@@ -164,8 +164,7 @@ struct exynos_drm_gem_buf *exynos_drm_init_buf(struct drm_device *dev,
 {
 	struct exynos_drm_gem_buf *buffer;
 
-	DRM_DEBUG_KMS("%s.\n", __FILE__);
-	DRM_DEBUG_KMS("desired size = 0x%x\n", size);
+	DRM_DEBUG_KMS("[DEV:%s] size: 0x%x\n", dev->devname, size);
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer) {
@@ -180,7 +179,7 @@ struct exynos_drm_gem_buf *exynos_drm_init_buf(struct drm_device *dev,
 void exynos_drm_fini_buf(struct drm_device *dev,
 				struct exynos_drm_gem_buf *buffer)
 {
-	DRM_DEBUG_KMS("%s.\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s]\n", dev->devname);
 
 	if (!buffer) {
 		DRM_DEBUG_KMS("buffer is null.\n");

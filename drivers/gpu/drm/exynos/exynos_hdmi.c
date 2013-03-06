@@ -895,7 +895,8 @@ static struct edid *hdmi_get_edid(void *ctx, struct drm_connector *connector)
 	struct hdmi_context *hdata = ctx;
 	struct edid *edid;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	if (!hdata->ddc_port)
 		return ERR_PTR(-ENODEV);
@@ -985,7 +986,9 @@ void hdmi_reg_infoframe(struct hdmi_context *hdata,
 	u32 aspect_ratio;
 	u32 mod;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	/* TODO: stringify HDMI_PACKET_TYPE */
+	DRM_DEBUG_KMS("type: %d ver: %d len: %d\n", infoframe->type,
+			infoframe->ver, infoframe->len);
 	mod = hdmi_reg_read(hdata, HDMI_MODE_SEL);
 	if (!hdata->has_hdmi_sink) {
 		hdmi_reg_writeb(hdata, HDMI_VSI_CON,
@@ -1041,8 +1044,6 @@ static int hdmi_check_timing(void *ctx, void *timing)
 {
 	struct hdmi_context *hdata = ctx;
 	struct fb_videomode *check_timing = timing;
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
 	DRM_DEBUG_KMS("[%d]x[%d] [%d]Hz [%x]\n", check_timing->xres,
 			check_timing->yres, check_timing->refresh,
@@ -1627,6 +1628,8 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 	int ret;
 	int i;
 
+	DRM_DEBUG_KMS("\n");
+
 	if (!hdata->hdmiphy_port) {
 		DRM_ERROR("hdmiphy is not attached\n");
 		return;
@@ -1672,7 +1675,7 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 
 static void hdmi_conf_apply(struct hdmi_context *hdata)
 {
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("\n");
 
 	hdmiphy_conf_reset(hdata);
 	hdmiphy_conf_apply(hdata);
@@ -1695,6 +1698,8 @@ static void hdmi_mode_copy(struct drm_display_mode *dst,
 {
 	struct drm_mode_object base;
 
+	DRM_DEBUG_KMS("[MODE:%d:%s]\n", DRM_BASE_ID(src), src->name);
+
 	/* following information should be preserved,
 	 * required for releasing the drm_display_mode node,
 	 * duplicated to recieve adjustment info. */
@@ -1716,7 +1721,10 @@ static void hdmi_mode_fixup(void *ctx, struct drm_connector *connector,
 	struct hdmi_context *hdata = ctx;
 	int index;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%d:%s]\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector),
+			DRM_BASE_ID(mode), mode->name);
 
 	drm_mode_set_crtcinfo(adjusted_mode, 0);
 
@@ -1761,6 +1769,8 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 {
 	struct hdmi_core_regs *core = &hdata->mode_conf.core;
 	struct hdmi_tg_regs *tg = &hdata->mode_conf.tg;
+
+	DRM_DEBUG_KMS("[MODE:%d:%s]\n", DRM_BASE_ID(m), m->name);
 
 	hdata->mode_conf.vic = drm_match_cea_mode(m);
 
@@ -1881,7 +1891,7 @@ static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[MODE:%d:%s]\n", DRM_BASE_ID(mode), mode->name);
 
 	if (hdata->is_v13)
 		hdata->cur_conf = hdmi_v13_conf_index(mode);
@@ -1893,7 +1903,8 @@ static void hdmi_commit(void *ctx)
 {
 	struct hdmi_context *hdata = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("is_hdmi_powered_on: %u\n", hdata->is_hdmi_powered_on);
+
 	if (!hdata->is_hdmi_powered_on)
 		return;
 
@@ -1924,7 +1935,7 @@ static int hdmiphy_s_power(struct i2c_client *client, bool on)
 	u8 buffer[2];
 	int ret;
 
-	DRM_DEBUG_KMS("%s: hdmiphy is %s\n", __func__, on ? "on" : "off");
+	DRM_DEBUG_KMS("%s\n", on ? "on" : "off");
 
 	/* Cache all 32 registers to make the code below faster */
 	buffer[0] = 0x0;
@@ -2041,6 +2052,8 @@ static int hdmi_dpms(void *ctx, int mode)
 {
 	struct hdmi_context *hdata = ctx;
 
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
+
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
 		if (!hdata->is_hdmi_powered_on)
@@ -2066,6 +2079,8 @@ static int hdmi_dpms(void *ctx, int mode)
 static int hdmi_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 {
 	struct hdmi_context *hdata = ctx;
+
+	DRM_DEBUG_KMS("[DEV:%s]\n", drm_dev->devname);
 
 	hdata->drm_dev = drm_dev;
 
@@ -2232,6 +2247,8 @@ int hdmi_register_audio_device(struct platform_device *pdev)
 	struct platform_device *audio_dev;
 	int ret;
 
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
+
 	audio_dev = platform_device_alloc("exynos-hdmi-audio", -1);
 	if (!audio_dev) {
 		DRM_ERROR("hdmi audio device allocation failed.\n");
@@ -2267,6 +2284,7 @@ err:
 
 void hdmi_unregister_audio_device(void)
 {
+	DRM_DEBUG_KMS("\n");
 	platform_device_unregister(hdmi_audio_device);
 }
 
@@ -2280,7 +2298,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	int ret;
 	enum of_gpio_flags flags;
 
-	DRM_DEBUG_KMS("[%d]\n", __LINE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
@@ -2455,7 +2473,7 @@ static int __devexit hdmi_remove(struct platform_device *pdev)
 	struct hdmi_context *hdata = platform_get_drvdata(pdev);
 	struct hdmi_resources *res = &hdata->res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	hdmi_resource_poweroff(hdata);
 

@@ -92,7 +92,8 @@ static bool vidi_display_is_connected(void *ctx)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] connected => %d\n",
+			DRM_BASE_ID(vidi_ctx->crtc), vidi_ctx->connected);
 
 	/*
 	 * connection request would come from user side
@@ -107,7 +108,7 @@ static int vidi_get_edid(void *ctx, struct drm_connector *connector,
 	struct vidi_context *vidi_ctx = ctx;
 	struct edid *raw_edid;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/*
 	 * the edid data comes from user side and it would be set
@@ -138,7 +139,9 @@ static int vidi_get_edid(void *ctx, struct drm_connector *connector,
 
 static struct exynos_drm_panel_info *vidi_get_panel(void *ctx)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	struct vidi_context *vidi_ctx = ctx;
+
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/* TODO. */
 
@@ -147,7 +150,9 @@ static struct exynos_drm_panel_info *vidi_get_panel(void *ctx)
 
 static int vidi_check_timing(void *ctx, void *timing)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	struct vidi_context *vidi_ctx = ctx;
+
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/* TODO. */
 
@@ -156,7 +161,10 @@ static int vidi_check_timing(void *ctx, void *timing)
 
 static int vidi_display_power(void *ctx, int mode)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	struct vidi_context *vidi_ctx = ctx;
+
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(vidi_ctx->crtc),
+			drm_get_dpms_name(mode));
 
 	/* TODO */
 
@@ -167,7 +175,7 @@ static void vidi_commit(void *ctx)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (vidi_ctx->suspended)
 		return;
@@ -185,7 +193,8 @@ static int vidi_dpms(void *ctx, int mode)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(vidi_ctx->crtc),
+			drm_get_dpms_name(mode));
 
 	mutex_lock(&vidi_ctx->lock);
 
@@ -212,7 +221,7 @@ static int vidi_enable_vblank(void *ctx, int pipe)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (vidi_ctx->suspended)
 		return -EPERM;
@@ -229,7 +238,7 @@ static void vidi_disable_vblank(void *ctx)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (vidi_ctx->suspended)
 		return;
@@ -245,7 +254,7 @@ static void vidi_win_mode_set(void *ctx, struct exynos_drm_overlay *overlay)
 	int win;
 	unsigned long offset;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (!overlay) {
 		DRM_ERROR("overlay is NULL\n");
@@ -299,7 +308,7 @@ static void vidi_win_commit(void *ctx, int zpos)
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(vidi_ctx->crtc), win);
 
 	if (vidi_ctx->suspended)
 		return;
@@ -326,7 +335,7 @@ static void vidi_apply(void *ctx)
 	struct vidi_win_data *win_data;
 	int i;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	for (i = 0; i < WINDOWS_NR; i++) {
 		win_data = &vidi_ctx->win_data[i];
@@ -343,7 +352,7 @@ static void vidi_win_disable(void *ctx, int zpos)
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(vidi_ctx->crtc), win);
 
 	if (win == DEFAULT_ZPOS)
 		win = vidi_ctx->default_win;
@@ -376,7 +385,8 @@ static int vidi_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 {
 	struct vidi_context *vidi_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [DEV:%s]\n", DRM_BASE_ID(vidi_ctx->crtc),
+			drm_dev->devname);
 
 	/*
 	 * enable drm irq mode.
@@ -414,7 +424,8 @@ static struct exynos_controller_ops vidi_controller_ops = {
 
 static int vidi_power_on(struct vidi_context *vidi_ctx, bool enable)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] enable: %u\n", DRM_BASE_ID(vidi_ctx->crtc),
+			enable);
 
 	if (enable != false && enable != true)
 		return -EINVAL;
@@ -456,7 +467,7 @@ static int vidi_store_connection(struct device *dev,
 	struct vidi_context *ctx = get_vidi_context(dev);
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
 
 	ret = kstrtoint(buf, 0, &ctx->connected);
 	if (ret)
@@ -483,7 +494,7 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 	struct exynos_drm_display *display;
 	struct drm_exynos_vidi_connection *vidi = data;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s]\n", drm_dev->devname);
 
 	if (!vidi) {
 		DRM_DEBUG_KMS("user data for vidi is null.\n");
@@ -534,7 +545,7 @@ static int __devinit vidi_probe(struct platform_device *pdev)
 	struct vidi_context *ctx;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -568,7 +579,7 @@ static int __devexit vidi_remove(struct platform_device *pdev)
 {
 	struct vidi_context *ctx = platform_get_drvdata(pdev);
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	kfree(ctx);
 

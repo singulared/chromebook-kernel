@@ -93,6 +93,8 @@ struct exynos_drm_display {
 	int suspend_dpms;
 };
 
+const char *exynos_display_type_name(const struct exynos_drm_display *display);
+
 /*
  * Used by the hardware drivers to attach panel and controller callbacks and
  * contexts to a display.

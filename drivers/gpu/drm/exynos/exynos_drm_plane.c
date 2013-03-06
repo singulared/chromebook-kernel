@@ -46,7 +46,9 @@ exynos_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 	unsigned int w = src_w >> 16;
 	unsigned int h = src_h >> 16;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[PLANE:%d] [CRTC:%d] %dx%d+%d+%d [FB:%d] %ux%u+%u+%u\n",
+			DRM_BASE_ID(plane), DRM_BASE_ID(crtc), crtc_w, crtc_h,
+			crtc_x, crtc_y, DRM_BASE_ID(fb), w, h, x, y);
 
 	memset(&pos, 0, sizeof(struct exynos_drm_crtc_pos));
 	pos.crtc_x = crtc_x;
@@ -74,7 +76,7 @@ static int exynos_disable_plane(struct drm_plane *plane)
 		container_of(plane, struct exynos_plane, base);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[PLANE:%d]\n", DRM_BASE_ID(plane));
 
 	if (!exynos_plane->enabled)
 		return 0;
@@ -90,7 +92,7 @@ static void exynos_plane_destroy(struct drm_plane *plane)
 	struct exynos_plane *exynos_plane =
 		container_of(plane, struct exynos_plane, base);
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[PLANE:%d]\n", DRM_BASE_ID(plane));
 
 	exynos_disable_plane(plane);
 	drm_plane_cleanup(plane);
@@ -107,6 +109,8 @@ int exynos_plane_init(struct drm_device *dev, unsigned int nr)
 {
 	struct exynos_plane *exynos_plane;
 	uint32_t possible_crtcs;
+
+	DRM_DEBUG_KMS("[DEV:%s] nr: %u\n", dev->devname, nr);
 
 	exynos_plane = kzalloc(sizeof(struct exynos_plane), GFP_KERNEL);
 	if (!exynos_plane)
@@ -131,10 +135,11 @@ int exynos_plane_set_zpos_ioctl(struct drm_device *dev, void *data,
 	struct exynos_plane *exynos_plane;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
+
+	DRM_DEBUG_KMS("[DEV:%s] [PLANE:%d] zpos: %d\n", dev->devname,
+			zpos_req->plane_id, zpos_req->zpos);
 
 	if (zpos_req->zpos < 0 || zpos_req->zpos >= MAX_PLANE) {
 		if (zpos_req->zpos != DEFAULT_ZPOS) {

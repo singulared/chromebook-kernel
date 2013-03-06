@@ -72,7 +72,7 @@ static struct sg_table *
 	unsigned int npages;
 	int nents;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("dir: %d\n", dir);
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -105,6 +105,8 @@ static void exynos_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 						struct sg_table *sgt,
 						enum dma_data_direction dir)
 {
+	DRM_DEBUG_PRIME("dir: %d\n", dir);
+
 	dma_unmap_sg(attach->dev, sgt->sgl, sgt->nents, dir);
 	sg_free_table(sgt);
 	kfree(sgt);
@@ -115,7 +117,7 @@ static void exynos_dmabuf_release(struct dma_buf *dmabuf)
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj = dmabuf->priv;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("size: %d\n", dmabuf->size);
 
 	/*
 	 * exynos_dmabuf_release() call means that file object's
@@ -222,7 +224,7 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 	struct page *page;
 	int ret, i = 0;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("[DEV:%s] size: %d\n", drm_dev->devname, dma_buf->size);
 
 	/* is this one of own objects? */
 	if (dma_buf->ops == &exynos_dmabuf_ops) {

@@ -45,7 +45,8 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[DEV:%s] [SUBDRV:%s]\n", dev->devname,
+			subdrv_name(subdrv));
 
 	if (subdrv->probe) {
 		int ret;
@@ -73,6 +74,8 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 		DRM_ERROR("failed to create encoder\n");
 		return -EFAULT;
 	}
+	DRM_DEBUG_DRIVER("[DEV:%s] created [ENCODER:%d:%s]\n", dev->devname,
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder));
 
 	/*
 	 * create and initialize a connector for this sub driver and
@@ -84,6 +87,9 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 		encoder->funcs->destroy(encoder);
 		return -EFAULT;
 	}
+	DRM_DEBUG_DRIVER("[DEV:%s] created [CONNECTOR:%d:%s]\n", dev->devname,
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	subdrv->encoder = encoder;
 	subdrv->connector = connector;
@@ -94,7 +100,8 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 static void exynos_drm_subdrv_remove(struct drm_device *dev,
 				      struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[DEV:%s] [SUBDRV:%s]\n", dev->devname,
+			subdrv_name(subdrv));
 
 	if (subdrv->remove)
 		subdrv->remove(dev);
@@ -117,7 +124,7 @@ int exynos_drm_device_register(struct drm_device *dev)
 	struct exynos_drm_subdrv *subdrv, *n;
 	int err;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[DEV:%s]\n", dev->devname);
 
 	if (!dev)
 		return -EINVAL;
@@ -140,7 +147,7 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 {
 	struct exynos_drm_subdrv *subdrv;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[DEV:%s]\n", dev->devname);
 
 	if (!dev) {
 		WARN(1, "Unexpected drm device unregister!\n");
@@ -157,7 +164,7 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 
 int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("%s\n", subdrv_name(subdrv));
 
 	if (!subdrv)
 		return -EINVAL;
@@ -169,7 +176,7 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("%s\n", subdrv_name(subdrv));
 
 	if (!subdrv)
 		return -EINVAL;
@@ -183,6 +190,8 @@ int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct exynos_drm_subdrv *subdrv;
 	int ret;
+
+	DRM_DEBUG_DRIVER("[DEV:%s]\n", dev->devname);
 
 	list_for_each_entry(subdrv, &exynos_drm_subdrv_list, list) {
 		if (subdrv->open) {
@@ -205,6 +214,8 @@ err:
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file)
 {
 	struct exynos_drm_subdrv *subdrv;
+
+	DRM_DEBUG_DRIVER("[DEV:%s]\n", dev->devname);
 
 	list_for_each_entry(subdrv, &exynos_drm_subdrv_list, list) {
 		if (subdrv->close)

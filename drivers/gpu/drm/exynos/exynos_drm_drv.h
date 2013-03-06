@@ -45,6 +45,9 @@
 #include <linux/dma-buf.h>
 #endif
 
+#define DRM_BASE_ID(obj)	((obj) ? (obj)->base.id : -1)
+#define subdrv_name(s)  ((s) ? exynos_display_type_name((s)->display) : "none")
+
 #define MAX_PLANE	5
 #define MAX_FB_BUFFER	4
 #define DEFAULT_ZPOS	-1

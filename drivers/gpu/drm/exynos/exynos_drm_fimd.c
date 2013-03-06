@@ -109,11 +109,26 @@ struct fimd_context {
 	struct exynos_drm_panel_info *panel;
 };
 
+/* FIMD is named per its attached panel type. */
+static const char *fimd_get_name(const struct fimd_context *fimd)
+{
+	if (!fimd)
+		return "NONE";
+	switch (fimd->panel_type) {
+	case MIPI_LCD:
+		return "MIPI";
+	case DP_LCD:
+		return "DP";
+	default:
+		return "UNKNOWN";
+	}
+}
+
 static struct exynos_drm_panel_info *fimd_get_panel(void *ctx)
 {
 	struct fimd_context *fimd_ctx = ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
 
 	return fimd_ctx->panel;
 }
@@ -125,7 +140,8 @@ static int fimd_dpms(void *ctx, int mode)
 	struct fimd_context *fimd_ctx = ctx;
 	bool enable;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] [DPMS:%s]\n", fimd_get_name(fimd_ctx),
+			drm_get_dpms_name(mode));
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
@@ -152,14 +168,14 @@ static void fimd_commit(void *ctx)
 	struct fimd_win_data *win_data;
 	u32 val;
 
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
+
 	if (fimd_ctx->suspended)
 		return;
 	win_data = &fimd_ctx->win_data[fimd_ctx->default_win];
 
 	if (!win_data->ovl_width || !win_data->ovl_height)
 		return;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	/* setup polarity values from machine code. */
 	writel(fimd_ctx->vidcon1, fimd_ctx->regs + VIDCON1);
@@ -203,7 +219,7 @@ static int fimd_enable_vblank(void *ctx, int pipe)
 	struct fimd_context *fimd_ctx = ctx;
 	u32 val;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] pipe: %d\n", fimd_get_name(fimd_ctx), pipe);
 
 	fimd_ctx->pipe = pipe;
 
@@ -230,7 +246,7 @@ static void fimd_disable_vblank(void *ctx)
 	struct fimd_context *fimd_ctx = ctx;
 	u32 val;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
 
 	if (fimd_ctx->suspended)
 		return;
@@ -253,7 +269,8 @@ static int fimd_calc_clkdiv(struct fimd_context *fimd_ctx,
 	u32 best_framerate = 0;
 	u32 framerate;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] refresh: %d\n", fimd_get_name(fimd_ctx),
+			refresh);
 
 	retrace = win_data->hmargin * 2 + win_data->hsync_len +
 				win_data->ovl_width;
@@ -293,7 +310,7 @@ static void fimd_win_mode_set(void *ctx, struct exynos_drm_overlay *overlay)
 	int win;
 	unsigned long offset;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
 
 	if (!overlay) {
 		DRM_ERROR("overlay is NULL\n");
@@ -353,7 +370,7 @@ static void fimd_win_set_pixfmt(struct fimd_context *fimd_ctx, unsigned int win)
 	unsigned long val;
 	unsigned long bytes;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] win: %u\n", fimd_get_name(fimd_ctx), win);
 
 	val = WINCONx_ENWIN;
 
@@ -424,7 +441,7 @@ static void fimd_win_set_colkey(struct fimd_context *fimd_ctx, unsigned int win)
 {
 	unsigned int keycon0 = 0, keycon1 = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] win: %u\n", fimd_get_name(fimd_ctx), win);
 
 	keycon0 = ~(WxKEYCON0_KEYBL_EN | WxKEYCON0_KEYEN_F |
 			WxKEYCON0_DIRCON) | WxKEYCON0_COMPKEY(0);
@@ -441,6 +458,8 @@ static void mie_set_6bit_dithering(struct fimd_context *ctx, int win)
 	unsigned long val;
 	unsigned int width, height;
 	int i;
+
+	DRM_DEBUG_KMS("[FIMD:%s] win: %d\n", fimd_get_name(ctx), win);
 
 	width = win_data->ovl_width;
 	height = win_data->ovl_height;
@@ -481,7 +500,7 @@ static void fimd_win_commit(void *ctx, int zpos)
 	int win = zpos;
 	unsigned long val, alpha, size;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] win: %d\n", fimd_get_name(fimd_ctx), win);
 
 	if (fimd_ctx->suspended)
 		return;
@@ -596,7 +615,8 @@ static void fimd_win_disable(void *ctx, int zpos)
 	int win = zpos;
 	u32 val;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] win: %d\n", fimd_get_name(fimd_ctx), win);
+
 	if (fimd_ctx->suspended)
 		return;
 
@@ -633,6 +653,8 @@ static void fimd_apply(void *ctx)
 	struct fimd_win_data *win_data;
 	int i;
 
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
+
 	for (i = 0; i < WINDOWS_NR; i++) {
 		win_data = &fimd_ctx->win_data[i];
 		if (win_data->enabled)
@@ -667,7 +689,9 @@ out:
 static int fimd_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 {
 	struct fimd_context *fimd_ctx = ctx;
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	DRM_DEBUG_KMS("[FIMD:%s] [DEV:%s]\n", fimd_get_name(fimd_ctx),
+			drm_dev->devname);
 
 	/*
 	 * enable drm irq mode.
@@ -707,7 +731,7 @@ static void fimd_clear_win(struct fimd_context *ctx, int win)
 {
 	u32 val;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] win: %d\n", fimd_get_name(ctx), win);
 
 	writel(0, ctx->regs + WINCON(win));
 	writel(0, ctx->regs + VIDOSD_A(win));
@@ -730,6 +754,8 @@ static void fimd_window_suspend(struct fimd_context *fimd_ctx)
 	struct fimd_win_data *win_data;
 	int i;
 
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
+
 	for(i = 0; i < WINDOWS_NR; i++)
 	{
 		win_data = &fimd_ctx->win_data[i];
@@ -746,6 +772,8 @@ static void fimd_window_resume(struct fimd_context *fimd_ctx)
 	struct fimd_win_data *win_data;
 	int i;
 
+	DRM_DEBUG_KMS("[FIMD:%s]\n", fimd_get_name(fimd_ctx));
+
 	for(i = 0; i < WINDOWS_NR; i++)
 	{
 		win_data = &fimd_ctx->win_data[i];
@@ -758,7 +786,8 @@ static void fimd_window_resume(struct fimd_context *fimd_ctx)
 
 static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FIMD:%s] enable: %u\n", fimd_get_name(fimd_ctx),
+			enable);
 
 	if (enable) {
 		int ret;
@@ -854,6 +883,8 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 	int win;
 	int ret = -EINVAL;
 
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
+
 #ifdef CONFIG_EXYNOS_IOMMU
 	ret = iommu_init(pdev);
 	if (ret < 0) {
@@ -861,7 +892,6 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 #endif
-	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
@@ -1005,7 +1035,7 @@ static int __devexit fimd_remove(struct platform_device *pdev)
 {
 	struct fimd_context *ctx = platform_get_drvdata(pdev);
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	if (ctx->suspended)
 		goto out;

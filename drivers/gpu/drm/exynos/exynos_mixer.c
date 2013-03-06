@@ -734,7 +734,7 @@ static int mixer_enable_vblank(void *ctx, int pipe)
 	struct mixer_context *mctx = ctx;
 	struct mixer_resources *res = &mctx->mixer_res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("pipe: %d\n", pipe);
 
 	/*
 	 * TODO (seanpaul): Right now, this is an expected code path since we
@@ -762,7 +762,7 @@ static void mixer_disable_vblank(void *ctx)
 	struct mixer_context *mctx = ctx;
 	struct mixer_resources *res = &mctx->mixer_res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("pipe: %d\n", mctx->pipe);
 
 	if (!mctx->is_mixer_powered_on)
 		return;
@@ -777,8 +777,6 @@ static void mixer_win_mode_set(void *ctx,
 	struct mixer_context *mctx = ctx;
 	struct hdmi_win_data *win_data;
 	int win;
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
 	if (!overlay) {
 		DRM_ERROR("overlay is NULL\n");
@@ -829,7 +827,8 @@ static void mixer_win_commit(void *ctx, int zpos)
 	struct mixer_resources *res = &mctx->mixer_res;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
+	DRM_DEBUG_KMS("win: %d\n", win);
+
 	if (win == DEFAULT_ZPOS)
 		win = MIXER_DEFAULT_WIN;
 
@@ -839,7 +838,7 @@ static void mixer_win_commit(void *ctx, int zpos)
 	}
 
 	if (!mctx->is_mixer_powered_on) {
-		DRM_DEBUG_KMS("[%d] %s not powered on\n", __LINE__, __func__);
+		DRM_DEBUG_KMS("not powered on\n");
 		return;
 	}
 
@@ -858,6 +857,8 @@ static void mixer_apply(void *ctx)
 	struct mixer_context *mctx = ctx;
 	int i;
 
+	DRM_DEBUG_KMS("\n");
+
 	for (i = 0; i < MIXER_WIN_NR; i++) {
 		if (!mctx->enabled[i])
 			continue;
@@ -873,7 +874,7 @@ static void mixer_win_disable(void *ctx, int zpos)
 	unsigned long flags;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
+	DRM_DEBUG_KMS("win: %d\n", win);
 
 	if (win == DEFAULT_ZPOS)
 		win = MIXER_DEFAULT_WIN;
@@ -972,6 +973,8 @@ static void mixer_win_reset(struct mixer_context *mctx)
 	unsigned long flags;
 	u32 val; /* value stored to register */
 
+	DRM_DEBUG_KMS("\n");
+
 	spin_lock_irqsave(&res->reg_slock, flags);
 	mixer_reg_writemask(res, MXR_STATUS, ~0, MXR_STATUS_SOFT_RESET);
 	mixer_vsync_set_update(mctx, false);
@@ -1033,6 +1036,8 @@ static void mixer_resource_poweron(struct mixer_context *mctx)
 {
 	struct mixer_resources *res = &mctx->mixer_res;
 
+	DRM_DEBUG_KMS("is_mixer_powered_on: %d\n", mctx->is_mixer_powered_on);
+
 	if (mctx->is_mixer_powered_on)
 		return;
 
@@ -1053,7 +1058,8 @@ static void mixer_resource_poweroff(struct mixer_context *mctx)
 {
 	struct mixer_resources *res = &mctx->mixer_res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("is_mixer_powered_on: %d\n", mctx->is_mixer_powered_on);
+
 	if (!mctx->is_mixer_powered_on)
 		return;
 
@@ -1070,7 +1076,7 @@ static int mixer_dpms(void *ctx, int mode)
 {
 	struct mixer_context *mctx = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
@@ -1092,6 +1098,8 @@ static int mixer_dpms(void *ctx, int mode)
 static int mixer_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 {
 	struct mixer_context *mctx = ctx;
+
+	DRM_DEBUG("[DEV:%s]\n", drm_dev->devname);
 
 	mctx->drm_dev = drm_dev;
 
@@ -1115,6 +1123,8 @@ static struct exynos_controller_ops mixer_ops = {
 static int iommu_init(struct platform_device *pdev)
 {
 	struct platform_device *pds;
+
+	DRM_DEBUG("[PDEV:%s]\n", pdev->name);
 
 	pds = find_sysmmu_dt(pdev, "sysmmu");
 	if (pds == NULL) {
@@ -1156,7 +1166,7 @@ static int __devinit mixer_resources_init_exynos(
 	struct resource *res;
 	int ret;
 
-	DRM_DEBUG_KMS("Mixer resources init\n");
+	DRM_DEBUG("[PDEV:%s] is_exynos5: %d\n", pdev->name, is_exynos5);
 
 	mixer_res->is_soc_exynos5 = is_exynos5;
 	mixer_res->dev = dev;
@@ -1291,6 +1301,8 @@ static void mixer_resources_cleanup(struct device *dev,
 {
 	struct mixer_resources *res = &mctx->mixer_res;
 
+	DRM_DEBUG("\n");
+
 	disable_irq(res->irq);
 	free_irq(res->irq, dev);
 
@@ -1304,6 +1316,8 @@ static int __devinit mixer_probe(struct platform_device *pdev)
 	struct exynos_drm_hdmi_pdata *pdata;
 	struct mixer_context *mctx;
 	int ret;
+
+	DRM_DEBUG("[PDEV:%s]\n", pdev->name);
 
 	dev_info(dev, "probe start\n");
 
@@ -1344,6 +1358,8 @@ static int mixer_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mixer_context *mctx = platform_get_drvdata(pdev);
+
+	DRM_DEBUG("[PDEV:%s]\n", pdev->name);
 
 	dev_info(dev, "remove successful\n");
 

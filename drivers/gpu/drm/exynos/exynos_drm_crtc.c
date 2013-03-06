@@ -267,6 +267,8 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 	struct exynos_drm_flip_desc next_desc;
 	unsigned int ret;
 
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
+
 	if (cur_desc->kds)
 		kds_resource_set_release(&cur_desc->kds);
 
@@ -312,7 +314,8 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_display *display = exynos_crtc->display;
 
-	DRM_DEBUG_KMS("crtc[%d] mode[%d]\n", crtc->base.id, mode);
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(crtc),
+			drm_get_dpms_name(mode));
 
 	if (display->controller_ops && display->controller_ops->dpms)
 		display->controller_ops->dpms(display->controller_ctx, mode);
@@ -325,7 +328,7 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 
 static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	/* drm framework doesn't check NULL. */
 }
@@ -340,7 +343,7 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 	struct exynos_drm_display *display = exynos_crtc->display;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	/*
 	 * when set_crtc is requested from user or at booting time,
@@ -363,7 +366,8 @@ exynos_drm_crtc_mode_fixup(struct drm_crtc *crtc,
 			    struct drm_display_mode *mode,
 			    struct drm_display_mode *adjusted_mode)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [MODE:%d:%s]\n", DRM_BASE_ID(crtc),
+			DRM_BASE_ID(mode), mode->name);
 
 	/* drm framework doesn't check NULL */
 	return true;
@@ -380,7 +384,9 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	struct drm_framebuffer *fb = crtc->fb;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [MODE:%d:%s] @ (%d, %d) [OLD_FB:%d]\n",
+			DRM_BASE_ID(crtc), DRM_BASE_ID(mode), mode->name, x, y,
+			DRM_BASE_ID(old_fb));
 
 	if (!fb)
 		return -EINVAL;
@@ -415,7 +421,8 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct drm_framebuffer *fb = crtc->fb;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] @ (%d, %d) [OLD_FB:%d]\n",
+			DRM_BASE_ID(crtc), x, y, DRM_BASE_ID(old_fb));
 
 	if (!fb)
 		return -EINVAL;
@@ -436,7 +443,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 	/* drm framework doesn't check NULL */
 }
 
@@ -491,7 +498,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_obj *gem_ob = (struct exynos_drm_gem_obj *)exynos_fb->exynos_gem_obj[0];
 #endif
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [FB:%d]\n", DRM_BASE_ID(crtc),
+			DRM_BASE_ID(fb));
 
 	/*
 	 * the pipe from user always is 0 so we can set pipe number
@@ -633,7 +641,7 @@ static void exynos_drm_crtc_destroy(struct drm_crtc *crtc)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_private *private = crtc->dev->dev_private;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	private->crtc[exynos_crtc->pipe] = NULL;
 
@@ -654,7 +662,7 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr,
 	struct exynos_drm_private *private = dev->dev_private;
 	struct drm_crtc *crtc;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s] pipe: %d\n", dev->devname, nr);
 
 	exynos_crtc = kzalloc(sizeof(*exynos_crtc), GFP_KERNEL);
 	if (!exynos_crtc) {
@@ -673,6 +681,8 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr,
 	drm_crtc_init(dev, crtc, &exynos_crtc_funcs);
 	drm_crtc_helper_add(crtc, &exynos_crtc_helper_funcs);
 
+	DRM_DEBUG_KMS("Created [CRTC:%d]\n", DRM_BASE_ID(crtc));
+
 	return 0;
 }
 
@@ -683,7 +693,7 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 		to_exynos_crtc(private->crtc[crtc]);
 	struct exynos_drm_display *display = exynos_crtc->display;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s] crtc: %d\n", dev->devname, crtc);
 
 	if (display->pipe == -1)
 		display->pipe = crtc;
@@ -701,7 +711,7 @@ void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc)
 		to_exynos_crtc(private->crtc[crtc]);
 	struct exynos_drm_display *display = exynos_crtc->display;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DEV:%s] pipe: %d\n", dev->devname, crtc);
 
 	/*
 	 * TODO(seanpaul): This seems like a hack. I don't think it's actually

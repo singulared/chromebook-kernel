@@ -95,7 +95,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	int nr;
 	struct bridge_init bridge;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s] flags: 0x%lx\n", dev->devname, flags);
 
 	private = kzalloc(sizeof(struct exynos_drm_private), GFP_KERNEL);
 	if (!private) {
@@ -216,7 +216,7 @@ static int exynos_drm_unload(struct drm_device *dev)
 {
 	struct exynos_drm_private *private = dev->dev_private;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s]\n", dev->devname);
 
 	exynos_drm_fbdev_fini(dev);
 	exynos_drm_device_unregister(dev);
@@ -237,7 +237,7 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct exynos_drm_file_private *file_private;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s]\n", dev->devname);
 
 	file_private = kzalloc(sizeof(*file_private), GFP_KERNEL);
 	if (!file_private) {
@@ -257,7 +257,7 @@ static void exynos_drm_preclose(struct drm_device *dev,
 	struct exynos_drm_file_private *file_private = file->driver_priv;
 	struct exynos_drm_gem_obj_node *cur, *d;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s]\n", dev->devname);
 
 	mutex_lock(&dev->struct_mutex);
 	/* release kds resource sets for outstanding GEM object acquires */
@@ -278,7 +278,7 @@ static void exynos_drm_preclose(struct drm_device *dev,
 
 static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s]\n", dev->devname);
 
 	if (!file->driver_priv)
 		return;
@@ -289,7 +289,7 @@ static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 
 static void exynos_drm_lastclose(struct drm_device *dev)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[DEV:%s]\n", dev->devname);
 
 	exynos_drm_fbdev_restore_mode(dev);
 }
@@ -406,7 +406,7 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[PDEV:%s]\n", pdev->name);
 
 #ifdef CONFIG_EXYNOS_IOMMU
 	if (iommu_init(pdev)) {
@@ -434,7 +434,7 @@ static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG("[PDEV:%s]\n", pdev->name);
 
 	pm_vt_switch_unregister(dev);
 	pm_runtime_disable(dev);
@@ -445,6 +445,20 @@ static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
 	iommu_deinit(pdev);
 #endif
 	return 0;
+}
+
+const char *exynos_display_type_name(const struct exynos_drm_display *display)
+{
+	switch (display->display_type) {
+	case EXYNOS_DRM_DISPLAY_TYPE_FIMD:
+		return "FIMD";
+	case EXYNOS_DRM_DISPLAY_TYPE_MIXER:
+		return "MIXER";
+	case EXYNOS_DRM_DISPLAY_TYPE_VIDI:
+		return "VIDI";
+	default:
+		return "?";
+	}
 }
 
 void exynos_display_attach_panel(enum exynos_drm_display_type type,
@@ -626,7 +640,7 @@ static int __init exynos_drm_init(void)
 {
 	int ret, i;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
 		displays[i] = kzalloc(sizeof(*displays[i]), GFP_KERNEL);
@@ -707,7 +721,7 @@ static void __exit exynos_drm_exit(void)
 {
 	int i;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	platform_driver_unregister(&exynos_drm_platform_driver);
 
