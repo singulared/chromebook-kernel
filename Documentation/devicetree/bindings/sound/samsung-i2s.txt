@@ -29,17 +29,8 @@ Optional SoC Specific Properties:
 - samsung,idma-addr: Internal DMA register base address of the audio
   sub system(used in secondary sound source).
 
-Required Board Specific Properties:
-
-- gpios: The gpio specifier for data out,data in, LRCLK, CDCLK and SCLK
-  interface lines. The format of the gpio specifier depends on the gpio
-  controller.
-  The syntax of samsung gpio specifier is
-	<[phandle of the gpio controller node]
-	 [pin number within the gpio controller]
-	 [mux function]
-	 [flags and pull up/down]
-	 [drive strength]>
+- pinctrl-0: Should specify pin control groups used for this controller.
+- pinctrl-names: Should contain only one value - "default".
 
 Aliases:
 
@@ -60,16 +51,6 @@ i2s@03830000 {
 	samsung,supports-rstclr;
 	samsung,supports-secdai;
 	samsung,idma-addr = <0x03000000>;
-};
-
-- Board Specific Portion:
-
-i2s_0: i2s@03830000 {
-	gpios = <&gpz 0 2 0 0>, /* I2S_0_SCLK */
-		<&gpz 1 2 0 0>, /* I2S_0_CDCLK */
-		<&gpz 2 2 0 0>, /* I2S_0_LRCK */
-		<&gpz 3 2 0 0>, /* I2S_0_SDI */
-		<&gpz 4 2 0 0>, /* I2S_0_SDO[1] */
-		<&gpz 5 2 0 0>, /* I2S_0_SDO[2] */
-		<&gpz 6 2 0 0>; /* I2S_0_SDO[3] */
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s0_bus>;
 };
