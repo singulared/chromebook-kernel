@@ -35,6 +35,7 @@
 #include <linux/mfd/chromeos_ec_commands.h>
 #include <linux/notifier.h>
 #include <linux/platform_device.h>
+#include <linux/power_supply.h>
 #include <linux/slab.h>
 
 struct mkbp_device {
@@ -85,7 +86,7 @@ static uint16_t mkbp_keycodes[MKBP_NUM_ROWS][MKBP_NUM_COLS] = {
 	  KEY_2,	KEY_8,		KEY_7,		0x0,
 	  KEY_0,	KEY_9,		KEY_LEFTALT,	KEY_DOWN,
 	  KEY_RIGHT },
-	{ 0x0,		KEY_Q,		KEY_E,		KEY_R,
+	{ KEY_BATTERY,	KEY_Q,		KEY_E,		KEY_R,
 	  KEY_W,	KEY_I,		KEY_U,		KEY_RIGHTSHIFT,
 	  KEY_P,	KEY_O,		0x0,		KEY_UP,
 	  KEY_LEFT }
@@ -101,6 +102,13 @@ static inline void mkbp_send_key_event(struct mkbp_device *mkbp_dev,
 {
 	struct input_dev *idev = mkbp_dev->idev;
 	int code = mkbp_keycodes[row][col];
+
+	/* This key signifies a change to power supply status */
+	if (code == KEY_BATTERY) {
+		if (mkbp_dev->ec->charger)
+			power_supply_changed(mkbp_dev->ec->charger);
+		return;
+	}
 
 	input_report_key(idev, code, pressed);
 }

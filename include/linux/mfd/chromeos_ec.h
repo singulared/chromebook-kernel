@@ -27,6 +27,7 @@ struct i2c_msg;
 #include <linux/init.h>
 #include <linux/mfd/chromeos_ec_commands.h>
 #include <linux/notifier.h>
+#include <linux/power_supply.h>
 
 /*
  * Command interface between EC and AP, for LPC, I2C and SPI interfaces.
@@ -101,6 +102,8 @@ struct chromeos_ec_device {
 	 * were not a wakeup source.
 	 */
 	struct blocking_notifier_head wake_notifier;
+
+	struct power_supply *charger;
 };
 
 /**

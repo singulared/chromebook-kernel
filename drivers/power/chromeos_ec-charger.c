@@ -57,26 +57,71 @@ static enum power_supply_property cros_ec_charger_props[] = {
 	POWER_SUPPLY_PROP_ONLINE, /* charger is active or not */
 };
 
-static int cros_ec_charger_get_prop(struct power_supply *psy,
-					     enum power_supply_property psp,
-					     union power_supply_propval *val)
+static void update_psu_type(struct power_supply *psy,
+			    struct ec_response_power_info *ec_data)
+{
+	dev_dbg(psy->dev, "dev_type = 0x%06x cur_limit = %d\n",
+		ec_data->usb_dev_type & CHARGING_MASK,
+		ec_data->usb_current_limit);
+
+	switch (ec_data->usb_dev_type & CHARGING_MASK) {
+	case TSU6721_TYPE_USB_HOST:
+		psy->type = POWER_SUPPLY_TYPE_USB;
+		break;
+	case TSU6721_TYPE_CDP:
+		psy->type = POWER_SUPPLY_TYPE_USB_CDP;
+		break;
+	case TSU6721_TYPE_DCP:
+	case TSU6721_TYPE_APPLE_CHG:
+		psy->type = POWER_SUPPLY_TYPE_USB_DCP;
+		break;
+	case TSU6721_TYPE_CHG12:
+		psy->type = POWER_SUPPLY_TYPE_MAINS;
+		break;
+	case TSU6721_TYPE_U200_CHG:
+	default:
+		psy->type = POWER_SUPPLY_TYPE_UNKNOWN;
+		break;
+	}
+
+}
+
+static int get_ec_power_info(struct power_supply *psy,
+			     struct ec_response_power_info *ec_data)
 {
 	struct charger_data *charger_data = container_of(psy,
 							 struct charger_data,
 							 charger);
 	struct device *dev = charger_data->dev;
 	struct chromeos_ec_device *ec = dev_get_drvdata(dev->parent);
+	int ret;
+
+	ret = ec->command_recv(ec, EC_CMD_POWER_INFO, ec_data,
+			       sizeof(*ec_data));
+	if (ret)
+		dev_err(dev, "Querying EC power info (err:%d)\n", ret);
+
+	return ret;
+}
+
+static void cros_ec_charger_power_changed(struct power_supply *psy)
+{
+	struct ec_response_power_info ec_data;
+
+	get_ec_power_info(psy, &ec_data);
+	update_psu_type(psy, &ec_data);
+}
+
+static int cros_ec_charger_get_prop(struct power_supply *psy,
+				    enum power_supply_property psp,
+				    union power_supply_propval *val)
+{
 	struct ec_response_power_info ec_data;
 	int ret;
 
-	val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
-	ret = ec->command_recv(ec, EC_CMD_POWER_INFO, &ec_data,
-			       sizeof(ec_data));
-	if (ret) {
-		dev_err(dev, "Unable to query EC power info (err:%d)\n",
-			ret);
+	ret = get_ec_power_info(psy, &ec_data);
+	if (ret)
 		return ret;
-	}
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -89,10 +134,13 @@ static int cros_ec_charger_get_prop(struct power_supply *psy,
 	return 0;
 }
 
+static char *charger_supplied_to[] = {"cros_ec-charger"};
+
 static __devinit int cros_ec_charger_probe(struct platform_device *pd)
 {
 	struct chromeos_ec_device *ec = dev_get_drvdata(pd->dev.parent);
 	struct charger_data *charger_data;
+	struct power_supply *psy;
 	struct device *dev = &pd->dev;
 	struct device_node *mfd_np, *charger_np;
 	int ret = 0;
@@ -121,23 +169,27 @@ static __devinit int cros_ec_charger_probe(struct platform_device *pd)
 		dev_err(dev, "Failed to alloc driver structure\n");
 		return -ENOMEM;
 	}
-
+	psy = &charger_data->charger;
 	charger_data->dev = dev;
 
-	charger_data->charger.name = "cros_ec-charger";
-	charger_data->charger.type = POWER_SUPPLY_TYPE_MAINS;
-	charger_data->charger.get_property = cros_ec_charger_get_prop;
-	charger_data->charger.properties = cros_ec_charger_props;
-	charger_data->charger.num_properties =
-		ARRAY_SIZE(cros_ec_charger_props);
+	psy->name = "cros_ec-charger";
+
+	psy->supplied_to = charger_supplied_to;
+	psy->num_supplicants = ARRAY_SIZE(charger_supplied_to);
+	psy->type = POWER_SUPPLY_TYPE_UNKNOWN;
+	psy->get_property = cros_ec_charger_get_prop;
+	psy->external_power_changed = cros_ec_charger_power_changed;
+	psy->properties = cros_ec_charger_props;
+	psy->num_properties = ARRAY_SIZE(cros_ec_charger_props);
 
 	platform_set_drvdata(pd, charger_data);
 
-	ret = power_supply_register(dev, &charger_data->charger);
+	ret = power_supply_register(dev, psy);
 	if (ret) {
 		dev_err(dev, "failed: power supply register\n");
 		return ret;
 	}
+	ec->charger = psy;
 
 	return 0;
 }
@@ -145,7 +197,9 @@ static __devinit int cros_ec_charger_probe(struct platform_device *pd)
 static int __devexit cros_ec_charger_remove(struct platform_device *pd)
 {
 	struct charger_data *charger_data = platform_get_drvdata(pd);
+	struct chromeos_ec_device *ec = dev_get_drvdata(pd->dev.parent);
 
+	ec->charger = NULL;
 	power_supply_unregister(&charger_data->charger);
 	platform_set_drvdata(pd, NULL);
 
