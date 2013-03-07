@@ -2231,6 +2231,11 @@ static int dspxfr_one_seg(struct hda_codec *codec,
 	hda_frame_size_words = ((sample_rate_div == 0) ? 0 :
 			(num_chans * sample_rate_mul / sample_rate_div));
 
+	if (hda_frame_size_words == 0) {
+		snd_printdd(KERN_ERR "frmsz zero\n");
+		return -EINVAL;
+	}
+
 	buffer_size_words = min(buffer_size_words,
 				(unsigned int)(UC_RANGE(chip_addx, 1) ?
 				65536 : 32768));
@@ -2244,10 +2249,8 @@ static int dspxfr_one_seg(struct hda_codec *codec,
 	CTASSERT(SUCCEEDED(status));
 	CTASSERT(buffer_addx != NULL);
 	CTASSERT(buffer_size_words >= hda_frame_size_words);
-	CTASSERT(hda_frame_size_words > 0);
 
-	if ((buffer_addx == NULL) || (hda_frame_size_words == 0) ||
-	    (buffer_size_words < hda_frame_size_words)) {
+	if (buffer_addx == NULL || buffer_size_words < hda_frame_size_words) {
 		status = FAIL_MSG(-1, "dspxfr_one_seg:failed");
 	}
 
