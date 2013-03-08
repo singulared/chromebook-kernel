@@ -936,6 +936,7 @@ validate_exec_list(struct drm_i915_gem_exec_object2 *exec,
 		   int count)
 {
 	int i;
+	int total = 0;
 
 	for (i = 0; i < count; i++) {
 		char __user *ptr = (char __user *)(uintptr_t)exec[i].relocs_ptr;
@@ -945,6 +946,9 @@ validate_exec_list(struct drm_i915_gem_exec_object2 *exec,
 		if (exec[i].relocation_count >
 		    INT_MAX / sizeof(struct drm_i915_gem_relocation_entry))
 			return -EINVAL;
+		if (exec[i].relocation_count > INT_MAX - total)
+			return -EINVAL;
+		total += exec[i].relocation_count;
 
 		length = exec[i].relocation_count *
 			sizeof(struct drm_i915_gem_relocation_entry);
