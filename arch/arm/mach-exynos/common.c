@@ -24,6 +24,8 @@
 #include <linux/irqdomain.h>
 #include <linux/of_address.h>
 #include <linux/cpu_pm.h>
+#include <linux/clocksource.h>
+#include <linux/clk-provider.h>
 
 #include <asm/proc-fns.h>
 #include <asm/exception.h>
@@ -710,6 +712,20 @@ static const struct of_device_id exynos_dt_irq_match[] = {
 	{},
 };
 #endif
+
+void __init exynos_init_time(void)
+{
+	if (of_have_populated_dt()) {
+#ifdef CONFIG_OF
+		of_clk_init(NULL);
+		clocksource_of_init();
+#endif
+	} else {
+		/* todo: remove after migrating legacy E4 platforms to dt */
+		exynos4_clk_init(NULL);
+		mct_init();
+	}
+}
 
 void __init exynos4_init_irq(void)
 {

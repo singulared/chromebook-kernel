@@ -424,7 +424,7 @@ MACHINE_START(SMDKV310, "SMDKV310")
 	.map_io		= smdkv310_map_io,
 	.handle_irq	= gic_handle_irq,
 	.init_machine	= smdkv310_machine_init,
-	.init_time	= mct_init,
+	.init_time	= exynos_init_time,
 	.reserve	= &smdkv310_reserve,
 	.restart	= exynos4_restart,
 MACHINE_END
@@ -438,7 +438,7 @@ MACHINE_START(SMDKC210, "SMDKC210")
 	.handle_irq	= gic_handle_irq,
 	.init_machine	= smdkv310_machine_init,
 	.init_late	= exynos_init_late,
-	.init_time	= mct_init,
+	.init_time	= exynos_init_time,
 	.reserve	= &smdkv310_reserve,
 	.restart	= exynos4_restart,
 MACHINE_END
