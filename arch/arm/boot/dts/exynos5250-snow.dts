@@ -367,4 +367,11 @@
 			pinctrl-0 = <&ptn3460_gpios>;
 		};
 	};
+
+	fixed-rate-clocks {
+		xxti {
+			compatible = "samsung,clock-xxti";
+			clock-frequency = <24000000>;
+		};
+	};
 };

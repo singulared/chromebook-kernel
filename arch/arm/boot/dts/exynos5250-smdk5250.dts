@@ -250,4 +250,11 @@
 		samsung,i2s-controller = <&i2s0>;
 		samsung,audio-codec = <&wm8994>;
 	};
+
+	fixed-rate-clocks {
+		xxti {
+			compatible = "samsung,clock-xxti";
+			clock-frequency = <24000000>;
+		};
+	};
 };
