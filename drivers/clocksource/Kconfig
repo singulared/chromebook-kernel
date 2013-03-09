@@ -61,3 +61,8 @@ config CLKSRC_ARM_GENERIC
 	def_bool y if ARM64
 	help
 	  This option enables support for the ARM generic timer.
+
+config CLKSRC_EXYNOS_MCT
+	def_bool y if ARCH_EXYNOS
+	help
+	  Support for Multi Core Timer controller on Exynos SoCs.
