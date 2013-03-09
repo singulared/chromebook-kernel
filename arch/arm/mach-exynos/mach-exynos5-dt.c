@@ -333,12 +333,7 @@ static const struct of_dev_auxdata exynos5440_auxdata_lookup[] __initconst = {
 
 static void __init exynos5_dt_map_io(void)
 {
-	unsigned long root = of_get_flat_dt_root();
-
 	exynos_init_io(NULL, 0);
-
-	if (of_flat_dt_is_compatible(root, "samsung,exynos5250"))
-		s3c24xx_init_clocks(24000000);
 }
 
 #define S5P_PMU_DEBUG				S5P_PMUREG(0x0A00)
