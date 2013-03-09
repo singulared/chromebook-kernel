@@ -3393,7 +3393,7 @@ static void ca0132_update_latency(struct hda_codec *codec,
 	while (substr) {
 		runtime = substr->runtime;
 		/* update latency only when runtime is setup */
-		if (runtime && runtime->status->state != SNDRV_PCM_STATE_OPEN)
+		if (runtime && runtime->frame_bits)
 			runtime->delay = bytes_to_frames(runtime,
 					(latency * runtime->rate *
 					runtime->byte_align) / 1000);
