@@ -71,6 +71,8 @@ static int exynos_init(void);
 static int exynos_init_irq_eint(struct device_node *np,
 				struct device_node *parent);
 
+unsigned long xxti_f = 0, xusbxti_f = 0;
+
 static struct cpu_table cpu_ids[] __initdata = {
 	{
 		.idcode		= EXYNOS4210_CPU_ID,
@@ -723,6 +725,7 @@ void __init exynos_init_time(void)
 	} else {
 		/* todo: remove after migrating legacy E4 platforms to dt */
 		exynos4_clk_init(NULL);
+		exynos4_clk_register_fixed_ext(xxti_f, xusbxti_f);
 		mct_init();
 	}
 }
