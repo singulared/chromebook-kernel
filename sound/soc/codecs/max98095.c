@@ -874,6 +874,12 @@ static const struct snd_kcontrol_new max98095_snd_controls[] = {
 	SOC_SINGLE("Biquad1 Switch", M98095_088_CFG_LEVEL, 2, 1, 0),
 	SOC_SINGLE("Biquad2 Switch", M98095_088_CFG_LEVEL, 3, 1, 0),
 
+	SOC_SINGLE("DMIC1 Left Capture Switch", M98095_087_CFG_MIC, 2, 1, 0),
+	SOC_SINGLE("DMIC1 Right Capture Switch", M98095_087_CFG_MIC, 3, 1, 0),
+
+	SOC_SINGLE("MIC1 External Mic Switch", M98095_087_CFG_MIC, 0, 1, 0),
+	SOC_SINGLE("MIC2 External Mic Switch", M98095_087_CFG_MIC, 1, 1, 0),
+
 	SOC_ENUM("DAI1 Filter Mode", max98095_dai1_filter_mode_enum),
 	SOC_ENUM("DAI2 Filter Mode", max98095_dai2_filter_mode_enum),
 	SOC_ENUM("DAI1 DAC Filter", max98095_dai1_dac_filter_enum),
@@ -890,10 +896,6 @@ static const struct snd_kcontrol_new max98095_left_speaker_mixer_controls[] = {
 	SOC_DAPM_SINGLE("Right DAC1 Switch", M98095_050_MIX_SPK_LEFT, 6, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC2 Switch", M98095_050_MIX_SPK_LEFT, 3, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC3 Switch", M98095_050_MIX_SPK_LEFT, 3, 1, 0),
-	SOC_DAPM_SINGLE("MIC1 Switch", M98095_050_MIX_SPK_LEFT, 4, 1, 0),
-	SOC_DAPM_SINGLE("MIC2 Switch", M98095_050_MIX_SPK_LEFT, 5, 1, 0),
-	SOC_DAPM_SINGLE("IN1 Switch", M98095_050_MIX_SPK_LEFT, 1, 1, 0),
-	SOC_DAPM_SINGLE("IN2 Switch", M98095_050_MIX_SPK_LEFT, 2, 1, 0),
 };
 
 /* Right speaker mixer switch */
@@ -902,10 +904,6 @@ static const struct snd_kcontrol_new max98095_right_speaker_mixer_controls[] = {
 	SOC_DAPM_SINGLE("Right DAC1 Switch", M98095_051_MIX_SPK_RIGHT, 0, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC2 Switch", M98095_051_MIX_SPK_RIGHT, 3, 1, 0),
 	SOC_DAPM_SINGLE("Mono DAC3 Switch", M98095_051_MIX_SPK_RIGHT, 3, 1, 0),
-	SOC_DAPM_SINGLE("MIC1 Switch", M98095_051_MIX_SPK_RIGHT, 5, 1, 0),
-	SOC_DAPM_SINGLE("MIC2 Switch", M98095_051_MIX_SPK_RIGHT, 4, 1, 0),
-	SOC_DAPM_SINGLE("IN1 Switch", M98095_051_MIX_SPK_RIGHT, 1, 1, 0),
-	SOC_DAPM_SINGLE("IN2 Switch", M98095_051_MIX_SPK_RIGHT, 2, 1, 0),
 };
 
 /* Left headphone mixer switch */
@@ -1205,20 +1203,12 @@ static const struct snd_soc_dapm_route max98095_audio_map[] = {
 	{"Left Speaker Mixer", "Right DAC1 Switch", "DACR1"},
 	{"Left Speaker Mixer", "Mono DAC2 Switch", "DACM2"},
 	{"Left Speaker Mixer", "Mono DAC3 Switch", "DACM3"},
-	{"Left Speaker Mixer", "MIC1 Switch", "MIC1 Input"},
-	{"Left Speaker Mixer", "MIC2 Switch", "MIC2 Input"},
-	{"Left Speaker Mixer", "IN1 Switch", "IN1 Input"},
-	{"Left Speaker Mixer", "IN2 Switch", "IN2 Input"},
 
 	/* Right speaker output mixer */
 	{"Right Speaker Mixer", "Left DAC1 Switch", "DACL1"},
 	{"Right Speaker Mixer", "Right DAC1 Switch", "DACR1"},
 	{"Right Speaker Mixer", "Mono DAC2 Switch", "DACM2"},
 	{"Right Speaker Mixer", "Mono DAC3 Switch", "DACM3"},
-	{"Right Speaker Mixer", "MIC1 Switch", "MIC1 Input"},
-	{"Right Speaker Mixer", "MIC2 Switch", "MIC2 Input"},
-	{"Right Speaker Mixer", "IN1 Switch", "IN1 Input"},
-	{"Right Speaker Mixer", "IN2 Switch", "IN2 Input"},
 
 	/* Earpiece/Receiver output mixer */
 	{"Receiver Mixer", "Left DAC1 Switch", "DACL1"},
@@ -1904,6 +1894,14 @@ static int max98095_put_eq_enum(struct snd_kcontrol *kcontrol,
 	snd_soc_update_bits(codec, M98095_088_CFG_LEVEL, regmask, 0);
 
 	mutex_lock(&codec->mutex);
+
+	/* Codec must be shutdown during EQ loading, and it may take up to 20mS
+	 * to shut down.
+	 */
+	snd_soc_update_bits(codec, M98095_097_PWR_SYS, M98095_CODECSHDN,
+			    M98095_CODECSHDN);
+	msleep(20);
+
 	snd_soc_update_bits(codec, M98095_00F_HOST_CFG, M98095_SEG, M98095_SEG);
 	m98095_eq_band(codec, channel, 0, coef_set->band1);
 	m98095_eq_band(codec, channel, 1, coef_set->band2);
@@ -1911,6 +1909,8 @@ static int max98095_put_eq_enum(struct snd_kcontrol *kcontrol,
 	m98095_eq_band(codec, channel, 3, coef_set->band4);
 	m98095_eq_band(codec, channel, 4, coef_set->band5);
 	snd_soc_update_bits(codec, M98095_00F_HOST_CFG, M98095_SEG, 0);
+	snd_soc_update_bits(codec, M98095_097_PWR_SYS, M98095_CODECSHDN, 0);
+
 	mutex_unlock(&codec->mutex);
 
 	/* Restore the original on/off state */
@@ -2491,6 +2491,59 @@ static struct snd_soc_codec_driver soc_codec_dev_max98095 = {
 	.num_dapm_routes = ARRAY_SIZE(max98095_audio_map),
 };
 
+static struct max98095_eq_cfg built_in_eqs[] = {
+	{
+		/* Band 1 reg[0x10..0x19] F=5, A=-15.0, Q=0.65 */
+		/* Band 2 reg[0x1A..0x23] F=600, A=4.0, Q=1.20 */
+		/* Band 3 reg[0x24..0x2D] F=1000, A=4.0, Q=1.50 */
+		/* Band 4 reg[0x2E..0x37] F=1500, A=4.0, Q=4.00 */
+		/* Band 5 reg[0x38..0x41] F=5000, A=-5.5, Q=1.25 */
+		.name = "Default",
+		.rate = 44100,
+		.band1 = {0x05B0, 0xC001, 0x3E4E, 0x000B, 0x0EA1},
+		.band2 = {0x32B7, 0xC03C, 0x3967, 0x0576, 0x1C4B},
+		.band3 = {0x32B7, 0xC0A7, 0x3816, 0x0916, 0x1ED2},
+		.band4 = {0x32B7, 0xC175, 0x3AEC, 0x0D92, 0x18FB},
+		.band5 = {0x10FD, 0xCF91, 0xFBDA, 0x29D5, 0x3FDD},
+	},
+	{
+		/* Band 1 reg[0x10..0x19] F=5, A=-15.0, Q=0.65 */
+		/* Band 2 reg[0x1A..0x23] F=600, A=4.0, Q=1.20 */
+		/* Band 3 reg[0x24..0x2D] F=1000, A=4.0, Q=1.50 */
+		/* Band 4 reg[0x2E..0x37] F=1500, A=4.0, Q=4.00 */
+		/* Band 5 reg[0x38..0x41] F=5000, A=-5.5, Q=1.25 */
+		.name = "Default",
+		.rate = 48000,
+		.band1 = {0x05B0, 0xC001, 0x3E71, 0x000A, 0x0E09},
+		.band2 = {0x32B7, 0xC033, 0x39EA, 0x0505, 0x1B3C},
+		.band3 = {0x32B7, 0xC08D, 0x38B1, 0x085A, 0x1DB1},
+		.band4 = {0x32B7, 0xC13B, 0x3B52, 0x0C7C, 0x1805},
+		.band5 = {0x10FD, 0xCD3A, 0xFE8E, 0x26F5, 0x3FFB},
+	},
+};
+
+static struct max98095_pdata *max98095_of_pdata(struct i2c_client *i2c)
+{
+	struct max98095_pdata *pdata;
+	struct device_node *dn = i2c->dev.of_node;
+
+	pdata = devm_kzalloc(&i2c->dev, sizeof(struct max98095_pdata),
+			     GFP_KERNEL);
+	if (!pdata)
+		return NULL;
+
+	if (of_get_property(dn, "mic-left-digital", NULL))
+		pdata->digmic_left_mode = 1;
+
+	if (of_get_property(dn, "mic-right-digital", NULL))
+		pdata->digmic_right_mode = 1;
+
+	pdata->eq_cfgcnt = ARRAY_SIZE(built_in_eqs);
+	pdata->eq_cfg = built_in_eqs;
+
+	return pdata;
+}
+
 static int max98095_i2c_probe(struct i2c_client *i2c,
 			     const struct i2c_device_id *id)
 {
@@ -2505,6 +2558,8 @@ static int max98095_i2c_probe(struct i2c_client *i2c,
 	max98095->devtype = id->driver_data;
 	i2c_set_clientdata(i2c, max98095);
 	max98095->pdata = i2c->dev.platform_data;
+	if (!max98095->pdata && i2c->dev.of_node)
+		max98095->pdata = max98095_of_pdata(i2c);
 
 	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_max98095,
 				     max98095_dai, ARRAY_SIZE(max98095_dai));
