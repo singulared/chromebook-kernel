@@ -23,7 +23,12 @@
 #include <linux/sched.h>
 
 #include <mach/regs-pmu.h>
+#include <mach/regs-clock.h>
 #include <plat/devs.h>
+
+#define DEFAULT_DEV_LATENCY_NS			1000000UL
+#define DEFAULT_PD_PWRON_LATENCY_NS		1000000000UL
+#define DEFAULT_PD_PWROFF_LATENCY_NS		1000000000UL
 
 /*
  * Exynos specific wrapper around the generic power domain
@@ -35,15 +40,35 @@ struct exynos_pm_domain {
 	struct generic_pm_domain pd;
 };
 
+static struct gpd_timing_data dev_latencies = {
+	.stop_latency_ns = DEFAULT_DEV_LATENCY_NS,
+	.start_latency_ns = DEFAULT_DEV_LATENCY_NS,
+	.save_state_latency_ns = DEFAULT_DEV_LATENCY_NS,
+	.restore_state_latency_ns = DEFAULT_DEV_LATENCY_NS,
+};
+
 static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 {
 	struct exynos_pm_domain *pd;
 	void __iomem *base;
 	u32 timeout, pwr;
 	char *op;
+	u32 tmp;
 
 	pd = container_of(domain, struct exynos_pm_domain, pd);
 	base = pd->base;
+
+	/*
+	 * TODO: It is found that the CLK SRC register gets modified when
+	 * we power off the pd of gsc/mfc/isp/disp1. This happens only after
+	 * the system is suspended and resumed and not before that. The
+	 * following fix is a temporary workaround which will be removed
+	 * once the exact issue is found and fixed in the hardware.
+	 */
+	if (!power_on) {
+		/*  save clock source register */
+		tmp = __raw_readl(EXYNOS5_CLKSRC_TOP3);
+	}
 
 	pwr = power_on ? S5P_INT_LOCAL_PWR_EN : 0;
 	__raw_writel(pwr, base);
@@ -61,6 +86,12 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 		cpu_relax();
 		usleep_range(80, 100);
 	}
+
+	if (!power_on) {
+		/*  restore clock source register */
+		__raw_writel(tmp, EXYNOS5_CLKSRC_TOP3);
+	}
+
 	return 0;
 }
 
@@ -93,7 +124,7 @@ static void exynos_add_device_to_domain(struct exynos_pm_domain *pd,
 	dev_dbg(dev, "adding to power domain %s\n", pd->pd.name);
 
 	while (1) {
-		ret = pm_genpd_add_device(&pd->pd, dev);
+		ret = __pm_genpd_add_device(&pd->pd, dev, &dev_latencies);
 		if (ret != -EAGAIN)
 			break;
 		cond_resched();

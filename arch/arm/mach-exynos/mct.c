@@ -20,7 +20,9 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 #include <linux/of.h>
+#include <linux/syscore_ops.h>
 
+#include <asm/sched_clock.h>
 #include <asm/arch_timer.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
@@ -128,10 +130,15 @@ static void exynos4_mct_frc_start(u32 hi, u32 lo)
 	exynos4_mct_write(reg, EXYNOS4_MCT_G_TCON);
 }
 
+static notrace u32 exynos4_read_sched_clock(void)
+{
+	return __raw_readl(EXYNOS4_MCT_G_CNT_L);
+}
+
 static cycle_t exynos4_frc_read(struct clocksource *cs)
 {
-	unsigned int lo, hi;
-	u32 hi2 = __raw_readl(EXYNOS4_MCT_G_CNT_U);
+	u32 lo, hi;
+	static u32 hi2;
 
 	do {
 		hi = hi2;
@@ -142,7 +149,7 @@ static cycle_t exynos4_frc_read(struct clocksource *cs)
 	return ((cycle_t)hi << 32) | lo;
 }
 
-static void exynos4_frc_resume(struct clocksource *cs)
+static void exynos4_frc_resume(void)
 {
 	exynos4_mct_frc_start(0, 0);
 }
@@ -153,15 +160,29 @@ struct clocksource mct_frc = {
 	.read		= exynos4_frc_read,
 	.mask		= CLOCKSOURCE_MASK(64),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+struct syscore_ops mct_frc_core = {
 	.resume		= exynos4_frc_resume,
 };
 
 static void __init exynos4_clocksource_init(void)
 {
+	u64 initial_time = exynos4_frc_read(&mct_frc);
+
+	do_div(initial_time, (clk_rate / 1000000));
+	printk(KERN_INFO "Initial usec timer %llu\n", initial_time);
+
 	exynos4_mct_frc_start(0, 0);
 
 	if (clocksource_register_hz(&mct_frc, clk_rate))
 		panic("%s: can't register clocksource\n", mct_frc.name);
+
+	setup_sched_clock(exynos4_read_sched_clock, 32, clk_rate);
+
+	/* FRC resume must happen prior to sched_clock_resume, so we
+	   register it via syscore_ops instead of via clocksource. */
+	register_syscore_ops(&mct_frc_core);
 }
 
 static void exynos4_mct_comp0_stop(void)

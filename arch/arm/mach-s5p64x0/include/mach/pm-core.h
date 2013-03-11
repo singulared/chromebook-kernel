@@ -33,6 +33,15 @@ static inline void s3c_pm_debug_init_uart(void)
 	udelay(10);
 }
 
+#ifdef CONFIG_SAMSUNG_PM_DEBUG
+
+static inline void s3c_pm_arch_restore_uarts(void)
+{
+	/* nothing here yet */
+}
+
+#endif
+
 static inline void s3c_pm_arch_prepare_irqs(void)
 {
 	/* VIC should have already been taken care of */

@@ -23,6 +23,7 @@
 #include <linux/export.h>
 #include <linux/irqdomain.h>
 #include <linux/of_address.h>
+#include <linux/cpu_pm.h>
 
 #include <asm/proc-fns.h>
 #include <asm/exception.h>
@@ -116,6 +117,11 @@ static struct map_desc exynos_iodesc[] __initdata = {
 	{
 		.virtual	= (unsigned long)S5P_VA_CHIPID,
 		.pfn		= __phys_to_pfn(EXYNOS_PA_CHIPID),
+		.length		= SZ_4K,
+		.type		= MT_DEVICE,
+	}, {
+		.virtual	= (unsigned long)S5P_VA_AUDSS,
+		.pfn		= __phys_to_pfn(EXYNOS_PA_AUDSS),
 		.length		= SZ_4K,
 		.type		= MT_DEVICE,
 	},
@@ -325,6 +331,19 @@ void __init exynos_init_late(void)
 	exynos_pm_late_initcall();
 }
 
+static void wdt_reset_init(void)
+{
+	unsigned int value;
+
+	value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
+	value &= ~EXYNOS5_SYS_WDTRESET;
+	__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
+
+	value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
+	value &= ~EXYNOS5_SYS_WDTRESET;
+	__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
+}
+
 /*
  * exynos_map_io
  *
@@ -354,6 +373,9 @@ void __init exynos_init_io(struct map_desc *mach_desc, int size)
 	s5p_init_cpu(S5P_VA_CHIPID);
 
 	s3c_init_cpu(samsung_cpu_id, cpu_ids, ARRAY_SIZE(cpu_ids));
+
+	/* TO support Watch dog reset */
+	wdt_reset_init();
 }
 
 static void __init exynos4_map_io(void)
@@ -448,17 +470,22 @@ struct combiner_chip_data {
 	unsigned int irq_offset;
 	unsigned int irq_mask;
 	void __iomem *base;
+#ifdef CONFIG_PM
+	bool saved_on;
+#endif
+	unsigned int gic_irq;
 };
 
 static struct irq_domain *combiner_irq_domain;
-static struct combiner_chip_data combiner_data[MAX_COMBINER_NR];
+static struct combiner_chip_data *combiner_data;
+static unsigned int max_nr;
 
 static inline void __iomem *combiner_base(struct irq_data *data)
 {
-	struct combiner_chip_data *combiner_data =
+	struct combiner_chip_data *irq_combiner_data =
 		irq_data_get_irq_chip_data(data);
 
-	return combiner_data->base;
+	return irq_combiner_data->base;
 }
 
 static void combiner_mask_irq(struct irq_data *data)
@@ -473,6 +500,17 @@ static void combiner_unmask_irq(struct irq_data *data)
 	u32 mask = 1 << (data->hwirq % 32);
 
 	__raw_writel(mask, combiner_base(data) + COMBINER_ENABLE_SET);
+}
+
+static int combiner_set_affinity(struct irq_data *data, const struct
+				 cpumask *dest, bool force)
+{
+	struct combiner_chip_data *chip_data = data->chip_data;
+
+	if (!chip_data)
+		return -EINVAL;
+
+	return irq_set_affinity(chip_data->gic_irq, dest);
 }
 
 static void combiner_handle_cascade_irq(unsigned int irq, struct irq_desc *desc)
@@ -508,22 +546,15 @@ static struct irq_chip combiner_chip = {
 	.name		= "COMBINER",
 	.irq_mask	= combiner_mask_irq,
 	.irq_unmask	= combiner_unmask_irq,
+	.irq_set_affinity = combiner_set_affinity,
 };
 
 static void __init combiner_cascade_irq(unsigned int combiner_nr, unsigned int irq)
 {
-	unsigned int max_nr;
-
-	if (soc_is_exynos5250())
-		max_nr = EXYNOS5_MAX_COMBINER_NR;
-	else
-		max_nr = EXYNOS4_MAX_COMBINER_NR;
-
-	if (combiner_nr >= max_nr)
-		BUG();
 	if (irq_set_handler_data(irq, &combiner_data[combiner_nr]) != 0)
 		BUG();
 	irq_set_chained_handler(irq, combiner_handle_cascade_irq);
+	combiner_data[combiner_nr].gic_irq = irq;
 }
 
 static void __init combiner_init_one(unsigned int combiner_nr,
@@ -578,6 +609,55 @@ static int combiner_irq_domain_map(struct irq_domain *d, unsigned int irq,
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static void combiner_save(void)
+{
+	int i;
+
+	for (i = 0; i < max_nr; i++) {
+		if (combiner_data[i].irq_mask &
+		    __raw_readl(combiner_data[i].base + COMBINER_ENABLE_SET)) {
+			combiner_data[i].saved_on = true;
+		} else {
+			combiner_data[i].saved_on = false;
+		}
+	}
+}
+
+static void combiner_restore(void)
+{
+	int i;
+
+	for (i = 0; i < max_nr; i++) {
+		if (!combiner_data[i].saved_on)
+			continue;
+
+		__raw_writel(combiner_data[i].irq_mask,
+			     combiner_data[i].base + COMBINER_ENABLE_SET);
+	}
+}
+
+
+static int combiner_notifier(struct notifier_block *self, unsigned long cmd,
+			     void *v)
+{
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		combiner_save();
+		break;
+	case CPU_PM_EXIT:
+		combiner_restore();
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block combiner_notifier_block = {
+	.notifier_call = combiner_notifier,
+};
+#endif
+
 static struct irq_domain_ops combiner_irq_domain_ops = {
 	.xlate	= combiner_irq_domain_xlate,
 	.map	= combiner_irq_domain_map,
@@ -587,19 +667,37 @@ static void __init combiner_init(void __iomem *combiner_base,
 				 struct device_node *np)
 {
 	int i, irq, irq_base;
-	unsigned int max_nr, nr_irq;
+	unsigned int nr_irq, soc_max_nr;
+
+	soc_max_nr = soc_is_exynos5250() ? EXYNOS5_MAX_COMBINER_NR :
+		EXYNOS4_MAX_COMBINER_NR;
 
 	if (np) {
 		if (of_property_read_u32(np, "samsung,combiner-nr", &max_nr)) {
+			max_nr = soc_max_nr;
 			pr_warning("%s: number of combiners not specified, "
 				"setting default as %d.\n",
-				__func__, EXYNOS4_MAX_COMBINER_NR);
-			max_nr = EXYNOS4_MAX_COMBINER_NR;
+				__func__, max_nr);
 		}
 	} else {
-		max_nr = soc_is_exynos5250() ? EXYNOS5_MAX_COMBINER_NR :
-						EXYNOS4_MAX_COMBINER_NR;
+		max_nr = soc_max_nr;
 	}
+
+	if (WARN_ON(max_nr > soc_max_nr)) {
+		pr_warning("%s: more combiners specified (%d) than "
+			   "architecture (%d) supports.",
+			   __func__, max_nr, soc_max_nr);
+		return;
+	}
+
+	combiner_data = kmalloc(sizeof(struct combiner_chip_data) *
+				max_nr, GFP_KERNEL);
+	if (WARN_ON(!combiner_data)) {
+		pr_warning("%s: combiner_data memory allocation failed for %d "
+			   "entries", __func__, max_nr);
+		return;
+	}
+
 	nr_irq = max_nr * MAX_IRQ_IN_COMBINER;
 
 	irq_base = irq_alloc_descs(COMBINER_IRQ(0, 0), 1, nr_irq, 0);
@@ -612,6 +710,7 @@ static void __init combiner_init(void __iomem *combiner_base,
 				&combiner_irq_domain_ops, &combiner_data);
 	if (WARN_ON(!combiner_irq_domain)) {
 		pr_warning("%s: irq domain init failed\n", __func__);
+		kfree(combiner_data);
 		return;
 	}
 
@@ -624,6 +723,11 @@ static void __init combiner_init(void __iomem *combiner_base,
 #endif
 		combiner_cascade_irq(i, irq);
 	}
+
+#ifdef CONFIG_PM
+	/* Setup suspend/resume combiner saving */
+	cpu_pm_register_notifier(&combiner_notifier_block);
+#endif
 }
 
 #ifdef CONFIG_OF
