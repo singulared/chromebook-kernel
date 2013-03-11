@@ -453,6 +453,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	if (of_get_property(node, "tx-fifo-resize", NULL))
 		dwc->needs_fifo_resize = true;
 
+	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
 	pm_runtime_forbid(dev);
@@ -472,7 +473,8 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err0;
 	}
 
-	mode = DWC3_MODE(dwc->hwparams.hwparams0);
+	/* Putting controller in Host mode here */
+	mode = DWC3_MODE_HOST; /* Just a hack for time being */
 
 	switch (mode) {
 	case DWC3_MODE_DEVICE:
@@ -517,6 +519,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
+	pm_runtime_put(dev);
 	pm_runtime_allow(dev);
 
 	return 0;
@@ -543,6 +546,7 @@ err1:
 
 err0:
 	dwc3_free_event_buffers(dwc);
+	pm_runtime_disable(&pdev->dev);
 
 	return ret;
 }
@@ -554,7 +558,6 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	dwc3_debugfs_exit(dwc);
@@ -580,11 +583,55 @@ static int dwc3_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int dwc3_resume(struct device *dev)
+{
+	struct dwc3 *dwc = dev_get_drvdata(dev);
+	int	ret;
+
+	ret = dwc3_core_init(dwc);
+	if (ret < 0)
+		return ret;
+
+	switch (dwc->mode) {
+	case DWC3_MODE_DEVICE:
+		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_DEVICE);
+		break;
+	case DWC3_MODE_HOST:
+		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_HOST);
+		break;
+	case DWC3_MODE_DRD:
+		dwc3_set_mode(dwc, DWC3_GCTL_PRTCAP_OTG);
+	}
+
+	/* runtime set active to reflect active state. */
+	pm_runtime_disable(dev);
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
+
+	return 0;
+}
+
+static int dwc3_suspend(struct device *dev)
+{
+	struct dwc3 *dwc = dev_get_drvdata(dev);
+
+	dwc3_core_exit(dwc);
+
+	return 0;
+}
+#endif /* CONFIG_PM_SLEEP */
+
+static const struct dev_pm_ops dwc3_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
+};
+
 static struct platform_driver dwc3_driver = {
 	.probe		= dwc3_probe,
 	.remove		= dwc3_remove,
 	.driver		= {
 		.name	= "dwc3",
+		.pm	= &dwc3_pm_ops,
 	},
 };
 
