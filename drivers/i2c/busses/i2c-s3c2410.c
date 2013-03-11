@@ -62,6 +62,13 @@ enum s3c24xx_i2c_state {
 	STATE_STOP
 };
 
+enum {
+	I2C_ARB_GPIO_AP,		/* AP claims i2c bus */
+	I2C_ARB_GPIO_EC,		/* EC claims i2c bus */
+
+	I2C_ARB_GPIO_COUNT,
+};
+
 struct s3c24xx_i2c {
 	wait_queue_head_t	wait;
 	unsigned int            quirks;
@@ -85,10 +92,16 @@ struct s3c24xx_i2c {
 
 	struct s3c2410_platform_i2c	*pdata;
 	int			gpios[2];
+	int			arb_gpios[I2C_ARB_GPIO_COUNT];
 	struct pinctrl          *pctrl;
 #ifdef CONFIG_CPU_FREQ
 	struct notifier_block	freq_transition;
 #endif
+	/* Arbitration parameters */
+	bool			arbitrate;
+	unsigned int		slew_delay_us;
+	unsigned int		wait_retry_us;
+	unsigned int		wait_free_us;
 };
 
 static struct platform_device_id s3c24xx_driver_ids[] = {
@@ -115,6 +128,61 @@ static const struct of_device_id s3c24xx_i2c_match[] = {
 };
 MODULE_DEVICE_TABLE(of, s3c24xx_i2c_match);
 #endif
+
+/*
+ * If we have enabled arbitration on this bus, claim the i2c bus, using
+ * the GPIO-based signalling protocol.
+ */
+int s3c24xx_i2c_claim(struct s3c24xx_i2c *i2c)
+{
+	unsigned long stop_retry, stop_time;
+
+	if (!i2c->arbitrate)
+		return 0;
+
+	/* Start a round of trying to claim the bus */
+	stop_time = jiffies + usecs_to_jiffies(i2c->wait_free_us) + 1;
+	do {
+		/* Indicate that we want to claim the bus */
+		gpio_set_value(i2c->arb_gpios[I2C_ARB_GPIO_AP], 0);
+		udelay(i2c->slew_delay_us);
+
+		/* Wait for the EC to release it */
+		stop_retry = jiffies + usecs_to_jiffies(i2c->wait_retry_us) + 1;
+		while (time_before(jiffies, stop_retry)) {
+			if (gpio_get_value(i2c->arb_gpios[I2C_ARB_GPIO_EC])) {
+				/* We got it, so return */
+				return 0;
+			}
+
+			usleep_range(50, 200);
+		}
+
+		/* It didn't release, so give up, wait, and try again */
+		gpio_set_value(i2c->arb_gpios[I2C_ARB_GPIO_AP], 1);
+
+		usleep_range(i2c->wait_retry_us, i2c->wait_retry_us * 2);
+	} while (time_before(jiffies, stop_time));
+
+	/* Give up, release our claim */
+	gpio_set_value(i2c->arb_gpios[I2C_ARB_GPIO_AP], 1);
+	udelay(i2c->slew_delay_us);
+	dev_err(i2c->dev, "I2C: Could not claim bus, timeout\n");
+	return -EBUSY;
+}
+
+/*
+ * If we have enabled arbitration on this bus, release the i2c bus, using
+ * the GPIO-based signalling protocol.
+ */
+void s3c24xx_i2c_release(struct s3c24xx_i2c *i2c)
+{
+	if (i2c->arbitrate) {
+		/* Release the bus and wait for the EC to notice */
+		gpio_set_value(i2c->arb_gpios[I2C_ARB_GPIO_AP], 1);
+		udelay(i2c->slew_delay_us);
+	}
+}
 
 /* s3c24xx_get_device_quirks
  *
@@ -184,6 +252,31 @@ static inline void s3c24xx_i2c_enable_irq(struct s3c24xx_i2c *i2c)
 
 	tmp = readl(i2c->regs + S3C2410_IICCON);
 	writel(tmp | S3C2410_IICCON_IRQEN, i2c->regs + S3C2410_IICCON);
+}
+
+/*
+ * Disable the bus so that we won't get any interrupts from now on, or try
+ * to drive any lines. This is the default state when we don't have
+ * anything to send/receive.
+ *
+ * If there is an event on the bus, or we have a pre-existing event at
+ * kernel boot time, we may not notice the event and the I2C controller
+ * will lock the bus with the I2C clock line low indefinitely.
+ */
+static inline void s3c24xx_i2c_disable_bus(struct s3c24xx_i2c *i2c)
+{
+	unsigned long tmp;
+
+	/* Stop driving the I2C pins */
+	tmp = readl(i2c->regs + S3C2410_IICSTAT);
+	tmp &= ~S3C2410_IICSTAT_TXRXEN;
+	writel(tmp, i2c->regs + S3C2410_IICSTAT);
+
+	/* We don't expect any interrupts now, and don't want send acks */
+	tmp = readl(i2c->regs + S3C2410_IICCON);
+	tmp &= ~(S3C2410_IICCON_IRQEN | S3C2410_IICCON_IRQPEND |
+		S3C2410_IICCON_ACKEN);
+	writel(tmp, i2c->regs + S3C2410_IICCON);
 }
 
 
@@ -612,6 +705,15 @@ static int s3c24xx_i2c_doxfer(struct s3c24xx_i2c *i2c,
 	if (i2c->suspended)
 		return -EIO;
 
+	/*
+	 * Claim the bus if needed.
+	 *
+	 * Note, this needs a lock. How come s3c24xx_i2c_set_master() below
+	 * is outside the lock?
+	 */
+	if (s3c24xx_i2c_claim(i2c))
+		return -EBUSY;
+
 	ret = s3c24xx_i2c_set_master(i2c);
 	if (ret != 0) {
 		dev_err(i2c->dev, "cannot get bus (error %d)\n", ret);
@@ -633,7 +735,7 @@ static int s3c24xx_i2c_doxfer(struct s3c24xx_i2c *i2c,
 	ret = i2c->msg_idx;
 
 	/* having these next two as dev_err() makes life very
-	 * noisy when doing an i2cdetect */
+	* noisy when doing an i2cdetect */
 
 	if (timeout == 0)
 		dev_dbg(i2c->dev, "timeout\n");
@@ -646,7 +748,14 @@ static int s3c24xx_i2c_doxfer(struct s3c24xx_i2c *i2c,
 
 	s3c24xx_i2c_wait_idle(i2c);
 
+	s3c24xx_i2c_disable_bus(i2c);
+
  out:
+	i2c->state = STATE_IDLE;
+
+	/* Release the bus if needed */
+	s3c24xx_i2c_release(i2c);
+
 	return ret;
 }
 
@@ -855,20 +964,41 @@ static inline void s3c24xx_i2c_deregister_cpufreq(struct s3c24xx_i2c *i2c)
 #endif
 
 #ifdef CONFIG_OF
-static int s3c24xx_i2c_parse_dt_gpio(struct s3c24xx_i2c *i2c)
+/**
+ * Parse a list of GPIOs from a node property and request each one
+ *
+ * This might be better as of_gpio_get_array() one day.
+ *
+ * @param i2c		i2c driver data
+ * @param name		name of property to read from
+ * @param gpios		returns an array of GPIOs
+ * @param count		number of GPIOs to read
+ * @param required	true if the property is required, false if it is
+ *			optional so no warning is printed (avoids a separate
+ *			check in caller)
+ * @return 0 on success, -ve on error, in which case no GPIOs remain
+ * requested
+ */
+static int s3c24xx_i2c_parse_gpio(struct s3c24xx_i2c *i2c, const char *name,
+		int gpios[], size_t count, bool required)
 {
+	struct device_node *dn = i2c->dev->of_node;
 	int idx, gpio, ret;
 
-	if (i2c->quirks & QUIRK_NO_GPIO)
-		return 0;
-
-	for (idx = 0; idx < 2; idx++) {
-		gpio = of_get_gpio(i2c->dev->of_node, idx);
+	/*
+	 * It would be nice if there were an of function to return a list
+	 * of GPIOs
+	 */
+	for (idx = 0; idx < count; idx++) {
+		gpio = of_get_named_gpio(dn, name, idx);
 		if (!gpio_is_valid(gpio)) {
-			dev_err(i2c->dev, "invalid gpio[%d]: %d\n", idx, gpio);
+			if (idx || required) {
+				dev_err(i2c->dev, "invalid gpio[%d]: %d\n",
+					idx, gpio);
+			}
 			goto free_gpio;
 		}
-		i2c->gpios[idx] = gpio;
+		gpios[idx] = gpio;
 
 		ret = gpio_request(gpio, "i2c-bus");
 		if (ret) {
@@ -880,19 +1010,47 @@ static int s3c24xx_i2c_parse_dt_gpio(struct s3c24xx_i2c *i2c)
 
 free_gpio:
 	while (--idx >= 0)
-		gpio_free(i2c->gpios[idx]);
+		gpio_free(gpios[idx]);
 	return -EINVAL;
+}
+
+/* Free a list of GPIOs */
+static void s3c24xx_i2c_free_gpios(int gpios[], int count)
+{
+	int idx;
+
+	for (idx = 0; idx < count; idx++) {
+		if (gpio_is_valid(gpios[idx]))
+			gpio_free(gpios[idx]);
+	}
+}
+
+static int s3c24xx_i2c_parse_dt_gpio(struct s3c24xx_i2c *i2c)
+{
+	if (i2c->quirks & QUIRK_NO_GPIO)
+		return 0;
+
+	if (s3c24xx_i2c_parse_gpio(i2c, "gpios", i2c->gpios, 2, true))
+		return -EINVAL;
+
+	if (!s3c24xx_i2c_parse_gpio(i2c, "samsung,arbitration-gpios",
+			i2c->arb_gpios, I2C_ARB_GPIO_COUNT, false)) {
+		i2c->arbitrate = 1;
+		dev_warn(i2c->dev, "GPIO-based arbitration enabled");
+	}
+
+	return 0;
+
 }
 
 static void s3c24xx_i2c_dt_gpio_free(struct s3c24xx_i2c *i2c)
 {
-	unsigned int idx;
-
 	if (i2c->quirks & QUIRK_NO_GPIO)
 		return;
 
-	for (idx = 0; idx < 2; idx++)
-		gpio_free(i2c->gpios[idx]);
+	s3c24xx_i2c_free_gpios(i2c->gpios, 2);
+	if (i2c->arbitrate)
+		s3c24xx_i2c_free_gpios(i2c->arb_gpios, I2C_ARB_GPIO_COUNT);
 }
 #else
 static int s3c24xx_i2c_parse_dt_gpio(struct s3c24xx_i2c *i2c)
@@ -912,7 +1070,6 @@ static void s3c24xx_i2c_dt_gpio_free(struct s3c24xx_i2c *i2c)
 
 static int s3c24xx_i2c_init(struct s3c24xx_i2c *i2c)
 {
-	unsigned long iicon = S3C2410_IICCON_IRQEN | S3C2410_IICCON_ACKEN;
 	struct s3c2410_platform_i2c *pdata;
 	unsigned int freq;
 
@@ -926,12 +1083,12 @@ static int s3c24xx_i2c_init(struct s3c24xx_i2c *i2c)
 
 	dev_info(i2c->dev, "slave address 0x%02x\n", pdata->slave_addr);
 
-	writel(iicon, i2c->regs + S3C2410_IICCON);
+	writel(0, i2c->regs + S3C2410_IICCON);
+	writel(0, i2c->regs + S3C2410_IICSTAT);
 
 	/* we need to work out the divisors for the clock... */
 
 	if (s3c24xx_i2c_clockrate(i2c, &freq) != 0) {
-		writel(0, i2c->regs + S3C2410_IICCON);
 		dev_err(i2c->dev, "cannot meet bus frequency required\n");
 		return -EINVAL;
 	}
@@ -939,7 +1096,8 @@ static int s3c24xx_i2c_init(struct s3c24xx_i2c *i2c)
 	/* todo - check that the i2c lines aren't being dragged anywhere */
 
 	dev_info(i2c->dev, "bus frequency set to %d KHz\n", freq);
-	dev_dbg(i2c->dev, "S3C2410_IICCON=0x%02lx\n", iicon);
+	dev_dbg(i2c->dev, "S3C2410_IICCON=0x%02x\n",
+		readl(i2c->regs + S3C2410_IICCON));
 
 	return 0;
 }
@@ -954,15 +1112,34 @@ static void
 s3c24xx_i2c_parse_dt(struct device_node *np, struct s3c24xx_i2c *i2c)
 {
 	struct s3c2410_platform_i2c *pdata = i2c->pdata;
+	int id;
 
 	if (!np)
 		return;
 
-	pdata->bus_num = -1; /* i2c bus number is dynamically assigned */
+	id = of_alias_get_id(np, "i2c");
+	if (id < 0) {
+		dev_warn(i2c->dev, "failed to get alias id:%d\n", id);
+		/* i2c bus number is dynamically assigned */
+		pdata->bus_num = -1;
+	} else
+		/* i2c bus number is statically assigned from alias*/
+		pdata->bus_num = id;
 	of_property_read_u32(np, "samsung,i2c-sda-delay", &pdata->sda_delay);
 	of_property_read_u32(np, "samsung,i2c-slave-addr", &pdata->slave_addr);
 	of_property_read_u32(np, "samsung,i2c-max-bus-freq",
 				(u32 *)&pdata->frequency);
+
+	/* Arbitration parameters */
+	if (of_property_read_u32(np, "samsung,slew-delay-us",
+				 &i2c->slew_delay_us))
+		i2c->slew_delay_us = 10;
+	if (of_property_read_u32(np, "samsung,wait-retry-us",
+				 &i2c->wait_retry_us))
+		i2c->wait_retry_us = 2000;
+	if (of_property_read_u32(np, "samsung,wait-free-us",
+				 &i2c->wait_free_us))
+		i2c->wait_free_us = 50000;
 }
 #else
 static void
