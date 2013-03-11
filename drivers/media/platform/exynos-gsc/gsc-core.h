@@ -20,6 +20,9 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <media/videobuf2-core.h>
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#endif
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
@@ -328,6 +331,7 @@ struct gsc_driverdata {
  * @state:	flags used to synchronize m2m and capture mode operation
  * @alloc_ctx:	videobuf2 memory allocator context
  * @vdev:	video device for G-Scaler instance
+ * @mapping:	dma_mapping for G-Scaler IOMMU device
  */
 struct gsc_dev {
 	spinlock_t			slock;
@@ -343,6 +347,9 @@ struct gsc_dev {
 	unsigned long			state;
 	struct vb2_alloc_ctx		*alloc_ctx;
 	struct video_device		vdev;
+#ifdef CONFIG_EXYNOS_IOMMU
+	struct dma_iommu_mapping	*mapping;
+#endif
 };
 
 /**
@@ -425,6 +432,11 @@ static inline void gsc_ctx_state_lock_clear(u32 state, struct gsc_ctx *ctx)
 	spin_lock_irqsave(&ctx->gsc_dev->slock, flags);
 	ctx->state &= ~state;
 	spin_unlock_irqrestore(&ctx->gsc_dev->slock, flags);
+}
+
+static inline int is_tiled(const struct gsc_fmt *fmt)
+{
+	return fmt->pixelformat == V4L2_PIX_FMT_NV12MT_16X16;
 }
 
 static inline void gsc_hw_enable_control(struct gsc_dev *dev, bool on)
