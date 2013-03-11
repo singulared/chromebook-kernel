@@ -59,6 +59,7 @@ struct hdmi_win_data {
 	unsigned int		mode_width;
 	unsigned int		mode_height;
 	unsigned int		scan_flags;
+	bool			updated;
 	bool			enabled;
 	bool			resume;
 };
@@ -284,13 +285,13 @@ static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int height)
 				MXR_CFG_SCAN_PROGRASSIVE);
 
 	/* choosing between porper HD and SD mode */
-	if (height == 480)
+	if (height <= 480)
 		val |= MXR_CFG_SCAN_NTSC | MXR_CFG_SCAN_SD;
-	else if (height == 576)
+	else if (height <= 576)
 		val |= MXR_CFG_SCAN_PAL | MXR_CFG_SCAN_SD;
-	else if (height == 720)
+	else if (height <= 720)
 		val |= MXR_CFG_SCAN_HD_720 | MXR_CFG_SCAN_HD;
-	else if (height == 1080)
+	else if (height <= 1080)
 		val |= MXR_CFG_SCAN_HD_1080 | MXR_CFG_SCAN_HD;
 	else
 		val |= MXR_CFG_SCAN_HD_720 | MXR_CFG_SCAN_HD;
@@ -487,16 +488,21 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	vp_regs_dump(ctx);
 }
 
-static void mixer_layer_update(struct mixer_context *ctx)
+static int mixer_get_layer_update_count(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val;
 
 	val = mixer_reg_read(res, MXR_CFG);
 
-	/* allow one update per vsync only */
-	if (!(val & MXR_CFG_LAYER_UPDATE_COUNT_MASK))
-		mixer_reg_writemask(res, MXR_CFG, ~0, MXR_CFG_LAYER_UPDATE);
+	return (val & MXR_CFG_LAYER_UPDATE_COUNT_MASK) >>
+			MXR_CFG_LAYER_UPDATE_COUNT0;
+}
+
+static void mixer_layer_update(struct mixer_context *ctx)
+{
+	struct mixer_resources *res = &ctx->mixer_res;
+	mixer_reg_writemask(res, MXR_CFG, ~0, MXR_CFG_LAYER_UPDATE);
 }
 
 static void mixer_graph_buffer(struct mixer_context *ctx, int win)
@@ -548,6 +554,11 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 		ctx->interlace = false;
 
 	spin_lock_irqsave(&res->reg_slock, flags);
+
+	/* Only allow one update per vsync */
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0 && win_data->updated)
+		goto end;
+
 	mixer_vsync_set_update(ctx, false);
 
 	/* setup format */
@@ -581,12 +592,15 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	mixer_cfg_layer(ctx, win, true);
 
 	/* layer update mandatory for mixer 16.0.33.0 */
-	if (ctx->mxr_ver == MXR_VER_16_0_33_0)
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
 		mixer_layer_update(ctx);
+		win_data->updated = true;
+	}
 
 	mixer_run(ctx);
 
 	mixer_vsync_set_update(ctx, true);
+end:
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 }
 
@@ -818,6 +832,20 @@ static void mixer_win_disable(void *ctx, int win)
 	mixer_ctx->win_data[win].enabled = false;
 }
 
+static void mixer_apply(void *ctx)
+{
+	struct mixer_context *mixer_ctx = ctx;
+	int i;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	for (i = 0; i < MIXER_WIN_NR; i++) {
+		struct hdmi_win_data *win_data = &mixer_ctx->win_data[i];
+		if (win_data->enabled)
+			mixer_win_commit(ctx, i);
+	}
+}
+
 static void mixer_wait_for_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
@@ -841,6 +869,55 @@ static void mixer_wait_for_vblank(void *ctx)
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 }
 
+static void mixer_complete_scanout(void *ctx, dma_addr_t dma_addr,
+					unsigned long size)
+{
+	struct mixer_context *mixer_ctx = ctx;
+	struct mixer_resources *res = &mixer_ctx->mixer_res;
+	dma_addr_t dma_addr_in_use;
+	int win;
+	bool in_use = false;
+
+	mutex_lock(&mixer_ctx->mixer_mutex);
+	if (!mixer_ctx->powered) {
+		mutex_unlock(&mixer_ctx->mixer_mutex);
+		return;
+	}
+	mutex_unlock(&mixer_ctx->mixer_mutex);
+
+	/*
+	 * This dma-addr must not be used next time so check the
+	 * register and disable the window if yes.
+	 */
+	for (win = 0; win < MIXER_WIN_NR; win++) {
+		if (!mixer_ctx->win_data[win].enabled)
+			continue;
+
+		dma_addr_in_use = mixer_reg_read(res, MXR_GRAPHIC_BASE(win));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size))
+				if (mixer_ctx->win_data[win].enabled)
+					mixer_win_disable(ctx, win);
+	}
+
+	/*
+	 * If the dma-addr is being used right now, then set in_use
+	 * flag so that we wait for vsync before freeing fb.
+	 */
+	for (win = 0; win < MIXER_WIN_NR; win++) {
+		dma_addr_in_use = mixer_reg_read(res, MXR_GRAPHIC_BASE_S(win));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size)) {
+				in_use = true;
+				/* no need to check all windows*/
+				break;
+		}
+	}
+
+	if (in_use)
+		mixer_wait_for_vblank(ctx);
+}
+
 static void mixer_window_suspend(struct mixer_context *ctx)
 {
 	struct hdmi_win_data *win_data;
@@ -849,7 +926,8 @@ static void mixer_window_suspend(struct mixer_context *ctx)
 	for (i = 0; i < MIXER_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		win_data->resume = win_data->enabled;
-		mixer_win_disable(ctx, i);
+		if (win_data->enabled)
+			mixer_win_disable(ctx, i);
 	}
 	mixer_wait_for_vblank(ctx);
 }
@@ -943,18 +1021,46 @@ static void mixer_dpms(void *ctx, int mode)
 	}
 }
 
+int mixer_check_timing(void *ctx, struct fb_videomode *timing)
+{
+	struct mixer_context *mixer_ctx = ctx;
+	u32 w, h;
+
+	w = timing->xres;
+	h = timing->yres;
+
+	DRM_DEBUG_KMS("%s : xres=%d, yres=%d, refresh=%d, intl=%d\n",
+		__func__, timing->xres, timing->yres,
+		timing->refresh, (timing->vmode &
+		FB_VMODE_INTERLACED) ? true : false);
+
+	if (mixer_ctx->mxr_ver == MXR_VER_0_0_0_16)
+		return 0;
+
+	if ((w >= 464 && w <= 720 && h >= 261 && h <= 576) ||
+		(w >= 1024 && w <= 1280 && h >= 576 && h <= 720) ||
+		(w >= 1664 && w <= 1920 && h >= 936 && h <= 1080))
+		return 0;
+
+	return -EINVAL;
+}
+
 static struct exynos_mixer_ops mixer_ops = {
 	/* manager */
 	.iommu_on		= mixer_iommu_on,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
-	.wait_for_vblank	= mixer_wait_for_vblank,
+	.complete_scanout	= mixer_complete_scanout,
 	.dpms			= mixer_dpms,
 
 	/* overlay */
 	.win_mode_set		= mixer_win_mode_set,
 	.win_commit		= mixer_win_commit,
 	.win_disable		= mixer_win_disable,
+	.apply                  = mixer_apply,
+
+	/* display */
+	.check_timing		= mixer_check_timing,
 };
 
 static irqreturn_t mixer_irq_handler(int irq, void *arg)
@@ -963,6 +1069,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	struct mixer_context *ctx = drm_hdmi_ctx->ctx;
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val, base, shadow;
+	int i;
 
 	spin_lock(&res->reg_slock);
 
@@ -985,6 +1092,16 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 		}
 
 		drm_handle_vblank(drm_hdmi_ctx->drm_dev, ctx->pipe);
+
+		if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
+			/* Bail out if a layer update is pending */
+			if (mixer_get_layer_update_count(ctx))
+				goto out;
+
+			for (i = 0; i < MIXER_WIN_NR; i++)
+				ctx->win_data[i].updated = false;
+		}
+
 		exynos_drm_crtc_finish_pageflip(drm_hdmi_ctx->drm_dev,
 				ctx->pipe);
 

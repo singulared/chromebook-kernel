@@ -1,0 +1,80 @@
+* Samsung Display Controller using DRM frame work
+
+The display controller is used to transfer image data from memory to an
+external LCD driver interface. It supports various color formats such as
+rgb and yuv.
+
+Required properties:
+ - compatible: Should be "samsung,exynos5-fimd" or "samsung,exynos4-fimd" for
+   fimd using DRM frame work.
+ - reg: physical base address of the controller and length of memory
+   mapped region.
+ - interrupts: Three interrupts should be specified. The interrupts should be
+   specified in the following order.
+   - VSYNC interrupt
+   - FIFO level interrupt
+   - FIMD System Interrupt
+
+ - samsung,fimd-display: This property should specify the phandle of the
+   display device node which holds the video interface timing with the
+   below mentioned properties.
+
+   - lcd-htiming: Specifies the horizontal timing for the overlay. The
+     horizontal timing includes four parameters in the following order.
+
+     - horizontal back porch (in number of lcd clocks)
+     - horizontal front porch (in number of lcd clocks)
+     - hsync pulse width (in number of lcd clocks)
+     - Display panels X resolution.
+
+   - lcd-vtiming: Specifies the vertical timing for the overlay. The
+     vertical timing includes four parameters in the following order.
+
+     - vertical back porch (in number of lcd lines)
+     - vertical front porch (in number of lcd lines)
+     - vsync pulse width (in number of lcd clocks)
+     - Display panels Y resolution.
+
+
+ - samsung,default-window: Specifies the default window number of the fimd controller.
+
+ - samsung,fimd-win-bpp: Specifies the bits per pixel.
+
+Optional properties:
+ - samsung,fimd-vidout-rgb: Video output format is RGB.
+ - samsung,fimd-inv-vclk: invert video clock polarity.
+ - samsung,fimd-frame-rate: Number of video frames per second.
+
+Example:
+
+	The following is an example for the fimd controller is split into
+	two portions. The SoC specific portion can be specified in the SoC
+	specific dts file. The board specific portion can be specified in the
+	board specific dts file.
+
+	- SoC Specific portion
+
+	fimd {
+		compatible = "samsung,exynos5-fimd";
+		interrupt-parent = <&combiner>;
+		reg = <0x14400000 0x40000>;
+		interrupts = <18 5>, <18 4>, <18 6>;
+	};
+
+	- Board Specific portion
+
+	lcd_fimd0: lcd_panel0 {
+			lcd-htiming = <4 4 4 480>;
+			lcd-vtiming = <4 4 4 320>;
+			supports-mipi-panel;
+	};
+
+	fimd {
+		samsung,fimd-display = <&lcd_fimd0>;
+		samsung,fimd-vidout-rgb;
+		samsung,fimd-inv-vclk;
+		samsung,fimd-frame-rate = <60>;
+		samsung,default-window = <0>;
+		samsung,fimd-win-bpp = <32>;
+	};
+

@@ -32,7 +32,7 @@ struct exynos_hdmi_ops {
 	bool (*is_connected)(void *ctx);
 	struct edid *(*get_edid)(void *ctx,
 			struct drm_connector *connector);
-	int (*check_timing)(void *ctx, void *timing);
+	int (*check_timing)(void *ctx, struct fb_videomode *timing);
 	int (*power_on)(void *ctx, int mode);
 
 	/* manager */
@@ -51,13 +51,18 @@ struct exynos_mixer_ops {
 	int (*iommu_on)(void *ctx, bool enable);
 	int (*enable_vblank)(void *ctx, int pipe);
 	void (*disable_vblank)(void *ctx);
-	void (*wait_for_vblank)(void *ctx);
+	void (*complete_scanout)(void *ctx, dma_addr_t dma_addr,
+					unsigned long size);
 	void (*dpms)(void *ctx, int mode);
 
 	/* overlay */
 	void (*win_mode_set)(void *ctx, struct exynos_drm_overlay *overlay);
 	void (*win_commit)(void *ctx, int zpos);
 	void (*win_disable)(void *ctx, int zpos);
+	void (*apply)(void *ctx);
+
+	/* display */
+	int (*check_timing)(void *ctx, struct fb_videomode *timing);
 };
 
 void exynos_hdmi_drv_attach(struct exynos_drm_hdmi_context *ctx);
