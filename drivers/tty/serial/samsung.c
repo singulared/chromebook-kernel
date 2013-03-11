@@ -1011,6 +1011,9 @@ static void s3c24xx_serial_resetport(struct uart_port *port,
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon | S3C2410_UFCON_RESETBOTH);
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon);
 
+	wr_regl(port, S3C64XX_UINTM, 0xf);
+	wr_regl(port, S3C64XX_UINTP, 0xf);
+
 	/* some delay is required after fifo reset */
 	udelay(1);
 }
@@ -1307,9 +1310,29 @@ static int s3c24xx_serial_resume(struct device *dev)
 	return 0;
 }
 
+static int s3c24xx_serial_resume_noirq(struct device *dev)
+{
+	struct uart_port *port = s3c24xx_dev_to_port(dev);
+
+	if (port) {
+		/* restore IRQ mask */
+		if (s3c24xx_serial_has_interrupt_mask(port)) {
+			unsigned int uintm = 0xf;
+			if (tx_enabled(port))
+				uintm &= ~S3C64XX_UINTM_TXD_MSK;
+			if (rx_enabled(port))
+				uintm &= ~S3C64XX_UINTM_RXD_MSK;
+			wr_regl(port, S3C64XX_UINTM, uintm);
+		}
+	}
+
+	return 0;
+}
+
 static const struct dev_pm_ops s3c24xx_serial_pm_ops = {
 	.suspend = s3c24xx_serial_suspend,
 	.resume = s3c24xx_serial_resume,
+	.resume_noirq = s3c24xx_serial_resume_noirq,
 };
 #define SERIAL_SAMSUNG_PM_OPS	(&s3c24xx_serial_pm_ops)
 
@@ -1343,6 +1366,13 @@ s3c24xx_serial_console_txrdy(struct uart_port *port, unsigned int ufcon)
 	return (utrstat & S3C2410_UTRSTAT_TXE) ? 1 : 0;
 }
 
+static bool
+s3c24xx_port_configured(unsigned int ucon)
+{
+	/* consider the serial port configured if the tx/rx mode set */
+	return (ucon & 0xf) != 0;
+}
+
 #ifdef CONFIG_CONSOLE_POLL
 /*
  * Console polling routines for writing and reading from the uart while
@@ -1365,6 +1395,11 @@ static void s3c24xx_serial_put_poll_char(struct uart_port *port,
 		unsigned char c)
 {
 	unsigned int ufcon = rd_regl(cons_uart, S3C2410_UFCON);
+	unsigned int ucon = rd_regl(cons_uart, S3C2410_UCON);
+
+	/* not possible to xmit on unconfigured port */
+	if (!s3c24xx_port_configured(ucon))
+		return;
 
 	while (!s3c24xx_serial_console_txrdy(port, ufcon))
 		cpu_relax();
@@ -1377,6 +1412,12 @@ static void
 s3c24xx_serial_console_putchar(struct uart_port *port, int ch)
 {
 	unsigned int ufcon = rd_regl(cons_uart, S3C2410_UFCON);
+	unsigned int ucon = rd_regl(cons_uart, S3C2410_UCON);
+
+	/* not possible to xmit on unconfigured port */
+	if (!s3c24xx_port_configured(ucon))
+		return;
+
 	while (!s3c24xx_serial_console_txrdy(port, ufcon))
 		barrier();
 	wr_regb(cons_uart, S3C2410_UTXH, ch);
@@ -1409,9 +1450,7 @@ s3c24xx_serial_get_options(struct uart_port *port, int *baud,
 	    "registers: ulcon=%08x, ucon=%08x, ubdriv=%08x\n",
 	    port, ulcon, ucon, ubrdiv);
 
-	if ((ucon & 0xf) != 0) {
-		/* consider the serial port configured if the tx/rx mode set */
-
+	if (s3c24xx_port_configured(ucon)) {
 		switch (ulcon & S3C2410_LCON_CSMASK) {
 		case S3C2410_LCON_CS5:
 			*bits = 5;
