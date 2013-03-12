@@ -1352,6 +1352,12 @@ static int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 	return ret;
 }
 
+static int s5p_mfc_run_init_enc_buffers_v5(struct s5p_mfc_ctx *ctx)
+{
+	/* Needeed for v6 only */
+	return -1;
+}
+
 /* Try running an operation on hardware */
 void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 {
@@ -1692,6 +1698,7 @@ static struct s5p_mfc_hw_ops s5p_mfc_ops_v5 = {
 	.set_enc_ref_buffer = s5p_mfc_set_enc_ref_buffer_v5,
 	.init_decode = s5p_mfc_init_decode_v5,
 	.init_encode = s5p_mfc_init_encode_v5,
+	.init_enc_buffers = s5p_mfc_run_init_enc_buffers_v5,
 	.encode_one_frame = s5p_mfc_encode_one_frame_v5,
 	.try_run = s5p_mfc_try_run_v5,
 	.cleanup_queue = s5p_mfc_cleanup_queue_v5,

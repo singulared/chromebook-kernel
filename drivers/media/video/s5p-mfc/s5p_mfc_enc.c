@@ -660,18 +660,17 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 		vb2_buffer_done(dst_mb->b, VB2_BUF_STATE_DONE);
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 	}
-	if (IS_MFCV6(dev)) {
-		ctx->state = MFCINST_HEAD_PARSED; /* for INIT_BUFFER cmd */
-	} else {
+
+	if (!IS_MFCV6(dev)) {
 		ctx->state = MFCINST_RUNNING;
 		if (s5p_mfc_ctx_ready(ctx))
 			set_work_bit_irqsave(ctx);
 		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
-	}
-
-	if (IS_MFCV6(dev))
+	} else {
 		ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
+		ctx->state = MFCINST_HEAD_PARSED;
+	}
 
 	return 0;
 }
@@ -1042,15 +1041,13 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 		}
 		ctx->capture_state = QUEUE_BUFS_REQUESTED;
 
-		if (!IS_MFCV6(dev)) {
-			ret = s5p_mfc_hw_call(ctx->dev->mfc_ops,
-					alloc_codec_buffers, ctx);
-			if (ret) {
-				mfc_err("Failed to allocate encoding buffers\n");
-				reqbufs->count = 0;
-				ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
-				return -ENOMEM;
-			}
+		ret = s5p_mfc_hw_call(ctx->dev->mfc_ops,
+				alloc_codec_buffers, ctx);
+		if (ret) {
+			mfc_err("Failed to allocate encoding buffers\n");
+			reqbufs->count = 0;
+			ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
+			return -ENOMEM;
 		}
 	} else if (reqbufs->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		if (ctx->output_state != QUEUE_FREE) {
@@ -1058,12 +1055,33 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 							ctx->output_state);
 			return -EINVAL;
 		}
+
+		if (IS_MFCV6(dev)) {
+			if (!ctx->dpb_count) {
+				mfc_err("Streamon on CAPTURE plane should be\n"
+						"done first\n");
+				return -EINVAL;
+			}
+			/* Check for min encoder buffers */
+			if (reqbufs->count < ctx->dpb_count) {
+				reqbufs->count = ctx->dpb_count;
+			}
+		}
+
 		ret = vb2_reqbufs(&ctx->vq_src, reqbufs);
 		if (ret != 0) {
 			mfc_err("error in vb2_reqbufs() for E(S)\n");
 			return ret;
 		}
 		ctx->output_state = QUEUE_BUFS_REQUESTED;
+
+		if (IS_MFCV6(dev)) {
+			/* Run init encoder buffers */
+			s5p_mfc_hw_call(dev->mfc_ops, init_enc_buffers, ctx);
+			set_work_bit_irqsave(ctx);
+			s5p_mfc_clean_ctx_int_flags(ctx);
+			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+		}
 	} else {
 		mfc_err("invalid buf type\n");
 		return -EINVAL;
@@ -1082,7 +1100,8 @@ static int vidioc_querybuf(struct file *file, void *priv,
 		(buf->memory != V4L2_MEMORY_USERPTR))
 		return -EINVAL;
 	if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		if (ctx->state != MFCINST_GOT_INST) {
+		if ((ctx->state != MFCINST_GOT_INST) &&
+			(ctx->state != MFCINST_HEAD_PARSED)) {
 			mfc_err("invalid context state: %d\n", ctx->state);
 			return -EINVAL;
 		}
@@ -1611,7 +1630,8 @@ static int s5p_mfc_queue_setup(struct vb2_queue *vq,
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(vq->drv_priv);
 	struct s5p_mfc_dev *dev = ctx->dev;
 
-	if (ctx->state != MFCINST_GOT_INST) {
+	if ((ctx->state != MFCINST_GOT_INST) &&
+		(ctx->state != MFCINST_HEAD_PARSED)) {
 		mfc_err("inavlid state: %d\n", ctx->state);
 		return -EINVAL;
 	}

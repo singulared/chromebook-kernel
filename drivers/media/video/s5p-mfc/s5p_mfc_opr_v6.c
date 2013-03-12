@@ -69,7 +69,7 @@ int s5p_mfc_get_dec_status_v6(struct s5p_mfc_dev *dev)
 }
 
 /* Allocate codec buffers */
-int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
+int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned int mb_width, mb_height;
@@ -158,39 +158,12 @@ int s5p_mfc_alloc_codec_buffers_v6(struct s5p_mfc_ctx *ctx)
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
 		ctx->bank1.size = ctx->scratch_buf_size;
 		break;
-	case S5P_MFC_CODEC_H264_ENC:
-		ctx->scratch_buf_size =
-			S5P_FIMV_SCRATCH_BUF_SIZE_H264_ENC_V6(
-					mb_width,
-					mb_height);
-		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
-				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size =
-			ctx->scratch_buf_size + ctx->tmv_buffer_size +
-			(ctx->dpb_count * (ctx->luma_dpb_size +
-			ctx->chroma_dpb_size + ctx->me_buffer_size));
-		ctx->bank2.size = 0;
-		break;
-	case S5P_MFC_CODEC_MPEG4_ENC:
-	case S5P_MFC_CODEC_H263_ENC:
-		ctx->scratch_buf_size =
-			S5P_FIMV_SCRATCH_BUF_SIZE_MPEG4_ENC_V6(
-					mb_width,
-					mb_height);
-		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
-				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size =
-			ctx->scratch_buf_size + ctx->tmv_buffer_size +
-			(ctx->dpb_count * (ctx->luma_dpb_size +
-			ctx->chroma_dpb_size + ctx->me_buffer_size));
-		ctx->bank2.size = 0;
-		break;
 	default:
 		break;
 	}
 
 	/* Allocate only if memory from bank 1 is necessary */
-	if (ctx->bank1.size > 0) {
+	if (ctx->bank1.size > 0 && (ctx->type == MFCINST_DECODER)) {
 		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 memory\n");
@@ -1506,15 +1479,56 @@ static inline int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 	return ret;
 }
 
-static inline int s5p_mfc_run_init_enc_buffers(struct s5p_mfc_ctx *ctx)
+static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned int mb_width, mb_height;
 	int ret;
 
-	ret = s5p_mfc_alloc_codec_buffers_v6(ctx);
-	if (ret) {
-		mfc_err("Failed to allocate encoding buffers.\n");
-		return -ENOMEM;
+	mb_width = MB_WIDTH(ctx->img_width);
+	mb_height = MB_HEIGHT(ctx->img_height);
+
+	/* Codecs have different memory requirements. */
+	switch (ctx->codec_mode) {
+	case S5P_MFC_CODEC_H264_ENC:
+		ctx->scratch_buf_size =
+			S5P_FIMV_SCRATCH_BUF_SIZE_H264_ENC_V6(
+					mb_width,
+					mb_height);
+		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
+				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
+		ctx->bank1.size =
+			ctx->scratch_buf_size + ctx->tmv_buffer_size +
+			(ctx->dpb_count * (ctx->luma_dpb_size +
+			ctx->chroma_dpb_size + ctx->me_buffer_size));
+		ctx->bank2.size = 0;
+		break;
+	case S5P_MFC_CODEC_MPEG4_ENC:
+	case S5P_MFC_CODEC_H263_ENC:
+		ctx->scratch_buf_size =
+			S5P_FIMV_SCRATCH_BUF_SIZE_MPEG4_ENC_V6(
+					mb_width,
+					mb_height);
+		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
+				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
+		ctx->bank1.size =
+			ctx->scratch_buf_size + ctx->tmv_buffer_size +
+			(ctx->dpb_count * (ctx->luma_dpb_size +
+			ctx->chroma_dpb_size + ctx->me_buffer_size));
+		ctx->bank2.size = 0;
+		break;
+	default:
+		break;
+	}
+
+	/* Allocate bank1 memory */
+	if (ctx->bank1.size > 0) {
+		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1);
+		if (ret) {
+			mfc_err("Failed to allocate Bank1 memory\n");
+			return ret;
+		}
+		BUG_ON(ctx->bank1.dma & ((1 << MFC_BANK1_ALIGN_ORDER) - 1));
 	}
 
 	/* Header was generated now starting processing
@@ -1526,6 +1540,14 @@ static inline int s5p_mfc_run_init_enc_buffers(struct s5p_mfc_ctx *ctx)
 			"before allocating codec buffer.\n");
 		return -EAGAIN;
 	}
+
+	return 0;
+}
+
+static int s5p_mfc_init_enc_buffers_cmd(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	int ret = 0;
 
 	dev->curr_ctx = ctx->num;
 	s5p_mfc_clean_ctx_int_flags(ctx);
@@ -1636,8 +1658,8 @@ void s5p_mfc_try_run_v6(struct s5p_mfc_dev *dev)
 		case MFCINST_GOT_INST:
 			s5p_mfc_run_init_enc(ctx);
 			break;
-		case MFCINST_HEAD_PARSED: /* Only for MFC6.x */
-			ret = s5p_mfc_run_init_enc_buffers(ctx);
+		case MFCINST_HEAD_PARSED:
+			ret = s5p_mfc_init_enc_buffers_cmd(ctx);
 			break;
 		default:
 			ret = -EAGAIN;
@@ -1845,7 +1867,7 @@ unsigned int s5p_mfc_get_crop_info_v_v6(struct s5p_mfc_ctx *ctx)
 static struct s5p_mfc_hw_ops s5p_mfc_ops_v6 = {
 	.alloc_dec_temp_buffers = s5p_mfc_alloc_dec_temp_buffers_v6,
 	.release_dec_desc_buffer = s5p_mfc_release_dec_desc_buffer_v6,
-	.alloc_codec_buffers = s5p_mfc_alloc_codec_buffers_v6,
+	.alloc_codec_buffers = s5p_mfc_alloc_dec_buffers_v6,
 	.release_codec_buffers = s5p_mfc_release_codec_buffers_v6,
 	.alloc_instance_buffer = s5p_mfc_alloc_instance_buffer_v6,
 	.release_instance_buffer = s5p_mfc_release_instance_buffer_v6,
@@ -1863,6 +1885,7 @@ static struct s5p_mfc_hw_ops s5p_mfc_ops_v6 = {
 	.set_enc_ref_buffer = s5p_mfc_set_enc_ref_buffer_v6,
 	.init_decode = s5p_mfc_init_decode_v6,
 	.init_encode = s5p_mfc_init_encode_v6,
+	.init_enc_buffers = s5p_mfc_alloc_enc_buffers_v6,
 	.encode_one_frame = s5p_mfc_encode_one_frame_v6,
 	.try_run = s5p_mfc_try_run_v6,
 	.cleanup_queue = s5p_mfc_cleanup_queue_v6,
