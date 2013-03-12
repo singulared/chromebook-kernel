@@ -41,6 +41,7 @@ struct s5p_mfc_hw_ops {
 	int (*set_enc_ref_buffer)(struct s5p_mfc_ctx *ctx);
 	int (*init_decode)(struct s5p_mfc_ctx *ctx);
 	int (*init_encode)(struct s5p_mfc_ctx *ctx);
+	int (*init_enc_buffers)(struct s5p_mfc_ctx *ctx);
 	int (*encode_one_frame)(struct s5p_mfc_ctx *ctx);
 	void (*try_run)(struct s5p_mfc_dev *dev);
 	void (*cleanup_queue)(struct list_head *lh,
