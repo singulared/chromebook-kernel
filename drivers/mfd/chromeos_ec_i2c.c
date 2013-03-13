@@ -187,8 +187,8 @@ static struct device *cros_ec_get_parent(struct chromeos_ec_device *ec_dev)
 	return &client->dev;
 }
 
-static int __devinit cros_ec_probe_i2c(struct i2c_client *client,
-				   const struct i2c_device_id *dev_id)
+static int cros_ec_probe_i2c(struct i2c_client *client,
+			     const struct i2c_device_id *dev_id)
 {
 	struct device *dev = &client->dev;
 	struct chromeos_ec_device *ec_dev = NULL;
