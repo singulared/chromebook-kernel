@@ -233,9 +233,17 @@
 
 	i2c@12C70000 {
 		samsung,i2c-sda-delay = <100>;
-		samsung,i2c-max-bus-freq = <378000>;
+		samsung,i2c-max-bus-freq = <400000>;
 		gpios = <&gpb3 2 2 3 0>,
 			<&gpb3 3 2 3 0>;
+
+		trackpad {
+			reg = <0x67>;
+			compatible = "cypress,cyapa";
+			interrupts = <10 0>;
+			interrupt-parent = <&wakeup_eint>;
+			wakeup-source;
+		};
 	};
 
 	i2c@12C80000 {
