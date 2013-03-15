@@ -281,13 +281,19 @@ static char const *exynos5_dt_compat[] __initdata = {
 static void __init exynos5_reserve(void)
 {
 #ifdef CONFIG_S5P_DEV_MFC
-	struct s5p_mfc_dt_meminfo mfc_mem;
+	struct s5p_mfc_dt_meminfo mfc_mem[] = {
+		{ .compatible = "samsung,mfc-v6" },
+		{ .compatible = "samsung,mfc-v7" },
+	};
+	int i;
 
 	/* Reserve memory for MFC only if it's available */
-	mfc_mem.compatible = "samsung,mfc-v6";
-	if (of_scan_flat_dt(s5p_fdt_find_mfc_mem, &mfc_mem))
-		s5p_mfc_reserve_mem(mfc_mem.roff, mfc_mem.rsize, mfc_mem.loff,
-				mfc_mem.lsize);
+	for (i = 0; i < ARRAY_SIZE(mfc_mem); i++)
+		if (of_scan_flat_dt(s5p_fdt_find_mfc_mem, &mfc_mem[i])) {
+			s5p_mfc_reserve_mem(mfc_mem[i].roff, mfc_mem[i].rsize,
+					    mfc_mem[i].loff, mfc_mem[i].lsize);
+			break;
+		}
 #endif
 
 	exynos5_ramoops_reserve();
