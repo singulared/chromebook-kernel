@@ -109,7 +109,7 @@ static bool s3c_pm_should_skip_page(phys_addr_t addr)
 {
 	if (pm_check_skip_unused) {
 		struct page *page = phys_to_page(addr);
-		if  (page->_count.counter == 0) {
+		if (atomic_read(&page->_count) == 0) {
 			s3c_pm_printskip("unused", addr);
 			return true;
 		}

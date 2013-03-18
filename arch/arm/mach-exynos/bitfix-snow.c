@@ -404,13 +404,6 @@ static void _bitfix_recover_chunk(phys_addr_t failed_chunk,
 	u32 cu;
 	size_t offset;
 
-	/*
-	 * If any of the pages in the failed chunk were skipped then we can't
-	 * recover it; just bail.
-	 */
-	for (offset = 0; offset < CHUNK_SIZE; offset += PAGE_SIZE)
-		BUG_ON(should_skip_fn(failed_chunk + offset));
-
 	for (cu = 0; cu < CU_COUNT; cu++) {
 		phys_addr_t this_chunk = (failed_chunk & ~CU_MASK) |
 			(cu << CU_OFFSET);
@@ -486,12 +479,36 @@ void bitfix_recover_chunk(phys_addr_t failed_addr,
 	memset(recover_chunk, 0, CHUNK_SIZE);
 	_bitfix_recover_chunk(bad_chunk_addr, should_skip_fn);
 
-	/* Do comparisons to characterize the corruption. */
+	/* Do comparisons to characterize the corruption and copy. */
 	for (pgnum = 0; pgnum < PAGES_PER_CHUNK; pgnum++) {
 		u32 offset = pgnum * PAGE_SIZE;
 		phys_addr_t addr = bad_chunk_addr + offset;
 		u32 *virt;
 		u32 *recover_page = recover_chunk + offset / sizeof(u32);
+
+		if (should_skip_fn(addr)) {
+			struct page *page = phys_to_page(addr);
+
+			/*
+			 * If the page is unused then we really don't care that
+			 * we can't recover it.  Just continue on.
+			 */
+			if (atomic_read(&page->_count) == 0) {
+				pr_info("%s: Skip unused page at %08x\n",
+					__func__, addr);
+				continue;
+			}
+
+			/*
+			 * If one page in a chunk has bit errors it's likely
+			 * that other pages in the chunk will have errors too.
+			 * Unfortunately we can't check, so reboot and be safe
+			 * rather than sorry.
+			 */
+			pr_err("%s: Can't recover skipped page at %08x\n",
+			       __func__, addr);
+			panic("Rebooting due to likely bit errors\n");
+		}
 
 		virt = kmap_atomic(phys_to_page(addr));
 		bytes_fixed += bitfix_compare(addr, virt, recover_page);
