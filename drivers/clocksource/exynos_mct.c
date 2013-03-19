@@ -567,18 +567,18 @@ static void __init exynos4_timer_resources(struct device_node *np)
 static const struct of_device_id exynos_mct_ids[] = {
 	{ .compatible = "samsung,exynos4210-mct", .data = (void *)MCT_INT_SPI },
 	{ .compatible = "samsung,exynos4412-mct", .data = (void *)MCT_INT_PPI },
+	{ }
 };
 
-void __init mct_init(void)
+void __init mct_init(struct device_node *np)
 {
-	struct device_node *np = NULL;
 	const struct of_device_id *match;
 	u32 i;
 
-#ifdef CONFIG_OF
-	np = of_find_matching_node_and_match(NULL, exynos_mct_ids, &match);
-#endif
 	if (np) {
+#ifdef CONFIG_OF
+		match = of_match_node(exynos_mct_ids, np);
+#endif
 		mct_int_type = (u32)(match->data);
 
 		/* This driver uses only one global timer interrupt */
@@ -615,5 +615,5 @@ void __init mct_init(void)
 	exynos4_clocksource_init();
 	exynos4_clockevent_init();
 }
-CLOCKSOURCE_OF_DECLARE(exynos4210, "samsung,exynos4210-mct", mct_init)
-CLOCKSOURCE_OF_DECLARE(exynos4412, "samsung,exynos4412-mct", mct_init)
+CLOCKSOURCE_OF_DECLARE(exynos4210, "samsung,exynos4210-mct", mct_init);
+CLOCKSOURCE_OF_DECLARE(exynos4412, "samsung,exynos4412-mct", mct_init);
