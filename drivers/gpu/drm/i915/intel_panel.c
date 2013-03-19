@@ -30,6 +30,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/dmi.h>
 #include <linux/moduleparam.h>
 #include "intel_drv.h"
 #include "i915_drv.h"
@@ -392,6 +393,23 @@ set_level:
 	intel_panel_actually_set_backlight(dev, dev_priv->backlight_level);
 }
 
+static int intel_link_backlight(const struct dmi_system_id *id)
+{
+	DRM_DEBUG_KMS("Using Link backlight\n");
+	return 1;
+}
+
+static const struct dmi_system_id link_dmi_table[] = {
+	{
+		.callback = intel_link_backlight,
+		.ident = "Link",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Link"),
+		},
+	},
+	{ }
+};
+
 static void intel_panel_init_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -404,6 +422,26 @@ static void intel_panel_init_backlight(struct drm_device *dev)
 
 	dev_priv->backlight_level = dev_priv->get_backlight(dev);
 	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
+
+	if (dmi_check_system(link_dmi_table)) {
+		struct drm_connector *connector;
+		bool found = false;
+		/* Find the connector */
+		list_for_each_entry(connector,
+				    &dev->mode_config.connector_list,
+				    head)
+			if (connector->connector_type ==
+			    DRM_MODE_CONNECTOR_eDP) {
+				found = true;
+				break;
+			}
+
+		if (found) {
+			intel_adaptive_backlight_setup(dev);
+			intel_attach_adaptive_backlight_property(connector);
+			intel_attach_panel_gamma_property(connector);
+		}
+	}
 }
 
 enum drm_connector_status

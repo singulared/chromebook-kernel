@@ -2442,6 +2442,23 @@ intel_dp_set_property(struct drm_connector *connector,
 		goto done;
 	}
 
+	if (property == dev_priv->adaptive_backlight_property) {
+		dev_priv->adaptive_backlight_enabled = !!val;
+
+		if (dev_priv->adaptive_backlight_enabled)
+			intel_adaptive_backlight_enable(dev_priv);
+		else
+			intel_adaptive_backlight_disable(dev_priv, connector);
+
+		goto done_nomodeset;
+	}
+
+	if (property == dev_priv->panel_gamma_property) {
+		dev_priv->adaptive_backlight_panel_gamma = (u32)val * 65536 / 100;
+
+		goto done_nomodeset;
+	}
+
 	return -EINVAL;
 
 done:
@@ -2451,6 +2468,7 @@ done:
 			       crtc->x, crtc->y, crtc->fb);
 	}
 
+done_nomodeset:
 	return 0;
 }
 
@@ -2574,6 +2592,12 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connect
 			connector->dev->mode_config.scaling_mode_property,
 			DRM_MODE_SCALE_ASPECT);
 		intel_connector->panel.fitting_mode = DRM_MODE_SCALE_ASPECT;
+	}
+
+	if ((INTEL_INFO(connector->dev)->gen == 7) &&
+	    (connector->connector_type == DRM_MODE_CONNECTOR_eDP)) {
+		intel_attach_adaptive_backlight_property(connector);
+		intel_attach_panel_gamma_property(connector);
 	}
 }
 

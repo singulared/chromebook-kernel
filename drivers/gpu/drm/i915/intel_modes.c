@@ -100,6 +100,54 @@ intel_attach_force_audio_property(struct drm_connector *connector)
 	drm_object_attach_property(&connector->base, prop, 0);
 }
 
+static const struct drm_prop_enum_list adaptive_backlight_names[] = {
+	{ 0, "off" },
+	{ 1, "on" },
+};
+
+void
+intel_attach_adaptive_backlight_property(struct drm_connector *connector)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_property *prop;
+
+	prop = dev_priv->adaptive_backlight_property;
+	if (prop == NULL) {
+		prop = drm_property_create_enum(dev, 0,
+					"Adaptive backlight",
+					adaptive_backlight_names,
+					ARRAY_SIZE(adaptive_backlight_names));
+		if (prop == NULL)
+			return;
+
+		dev_priv->adaptive_backlight_property = prop;
+	}
+	drm_object_attach_property(&connector->base, prop, 0);
+}
+
+void
+intel_attach_panel_gamma_property(struct drm_connector *connector)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_property *prop;
+
+	prop = dev_priv->panel_gamma_property;
+	if (prop == NULL) {
+		prop = drm_property_create_range(dev, 0,
+					"Panel gamma",
+					100,
+					550);
+
+		if (prop == NULL)
+			return;
+
+		dev_priv->panel_gamma_property = prop;
+	}
+	drm_object_attach_property(&connector->base, prop, 100);
+}
+
 static const struct drm_prop_enum_list broadcast_rgb_names[] = {
 	{ 0, "Full" },
 	{ 1, "Limited 16:235" },
