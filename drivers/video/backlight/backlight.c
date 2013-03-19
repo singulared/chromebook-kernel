@@ -260,7 +260,13 @@ static int backlight_suspend(struct device *dev, pm_message_t state)
 
 static int backlight_resume(struct device *dev)
 {
-	struct backlight_device *bd = to_backlight_device(dev);
+	struct backlight_device *bd;
+
+	if (dpm_is_dark_resume()) {
+		dev_info(dev, "disabled for dark resume\n");
+		return 0;
+	}
+	bd = to_backlight_device(dev);
 
 	mutex_lock(&bd->ops_lock);
 	if ((bd->ops && bd->ops->options & BL_CORE_SUSPENDRESUME) ||
