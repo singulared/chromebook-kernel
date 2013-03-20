@@ -789,12 +789,12 @@ static int s5p_mfc_open(struct file *file)
 		dev->watchdog_timer.expires = jiffies +
 					msecs_to_jiffies(MFC_WATCHDOG_INTERVAL);
 		add_timer(&dev->watchdog_timer);
+		s5p_mfc_clock_on();
 		ret = s5p_mfc_power_on();
 		if (ret < 0) {
 			mfc_err("power on failed\n");
 			goto err_pwr_enable;
 		}
-		s5p_mfc_clock_on();
 		ret = s5p_mfc_alloc_and_load_firmware(dev);
 		if (ret)
 			goto err_alloc_fw;
@@ -856,13 +856,13 @@ err_init_hw:
 err_alloc_fw:
 	dev->ctx[ctx->num] = NULL;
 	del_timer_sync(&dev->watchdog_timer);
-	s5p_mfc_clock_off();
 err_pwr_enable:
 	if (dev->num_inst == 1) {
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("power off failed\n");
 		s5p_mfc_release_firmware(dev);
 	}
+	s5p_mfc_clock_off();
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);
 err_bad_node:
@@ -1033,15 +1033,17 @@ static int match_child(struct device *dev, void *data)
 
 static void *mfc_get_drv_data(struct platform_device *pdev);
 
-static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
-{
 #ifdef CONFIG_EXYNOS_IOMMU
+static int s5p_mfc_alloc_memdevs_iommu(struct s5p_mfc_dev *dev)
+{
 	struct device *mdev = &dev->plat_dev->dev;
 
+	s5p_mfc_clock_on();
 	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
 			SZ_256M, 4);
 	if (mapping == NULL) {
 		mfc_err("IOMMU mapping failed\n");
+		s5p_mfc_clock_off();
 		return -EFAULT;
 	}
 	mdev->dma_parms = devm_kzalloc(&dev->plat_dev->dev,
@@ -1049,8 +1051,13 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 	dma_set_max_seg_size(mdev, 0xffffffffu);
 	arm_iommu_attach_device(mdev, mapping);
 
+	s5p_mfc_clock_off();
 	return 0;
+}
+
 #else
+static int s5p_mfc_alloc_memdevs_noiommu(struct s5p_mfc_dev *dev)
+{
 	unsigned int mem_info[2];
 
 	dev->mem_dev_l = devm_kzalloc(&dev->plat_dev->dev,
@@ -1087,6 +1094,45 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 		return -ENOMEM;
 	}
 	return 0;
+}
+#endif
+
+static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
+{
+#ifdef CONFIG_EXYNOS_IOMMU
+	return s5p_mfc_alloc_memdevs_iommu(dev);
+#else
+	return s5p_mfc_alloc_memdevs_noiommu(dev);
+#endif
+}
+
+#ifdef CONFIG_EXYNOS_IOMMU
+void s5p_mfc_cleanup_memdevs_iommu()
+{
+	if (mapping) {
+		s5p_mfc_clock_on();
+		arm_iommu_release_mapping(mapping);
+		s5p_mfc_clock_off();
+	}
+}
+
+#else
+void s5p_mfc_cleanup_memdevs_noiommu(struct platform_device *pdev)
+{
+	struct s5p_mfc_dev *dev = platform_get_drvdata(pdev);
+	if (pdev->dev.of_node) {
+		put_device(dev->mem_dev_l);
+		put_device(dev->mem_dev_r);
+	}
+}
+#endif
+
+void s5p_mfc_cleanup_memdevs(struct platform_device *pdev)
+{
+#ifdef CONFIG_EXYNOS_IOMMU
+	s5p_mfc_cleanup_memdevs_iommu();
+#else
+	s5p_mfc_cleanup_memdevs_noiommu(pdev);
 #endif
 }
 
@@ -1126,7 +1172,8 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->regs_base = devm_request_and_ioremap(&pdev->dev, res);
 	if (dev->regs_base == NULL) {
 		dev_err(&pdev->dev, "Failed to obtain io memory\n");
-		return -ENOENT;
+		ret = -ENOENT;
+		goto err_res;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -1170,7 +1217,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 #endif
 	if (IS_ERR_OR_NULL(dev->alloc_ctx[0])) {
 		ret = PTR_ERR(dev->alloc_ctx[0]);
-		goto err_res;
+		goto err_cleanupmemdevs;
 	}
 
 #ifdef CONFIG_EXYNOS_IOMMU
@@ -1268,13 +1315,10 @@ err_v4l2_dev_reg:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
 err_mem_init_ctx_1:
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
+err_cleanupmemdevs:
+	s5p_mfc_cleanup_memdevs(pdev);
 err_res:
 	s5p_mfc_final_pm(dev);
-#ifdef CONFIG_EXYNOS_IOMMU
-	if (mapping)
-		arm_iommu_release_mapping(mapping);
-#endif
-
 	pr_debug("%s-- with error\n", __func__);
 	return ret;
 
@@ -1296,14 +1340,8 @@ static int s5p_mfc_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&dev->v4l2_dev);
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[0]);
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx[1]);
-	if (pdev->dev.of_node) {
-		put_device(dev->mem_dev_l);
-		put_device(dev->mem_dev_r);
-	}
-#ifdef CONFIG_EXYNOS_IOMMU
-	if (mapping)
-		arm_iommu_release_mapping(mapping);
-#endif
+
+	s5p_mfc_cleanup_memdevs(pdev);
 	s5p_mfc_final_pm(dev);
 	return 0;
 }
