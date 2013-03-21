@@ -651,8 +651,11 @@ static int cyapa_poll_state(struct cyapa *cyapa, unsigned int timeout)
 	cyapa_dbg(cyapa, "======< cyapa_poll_state >======");
 
 	ret = cyapa_get_state(cyapa);
-	if (ret)
+	if (ret) {
+		dev_err(&cyapa->client->dev, "poll state first trial"
+				" failed\n");
 		cyapa->debug = true;
+	}
 
 	while ((ret || cyapa->state >= CYAPA_STATE_BL_BUSY) && tries--) {
 		msleep(100);
@@ -887,6 +890,25 @@ static u16 cyapa_pwr_cmd_to_sleep_time(u8 pwr_mode)
 }
 
 /*
+ * cyapa_get_wait_time_for_pwr_cmd
+ *
+ * Compute the amount of time we need to wait after updating the touchpad
+ * power mode. The touchpad needs to consume the incoming power mode set
+ * command at the current clock rate.
+ */
+
+static u16 cyapa_get_wait_time_for_pwr_cmd(u8 pwr_mode)
+{
+	switch (pwr_mode) {
+	case PWR_MODE_FULL_ACTIVE: return 20;
+	case PWR_MODE_BTN_ONLY: return 20;
+	case PWR_MODE_OFF: return 20;
+	default: return cyapa_pwr_cmd_to_sleep_time(pwr_mode) + 50;
+	}
+}
+
+
+/*
  * Set device power mode
  *
  * Write to the field to configure power state. Power states include :
@@ -912,6 +934,7 @@ static int cyapa_set_power_mode(struct cyapa *cyapa, u8 power_mode)
 	int ret;
 	u8 power;
 	int tries = SET_POWER_MODE_TRIES;
+	u16 sleep_time;
 	cyapa_dbg(cyapa, "======< cyapa_set_power_mode >======");
 
 	if (cyapa->state != CYAPA_STATE_OP)
@@ -921,16 +944,26 @@ static int cyapa_set_power_mode(struct cyapa *cyapa, u8 power_mode)
 		ret = cyapa_read_byte(cyapa, CYAPA_CMD_POWER_MODE);
 		if (ret >= 0 || --tries < 1)
 			break;
-		dev_dbg(dev, "set power mode read retry. tries left = %d\n",
+		dev_dbg(dev, "set_power_mode read retry. tries left = %d\n",
 			tries);
 		usleep_range(SET_POWER_MODE_DELAY, 2 * SET_POWER_MODE_DELAY);
 	}
 	if (ret < 0) {
-		dev_err(dev, "failed to read power mode %d\n", ret);
+		dev_err(dev, "set_power_mode failed to read power mode %d\n",
+				ret);
 		cyapa->debug = true;
 		return ret;
 	}
+	/*
+	 * Return early if the power mode to set is the same as the current
+	 * one.
+	 */
+	if ((ret & PWR_MODE_MASK) == power_mode) {
+		cyapa_dbg(cyapa, "set_power_mode early return\n");
+		return 0;
+	}
 
+	sleep_time = cyapa_get_wait_time_for_pwr_cmd(ret & PWR_MODE_MASK);
 	power = ret;
 	power &= ~PWR_MODE_MASK;
 	power |= power_mode & PWR_MODE_MASK;
@@ -938,15 +971,22 @@ static int cyapa_set_power_mode(struct cyapa *cyapa, u8 power_mode)
 		ret = cyapa_write_byte(cyapa, CYAPA_CMD_POWER_MODE, power);
 		if (!ret || --tries < 1)
 			break;
-		dev_dbg(dev, "set power mode write retry. tries left = %d\n",
+		dev_dbg(dev, "set_power_mode write retry. tries left = %d\n",
 			tries);
 		usleep_range(SET_POWER_MODE_DELAY, 2 * SET_POWER_MODE_DELAY);
 	}
 	if (ret < 0) {
-		dev_err(dev, "failed to set power_mode 0x%02x err = %d\n",
-			power_mode, ret);
+		dev_err(dev, "set_power_mode failed to set power mode"
+				" 0x%02x err = %d\n", power_mode, ret);
 		cyapa->debug = true;
 	}
+	/*
+	 * Wait for the newly set power command to go in at the previous
+	 * clock speed (scanrate) used by the touchpad firmware. Not
+	 * doing so before issuing the next command may result in errors
+	 * depending on the command's content.
+	 */
+	msleep(sleep_time);
 	return ret;
 }
 
@@ -1035,6 +1075,16 @@ static int cyapa_check_is_operational(struct cyapa *cyapa)
 
 	/* Fallthrough state */
 	case CYAPA_STATE_OP:
+		/*
+		 * Reading query data before going back to the full mode
+		 * may cause problems, so we set the power mode first here.
+		 */
+		ret = cyapa_set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE);
+		if (ret) {
+			dev_err(dev, "check_is_operational active power"
+					" failed, %d\n", ret);
+			cyapa->debug = true;
+		}
 		ret = cyapa_get_query_data(cyapa);
 		if (ret < 0)
 			return ret;
@@ -1271,8 +1321,6 @@ static int cyapa_firmware(struct cyapa *cyapa, const char *fw_name)
 	int ret;
 	const struct firmware *fw;
 	int i;
-	u8 pwr_cmd = cyapa->runtime_suspend_power_mode;
-	u16 time = cyapa_pwr_cmd_to_sleep_time(pwr_cmd);
 	cyapa_dbg(cyapa, "======< cyapa_firmware >======");
 
 	ret = request_firmware(&fw, fw_name, dev);
@@ -1294,7 +1342,6 @@ static int cyapa_firmware(struct cyapa *cyapa, const char *fw_name)
 	 * fail.
 	 */
 	pm_runtime_get_sync(dev);
-	msleep(time + 100);
 
 	ret = cyapa_bl_enter(cyapa);
 	if (ret) {
@@ -1456,6 +1503,7 @@ static ssize_t cyapa_calibrate_store(struct device *dev,
 	struct cyapa *cyapa = dev_get_drvdata(dev);
 	int tries = 20;  /* max recalibration timeout 2s. */
 	int ret;
+	cyapa_dbg(cyapa, "======< cyapa_calibrate_store >======");
 
 	disable_irq(cyapa->irq);
 
@@ -1516,6 +1564,7 @@ static ssize_t cyapa_show_baseline(struct device *dev,
 	int max_baseline, min_baseline;
 	int tries = 3;
 	int ret;
+	cyapa_dbg(cyapa, "======< cyapa_show_baseline >======");
 
 	disable_irq(cyapa->irq);
 
@@ -2236,7 +2285,7 @@ static int cyapa_suspend(struct device *dev)
 					    : PWR_MODE_OFF;
 	ret = cyapa_set_power_mode(cyapa, power_mode);
 	if (ret < 0)
-		dev_err(dev, "set power mode failed, %d\n", ret);
+		dev_err(dev, "suspend set power mode failed, %d\n", ret);
 
 	if (device_may_wakeup(dev))
 		cyapa->irq_wake = (enable_irq_wake(cyapa->irq) == 0);
