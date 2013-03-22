@@ -1501,10 +1501,8 @@ static int psmouse_reconnect(struct serio *serio)
 	psmouse_set_state(psmouse, PSMOUSE_INITIALIZING);
 
 	if (psmouse->reconnect) {
-		/* Skip trackpoint reconnect to reduce the latency */
-		if (strcmp(serio->name, "Synaptics pass-through"))
-			if (psmouse->reconnect(psmouse))
-				goto out;
+		if (psmouse->reconnect(psmouse))
+			goto out;
 	} else {
 		psmouse_reset(psmouse);
 
