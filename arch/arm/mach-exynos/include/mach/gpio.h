@@ -278,9 +278,7 @@ enum exynos5_gpio_number {
 
 #define EXYNOS5_GPIO_END	(EXYNOS5_GPZ(EXYNOS5_GPIO_Z_NR) + 1)
 
-/* actually, EXYNOS5_GPIO_END is bigger than EXYNOS4 */
-
-#define S3C_GPIO_END		(EXYNOS5_GPIO_END)
+#define S3C_GPIO_END		EXYNOS5_GPIO_END
 
 /* define the number of gpios */
 

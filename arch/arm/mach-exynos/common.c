@@ -61,6 +61,7 @@ static const char name_exynos4210[] = "EXYNOS4210";
 static const char name_exynos4212[] = "EXYNOS4212";
 static const char name_exynos4412[] = "EXYNOS4412";
 static const char name_exynos5250[] = "EXYNOS5250";
+static const char name_exynos5420[] = "EXYNOS5420";
 static const char name_exynos5440[] = "EXYNOS5440";
 
 static void exynos4_map_io(void);
@@ -101,6 +102,12 @@ static struct cpu_table cpu_ids[] __initdata = {
 		.map_io		= exynos5_map_io,
 		.init		= exynos_init,
 		.name		= name_exynos5250,
+	}, {
+		.idcode		= EXYNOS5420_SOC_ID,
+		.idmask		= EXYNOS5_SOC_MASK,
+		.map_io		= exynos5_map_io,
+		.init		= exynos_init,
+		.name		= name_exynos5420,
 	}, {
 		.idcode		= EXYNOS5440_SOC_ID,
 		.idmask		= EXYNOS5_SOC_MASK,
@@ -263,7 +270,7 @@ static struct map_desc exynos5_iodesc[] __initdata = {
 	}, {
 		.virtual	= (unsigned long)S5P_VA_CMU,
 		.pfn		= __phys_to_pfn(EXYNOS5_PA_CMU),
-		.length		= 144 * SZ_1K,
+		.length		= 192 * SZ_1K,
 		.type		= MT_DEVICE,
 	}, {
 		.virtual	= (unsigned long)S5P_VA_PMU,
@@ -308,7 +315,8 @@ void exynos5_restart(char mode, const char *cmd)
 	u32 val;
 	void __iomem *addr;
 
-	if (of_machine_is_compatible("samsung,exynos5250")) {
+	if (of_machine_is_compatible("samsung,exynos5250") ||
+			of_machine_is_compatible("samsung,exynos5420")) {
 		val = 0x1;
 		addr = EXYNOS_SWRESET;
 	} else if (of_machine_is_compatible("samsung,exynos5440")) {
@@ -337,12 +345,22 @@ static void wdt_reset_init(void)
 	unsigned int value;
 
 	value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
-	value &= ~EXYNOS5_SYS_WDTRESET;
+	if (soc_is_exynos5420())
+		value &= ~EXYNOS5420_SYS_WDTRESET;
+	else
+		value &= ~EXYNOS5_SYS_WDTRESET;
 	__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
 
 	value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
-	value &= ~EXYNOS5_SYS_WDTRESET;
+	if (soc_is_exynos5420())
+		value &= ~EXYNOS5420_SYS_WDTRESET;
+	else
+		value &= ~EXYNOS5_SYS_WDTRESET;
 	__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
+
+	/* Set a higher reset value for WDT so that
+	 * CCF gets time to come in and gate it */
+	__raw_writel(0xffff, S3C_VA_WATCHDOG + 0x8);
 }
 
 /*
@@ -520,7 +538,7 @@ static void __init combiner_cascade_irq(unsigned int combiner_nr, unsigned int i
 {
 	unsigned int max_nr;
 
-	if (soc_is_exynos5250())
+	if (soc_is_exynos5250() || soc_is_exynos5420())
 		max_nr = EXYNOS5_MAX_COMBINER_NR;
 	else
 		max_nr = EXYNOS4_MAX_COMBINER_NR;
@@ -643,7 +661,10 @@ static void __init combiner_init(void __iomem *combiner_base,
 				 struct device_node *np)
 {
 	int i, irq, irq_base;
-	unsigned int nr_irq;
+	unsigned int nr_irq, soc_max_nr;
+
+	soc_max_nr = (soc_is_exynos5250() || soc_is_exynos5420())
+			? EXYNOS5_MAX_COMBINER_NR : EXYNOS4_MAX_COMBINER_NR;
 
 	if (np) {
 		if (of_property_read_u32(np, "samsung,combiner-nr", &max_nr)) {
@@ -794,7 +815,7 @@ static int __init exynos4_l2x0_cache_init(void)
 {
 	int ret;
 
-	if (soc_is_exynos5250() || soc_is_exynos5440())
+	if (soc_is_exynos5250() || soc_is_exynos5420() || soc_is_exynos5440())
 		return 0;
 
 	ret = l2x0_of_init(L2_AUX_VAL, L2_AUX_MASK);
@@ -1180,14 +1201,15 @@ static int __init exynos_init_irq_eint(struct device_node *eint_np,
 		{ .compatible = "samsung,exynos4210-pinctrl", },
 		{ .compatible = "samsung,exynos4x12-pinctrl", },
 		{ .compatible = "samsung,exynos5250-pinctrl", },
+		{ .compatible = "samsung,exynos5420-pinctrl", },
 	};
 	struct device_node *pctrl_np, *wkup_np;
 	const char *wkup_compat = "samsung,exynos4210-wakeup-eint";
 
 	for_each_matching_node(pctrl_np, exynos_pinctrl_ids) {
 		if (of_device_is_available(pctrl_np)) {
-			wkup_np = of_find_compatible_node(pctrl_np, NULL,
-							wkup_compat);
+			wkup_np = of_find_compatible_node(pctrl_np,
+						NULL, wkup_compat);
 			if (wkup_np)
 				return -ENODEV;
 		}
@@ -1200,8 +1222,10 @@ static int __init exynos_init_irq_eint(struct device_node *eint_np,
 		goto retry_init;
 
 	if (!eint_np) {
-		paddr = soc_is_exynos5250() ? EXYNOS5_PA_GPIO1 :
-						EXYNOS4_PA_GPIO2;
+		if (soc_is_exynos5250())
+			paddr = EXYNOS5_PA_GPIO1;
+		else
+			paddr = EXYNOS4_PA_GPIO2;
 		exynos_eint_base = ioremap(paddr, SZ_4K);
 	} else {
 		np = of_get_parent(eint_np);
@@ -1233,8 +1257,10 @@ static int __init exynos_init_irq_eint(struct device_node *eint_np,
 retry_init:
 	for (irq = 0; irq <= 15; irq++) {
 		eint0_15_data[irq] = irq;
-		src_int = soc_is_exynos5250() ? exynos5_eint0_15_src_int :
-						exynos4_eint0_15_src_int;
+		if (soc_is_exynos5250())
+			src_int = exynos5_eint0_15_src_int;
+		else
+			src_int = exynos4_eint0_15_src_int;
 		irq_eint = eint_np ? irq_of_parse_and_map(np, irq) :
 								src_int[irq];
 		if (!irq_eint) {
