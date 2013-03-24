@@ -231,7 +231,7 @@ LIBTRACEEVENT = $(TE_PATH)libtraceevent.a
 TE_LIB := -L$(TE_PATH) -ltraceevent
 
 PYTHON_EXT_SRCS := $(shell grep -v ^\# util/python-ext-sources)
-PYTHON_EXT_DEPS := util/python-ext-sources util/setup.py
+PYTHON_EXT_DEPS := util/python-ext-sources util/setup.py $(LIBTRACEEVENT)
 
 export LIBTRACEEVENT
 
