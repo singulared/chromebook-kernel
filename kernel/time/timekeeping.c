@@ -537,7 +537,7 @@ s32 timekeeping_get_tai_offset(void)
  * __timekeeping_set_tai_offset - Lock free worker function
  *
  */
-void __timekeeping_set_tai_offset(struct timekeeper *tk, s32 tai_offset)
+static void __timekeeping_set_tai_offset(struct timekeeper *tk, s32 tai_offset)
 {
 	tk->tai_offset = tai_offset;
 }
