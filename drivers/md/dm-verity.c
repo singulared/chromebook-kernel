@@ -551,6 +551,8 @@ static void verity_finish_io(struct dm_verity_io *io, int error)
 	struct bio *bio = io->bio;
 	struct dm_verity *v = io->v;
 
+	if (error)
+		verity_error(v, io, error);
 	bio->bi_end_io = io->orig_bi_end_io;
 	bio->bi_private = io->orig_bi_private;
 
@@ -572,12 +574,6 @@ static void verity_work(struct work_struct *w)
 static void verity_end_io(struct bio *bio, int error)
 {
 	struct dm_verity_io *io = bio->bi_private;
-
-	if (error) {
-		verity_error(io->v, io, error);
-		verity_finish_io(io, error);
-		return;
-	}
 
 	INIT_WORK(&io->work, verity_work);
 	queue_work(io->v->verify_wq, &io->work);
