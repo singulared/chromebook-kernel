@@ -692,6 +692,7 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 	struct exynos_drm_crtc *exynos_crtc =
 		to_exynos_crtc(private->crtc[crtc]);
 	struct exynos_drm_display *display = exynos_crtc->display;
+	int ret = 0;
 
 	DRM_DEBUG_KMS("[DEV:%s] crtc: %d\n", dev->devname, crtc);
 
@@ -699,9 +700,9 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc)
 		display->pipe = crtc;
 
 	if (display->controller_ops && display->controller_ops->enable_vblank)
-		display->controller_ops->enable_vblank(display->controller_ctx,
-				crtc);
-	return 0;
+		ret = display->controller_ops->enable_vblank(
+				display->controller_ctx, crtc);
+	return ret;
 }
 
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc)
