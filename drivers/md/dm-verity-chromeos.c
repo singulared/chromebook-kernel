@@ -3,8 +3,18 @@
  *                    All Rights Reserved.
  *
  * This file is released under the GPL.
- *
+ */
+/*
  * Implements a Chrome OS platform specific error handler.
+ * When verity detects an invalid block, this error handling will
+ * attempt to corrupt the kernel boot image. On reboot, the bios will
+ * detect the kernel corruption and switch to the alternate kernel
+ * and root file system partitions.
+ *
+ * Assumptions:
+ * 1. Partitions are specified on the command line using uuid.
+ * 2. The kernel partition is the partition number is one less
+ *    than the root partition number.
  */
 #include <linux/bio.h>
 #include <linux/blkdev.h>
@@ -16,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
+#include <linux/string.h>
 #include <asm/page.h>
 
 #include "dm-verity.h"
@@ -67,6 +78,94 @@ static int chromeos_invalidate_kernel_submit(struct bio *bio,
 	return 0;
 }
 
+static char *get_info_from_cmdline(const char *key)
+{
+	const char *dev;
+	const char *end;
+	int len;
+
+	dev = strstr(saved_command_line, key);
+	if (!dev)
+		return NULL;
+	len = strlen(key);
+	dev = &dev[len];
+	end = strchr(dev, ' ');
+	return kstrndup(dev, end - dev, GFP_ATOMIC);
+}
+
+/**
+ * match_dev_by_uuid - callback for finding a partition using its uuid
+ * @dev:	device passed in by the caller
+ * @uuid_data:	opaque pointer to a uuid packed by part_pack_uuid().
+ *
+ * Returns 1 if the device matches, and 0 otherwise.
+ */
+static int match_dev_by_uuid(struct device *dev, void *uuid_data)
+{
+	u8 *uuid = uuid_data;
+	struct hd_struct *part = dev_to_part(dev);
+
+	if (!part->info)
+		goto no_match;
+
+	if (memcmp(uuid, part->info->uuid, sizeof(part->info->uuid)))
+		goto no_match;
+
+	return 1;
+no_match:
+	return 0;
+}
+
+static dev_t get_boot_dev_from_root_dev(struct block_device *root_bdev)
+{
+	/* Very basic sanity checking. This should be better. */
+	if (!root_bdev || !root_bdev->bd_part ||
+	    MAJOR(root_bdev->bd_dev) == 254 ||
+	    root_bdev->bd_part->partno <= 1) {
+		return 0;
+	}
+	return MKDEV(MAJOR(root_bdev->bd_dev), MINOR(root_bdev->bd_dev) - 1);
+}
+
+/* get_boot_dev is bassed on dm_get_device_by_uuid in dm_bootcache. */
+static dev_t get_boot_dev(void)
+{
+	const char *uuid_str;
+	struct device *dev = NULL;
+	dev_t devt = 0;
+	u8 uuid[16];
+	size_t uuid_length;
+
+	uuid_str = get_info_from_cmdline(" kern_guid=");
+	if (!uuid_str) {
+		DMERR("Couldn't get uuid, try root dev");
+		return 0;
+	}
+	uuid_length = strlen(uuid_str);
+	if (uuid_length != 36)
+		goto bad_uuid;
+	/* Pack the requested UUID in the expected format. */
+	part_pack_uuid(uuid_str, uuid);
+
+	dev = class_find_device(&block_class, NULL, uuid, &match_dev_by_uuid);
+	if (!dev)
+		goto found_nothing;
+
+	devt = dev->devt;
+	put_device(dev);
+
+	return devt;
+
+bad_uuid:
+	kfree(uuid_str);
+	DMDEBUG("Supplied value '%s' is an invalid UUID", uuid_str);
+	return 0;
+found_nothing:
+	kfree(uuid_str);
+	DMDEBUG("No matching partition for GUID: %s", uuid_str);
+	return 0;
+}
+
 /* Replaces the first 8 bytes of a partition with DMVERROR */
 static int chromeos_invalidate_kernel(struct block_device *root_bdev)
 {
@@ -74,30 +173,26 @@ static int chromeos_invalidate_kernel(struct block_device *root_bdev)
 	struct block_device *bdev;
 	struct bio *bio;
 	struct page *page;
-	int partno = root_bdev->bd_part->partno - 1;
-	dev_t kdev = MKDEV(0, 0);
+	dev_t devt;
 	fmode_t dev_mode;
 	/* Ensure we do synchronous unblocked I/O. We may also need
 	 * sync_bdev() on completion, but it really shouldn't.
 	 */
 	int rw = REQ_SYNC | REQ_SOFTBARRIER | REQ_NOIDLE;
 
-	/* Very basic sanity checking. This should be better. */
-	if (!root_bdev || !root_bdev->bd_part ||
-	    root_bdev->bd_part->partno <= 1) {
-		DMERR("invalidate_kernel: partition layout unexpected");
-		return -EINVAL;
+	devt = get_boot_dev_from_root_dev(root_bdev);
+	if (!devt) {
+		devt = get_boot_dev();
+		if (!devt)
+			return -EINVAL;
 	}
-	kdev = MKDEV(MAJOR(root_bdev->bd_dev), MINOR(root_bdev->bd_dev) - 1);
-
-	DMERR("Attempting to invalidate kernel (part:%d,devt:%d)",
-	      partno, kdev);
 
 	/* First we open the device for reading. */
 	dev_mode = FMODE_READ | FMODE_EXCL;
-	bdev = blkdev_get_by_dev(kdev, dev_mode, chromeos_invalidate_kernel);
+	bdev = blkdev_get_by_dev(devt, dev_mode, chromeos_invalidate_kernel);
 	if (IS_ERR(bdev)) {
 		DMERR("invalidate_kernel: could not open device for reading");
+		dev_mode = 0;
 		ret = -1;
 		goto failed_to_read;
 	}
@@ -134,7 +229,7 @@ static int chromeos_invalidate_kernel(struct block_device *root_bdev)
 	/* The block dev was being changed on read. Let's reopen here. */
 	blkdev_put(bdev, dev_mode);
 	dev_mode = FMODE_WRITE | FMODE_EXCL;
-	bdev = blkdev_get_by_dev(kdev, dev_mode, chromeos_invalidate_kernel);
+	bdev = blkdev_get_by_dev(devt, dev_mode, chromeos_invalidate_kernel);
 	if (IS_ERR(bdev)) {
 		DMERR("invalidate_kernel: could not open device for reading");
 		dev_mode = 0;
