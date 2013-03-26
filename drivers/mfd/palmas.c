@@ -300,6 +300,22 @@ static void palmas_dt_to_pdata(struct i2c_client *i2c,
 					PALMAS_POWER_CTRL_ENABLE2_MASK;
 	if (i2c->irq)
 		palmas_set_pdata_irq_flag(i2c, pdata);
+
+	pdata->pm_off = of_property_read_bool(node,
+			"ti,system-power-controller");
+}
+
+static struct palmas *palmas_dev;
+static void palmas_power_off(void)
+{
+	unsigned int addr;
+
+	if (!palmas_dev)
+		return;
+
+	addr = PALMAS_BASE_TO_REG(PALMAS_PMU_CONTROL_BASE, PALMAS_DEV_CTRL);
+
+	regmap_update_bits(palmas_dev->regmap[0], addr, 1, 0);
 }
 
 static int palmas_i2c_probe(struct i2c_client *i2c,
@@ -466,10 +482,15 @@ static int palmas_i2c_probe(struct i2c_client *i2c,
 	 */
 	if (node) {
 		ret = of_platform_populate(node, NULL, NULL, &i2c->dev);
-		if (ret < 0)
+		if (ret < 0) {
 			goto err_irq;
-		else
+		} else {
+			if (pdata->pm_off && !pm_power_off) {
+				palmas_dev = palmas;
+				pm_power_off = palmas_power_off;
+			}
 			return ret;
+		}
 	}
 
 	children = kmemdup(palmas_children, sizeof(palmas_children),
