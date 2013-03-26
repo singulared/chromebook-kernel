@@ -129,13 +129,27 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	return 0;
 }
 
-static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
-					  struct drm_framebuffer *old_fb)
+static void exynos_drm_crtc_update(struct drm_crtc *crtc,
+				   struct drm_framebuffer *fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
+
+	crtc_w = fb->width - crtc->x;
+	crtc_h = fb->height - crtc->y;
+
+	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
+			      crtc->x, crtc->y, crtc_w, crtc_h);
+
+	exynos_drm_crtc_commit(crtc);
+}
+
+static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
+					  struct drm_framebuffer *old_fb)
+{
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -145,13 +159,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 		return -EPERM;
 	}
 
-	crtc_w = crtc->fb->width - x;
-	crtc_h = crtc->fb->height - y;
-
-	exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
-			      x, y, crtc_w, crtc_h);
-
-	exynos_drm_crtc_commit(crtc);
+	exynos_drm_crtc_update(crtc, crtc->fb);
 
 	return 0;
 }
@@ -188,7 +196,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct drm_framebuffer *old_fb = crtc->fb;
 	int ret = -EINVAL;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -215,16 +222,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		}
 
 		crtc->fb = fb;
-		ret = exynos_drm_crtc_mode_set_base(crtc, crtc->x, crtc->y,
-						    NULL);
-		if (ret) {
-			crtc->fb = old_fb;
-
-			drm_vblank_put(dev, exynos_crtc->pipe);
-
-			goto out;
-		}
-
+		exynos_drm_crtc_update(crtc, fb);
 		exynos_crtc->event = event;
 	}
 out:
