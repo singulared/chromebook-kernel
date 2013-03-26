@@ -273,6 +273,10 @@ struct intel_plane {
 	bool can_scale;
 	int max_downscale;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
+	int crtc_x, crtc_y;
+	unsigned int crtc_w, crtc_h;
+	uint32_t src_x, src_y;
+	uint32_t src_w, src_h;
 
 	/* Since we need to change the watermarks before/after
 	 * enabling/disabling the planes, we need to store the parameters here
@@ -574,6 +578,7 @@ extern bool intel_encoder_check_is_cloned(struct intel_encoder *encoder);
 extern void intel_connector_dpms(struct drm_connector *, int mode);
 extern bool intel_connector_get_hw_state(struct intel_connector *connector);
 extern void intel_modeset_check_state(struct drm_device *dev);
+extern void intel_plane_restore(struct drm_plane *plane);
 
 
 static inline struct intel_encoder *intel_attached_encoder(struct drm_connector *connector)
