@@ -38,15 +38,6 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 
-struct mkbp_device {
-	struct device *dev;
-	struct input_dev *idev;
-	struct chromeos_ec_device *ec;
-	struct notifier_block notifier;
-	struct notifier_block wake_notifier;
-};
-
-
 /*
  * The standard MKBP keyboard matrix table.
  *
@@ -55,6 +46,15 @@ struct mkbp_device {
  */
 #define MKBP_NUM_ROWS 8
 #define MKBP_NUM_COLS 13
+
+struct mkbp_device {
+	struct device *dev;
+	struct input_dev *idev;
+	struct chromeos_ec_device *ec;
+	struct notifier_block notifier;
+	struct notifier_block wake_notifier;
+	uint8_t valid_keys[MKBP_NUM_COLS];
+};
 
 /* We will read this table from the Device Tree when we have one. */
 static uint16_t mkbp_keycodes[MKBP_NUM_ROWS][MKBP_NUM_COLS] = {
@@ -117,17 +117,27 @@ static inline void mkbp_send_key_event(struct mkbp_device *mkbp_dev,
  * Returns true when there is at least one combination of pressed keys that
  * results in ghosting.
  */
-static bool mkbp_has_ghosting(struct device *dev, uint8_t *buf)
+static bool mkbp_has_ghosting(struct mkbp_device *mkbp_dev, uint8_t *buf)
 {
 	int col, row;
-	int mask;
+	int mask, mask_corner;
 	int pressed_in_row[MKBP_NUM_ROWS];
-	int row_has_teeth[MKBP_NUM_ROWS];
+	int pressed_in_col[MKBP_NUM_COLS];
+	struct device *dev = mkbp_dev->dev;
+	uint8_t *valid_keys = mkbp_dev->valid_keys;
+	int max_in_row = 0;
+	int max_in_col = 0;
+	int n_corners = 0;
+	struct {
+		int row, col;
+	} corners[10];
+	int col_corner, row_corner;
 
 	memset(pressed_in_row, 0, sizeof(pressed_in_row));
-	memset(row_has_teeth, 0, sizeof(row_has_teeth));
+	memset(pressed_in_col, 0, sizeof(pressed_in_col));
 	/*
 	 * Ghosting happens if for any pressed key X there are other keys
+
 	 * pressed both in the same row and column of X as, for instance,
 	 * in the following diagram:
 	 *
@@ -138,33 +148,82 @@ static bool mkbp_has_ghosting(struct device *dev, uint8_t *buf)
 	 *
 	 * In this case only X, Y, and Z are pressed, but g appears to be
 	 * pressed too (see Wikipedia).
-	 *
-	 * We can detect ghosting in a single pass (*) over the keyboard state
-	 * by maintaining two arrays.  pressed_in_row counts how many pressed
-	 * keys we have found in a row.  row_has_teeth is true if any of the
-	 * pressed keys for this row has other pressed keys in its column.  If
-	 * at any point of the scan we find that a row has multiple pressed
-	 * keys, and at least one of them is at the intersection with a column
-	 * with multiple pressed keys, we're sure there is ghosting.
-	 * Conversely, if there is ghosting, we will detect such situation for
-	 * at least one key during the pass.
-	 *
-	 * (*) This looks linear in the number of keys, but it's not.  We can
-	 * cheat because the number of rows is small.
 	 */
 	for (row = 0; row < MKBP_NUM_ROWS; row++) {
 		mask = 1 << row;
 		for (col = 0; col < MKBP_NUM_COLS; col++) {
-			if (buf[col] & mask) {
+			if (mask & buf[col] & valid_keys[col]) {
 				pressed_in_row[row] += 1;
-				row_has_teeth[row] |= buf[col] & ~mask;
-				if (pressed_in_row[row] > 1 &&
-				    row_has_teeth[row]) {
-					/* ghosting */
+				pressed_in_col[col] += 1;
+				if (pressed_in_col[col] > max_in_col)
+					max_in_col = pressed_in_col[col];
+			}
+		}
+		if (pressed_in_row[row] > max_in_row)
+			max_in_row = pressed_in_row[row];
+	}
+
+	if (max_in_col < 2 || max_in_row < 2)
+		return false;
+
+       /* Find possible ghosting locations.  These are the corners of the L's.
+	* We know there is at least one L (i.e. one point whose row has at
+	* least two keys ON and whose column has at least two keys ON).
+	*/
+	for (row = 0; row < MKBP_NUM_ROWS; row++) {
+		mask = 1 << row;
+		if (pressed_in_row[row] < 2)
+			continue;
+		for (col = 0; col < MKBP_NUM_COLS; col++) {
+			if (pressed_in_col[col] < 2)
+				continue;
+			if (buf[col] & mask & valid_keys[col]) {
+				corners[n_corners].row = row;
+				corners[n_corners].col = col;
+				n_corners++;
+				if (n_corners == sizeof(corners) /
+				    sizeof(corners[0])) {
+					/* give up */
+					dev_dbg(dev, "too many corners!");
+					return true;
+				}
+			}
+		}
+	}
+	/* Examine all corners for possible ghosting. */
+	for (n_corners--; n_corners >= 0; n_corners--) {
+		row_corner = corners[n_corners].row;
+		col_corner = corners[n_corners].col;
+		mask_corner = 1 << row_corner;
+		/* Find the other bits in this column. */
+		for (row = 0; row < MKBP_NUM_ROWS; row++) {
+			if (row == row_corner)
+				/* Skip the corner. */
+				continue;
+			mask = 1 << row;
+			if (!(buf[col_corner] & mask & valid_keys[col_corner]))
+				/* Key is OFF */
+				continue;
+			/* [row, col_corner] is ON.  Find the other bits in
+			 * row_corner.
+			 */
+			for (col = 0; col < MKBP_NUM_COLS; col++) {
+				if (col == col_corner)
+					/* Skip the corner. */
+					continue;
+				if (!(buf[col] & mask_corner))
+					/* Key is OFF. */
+					continue;
+				/* If we get here, [row_corner, col] is ON,
+				 * therefore [row, col] is the possible
+				 * ghosting location (diagonally opposite).  If
+				 * that key is wired, we have ghosting.
+				 */
+				if (valid_keys[col] & mask) {
 					dev_dbg(dev, "ghost found at: r%d c%d,"
-						" pressed %d, teeth 0x%x\n",
-						row, col, pressed_in_row[row],
-						row_has_teeth[row]);
+						" corners: r:0x%x c:0x%x\n",
+						row, col, row_corner,
+						col_corner);
 					return true;
 				}
 			}
@@ -194,7 +253,7 @@ static void mkbp_process(struct mkbp_device *mkbp_dev,
 
 	num_cols = len;
 
-	if (mkbp_has_ghosting(mkbp_dev->dev, kb_state)) {
+	if (mkbp_has_ghosting(mkbp_dev, kb_state)) {
 		/*
 		 * Simple-minded solution: ignore this state. The obvious
 		 * improvement is to only ignore changes to keys involved in
@@ -311,6 +370,28 @@ static int mkbp_clear_keyboard(struct notifier_block *nb,
 	return 0;
 }
 
+/*
+ * Walks keycodes flipping bit in buffer COLUMNS deep where bit is ROW.  Used by
+ * ghosting logic to ignore NULL or virtual keys.
+ */
+static void __devinit mkbp_compute_valid_keys(struct mkbp_device *mkbp_dev)
+{
+	int row, col;
+	uint16_t code;
+
+	BUILD_BUG_ON(MKBP_NUM_ROWS > sizeof(mkbp_dev->valid_keys));
+
+	for (col = 0; col < MKBP_NUM_COLS; col++) {
+		for (row = 0; row < MKBP_NUM_ROWS; row++) {
+			code = mkbp_keycodes[row][col];
+			if (code)
+				mkbp_dev->valid_keys[col] |= 1 << row;
+		}
+		dev_dbg(mkbp_dev->dev, "valid_keys[%02d] = 0x%02x\n",
+			col, mkbp_dev->valid_keys[col]);
+	}
+}
+
 static int __devinit mkbp_probe(struct platform_device *pdev)
 {
 	struct chromeos_ec_device *ec = dev_get_drvdata(pdev->dev.parent);
@@ -334,6 +415,7 @@ static int __devinit mkbp_probe(struct platform_device *pdev)
 	mkbp_dev->notifier.notifier_call = mkbp_work;
 	mkbp_dev->wake_notifier.notifier_call = mkbp_clear_keyboard;
 	mkbp_dev->dev = dev;
+	mkbp_compute_valid_keys(mkbp_dev);
 
 	idev->name = ec->get_name(ec);
 	idev->phys = ec->get_phys_name(ec);
