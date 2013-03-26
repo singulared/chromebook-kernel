@@ -297,12 +297,9 @@ struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	if (index >= MAX_FB_BUFFER)
-		return NULL;
+	BUG_ON(index >= MAX_FB_BUFFER);
 
 	buffer = exynos_fb->exynos_gem_obj[index]->buffer;
-	if (!buffer)
-		return NULL;
 
 	DRM_DEBUG_KMS("dma_addr = 0x%lx\n", (unsigned long)buffer->dma_addr);
 

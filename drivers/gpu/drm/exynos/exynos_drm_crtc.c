@@ -106,7 +106,6 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 	int pipe = exynos_crtc->pipe;
-	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -119,10 +118,8 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	crtc_w = crtc->fb->width - x;
 	crtc_h = crtc->fb->height - y;
 
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
-				    x, y, crtc_w, crtc_h);
-	if (ret)
-		return ret;
+	exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+			      x, y, crtc_w, crtc_h);
 
 	plane->crtc = crtc;
 	plane->fb = crtc->fb;
@@ -139,7 +136,6 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
-	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -152,10 +148,8 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	crtc_w = crtc->fb->width - x;
 	crtc_h = crtc->fb->height - y;
 
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
-				    x, y, crtc_w, crtc_h);
-	if (ret)
-		return ret;
+	exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+			      x, y, crtc_w, crtc_h);
 
 	exynos_drm_crtc_commit(crtc);
 

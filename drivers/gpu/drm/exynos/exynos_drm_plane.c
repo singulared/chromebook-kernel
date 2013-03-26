@@ -68,11 +68,11 @@ static int exynos_plane_get_size(int start, unsigned length, unsigned last)
 	return size;
 }
 
-int exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
-			  struct drm_framebuffer *fb, int crtc_x, int crtc_y,
-			  unsigned int crtc_w, unsigned int crtc_h,
-			  uint32_t src_x, uint32_t src_y,
-			  uint32_t src_w, uint32_t src_h)
+void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
+			   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
+			   unsigned int crtc_w, unsigned int crtc_h,
+			   uint32_t src_x, uint32_t src_y,
+			   uint32_t src_w, uint32_t src_h)
 {
 	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
@@ -86,11 +86,6 @@ int exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 	nr = exynos_drm_fb_get_buf_cnt(fb);
 	for (i = 0; i < nr; i++) {
 		struct exynos_drm_gem_buf *buffer = exynos_drm_fb_buffer(fb, i);
-
-		if (!buffer) {
-			DRM_LOG_KMS("buffer is null\n");
-			return -EFAULT;
-		}
 
 		overlay->dma_addr[i] = buffer->dma_addr;
 
@@ -141,8 +136,6 @@ int exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 			overlay->crtc_width, overlay->crtc_height);
 
 	exynos_drm_fn_encoder(crtc, overlay, exynos_drm_encoder_plane_mode_set);
-
-	return 0;
 }
 
 void exynos_plane_commit(struct drm_plane *plane)
@@ -187,15 +180,11 @@ exynos_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 		     uint32_t src_x, uint32_t src_y,
 		     uint32_t src_w, uint32_t src_h)
 {
-	int ret;
-
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	ret = exynos_plane_mode_set(plane, crtc, fb, crtc_x, crtc_y,
-			crtc_w, crtc_h, src_x >> 16, src_y >> 16,
-			src_w >> 16, src_h >> 16);
-	if (ret < 0)
-		return ret;
+	exynos_plane_mode_set(plane, crtc, fb, crtc_x, crtc_y,
+			      crtc_w, crtc_h, src_x >> 16, src_y >> 16,
+			      src_w >> 16, src_h >> 16);
 
 	plane->crtc = crtc;
 
