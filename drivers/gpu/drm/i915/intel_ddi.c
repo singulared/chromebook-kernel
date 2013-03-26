@@ -925,7 +925,7 @@ void intel_ddi_set_pipe_settings(struct drm_crtc *crtc)
 	if (type == INTEL_OUTPUT_DISPLAYPORT || type == INTEL_OUTPUT_EDP) {
 
 		temp = TRANS_MSA_SYNC_CLK;
-		switch (intel_crtc->bpp) {
+		switch (intel_crtc->config.pipe_bpp) {
 		case 18:
 			temp |= TRANS_MSA_6_BPC;
 			break;
@@ -941,7 +941,7 @@ void intel_ddi_set_pipe_settings(struct drm_crtc *crtc)
 		default:
 			temp |= TRANS_MSA_8_BPC;
 			WARN(1, "%d bpp unsupported by DDI function\n",
-			     intel_crtc->bpp);
+			     intel_crtc->config.pipe_bpp);
 		}
 		I915_WRITE(TRANS_MSA_MISC(cpu_transcoder), temp);
 	}
@@ -963,7 +963,7 @@ void intel_ddi_enable_pipe_func(struct drm_crtc *crtc)
 	temp = TRANS_DDI_FUNC_ENABLE;
 	temp |= TRANS_DDI_SELECT_PORT(port);
 
-	switch (intel_crtc->bpp) {
+	switch (intel_crtc->config.pipe_bpp) {
 	case 18:
 		temp |= TRANS_DDI_BPC_6;
 		break;
@@ -978,7 +978,7 @@ void intel_ddi_enable_pipe_func(struct drm_crtc *crtc)
 		break;
 	default:
 		WARN(1, "%d bpp unsupported by transcoder DDI function\n",
-		     intel_crtc->bpp);
+		     intel_crtc->config.pipe_bpp);
 	}
 
 	if (crtc->mode.flags & DRM_MODE_FLAG_PVSYNC)

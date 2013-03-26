@@ -194,6 +194,9 @@ struct intel_crtc_config {
 	 */
 	bool limited_color_range;
 
+	bool dither;
+	int pipe_bpp;
+
 	/* Used by SDVO (and if we ever fix it, HDMI). */
 	unsigned pixel_multiplier;
 };
@@ -228,7 +231,6 @@ struct intel_crtc {
 	int16_t cursor_x, cursor_y;
 	int16_t cursor_width, cursor_height;
 	bool cursor_visible;
-	unsigned int bpp;
 
 	struct intel_crtc_config config;
 

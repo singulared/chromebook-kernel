@@ -815,7 +815,7 @@ intel_dp_set_m_n(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	 * the number of bytes_per_pixel post-LUT, which we always
 	 * set up for 8-bits of R/G/B, or 3 bytes total.
 	 */
-	intel_link_compute_m_n(intel_crtc->bpp, lane_count,
+	intel_link_compute_m_n(intel_crtc->config.pipe_bpp, lane_count,
 			       target_clock, adjusted_mode->clock, &m_n);
 
 	if (IS_HASWELL(dev)) {

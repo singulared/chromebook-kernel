@@ -606,7 +606,7 @@ static void intel_hdmi_mode_set(struct drm_encoder *encoder,
 	if (adjusted_mode->flags & DRM_MODE_FLAG_PHSYNC)
 		sdvox |= SDVO_HSYNC_ACTIVE_HIGH;
 
-	if (intel_crtc->bpp > 24)
+	if (intel_crtc->config.pipe_bpp > 24)
 		sdvox |= COLOR_FORMAT_12bpc;
 	else
 		sdvox |= COLOR_FORMAT_8bpc;
