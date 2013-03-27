@@ -18,6 +18,10 @@
 #include <drm/drm_fb_helper.h>
 #include <uapi/drm/exynos_drm.h>
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#include <linux/dma-buf.h>
+#endif
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
@@ -37,6 +41,9 @@ struct exynos_drm_fb {
 	struct drm_framebuffer		fb;
 	unsigned int			buf_cnt;
 	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct dma_buf			*dma_buf;
+#endif
 };
 
 static int check_fb_gem_memory_type(struct drm_device *drm_dev,
@@ -64,6 +71,24 @@ static int check_fb_gem_memory_type(struct drm_device *drm_dev,
 
 	return 0;
 }
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+void exynos_drm_fb_attach_dma_buf(struct drm_framebuffer *fb,
+				  struct dma_buf *buf)
+{
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+
+	/*
+	 * If we don't already have a reference to the dma_buf,
+	 * grab one now. We'll release it in exynos_drm_fb_destroy().
+	 */
+	if (!exynos_fb->dma_buf) {
+		get_dma_buf(buf);
+		exynos_fb->dma_buf = buf;
+	}
+	BUG_ON(exynos_fb->dma_buf != buf);
+}
+#endif
 
 static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 {
@@ -95,6 +120,11 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 		obj = &exynos_fb->exynos_gem_obj[i]->base;
 		drm_gem_object_unreference_unlocked(obj);
 	}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_fb->dma_buf)
+		dma_buf_put(exynos_fb->dma_buf);
+#endif
 
 	kfree(exynos_fb);
 	exynos_fb = NULL;
@@ -304,6 +334,18 @@ struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
 	DRM_DEBUG_KMS("dma_addr = 0x%lx\n", (unsigned long)buffer->dma_addr);
 
 	return buffer;
+}
+
+struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct drm_framebuffer *fb,
+					     int index)
+{
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+
+	DRM_DEBUG_KMS("%s\n", __func__);
+
+	BUG_ON(index >= MAX_FB_BUFFER);
+
+	return exynos_fb->exynos_gem_obj[index];
 }
 
 static void exynos_drm_output_poll_changed(struct drm_device *dev)

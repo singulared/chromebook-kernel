@@ -16,6 +16,10 @@
 
 #include <drm/exynos_drm.h>
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#include <linux/kds.h>
+#endif
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
@@ -67,6 +71,11 @@ static int find_bridge(const char *name, struct bridge_init *bridge)
 	bridge->valid = true;
 	return 0;
 }
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+void exynos_drm_kds_callback(void *callback_parameter,
+			     void *callback_extra_parameter);
+#endif
+
 
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
@@ -85,6 +94,15 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 
 	dev->dev_private = (void *)private;
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	ret = kds_callback_init(&private->kds_cb, 1,
+				exynos_drm_kds_callback);
+	if (ret < 0) {
+		DRM_ERROR("kds callback init failed: %d\n", ret);
+		goto err_freepriv;
+	}
+#endif
+
 	/*
 	 * create mapping to manage iommu table and set a pointer to iommu
 	 * mapping structure to iommu_mapping of private data.
@@ -94,7 +112,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = drm_create_iommu_mapping(dev);
 	if (ret < 0) {
 		DRM_ERROR("failed to create iommu mapping.\n");
-		goto err_freepriv;
+		goto err_kds;
 	}
 
 	drm_mode_config_init(dev);
@@ -188,6 +206,10 @@ err_vblank:
 err_release_iommu_mapping:
 	drm_mode_config_cleanup(dev);
 	drm_release_iommu_mapping(dev);
+err_kds:
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	kds_callback_term(&private->kds_cb);
+#endif
 err_freepriv:
 	kfree(private);
 
@@ -196,6 +218,8 @@ err_freepriv:
 
 static int exynos_drm_unload(struct drm_device *dev)
 {
+	struct exynos_drm_private *private = dev->dev_private;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
 	exynos_drm_fbdev_fini(dev);
@@ -204,8 +228,12 @@ static int exynos_drm_unload(struct drm_device *dev)
 	drm_kms_helper_poll_fini(dev);
 	drm_mode_config_cleanup(dev);
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	kds_callback_term(&private->kds_cb);
+#endif
+
 	drm_release_iommu_mapping(dev);
-	kfree(dev->dev_private);
+	kfree(private);
 
 	dev->dev_private = NULL;
 

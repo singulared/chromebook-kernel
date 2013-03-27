@@ -15,8 +15,17 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#include <linux/dma-buf.h>
+#include <linux/kds.h>
+#endif
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_encoder.h"
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#include "exynos_drm_fb.h"
+#include "exynos_drm_gem.h"
+#endif
 #include "exynos_drm_plane.h"
 
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
@@ -50,6 +59,10 @@ struct exynos_drm_crtc {
 	unsigned int			pipe;
 	unsigned int			dpms;
 	enum exynos_crtc_mode		mode;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	atomic_t			flip_pending;
+	struct kds_resource_set		*kds;
+#endif
 };
 
 static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
@@ -149,8 +162,6 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	exynos_drm_crtc_update(crtc, crtc->fb);
@@ -184,12 +195,33 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.disable	= exynos_drm_crtc_disable,
 };
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+void exynos_drm_kds_callback(void *callback_parameter,
+			     void *callback_extra_parameter)
+{
+	struct drm_framebuffer *fb = callback_parameter;
+	struct drm_crtc *crtc = callback_extra_parameter;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+
+	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
+		if (exynos_crtc->kds)
+			kds_resource_set_release(&exynos_crtc->kds);
+		exynos_drm_crtc_update(crtc, fb);
+	} else {
+		BUG();
+	}
+}
+#endif
+
 static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 				      struct drm_framebuffer *fb,
 				      struct drm_pending_vblank_event *event)
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_drm_fb_obj(fb, 0);
+#endif
 	int ret = -EINVAL;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -215,8 +247,32 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	}
 
 	crtc->fb = fb;
-	exynos_drm_crtc_update(crtc, fb);
 	exynos_crtc->event = event;
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_gem_obj->base.export_dma_buf) {
+		struct dma_buf *buf = exynos_gem_obj->base.export_dma_buf;
+		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
+		struct exynos_drm_private *dev_priv = dev->dev_private;
+		unsigned long shared = 0UL;
+
+		exynos_drm_fb_attach_dma_buf(fb, buf);
+
+		/* Waiting for the KDS resource*/
+		ret = kds_async_waitall(&exynos_crtc->kds, KDS_FLAG_LOCKED_WAIT,
+					&dev_priv->kds_cb, fb, crtc, 1,
+					&shared, &res_list);
+		if (ret) {
+			DRM_ERROR("kds_async_waitall failed: %d\n", ret);
+			goto out;
+		}
+	} else {
+		exynos_drm_kds_callback(fb, crtc);
+	}
+#else
+	exynos_drm_crtc_update(crtc, fb);
+#endif
+
 out:
 	mutex_unlock(&dev->struct_mutex);
 	return ret;
@@ -379,8 +435,12 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc_idx)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	spin_lock_irqsave(&dev->event_lock, flags);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
+		return;
+#endif
 
+	spin_lock_irqsave(&dev->event_lock, flags);
 
 	if (exynos_crtc->event) {
 		struct drm_pending_vblank_event *e = exynos_crtc->event;
