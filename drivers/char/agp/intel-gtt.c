@@ -832,6 +832,9 @@ static void intel_gtt_insert_pages(unsigned int first_entry,
 		dma_addr_t addr = page_to_phys(pages[i]);
 		intel_private.driver->write_entry(addr,
 						  j, flags);
+		if (unlikely(addr < 1 << 20))
+			panic("gtt: using low address 0x%lx",
+			      (unsigned long) addr);
 	}
 	readl(intel_private.gtt+j-1);
 }
