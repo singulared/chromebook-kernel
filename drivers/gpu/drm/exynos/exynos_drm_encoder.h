@@ -32,6 +32,8 @@ void exynos_drm_encoder_plane_mode_set(struct drm_encoder *encoder, void *data);
 void exynos_drm_encoder_plane_commit(struct drm_encoder *encoder, void *data);
 void exynos_drm_encoder_plane_enable(struct drm_encoder *encoder, void *data);
 void exynos_drm_encoder_plane_disable(struct drm_encoder *encoder, void *data);
-void exynos_drm_encoder_complete_scanout(struct drm_framebuffer *fb);
+void exynos_drm_encoder_complete_scanout(struct drm_device *drm_dev,
+					 dma_addr_t dma_addr,
+					 unsigned long size);
 
 #endif

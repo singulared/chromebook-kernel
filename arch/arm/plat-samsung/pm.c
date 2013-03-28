@@ -43,19 +43,6 @@ unsigned long s3c_pm_flags;
 */
 
 #ifdef CONFIG_SAMSUNG_PM_DEBUG
-extern void printascii(const char *);
-
-void s3c_pm_dbg(const char *fmt, ...)
-{
-	va_list va;
-	char buff[256];
-
-	va_start(va, fmt);
-	vsprintf(buff, fmt, va);
-	va_end(va);
-
-	printascii(buff);
-}
 
 static inline void s3c_pm_debug_init(void)
 {
@@ -125,10 +112,33 @@ static void s3c_pm_restore_uarts(void)
 
 	for (uart = 0; uart < CONFIG_SERIAL_SAMSUNG_UARTS; uart++, save++)
 		s3c_pm_restore_uart(uart, save);
+
+	s3c_pm_arch_restore_uarts();
 }
+
+static void s3c_pm_drain_uart(int uart)
+{
+	void __iomem *regs = S3C_VA_UARTx(uart);
+	unsigned long ufstat;
+
+	do {
+		ufstat = __raw_readl(regs + S3C2410_UTRSTAT);
+	} while (!(ufstat & S3C2410_UTRSTAT_TXE));
+}
+
+static void s3c_pm_drain_uarts(void)
+{
+	unsigned int uart;
+	for (uart = 0; uart < CONFIG_SERIAL_SAMSUNG_UARTS; uart++)
+		s3c_pm_drain_uart(uart);
+
+	mdelay(1);
+}
+
 #else
 static void s3c_pm_save_uarts(void) { }
 static void s3c_pm_restore_uarts(void) { }
+static void s3c_pm_drain_uarts(void) { }
 #endif
 
 /* The IRQ ext-int code goes here, it is too small to currently bother
@@ -291,6 +301,8 @@ static int s3c_pm_enter(suspend_state_t state)
 	flush_cache_all();
 
 	s3c_pm_check_store();
+
+	s3c_pm_drain_uarts();
 
 	/* send the cpu to sleep... */
 

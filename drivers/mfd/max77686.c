@@ -25,6 +25,7 @@
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
 #include <linux/module.h>
 #include <linux/mfd/core.h>
@@ -40,6 +41,11 @@ static struct mfd_cell max77686_devs[] = {
 };
 
 static struct regmap_config max77686_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+};
+
+static struct regmap_config max77686_rtc_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 };
@@ -122,6 +128,13 @@ static int max77686_i2c_probe(struct i2c_client *i2c,
 
 	max77686->rtc = i2c_new_dummy(i2c->adapter, I2C_ADDR_RTC);
 	i2c_set_clientdata(max77686->rtc, max77686);
+	max77686->rtc_regmap = devm_regmap_init_i2c(max77686->rtc,
+						&max77686_rtc_regmap_config);
+	if (IS_ERR(max77686->rtc_regmap)) {
+		ret = PTR_ERR(max77686->rtc_regmap);
+		dev_err(&i2c->dev, "rtc regmap init failed: %d\n", ret);
+		goto err_rtc;
+	}
 
 	max77686_irq_init(max77686);
 
@@ -135,6 +148,8 @@ static int max77686_i2c_probe(struct i2c_client *i2c,
 
 err_mfd:
 	mfd_remove_devices(max77686->dev);
+	max77686_irq_exit(max77686);
+err_rtc:
 	i2c_unregister_device(max77686->rtc);
 err:
 	kfree(max77686);
@@ -145,7 +160,9 @@ static int max77686_i2c_remove(struct i2c_client *i2c)
 {
 	struct max77686_dev *max77686 = i2c_get_clientdata(i2c);
 
+	device_init_wakeup(max77686->dev, 0);
 	mfd_remove_devices(max77686->dev);
+	max77686_irq_exit(max77686);
 	i2c_unregister_device(max77686->rtc);
 	kfree(max77686);
 
@@ -158,10 +175,39 @@ static const struct i2c_device_id max77686_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, max77686_i2c_id);
 
+static int max77686_suspend(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct max77686_dev *max77686 = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		enable_irq_wake(max77686->irq);
+
+	return 0;
+}
+
+static int max77686_resume(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct max77686_dev *max77686 = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		disable_irq_wake(max77686->irq);
+
+	max77686_irq_resume(max77686);
+	return 0;
+}
+
+const struct dev_pm_ops max77686_pm = {
+	.suspend = max77686_suspend,
+	.resume = max77686_resume,
+};
+
 static struct i2c_driver max77686_i2c_driver = {
 	.driver = {
 		   .name = "max77686",
 		   .owner = THIS_MODULE,
+		   .pm = &max77686_pm,
 		   .of_match_table = of_match_ptr(max77686_pmic_dt_match),
 	},
 	.probe = max77686_i2c_probe,

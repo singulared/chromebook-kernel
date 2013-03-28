@@ -25,6 +25,14 @@
 #include <linux/clk.h>
 #include <linux/of.h>
 #include <media/v4l2-ioctl.h>
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/kref.h>
+#include <linux/of_platform.h>
+
+#include <asm/dma-iommu.h>
+#endif
 
 #include "gsc-core.h"
 
@@ -185,6 +193,15 @@ static const struct gsc_fmt gsc_formats[] = {
 		.corder		= GSC_CRCB,
 		.num_planes	= 3,
 		.num_comp	= 3,
+	}, {
+		.name		= "YUV 4:2:0 n.c. 2p, Y/CbCr tiled",
+		.pixelformat	= V4L2_PIX_FMT_NV12MT_16X16,
+		.depth		= { 8, 4 },
+		.color		= GSC_YUV420,
+		.yorder		= GSC_LSB_Y,
+		.corder		= GSC_CBCR,
+		.num_planes	= 2,
+		.num_comp	= 2,
 	}
 };
 
@@ -935,8 +952,8 @@ static struct gsc_variant gsc_v_100_variant = {
 	.pix_max		= &gsc_v_100_max,
 	.pix_min		= &gsc_v_100_min,
 	.pix_align		= &gsc_v_100_align,
-	.in_buf_cnt		= 8,
-	.out_buf_cnt		= 16,
+	.in_buf_cnt		= 32,
+	.out_buf_cnt		= 32,
 	.sc_up_max		= 8,
 	.sc_down_max		= 16,
 	.poly_sc_down_max	= 4,
@@ -1067,6 +1084,47 @@ static int gsc_m2m_resume(struct gsc_dev *gsc)
 	return 0;
 }
 
+#ifdef CONFIG_EXYNOS_IOMMU
+static int gsc_iommu_init(struct gsc_dev *gsc, struct platform_device *pdev)
+{
+	struct dma_iommu_mapping *mapping;
+	struct device *dev = &pdev->dev;
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
+						SZ_256M, 4);
+	if (mapping == NULL) {
+		dev_err(dev, "IOMMU mapping failed\n");
+		return -EFAULT;
+	}
+
+	dev->dma_parms = devm_kzalloc(dev, sizeof(*dev->dma_parms),
+						GFP_KERNEL);
+	dma_set_max_seg_size(dev, 0xffffffffu);
+	arm_iommu_attach_device(dev, mapping);
+
+	gsc->mapping = mapping;
+
+	return 0;
+}
+
+static void gsc_iommu_deinit(struct gsc_dev *gsc)
+{
+	if (gsc->mapping)
+		arm_iommu_release_mapping(gsc->mapping);
+}
+
+#else
+static int gsc_iommu_init(struct gsc_dev *gsc, struct platform_device *pdev)
+{
+	return 0;
+}
+
+static void gsc_iommu_deinit(struct gsc_dev *gsc)
+{
+	return;
+}
+#endif
+
 static int gsc_probe(struct platform_device *pdev)
 {
 	struct gsc_dev *gsc;
@@ -1114,6 +1172,11 @@ static int gsc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	if (gsc_iommu_init(gsc, pdev)) {
+		dev_err(&pdev->dev, "IOMMU Initialization failed\n");
+		return -EINVAL;
+	}
+
 	ret = devm_request_irq(dev, res->start, gsc_irq_handler,
 				0, pdev->name, gsc);
 	if (ret) {
@@ -1147,6 +1210,7 @@ err_pm:
 err_m2m:
 	gsc_unregister_m2m_device(gsc);
 err_clk:
+	gsc_iommu_deinit(gsc);
 	gsc_clk_put(gsc);
 	return ret;
 }
@@ -1159,6 +1223,7 @@ static int gsc_remove(struct platform_device *pdev)
 
 	vb2_dma_contig_cleanup_ctx(gsc->alloc_ctx);
 	pm_runtime_disable(&pdev->dev);
+	gsc_iommu_deinit(gsc);
 
 	dev_dbg(&pdev->dev, "%s driver unloaded\n", pdev->name);
 	return 0;
@@ -1201,10 +1266,8 @@ static int gsc_resume(struct device *dev)
 
 	pr_debug("gsc%d: state: 0x%lx", gsc->id, gsc->state);
 
-	/* Do not resume if the device was idle before system suspend */
 	spin_lock_irqsave(&gsc->slock, flags);
-	if (!test_and_clear_bit(ST_SUSPEND, &gsc->state) ||
-	    !gsc_m2m_active(gsc)) {
+	if (!test_and_clear_bit(ST_SUSPEND, &gsc->state)) {
 		spin_unlock_irqrestore(&gsc->slock, flags);
 		return 0;
 	}

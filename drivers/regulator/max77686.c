@@ -58,6 +58,11 @@
 #define MAX77686_REGULATORS	MAX77686_REG_MAX
 #define MAX77686_LDOS		26
 
+#define MAX77686_CLOCK_OPMODE_MASK	0x1
+#define MAX77686_CLOCK_EN32KHZ_AP_SHIFT	0x0
+#define MAX77686_CLOCK_EN32KHZ_CP_SHIFT	0x1
+#define MAX77686_CLOCK_P32KHZ_SHIFT	0x2
+
 enum max77686_ramp_rate {
 	RAMP_RATE_13P75MV,
 	RAMP_RATE_27P5MV,
@@ -229,6 +234,12 @@ static struct regulator_ops max77686_buck_dvs_ops = {
 	.set_suspend_disable	= max77686_buck_set_suspend_disable,
 };
 
+static struct regulator_ops max77686_fixedvolt_ops = {
+	.is_enabled		= regulator_is_enabled_regmap,
+	.enable			= max77686_enable,
+	.disable		= regulator_disable_regmap,
+};
+
 #define regulator_desc_ldo(num)		{				\
 	.name		= "LDO"#num,					\
 	.id		= MAX77686_LDO##num,				\
@@ -376,6 +387,34 @@ static struct regulator_desc regulators[] = {
 	regulator_desc_buck(7),
 	regulator_desc_buck(8),
 	regulator_desc_buck(9),
+	{
+		.name = "EN32KHZ_AP",
+		.id = MAX77686_EN32KHZ_AP,
+		.ops = &max77686_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = MAX77686_REG_32KHZ,
+		.enable_mask = MAX77686_CLOCK_OPMODE_MASK	\
+			       << MAX77686_CLOCK_EN32KHZ_AP_SHIFT,
+	}, {
+		.name = "EN32KHZ_CP",
+		.id = MAX77686_EN32KHZ_CP,
+		.ops = &max77686_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = MAX77686_REG_32KHZ,
+		.enable_mask = MAX77686_CLOCK_OPMODE_MASK	\
+			       << MAX77686_CLOCK_EN32KHZ_CP_SHIFT,
+	}, {
+		.name = "P32KHZ",
+		.id = MAX77686_P32KHZ,
+		.ops = &max77686_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = MAX77686_REG_32KHZ,
+		.enable_mask = MAX77686_CLOCK_OPMODE_MASK	\
+			       << MAX77686_CLOCK_P32KHZ_SHIFT,
+	},
 };
 
 #ifdef CONFIG_OF
@@ -411,6 +450,12 @@ static int max77686_pmic_dt_parse_pdata(struct platform_device *pdev,
 		of_regulator_match(&pdev->dev, regulators_np, &rmatch, 1);
 		rdata[i].initdata = rmatch.init_data;
 		rdata[i].of_node = rmatch.of_node;
+		if (of_property_read_u32(rdata[i].of_node, "max77686-opmode",
+			&rdata[i].opmode)) {
+			dev_warn(iodev->dev, "no op_mode property property at %s\n",
+			rmatch.name);
+			rdata[i].opmode = regulators[i].enable_mask;
+		}
 	}
 
 	pdata->regulators = rdata;
@@ -466,7 +511,10 @@ static int max77686_pmic_probe(struct platform_device *pdev)
 		config.init_data = pdata->regulators[i].initdata;
 		config.of_node = pdata->regulators[i].of_node;
 
-		max77686->opmode[i] = regulators[i].enable_mask;
+		if (config.of_node)
+			max77686->opmode[i] = pdata->regulators[i].opmode;
+		else
+			max77686->opmode[i] = regulators[i].enable_mask;
 		max77686->rdev[i] = regulator_register(&regulators[i], &config);
 		if (IS_ERR(max77686->rdev[i])) {
 			ret = PTR_ERR(max77686->rdev[i]);

@@ -22,6 +22,8 @@ config ARCH_EXYNOS4
 config ARCH_EXYNOS5
 	bool "SAMSUNG EXYNOS5"
 	select HAVE_SMP
+	select ARM_ERRATA_774769
+	select ARM_ERRATA_773022
 	help
 	  Samsung EXYNOS5 (Cortex-A15) SoC based systems
 
@@ -65,6 +67,8 @@ config SOC_EXYNOS5250
 	select S5P_SLEEP if PM
 	select S5P_DEV_MFC
 	select SAMSUNG_DMADEV
+	select SAMSUNG_DEV_PWM
+	select EXYNOS5_SETUP_FIMD1
 	help
 	  Enable EXYNOS5250 SoC support
 
@@ -82,6 +86,7 @@ config SOC_EXYNOS5440
 config EXYNOS4_MCT
 	bool
 	default y
+	select HAVE_SCHED_CLOCK
 	help
 	  Use MCT (Multi Core Timer) as kernel timers
 
@@ -105,10 +110,10 @@ config EXYNOS4_SETUP_FIMD0
 	help
 	  Common setup code for FIMD0.
 
-config EXYNOS_DEV_SYSMMU
+config EXYNOS5_SETUP_FIMD1
 	bool
 	help
-	  Common setup code for SYSTEM MMU in EXYNOS platforms
+	  Common setup code for FIMD1.
 
 config EXYNOS4_DEV_USB_OHCI
 	bool
@@ -428,6 +433,11 @@ config MACH_EXYNOS5_DT
 	depends on ARCH_EXYNOS5
 	select ARM_AMBA
 	select USE_OF
+	select ARM_DMA_USE_IOMMU
+	select USB_ARCH_HAS_XHCI
+	select SAMSUNG_DEV_BACKLIGHT
+	select PM_GENERIC_DOMAINS if PM
+	select ARM_ERRATA_766421
 	help
 	  Machine support for Samsung EXYNOS5 machine with device tree enabled.
 	  Select this if a fdt blob is available for the EXYNOS5 SoC based board.

@@ -220,28 +220,27 @@ static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 	exynos_encoder->dpms = DRM_MODE_DPMS_ON;
 }
 
-void exynos_drm_encoder_complete_scanout(struct drm_framebuffer *fb)
+void exynos_drm_encoder_complete_scanout(struct drm_device *drm_dev,
+					 dma_addr_t dma_addr,
+					 unsigned long size)
 {
 	struct exynos_drm_encoder *exynos_encoder;
 	struct exynos_drm_manager_ops *ops;
-	struct drm_device *dev = fb->dev;
 	struct drm_encoder *encoder;
+	struct device *dev;
 
-	/*
-	 * make sure that overlay data are updated to real hardware
-	 * for all encoders.
-	 */
-	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
+	/* make sure that current framebuffer is not in use for all encoders */
+	list_for_each_entry(encoder, &drm_dev->mode_config.encoder_list, head) {
 		exynos_encoder = to_exynos_encoder(encoder);
 		ops = exynos_encoder->manager->ops;
+		dev = exynos_encoder->manager->dev;
 
 		/*
-		 * wait for vblank interrupt
-		 * - this makes sure that overlay data are updated to
-		 *	real hardware.
+		 * complete_scanout
+		 * - this makes sure that framebuffer is not in use.
 		 */
-		if (ops->wait_for_vblank)
-			ops->wait_for_vblank(exynos_encoder->manager->dev);
+		if (ops->complete_scanout)
+			ops->complete_scanout(dev, dma_addr, size);
 	}
 }
 

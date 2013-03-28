@@ -81,6 +81,8 @@ static unsigned int save_arm_register[2];
 
 static int exynos_cpu_suspend(unsigned long arg)
 {
+	unsigned int i;
+
 #ifdef CONFIG_CACHE_L2X0
 	outer_flush_all();
 #endif
@@ -88,11 +90,18 @@ static int exynos_cpu_suspend(unsigned long arg)
 	if (soc_is_exynos5250())
 		flush_cache_all();
 
-	/* issue the standby signal into the pm unit. */
-	cpu_do_idle();
+	/*
+	 * Disable all interrupts.  eints will still be active during
+	 * suspend so its ok to mask everything here
+	 */
+	__raw_writel(0x0, S5P_VA_GIC_DIST + GIC_DIST_CTRL);
 
-	/* we should never get past here */
-	panic("sleep resumed to originator?");
+	/* issue the standby signal into the pm unit. */
+	for (i = 0; i < 100; i++)
+		cpu_do_idle();
+
+	printk(KERN_ERR "Failed to suspend the system\n");
+	return -EBUSY;
 }
 
 static void exynos_pm_prepare(void)
@@ -242,6 +251,9 @@ static int exynos_pm_suspend(void)
 {
 	unsigned long tmp;
 
+	/* Powering on ISP before suspend */
+	__raw_writel(S5P_INT_LOCAL_PWR_EN, EXYNOS5_ISP_CONFIGURATION);
+
 	/* Setting Central Sequence Register for power down mode */
 
 	tmp = __raw_readl(S5P_CENTRAL_SEQ_CONFIGURATION);
@@ -282,6 +294,8 @@ static void exynos_pm_resume(void)
 	if (!(tmp & S5P_CENTRAL_LOWPWR_CFG)) {
 		tmp |= S5P_CENTRAL_LOWPWR_CFG;
 		__raw_writel(tmp, S5P_CENTRAL_SEQ_CONFIGURATION);
+		/* clear the wakeup state register */
+		__raw_writel(0x0, S5P_WAKEUP_STAT);
 		/* No need to perform below restore code */
 		goto early_wakeup;
 	}
@@ -324,6 +338,9 @@ static void exynos_pm_resume(void)
 	}
 
 early_wakeup:
+
+	/* Powering off ISP */
+	__raw_writel(0x0, EXYNOS5_ISP_CONFIGURATION);
 
 	/* Clear SLEEP mode set in INFORM1 */
 	__raw_writel(0x0, S5P_INFORM1);

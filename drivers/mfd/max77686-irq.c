@@ -121,16 +121,17 @@ static void max77686_irq_sync_unlock(struct irq_data *data)
 	mutex_unlock(&max77686->irqlock);
 }
 
-static const inline struct max77686_irq_data *to_max77686_irq(int irq)
+static const struct max77686_irq_data *
+irq_to_max77686_irq(struct max77686_dev *max77686, int irq)
 {
-	struct irq_data *data = irq_get_irq_data(irq);
-	return &max77686_irqs[data->hwirq];
+	return &max77686_irqs[irq - MAX77686_IRQ_BASE];
 }
 
 static void max77686_irq_mask(struct irq_data *data)
 {
 	struct max77686_dev *max77686 = irq_get_chip_data(data->irq);
-	const struct max77686_irq_data *irq_data = to_max77686_irq(data->irq);
+	const struct max77686_irq_data *irq_data = irq_to_max77686_irq(max77686,
+								data->irq);
 
 	max77686->irq_masks_cur[irq_data->group] |= irq_data->mask;
 
@@ -143,7 +144,8 @@ static void max77686_irq_mask(struct irq_data *data)
 static void max77686_irq_unmask(struct irq_data *data)
 {
 	struct max77686_dev *max77686 = irq_get_chip_data(data->irq);
-	const struct max77686_irq_data *irq_data = to_max77686_irq(data->irq);
+	const struct max77686_irq_data *irq_data = irq_to_max77686_irq(max77686,
+								data->irq);
 
 	max77686->irq_masks_cur[irq_data->group] &= ~irq_data->mask;
 
@@ -166,8 +168,7 @@ static irqreturn_t max77686_irq_thread(int irq, void *data)
 	struct max77686_dev *max77686 = data;
 	unsigned int irq_reg[MAX77686_IRQ_GROUP_NR] = {};
 	unsigned int irq_src;
-	int ret;
-	int i, cur_irq;
+	int ret, i;
 
 	ret = regmap_read(max77686->regmap,  MAX77686_REG_INTSRC, &irq_src);
 	if (ret < 0) {
@@ -208,46 +209,27 @@ static irqreturn_t max77686_irq_thread(int irq, void *data)
 
 	}
 
-	for (i = 0; i < MAX77686_IRQ_GROUP_NR; i++)
-		irq_reg[i] &= ~max77686->irq_masks_cur[i];
-
 	for (i = 0; i < MAX77686_IRQ_NR; i++) {
-		if (irq_reg[max77686_irqs[i].group] & max77686_irqs[i].mask) {
-			cur_irq = irq_find_mapping(max77686->irq_domain, i);
-			if (cur_irq)
-				handle_nested_irq(cur_irq);
-		}
+		if (irq_reg[max77686_irqs[i].group] & max77686_irqs[i].mask)
+			handle_nested_irq(MAX77686_IRQ_BASE + i);
 	}
 
 	return IRQ_HANDLED;
 }
 
-static int max77686_irq_domain_map(struct irq_domain *d, unsigned int irq,
-					irq_hw_number_t hw)
+int max77686_irq_resume(struct max77686_dev *max77686)
 {
-	struct max77686_dev *max77686 = d->host_data;
-
-	irq_set_chip_data(irq, max77686);
-	irq_set_chip_and_handler(irq, &max77686_irq_chip, handle_edge_irq);
-	irq_set_nested_thread(irq, 1);
-#ifdef CONFIG_ARM
-	set_irq_flags(irq, IRQF_VALID);
-#else
-	irq_set_noprobe(irq);
-#endif
+	if (max77686->irq && MAX77686_IRQ_BASE)
+		max77686_irq_thread(MAX77686_IRQ_BASE, max77686);
 	return 0;
 }
 
-static struct irq_domain_ops max77686_irq_domain_ops = {
-	.map = max77686_irq_domain_map,
-};
-
 int max77686_irq_init(struct max77686_dev *max77686)
 {
-	struct irq_domain *domain;
 	int i;
 	int ret;
 	int val;
+	int cur_irq;
 	struct regmap *map;
 
 	mutex_init(&max77686->irqlock);
@@ -289,13 +271,15 @@ int max77686_irq_init(struct max77686_dev *max77686)
 
 		regmap_write(map, max77686_mask_reg[i], 0xff);
 	}
-	domain = irq_domain_add_linear(NULL, MAX77686_IRQ_NR,
-					&max77686_irq_domain_ops, max77686);
-	if (!domain) {
-		dev_err(max77686->dev, "could not create irq domain\n");
-		return -ENODEV;
+	/* Register with genirq */
+	for (i = 0; i < MAX77686_IRQ_NR; i++) {
+		cur_irq = MAX77686_IRQ_BASE + i;
+		irq_set_chip_data(cur_irq, max77686);
+		irq_set_chip_and_handler(cur_irq, &max77686_irq_chip,
+					 handle_edge_irq);
+		irq_set_nested_thread(cur_irq, 1);
+		set_irq_flags(cur_irq, IRQF_VALID);
 	}
-	max77686->irq_domain = domain;
 
 	ret = request_threaded_irq(max77686->irq, NULL, max77686_irq_thread,
 				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,

@@ -45,8 +45,6 @@ struct drm_hdmi_context {
 	struct exynos_drm_subdrv	subdrv;
 	struct exynos_drm_hdmi_context	*hdmi_ctx;
 	struct exynos_drm_hdmi_context	*mixer_ctx;
-
-	bool	enabled[MIXER_WIN_NR];
 };
 
 int exynos_platform_device_hdmi_register(void)
@@ -124,8 +122,20 @@ static struct edid *drm_hdmi_get_edid(struct device *dev,
 static int drm_hdmi_check_timing(struct device *dev, void *timing)
 {
 	struct drm_hdmi_context *ctx = to_context(dev);
+	int ret = 0;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	/*
+	* Both, mixer and hdmi should be able to handle the requested mode.
+	* If any of the two fails, return mode as BAD.
+	*/
+
+	if (mixer_ops && mixer_ops->check_timing)
+		ret = mixer_ops->check_timing(ctx->mixer_ctx->ctx, timing);
+
+	if (ret)
+		return ret;
 
 	if (hdmi_ops && hdmi_ops->check_timing)
 		return hdmi_ops->check_timing(ctx->hdmi_ctx->ctx, timing);
@@ -178,14 +188,17 @@ static void drm_hdmi_disable_vblank(struct device *subdrv_dev)
 		return mixer_ops->disable_vblank(ctx->mixer_ctx->ctx);
 }
 
-static void drm_hdmi_wait_for_vblank(struct device *subdrv_dev)
+static void drm_hdmi_complete_scanout(struct device *subdrv_dev,
+					dma_addr_t dma_addr,
+					unsigned long size)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	if (mixer_ops && mixer_ops->wait_for_vblank)
-		mixer_ops->wait_for_vblank(ctx->mixer_ctx->ctx);
+	if (mixer_ops && mixer_ops->complete_scanout)
+		mixer_ops->complete_scanout(ctx->mixer_ctx->ctx,
+						dma_addr, size);
 }
 
 static void drm_hdmi_mode_fixup(struct device *subdrv_dev,
@@ -249,16 +262,11 @@ static void drm_hdmi_dpms(struct device *subdrv_dev, int mode)
 static void drm_hdmi_apply(struct device *subdrv_dev)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
-	int i;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	for (i = 0; i < MIXER_WIN_NR; i++) {
-		if (!ctx->enabled[i])
-			continue;
-		if (mixer_ops && mixer_ops->win_commit)
-			mixer_ops->win_commit(ctx->mixer_ctx->ctx, i);
-	}
+	if (mixer_ops && mixer_ops->apply)
+		mixer_ops->apply(ctx->mixer_ctx->ctx);
 
 	if (hdmi_ops && hdmi_ops->commit)
 		hdmi_ops->commit(ctx->hdmi_ctx->ctx);
@@ -269,7 +277,7 @@ static struct exynos_drm_manager_ops drm_hdmi_manager_ops = {
 	.apply = drm_hdmi_apply,
 	.enable_vblank = drm_hdmi_enable_vblank,
 	.disable_vblank = drm_hdmi_disable_vblank,
-	.wait_for_vblank = drm_hdmi_wait_for_vblank,
+	.complete_scanout = drm_hdmi_complete_scanout,
 	.mode_fixup = drm_hdmi_mode_fixup,
 	.mode_set = drm_hdmi_mode_set,
 	.get_max_resol = drm_hdmi_get_max_resol,
@@ -301,8 +309,6 @@ static void drm_mixer_commit(struct device *subdrv_dev, int zpos)
 
 	if (mixer_ops && mixer_ops->win_commit)
 		mixer_ops->win_commit(ctx->mixer_ctx->ctx, win);
-
-	ctx->enabled[win] = true;
 }
 
 static void drm_mixer_disable(struct device *subdrv_dev, int zpos)
@@ -319,8 +325,6 @@ static void drm_mixer_disable(struct device *subdrv_dev, int zpos)
 
 	if (mixer_ops && mixer_ops->win_disable)
 		mixer_ops->win_disable(ctx->mixer_ctx->ctx, win);
-
-	ctx->enabled[win] = false;
 }
 
 static struct exynos_drm_overlay_ops drm_hdmi_overlay_ops = {

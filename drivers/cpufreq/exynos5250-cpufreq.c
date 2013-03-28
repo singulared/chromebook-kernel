@@ -251,8 +251,10 @@ static void __init set_volt_table(void)
 
 	max_support_idx = L0;
 
-	for (i = 0 ; i < CPUFREQ_LEVEL_END ; i++)
-		exynos5250_volt_table[i] = asv_voltage_5250[i];
+	for (i = 0 ; i < CPUFREQ_LEVEL_END ; i++) {
+		exynos5250_volt_table[i] = exynos5250_cpufreq_get_asv(i);
+		pr_info("VDD_ARM : L%d, %d uV\n", i, exynos5250_volt_table[i]);
+	}
 }
 
 int exynos5250_cpufreq_init(struct exynos_dvfs_info *info)

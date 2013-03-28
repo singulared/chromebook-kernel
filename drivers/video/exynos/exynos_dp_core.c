@@ -1119,8 +1119,6 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
 
-	disable_irq(dp->irq);
-
 	if (work_pending(&dp->hotplug_work))
 		flush_work(&dp->hotplug_work);
 
@@ -1143,6 +1141,8 @@ static int exynos_dp_suspend(struct device *dev)
 {
 	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
+
+	disable_irq(dp->irq);
 
 	if (work_pending(&dp->hotplug_work))
 		flush_work(&dp->hotplug_work);
@@ -1204,7 +1204,20 @@ static struct platform_driver exynos_dp_driver = {
 	},
 };
 
-module_platform_driver(exynos_dp_driver);
+static int __init exynos_dp_init(void)
+{
+       return platform_driver_probe(&exynos_dp_driver, exynos_dp_probe);
+}
+
+static void __exit exynos_dp_exit(void)
+{
+       platform_driver_unregister(&exynos_dp_driver);
+}
+/* TODO: Register as module_platform_driver */
+/* Currently, we make it late_initcall to make */
+/* sure that s3c-fb is probed before DP driver */
+late_initcall(exynos_dp_init);
+module_exit(exynos_dp_exit);
 
 MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC DP Driver");

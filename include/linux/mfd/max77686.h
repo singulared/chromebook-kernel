@@ -67,12 +67,16 @@ enum max77686_regulators {
 	MAX77686_BUCK7,
 	MAX77686_BUCK8,
 	MAX77686_BUCK9,
+	MAX77686_EN32KHZ_AP,
+	MAX77686_EN32KHZ_CP,
+	MAX77686_P32KHZ,
 
 	MAX77686_REG_MAX,
 };
 
 struct max77686_regulator_data {
 	int id;
+	int opmode;
 	struct regulator_init_data *initdata;
 	struct device_node *of_node;
 };

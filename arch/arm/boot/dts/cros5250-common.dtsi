@@ -16,7 +16,20 @@
 		reg = <0x40000000 0x80000000>;
 	};
 
+	ramoops {
+		compatible = "ramoops";
+		reg = <0x41f00000 0x00100000>;
+		record-size = <0x00020000>;
+		dump-oops;
+	};
+
 	chosen {
+	};
+
+	firmware {
+		chromeos {
+			write-protect-gpio = <&gpd1 6 0 0x10000 0>;
+		};
 	};
 
 	i2c@12C60000 {
@@ -24,13 +37,213 @@
 		samsung,i2c-max-bus-freq = <378000>;
 		gpios = <&gpb3 0 2 3 0>,
 			<&gpb3 1 2 3 0>;
+
+		max77686@09 {
+			compatible = "maxim,max77686";
+			interrupt-parent = <&wakeup_eint>;
+			interrupts = <26 0>;
+			wakeup-source;
+			reg = <0x09>;
+
+			voltage-regulators {
+				ldo1_reg: LDO1 {
+					regulator-name = "P1.0V_LDO_OUT1";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					/* Output ON/LPM controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo2_reg: LDO2 {
+					regulator-name = "P1.8V_LDO_OUT2";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x20>;
+				};
+
+				ldo3_reg: LDO3 {
+					regulator-name = "P1.8V_LDO_OUT3";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					/* Output ON/LPM controlled by PWRREQ */
+					max77686-opmode = <0x80>;
+				};
+
+				ldo7_reg: LDO7 {
+					regulator-name = "P1.1V_LDO_OUT7";
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo8_reg: LDO8 {
+					regulator-name = "P1.0V_LDO_OUT8";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo10_reg: LDO10 {
+					regulator-name = "P1.8V_LDO_OUT10";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo12_reg: LDO12 {
+					regulator-name = "P3.0V_LDO_OUT12";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo14_reg: LDO14 {
+					regulator-name = "P1.8V_LDO_OUT14";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo15_reg: LDO15 {
+					regulator-name = "P1.0V_LDO_OUT15";
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				ldo16_reg: LDO16 {
+					regulator-name = "P1.8V_LDO_OUT16";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x40>;
+				};
+
+				buck1_reg: BUCK1 {
+					regulator-name = "vdd_mif";
+					regulator-min-microvolt = <950000>;
+					regulator-max-microvolt = <1300000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x1>;
+				};
+
+				buck2_reg: BUCK2 {
+					regulator-name = "vdd_arm";
+					regulator-min-microvolt = <850000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x10>;
+				};
+
+				buck3_reg: BUCK3 {
+					regulator-name = "vdd_int";
+					regulator-min-microvolt = <900000>;
+					regulator-max-microvolt = <1200000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x10>;
+				};
+
+				buck4_reg: BUCK4 {
+					regulator-name = "vdd_g3d";
+					regulator-min-microvolt = <850000>;
+					regulator-max-microvolt = <1300000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Output ON/OFF controlled by PWRREQ */
+					max77686-opmode = <0x10>;
+				};
+
+				buck5_reg: BUCK5 {
+					regulator-name = "P1.8V_BUCK_OUT5";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					regulator-boot-on;
+					/* Output ON */
+					max77686-opmode = <0x3>;
+				};
+
+				buck6_reg: BUCK6 {
+					regulator-name = "P1.35V_BUCK_OUT6";
+					regulator-min-microvolt = <1350000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-always-on;
+					/* Output ON */
+					max77686-opmode = <0x3>;
+				};
+
+				buck7_reg: BUCK7 {
+					regulator-name = "P2.0V_BUCK_OUT7";
+					regulator-min-microvolt = <2000000>;
+					regulator-max-microvolt = <2000000>;
+					regulator-always-on;
+					/* Output ON */
+					max77686-opmode = <0x3>;
+				};
+
+				buck8_reg: BUCK8 {
+					regulator-name = "P2.85V_BUCK_OUT8";
+					regulator-min-microvolt = <2850000>;
+					regulator-max-microvolt = <2850000>;
+					regulator-always-on;
+					/* Output OFF of ENB8 is low */
+					max77686-opmode = <0x1>;
+				};
+
+				en32khz_ap: EN32KHZ_AP {
+					regulator-name = "en32khz_ap";
+					regulator-boot-on;
+				};
+
+				en32khz_cp: EN32KHZ_CP {
+					regulator-name = "en32khz_cp";
+					regulator-boot-on;
+				};
+
+				p32khz: P32KHZ {
+					regulator-name = "p32khz";
+					regulator-boot-on;
+				};
+			};
+		};
 	};
 
 	i2c@12C70000 {
 		samsung,i2c-sda-delay = <100>;
-		samsung,i2c-max-bus-freq = <378000>;
+		samsung,i2c-max-bus-freq = <400000>;
 		gpios = <&gpb3 2 2 3 0>,
 			<&gpb3 3 2 3 0>;
+
+		trackpad {
+			reg = <0x67>;
+			compatible = "cypress,cyapa";
+			interrupts = <10 0>;
+			interrupt-parent = <&wakeup_eint>;
+			wakeup-source;
+		};
 	};
 
 	i2c@12C80000 {
@@ -58,7 +271,21 @@
 	};
 
 	i2c@12CA0000 {
-		status = "disabled";
+		samsung,i2c-sda-delay = <100>;
+		samsung,i2c-max-bus-freq = <66000>;
+		gpios = <&gpa2 0 3 3 0>,
+			<&gpa2 1 3 3 0>;
+
+		ec: chromeos-ec {
+			compatible = "google,chromeos-ec-i2c";
+			reg = <0x1e>;
+			interrupts = <14 0>;
+			interrupt-parent = <&wakeup_eint>;
+			wakeup-source;
+			nv-storage {
+				compatible = "google,chromeos_vbc_ec";
+			};
+		};
 	};
 
 	i2c@12CB0000 {
@@ -77,6 +304,19 @@
 		samsung,i2c-max-bus-freq = <66000>;
 		gpios = <&gpb2 2 3 3 0>,
 			<&gpb2 3 3 3 0>;
+
+		light-sensor {
+			compatible = "invn,isl29018";
+			reg = <0x44>;
+		};
+
+		codec {
+			compatible = "maxim,max98095";
+			reg = <0x11>;
+			mic-left-digital;
+			mic-right-digital;
+		};
+
 	};
 
 	i2c@12CE0000 {
@@ -87,6 +327,10 @@
 			compatible = "samsung,exynos5-hdmiphy";
 			reg = <0x38>;
 		};
+	};
+
+	adc@12D10000 {
+		vdd-supply = <&buck5_reg>;
 	};
 
 	dwmmc0@12200000 {
@@ -167,8 +411,22 @@
 		status = "disabled";
 	};
 
+	codec@11000000 {
+		samsung,mfc-r = <0x43000000 0x800000>;
+		samsung,mfc-l = <0x51000000 0x800000>;
+	};
+
 	hdmi {
 		hpd-gpio = <&gpx3 7 0xf 1 3>;
+	};
+
+	max98095-en {
+		compatible = "regulator-fixed";
+		regulator-name = "codec-en";
+		gpio = <&gpx1 7 0 0 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
 	};
 
 	gpio-keys {
@@ -180,5 +438,22 @@
 			linux,code = <116>; /* KEY_POWER */
 			gpio-key,wakeup;
 		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98095";
+	};
+
+	charger-detect {
+		compatible = "gpio-charger";
+		charger-type = <3>;
+		gpio = <&gpf0 2 0 0 0>;
+	};
+
+	fixed-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "hsichub-reset-l";
+		gpio = <&gpe1 0 1 0 0>;
+		enable-active-high;
 	};
 };

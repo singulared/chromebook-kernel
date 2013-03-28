@@ -46,6 +46,7 @@
 #define VIDOSD_D(win)		(VIDOSD_BASE + 0x0C + (win) * 16)
 
 #define VIDWx_BUF_START(win, buf)	(VIDW_BUF_START(buf) + (win) * 8)
+#define VIDWx_BUF_START_S(win, buf)	(VIDW_BUF_START_S(buf) + (win) * 8)
 #define VIDWx_BUF_END(win, buf)		(VIDW_BUF_END(buf) + (win) * 8)
 #define VIDWx_BUF_SIZE(win, buf)	(VIDW_BUF_SIZE(buf) + (win) * 4)
 
@@ -93,6 +94,7 @@ struct fimd_context {
 	struct clk			*bus_clk;
 	struct clk			*lcd_clk;
 	void __iomem			*regs;
+	void __iomem			*regs_mie;
 	struct fimd_win_data		win_data[WINDOWS_NR];
 	unsigned int			clkdiv;
 	unsigned int			default_win;
@@ -175,6 +177,342 @@ static struct exynos_drm_display_ops fimd_display_ops = {
 	.get_panel = fimd_get_panel,
 	.check_timing = fimd_check_timing,
 	.power_on = fimd_display_power_on,
+};
+
+static void fimd_win_mode_set(struct device *dev,
+			      struct exynos_drm_overlay *overlay)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	struct fimd_win_data *win_data;
+	int win;
+	unsigned long offset;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (!overlay) {
+		dev_err(dev, "overlay is NULL\n");
+		return;
+	}
+
+	win = overlay->zpos;
+	if (win == DEFAULT_ZPOS)
+		win = ctx->default_win;
+
+	if (win < 0 || win > WINDOWS_NR)
+		return;
+
+	offset = overlay->fb_x * (overlay->bpp >> 3);
+	offset += overlay->fb_y * overlay->pitch;
+
+	DRM_DEBUG_KMS("offset = 0x%lx, pitch = %x\n", offset, overlay->pitch);
+
+	win_data = &ctx->win_data[win];
+
+	win_data->offset_x = overlay->crtc_x;
+	win_data->offset_y = overlay->crtc_y;
+	win_data->ovl_width = overlay->crtc_width;
+	win_data->ovl_height = overlay->crtc_height;
+	win_data->fb_width = overlay->fb_width;
+	win_data->fb_height = overlay->fb_height;
+	win_data->dma_addr = overlay->dma_addr[0] + offset;
+	win_data->bpp = overlay->bpp;
+	win_data->buf_offsize = (overlay->fb_width - overlay->crtc_width) *
+				(overlay->bpp >> 3);
+	win_data->line_size = overlay->crtc_width * (overlay->bpp >> 3);
+
+	DRM_DEBUG_KMS("offset_x = %d, offset_y = %d\n",
+			win_data->offset_x, win_data->offset_y);
+	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
+			win_data->ovl_width, win_data->ovl_height);
+	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
+	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
+			overlay->fb_width, overlay->crtc_width);
+}
+
+static void fimd_win_set_pixfmt(struct device *dev, unsigned int win)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	struct fimd_win_data *win_data = &ctx->win_data[win];
+	unsigned long val;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	val = WINCONx_ENWIN;
+
+	switch (win_data->bpp) {
+	case 1:
+		val |= WINCON0_BPPMODE_1BPP;
+		val |= WINCONx_BITSWP;
+		break;
+	case 2:
+		val |= WINCON0_BPPMODE_2BPP;
+		val |= WINCONx_BITSWP;
+		break;
+	case 4:
+		val |= WINCON0_BPPMODE_4BPP;
+		val |= WINCONx_BITSWP;
+		break;
+	case 8:
+		val |= WINCON0_BPPMODE_8BPP_PALETTE;
+		val |= WINCONx_BYTSWP;
+		break;
+	case 16:
+		val |= WINCON0_BPPMODE_16BPP_565;
+		val |= WINCONx_HAWSWP;
+		break;
+	case 24:
+		val |= WINCON0_BPPMODE_24BPP_888;
+		val |= WINCONx_WSWP;
+		break;
+	case 32:
+		val |= WINCON1_BPPMODE_28BPP_A4888
+			| WINCON1_BLD_PIX | WINCON1_ALPHA_SEL;
+		val |= WINCONx_WSWP;
+		break;
+	default:
+		DRM_DEBUG_KMS("invalid pixel size so using unpacked 24bpp.\n");
+
+		val |= WINCON0_BPPMODE_24BPP_888;
+		val |= WINCONx_WSWP;
+		break;
+	}
+
+	DRM_DEBUG_KMS("bpp = %d\n", win_data->bpp);
+
+	/* Restrict the burst length to 4WORD for cursor */
+	if (win_data->fb_width <= 96)
+		val |= WINCONx_BURSTLEN_4WORD;
+	else
+		val |= WINCONx_BURSTLEN_16WORD;
+
+	writel(val, ctx->regs + WINCON(win));
+}
+
+static void fimd_win_set_colkey(struct device *dev, unsigned int win)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	unsigned int keycon0 = 0, keycon1 = 0;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	keycon0 = ~(WxKEYCON0_KEYBL_EN | WxKEYCON0_KEYEN_F |
+			WxKEYCON0_DIRCON) | WxKEYCON0_COMPKEY(0);
+
+	keycon1 = WxKEYCON1_COLVAL(0xffffffff);
+
+	writel(keycon0, ctx->regs + WKEYCON0_BASE(win));
+	writel(keycon1, ctx->regs + WKEYCON1_BASE(win));
+}
+
+
+static void mie_set_6bit_dithering(struct fimd_context *ctx)
+{
+	struct fb_videomode *timing = &ctx->panel->timing;
+	unsigned long val;
+	int i;
+
+	writel(MIE_HRESOL(timing->xres) | MIE_VRESOL(timing->yres) |
+				MIE_MODE_UI, ctx->regs_mie + MIE_CTRL1);
+
+	writel(MIE_WINHADDR0(0) | MIE_WINHADDR1(timing->xres),
+						ctx->regs_mie + MIE_WINHADDR);
+	writel(MIE_WINVADDR0(0) | MIE_WINVADDR1(timing->yres),
+						ctx->regs_mie + MIE_WINVADDR);
+
+	val = (timing->xres + timing->left_margin +
+			timing->right_margin + timing->hsync_len) *
+	      (timing->yres + timing->upper_margin +
+			timing->lower_margin + timing->vsync_len) /
+							(MIE_PWMCLKVAL + 1);
+	writel(PWMCLKCNT(val), ctx->regs_mie + MIE_PWMCLKCNT);
+
+	writel((MIE_VBPD(timing->upper_margin)) |
+		MIE_VFPD(timing->lower_margin) |
+		MIE_VSPW(timing->vsync_len), ctx->regs_mie + MIE_PWMVIDTCON1);
+
+	writel(MIE_HBPD(timing->left_margin) |
+		MIE_HFPD(timing->right_margin) |
+		MIE_HSPW(timing->hsync_len), ctx->regs_mie + MIE_PWMVIDTCON2);
+
+	writel(MIE_DITHCON_EN | MIE_RGB6MODE,
+					ctx->regs_mie + MIE_AUXCON);
+
+	/* Bypass MIE image brightness enhancement */
+	for (i = 0; i <= 0x30; i += 4) {
+		writel(0, ctx->regs_mie + 0x100 + i);
+		writel(0, ctx->regs_mie + 0x200 + i);
+	}
+}
+
+static void fimd_win_commit(struct device *dev, int zpos)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	struct fimd_win_data *win_data;
+	int win = zpos;
+	unsigned long val, alpha, size;
+	unsigned int last_x;
+	unsigned int last_y;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (ctx->suspended)
+		return;
+
+	if (win == DEFAULT_ZPOS)
+		win = ctx->default_win;
+
+	if (win < 0 || win > WINDOWS_NR)
+		return;
+
+	win_data = &ctx->win_data[win];
+
+	/*
+	 * SHADOWCON register is used for enabling timing.
+	 *
+	 * for example, once only width value of a register is set,
+	 * if the dma is started then fimd hardware could malfunction so
+	 * with protect window setting, the register fields with prefix '_F'
+	 * wouldn't be updated at vsync also but updated once unprotect window
+	 * is set.
+	 */
+
+	/* protect windows */
+	val = readl(ctx->regs + SHADOWCON);
+	val |= SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+
+	/* buffer start address */
+	val = (unsigned long)win_data->dma_addr;
+	writel(val, ctx->regs + VIDWx_BUF_START(win, 0));
+
+	/* buffer end address */
+	size = win_data->fb_width * win_data->ovl_height * (win_data->bpp >> 3);
+	val = (unsigned long)(win_data->dma_addr + size);
+	writel(val, ctx->regs + VIDWx_BUF_END(win, 0));
+
+	DRM_DEBUG_KMS("start addr = 0x%lx, end addr = 0x%lx, size = 0x%lx\n",
+			(unsigned long)win_data->dma_addr, val, size);
+	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
+			win_data->ovl_width, win_data->ovl_height);
+
+	/* buffer size */
+	val = VIDW_BUF_SIZE_OFFSET(win_data->buf_offsize) |
+		VIDW_BUF_SIZE_PAGEWIDTH(win_data->line_size) |
+		VIDW_BUF_SIZE_OFFSET_E(win_data->buf_offsize) |
+		VIDW_BUF_SIZE_PAGEWIDTH_E(win_data->line_size);
+	writel(val, ctx->regs + VIDWx_BUF_SIZE(win, 0));
+
+	/* OSD position */
+	val = VIDOSDxA_TOPLEFT_X(win_data->offset_x) |
+		VIDOSDxA_TOPLEFT_Y(win_data->offset_y) |
+		VIDOSDxA_TOPLEFT_X_E(win_data->offset_x) |
+		VIDOSDxA_TOPLEFT_Y_E(win_data->offset_y);
+	writel(val, ctx->regs + VIDOSD_A(win));
+
+	last_x = win_data->offset_x + win_data->ovl_width;
+	if (last_x)
+		last_x--;
+	last_y = win_data->offset_y + win_data->ovl_height;
+	if (last_y)
+		last_y--;
+
+	val = VIDOSDxB_BOTRIGHT_X(last_x) | VIDOSDxB_BOTRIGHT_Y(last_y) |
+		VIDOSDxB_BOTRIGHT_X_E(last_x) | VIDOSDxB_BOTRIGHT_Y_E(last_y);
+
+	writel(val, ctx->regs + VIDOSD_B(win));
+
+	DRM_DEBUG_KMS("osd pos: tx = %d, ty = %d, bx = %d, by = %d\n",
+			win_data->offset_x, win_data->offset_y, last_x, last_y);
+
+	/* hardware window 0 doesn't support alpha channel. */
+	if (win != 0) {
+		/* OSD alpha */
+		alpha = VIDISD14C_ALPHA1_R(0xf) |
+			VIDISD14C_ALPHA1_G(0xf) |
+			VIDISD14C_ALPHA1_B(0xf);
+
+		writel(alpha, ctx->regs + VIDOSD_C(win));
+	}
+
+	/* OSD size */
+	if (win != 3 && win != 4) {
+		u32 offset = VIDOSD_D(win);
+		if (win == 0)
+			offset = VIDOSD_C_SIZE_W0;
+		val = win_data->ovl_width * win_data->ovl_height;
+		writel(val, ctx->regs + offset);
+
+		DRM_DEBUG_KMS("osd size = 0x%x\n", (unsigned int)val);
+	}
+
+	fimd_win_set_pixfmt(dev, win);
+
+	/* hardware window 0 doesn't support color key. */
+	if (win != 0)
+		fimd_win_set_colkey(dev, win);
+
+	/* wincon */
+	val = readl(ctx->regs + WINCON(win));
+	val |= WINCONx_ENWIN;
+	writel(val, ctx->regs + WINCON(win));
+
+	mie_set_6bit_dithering(ctx);
+
+	/* Enable DMA channel and unprotect windows */
+	val = readl(ctx->regs + SHADOWCON);
+	val |= SHADOWCON_CHx_ENABLE(win);
+	val &= ~SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+
+	win_data->enabled = true;
+}
+
+static void fimd_win_disable(struct device *dev, int zpos)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	struct fimd_win_data *win_data;
+	int win = zpos;
+	u32 val;
+
+	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (win == DEFAULT_ZPOS)
+		win = ctx->default_win;
+
+	if (win < 0 || win > WINDOWS_NR)
+		return;
+
+	win_data = &ctx->win_data[win];
+
+	if (ctx->suspended) {
+		/* do not resume this window*/
+		win_data->resume = false;
+		return;
+	}
+
+	/* protect windows */
+	val = readl(ctx->regs + SHADOWCON);
+	val |= SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+
+	/* wincon */
+	val = readl(ctx->regs + WINCON(win));
+	val &= ~WINCONx_ENWIN;
+	writel(val, ctx->regs + WINCON(win));
+
+	/* unprotect windows */
+	val = readl(ctx->regs + SHADOWCON);
+	val &= ~SHADOWCON_CHx_ENABLE(win);
+	val &= ~SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+
+	win_data->enabled = false;
+}
+
+static struct exynos_drm_overlay_ops fimd_overlay_ops = {
+	.mode_set = fimd_win_mode_set,
+	.commit = fimd_win_commit,
+	.disable = fimd_win_disable,
 };
 
 static void fimd_dpms(struct device *subdrv_dev, int mode)
@@ -335,9 +673,18 @@ static void fimd_disable_vblank(struct device *dev)
 static void fimd_wait_for_vblank(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	u32 val;
+	bool vblank_enabled = true;
 
 	if (ctx->suspended)
 		return;
+
+	val = readl(ctx->regs + VIDINTCON0);
+
+	if (!(val & VIDINTCON0_INT_FRAME)) {
+		vblank_enabled = false;
+		fimd_enable_vblank(dev);
+	}
 
 	atomic_set(&ctx->wait_vsync_event, 1);
 
@@ -349,6 +696,53 @@ static void fimd_wait_for_vblank(struct device *dev)
 				!atomic_read(&ctx->wait_vsync_event),
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
+
+	if (!vblank_enabled)
+		fimd_disable_vblank(dev);
+}
+
+static void fimd_complete_scanout(struct device *dev, dma_addr_t dma_addr,
+					unsigned long size)
+{
+	struct fimd_context *ctx = get_fimd_context(dev);
+	dma_addr_t dma_addr_in_use;
+	int win;
+	bool in_use = false;
+
+	if (ctx->suspended)
+		return;
+
+	/*
+	 * This dma-addr must not be used next time so check the
+	 * register and disable the window if yes.
+	 */
+	for (win = 0; win < WINDOWS_NR; win++) {
+		if (!ctx->win_data[win].enabled)
+			continue;
+
+		dma_addr_in_use = readl(ctx->regs + VIDWx_BUF_START(win, 0));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size))
+				fimd_win_disable(dev, win);
+	}
+
+	/*
+	 * If the dma-addr is being used right now, then set in_use
+	 * flag so that we wait for vsync before freeing fb.
+	 */
+	for (win = 0; win < WINDOWS_NR; win++) {
+		dma_addr_in_use = readl(ctx->regs + VIDWx_BUF_START_S(win, 0));
+		if (dma_addr_in_use >= dma_addr &&
+			dma_addr_in_use < (dma_addr + size)) {
+				in_use = true;
+				/* no need to check all windows*/
+				break;
+		}
+	}
+
+	if (in_use)
+		fimd_wait_for_vblank(dev);
+	return;
 }
 
 static struct exynos_drm_manager_ops fimd_manager_ops = {
@@ -357,303 +751,7 @@ static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
-	.wait_for_vblank = fimd_wait_for_vblank,
-};
-
-static void fimd_win_mode_set(struct device *dev,
-			      struct exynos_drm_overlay *overlay)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	struct fimd_win_data *win_data;
-	int win;
-	unsigned long offset;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (!overlay) {
-		dev_err(dev, "overlay is NULL\n");
-		return;
-	}
-
-	win = overlay->zpos;
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win > WINDOWS_NR)
-		return;
-
-	offset = overlay->fb_x * (overlay->bpp >> 3);
-	offset += overlay->fb_y * overlay->pitch;
-
-	DRM_DEBUG_KMS("offset = 0x%lx, pitch = %x\n", offset, overlay->pitch);
-
-	win_data = &ctx->win_data[win];
-
-	win_data->offset_x = overlay->crtc_x;
-	win_data->offset_y = overlay->crtc_y;
-	win_data->ovl_width = overlay->crtc_width;
-	win_data->ovl_height = overlay->crtc_height;
-	win_data->fb_width = overlay->fb_width;
-	win_data->fb_height = overlay->fb_height;
-	win_data->dma_addr = overlay->dma_addr[0] + offset;
-	win_data->bpp = overlay->bpp;
-	win_data->buf_offsize = (overlay->fb_width - overlay->crtc_width) *
-				(overlay->bpp >> 3);
-	win_data->line_size = overlay->crtc_width * (overlay->bpp >> 3);
-
-	DRM_DEBUG_KMS("offset_x = %d, offset_y = %d\n",
-			win_data->offset_x, win_data->offset_y);
-	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
-			win_data->ovl_width, win_data->ovl_height);
-	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
-	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
-			overlay->fb_width, overlay->crtc_width);
-}
-
-static void fimd_win_set_pixfmt(struct device *dev, unsigned int win)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	struct fimd_win_data *win_data = &ctx->win_data[win];
-	unsigned long val;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	val = WINCONx_ENWIN;
-
-	switch (win_data->bpp) {
-	case 1:
-		val |= WINCON0_BPPMODE_1BPP;
-		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_4WORD;
-		break;
-	case 2:
-		val |= WINCON0_BPPMODE_2BPP;
-		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_8WORD;
-		break;
-	case 4:
-		val |= WINCON0_BPPMODE_4BPP;
-		val |= WINCONx_BITSWP;
-		val |= WINCONx_BURSTLEN_8WORD;
-		break;
-	case 8:
-		val |= WINCON0_BPPMODE_8BPP_PALETTE;
-		val |= WINCONx_BURSTLEN_8WORD;
-		val |= WINCONx_BYTSWP;
-		break;
-	case 16:
-		val |= WINCON0_BPPMODE_16BPP_565;
-		val |= WINCONx_HAWSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
-		break;
-	case 24:
-		val |= WINCON0_BPPMODE_24BPP_888;
-		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
-		break;
-	case 32:
-		val |= WINCON1_BPPMODE_28BPP_A4888
-			| WINCON1_BLD_PIX | WINCON1_ALPHA_SEL;
-		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
-		break;
-	default:
-		DRM_DEBUG_KMS("invalid pixel size so using unpacked 24bpp.\n");
-
-		val |= WINCON0_BPPMODE_24BPP_888;
-		val |= WINCONx_WSWP;
-		val |= WINCONx_BURSTLEN_16WORD;
-		break;
-	}
-
-	DRM_DEBUG_KMS("bpp = %d\n", win_data->bpp);
-
-	writel(val, ctx->regs + WINCON(win));
-}
-
-static void fimd_win_set_colkey(struct device *dev, unsigned int win)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	unsigned int keycon0 = 0, keycon1 = 0;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	keycon0 = ~(WxKEYCON0_KEYBL_EN | WxKEYCON0_KEYEN_F |
-			WxKEYCON0_DIRCON) | WxKEYCON0_COMPKEY(0);
-
-	keycon1 = WxKEYCON1_COLVAL(0xffffffff);
-
-	writel(keycon0, ctx->regs + WKEYCON0_BASE(win));
-	writel(keycon1, ctx->regs + WKEYCON1_BASE(win));
-}
-
-static void fimd_win_commit(struct device *dev, int zpos)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	struct fimd_win_data *win_data;
-	int win = zpos;
-	unsigned long val, alpha, size;
-	unsigned int last_x;
-	unsigned int last_y;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (ctx->suspended)
-		return;
-
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win > WINDOWS_NR)
-		return;
-
-	win_data = &ctx->win_data[win];
-
-	/*
-	 * SHADOWCON register is used for enabling timing.
-	 *
-	 * for example, once only width value of a register is set,
-	 * if the dma is started then fimd hardware could malfunction so
-	 * with protect window setting, the register fields with prefix '_F'
-	 * wouldn't be updated at vsync also but updated once unprotect window
-	 * is set.
-	 */
-
-	/* protect windows */
-	val = readl(ctx->regs + SHADOWCON);
-	val |= SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-
-	/* buffer start address */
-	val = (unsigned long)win_data->dma_addr;
-	writel(val, ctx->regs + VIDWx_BUF_START(win, 0));
-
-	/* buffer end address */
-	size = win_data->fb_width * win_data->ovl_height * (win_data->bpp >> 3);
-	val = (unsigned long)(win_data->dma_addr + size);
-	writel(val, ctx->regs + VIDWx_BUF_END(win, 0));
-
-	DRM_DEBUG_KMS("start addr = 0x%lx, end addr = 0x%lx, size = 0x%lx\n",
-			(unsigned long)win_data->dma_addr, val, size);
-	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
-			win_data->ovl_width, win_data->ovl_height);
-
-	/* buffer size */
-	val = VIDW_BUF_SIZE_OFFSET(win_data->buf_offsize) |
-		VIDW_BUF_SIZE_PAGEWIDTH(win_data->line_size) |
-		VIDW_BUF_SIZE_OFFSET_E(win_data->buf_offsize) |
-		VIDW_BUF_SIZE_PAGEWIDTH_E(win_data->line_size);
-	writel(val, ctx->regs + VIDWx_BUF_SIZE(win, 0));
-
-	/* OSD position */
-	val = VIDOSDxA_TOPLEFT_X(win_data->offset_x) |
-		VIDOSDxA_TOPLEFT_Y(win_data->offset_y) |
-		VIDOSDxA_TOPLEFT_X_E(win_data->offset_x) |
-		VIDOSDxA_TOPLEFT_Y_E(win_data->offset_y);
-	writel(val, ctx->regs + VIDOSD_A(win));
-
-	last_x = win_data->offset_x + win_data->ovl_width;
-	if (last_x)
-		last_x--;
-	last_y = win_data->offset_y + win_data->ovl_height;
-	if (last_y)
-		last_y--;
-
-	val = VIDOSDxB_BOTRIGHT_X(last_x) | VIDOSDxB_BOTRIGHT_Y(last_y) |
-		VIDOSDxB_BOTRIGHT_X_E(last_x) | VIDOSDxB_BOTRIGHT_Y_E(last_y);
-
-	writel(val, ctx->regs + VIDOSD_B(win));
-
-	DRM_DEBUG_KMS("osd pos: tx = %d, ty = %d, bx = %d, by = %d\n",
-			win_data->offset_x, win_data->offset_y, last_x, last_y);
-
-	/* hardware window 0 doesn't support alpha channel. */
-	if (win != 0) {
-		/* OSD alpha */
-		alpha = VIDISD14C_ALPHA1_R(0xf) |
-			VIDISD14C_ALPHA1_G(0xf) |
-			VIDISD14C_ALPHA1_B(0xf);
-
-		writel(alpha, ctx->regs + VIDOSD_C(win));
-	}
-
-	/* OSD size */
-	if (win != 3 && win != 4) {
-		u32 offset = VIDOSD_D(win);
-		if (win == 0)
-			offset = VIDOSD_C_SIZE_W0;
-		val = win_data->ovl_width * win_data->ovl_height;
-		writel(val, ctx->regs + offset);
-
-		DRM_DEBUG_KMS("osd size = 0x%x\n", (unsigned int)val);
-	}
-
-	fimd_win_set_pixfmt(dev, win);
-
-	/* hardware window 0 doesn't support color key. */
-	if (win != 0)
-		fimd_win_set_colkey(dev, win);
-
-	/* wincon */
-	val = readl(ctx->regs + WINCON(win));
-	val |= WINCONx_ENWIN;
-	writel(val, ctx->regs + WINCON(win));
-
-	/* Enable DMA channel and unprotect windows */
-	val = readl(ctx->regs + SHADOWCON);
-	val |= SHADOWCON_CHx_ENABLE(win);
-	val &= ~SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-
-	win_data->enabled = true;
-}
-
-static void fimd_win_disable(struct device *dev, int zpos)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	struct fimd_win_data *win_data;
-	int win = zpos;
-	u32 val;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win > WINDOWS_NR)
-		return;
-
-	win_data = &ctx->win_data[win];
-
-	if (ctx->suspended) {
-		/* do not resume this window*/
-		win_data->resume = false;
-		return;
-	}
-
-	/* protect windows */
-	val = readl(ctx->regs + SHADOWCON);
-	val |= SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-
-	/* wincon */
-	val = readl(ctx->regs + WINCON(win));
-	val &= ~WINCONx_ENWIN;
-	writel(val, ctx->regs + WINCON(win));
-
-	/* unprotect windows */
-	val = readl(ctx->regs + SHADOWCON);
-	val &= ~SHADOWCON_CHx_ENABLE(win);
-	val &= ~SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-
-	win_data->enabled = false;
-}
-
-static struct exynos_drm_overlay_ops fimd_overlay_ops = {
-	.mode_set = fimd_win_mode_set,
-	.commit = fimd_win_commit,
-	.disable = fimd_win_disable,
+	.complete_scanout = fimd_complete_scanout,
 };
 
 static struct exynos_drm_manager fimd_manager = {
@@ -824,8 +922,10 @@ static void fimd_window_suspend(struct device *dev)
 
 	for (i = 0; i < WINDOWS_NR; i++) {
 		win_data = &ctx->win_data[i];
-		win_data->resume = win_data->enabled;
-		fimd_win_disable(dev, i);
+		if (win_data->enabled) {
+			win_data->resume = win_data->enabled;
+			fimd_win_disable(dev, i);
+		}
 	}
 	fimd_wait_for_vblank(dev);
 }
@@ -855,6 +955,7 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 
 		ctx->suspended = false;
 
+		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
 		/* if vblank was enabled status, enable it again. */
 		if (test_and_clear_bit(0, &ctx->irq_flags))
 			fimd_enable_vblank(dev);
@@ -870,20 +971,95 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *disp_np;
+	struct exynos_drm_fimd_pdata *pd;
+	u32 data[4];
+
+	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	if (!pd) {
+		dev_err(dev, "memory allocation for pdata failed\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (of_get_property(np, "samsung,fimd-vidout-rgb", NULL))
+		pd->vidcon0 |= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB;
+	if (of_get_property(np, "samsung,fimd-inv-hsync", NULL))
+		pd->vidcon1 |= VIDCON1_INV_HSYNC;
+	if (of_get_property(np, "samsung,fimd-inv-vsync", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VSYNC;
+	if (of_get_property(np, "samsung,fimd-inv-vclk", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VCLK;
+	if (of_get_property(np, "samsung,fimd-inv-vden", NULL))
+		pd->vidcon1 |= VIDCON1_INV_VDEN;
+
+	disp_np = of_parse_phandle(np, "samsung,fimd-display", 0);
+	if (!disp_np) {
+		dev_err(dev, "unable to find display panel info\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (of_property_read_u32_array(disp_np, "lcd-htiming", data, 4)) {
+		dev_err(dev, "invalid horizontal timing\n");
+		return ERR_PTR(-EINVAL);
+	}
+	pd->panel.timing.left_margin = data[0];
+	pd->panel.timing.right_margin = data[1];
+	pd->panel.timing.hsync_len = data[2];
+	pd->panel.timing.xres = data[3];
+
+	if (of_property_read_u32_array(disp_np, "lcd-vtiming", data, 4)) {
+		dev_err(dev, "invalid vertical timing\n");
+		return ERR_PTR(-EINVAL);
+	}
+	pd->panel.timing.upper_margin = data[0];
+	pd->panel.timing.lower_margin = data[1];
+	pd->panel.timing.vsync_len = data[2];
+	pd->panel.timing.yres = data[3];
+
+	of_property_read_u32(np, "samsung,fimd-frame-rate",
+				&pd->panel.timing.refresh);
+
+	of_property_read_u32(np, "samsung,default-window", &pd->default_win);
+
+	of_property_read_u32(np, "samsung,fimd-win-bpp", &pd->bpp);
+
+	of_property_read_string(np, "samsung,src-clk-name",  &pd->src_clk_name);
+
+	of_property_read_u32(np, "samsung,fimd-src-clk-rate", &pd->clock_rate);
+
+	return pd;
+}
+#else
+static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
+{
+	return NULL;
+}
+#endif /* CONFIG_OF */
+
 static int fimd_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fimd_context *ctx;
 	struct exynos_drm_subdrv *subdrv;
-	struct exynos_drm_fimd_pdata *pdata;
+	struct exynos_drm_fimd_pdata *pdata = pdev->dev.platform_data;
 	struct exynos_drm_panel_info *panel;
 	struct resource *res;
+	struct clk *clk_parent;
+
 	int win;
 	int ret = -EINVAL;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	pdata = pdev->dev.platform_data;
+	if (pdev->dev.of_node) {
+		pdata = drm_fimd_dt_parse_pdata(&pdev->dev);
+		if (IS_ERR(pdata))
+			return PTR_ERR(pdata);
+	}
 	if (!pdata) {
 		dev_err(dev, "no platform data specified\n");
 		return -EINVAL;
@@ -911,6 +1087,26 @@ static int fimd_probe(struct platform_device *pdev)
 		return PTR_ERR(ctx->lcd_clk);
 	}
 
+	if (pdata->src_clk_name) {
+		clk_parent = clk_get(&pdev->dev, pdata->src_clk_name);
+		if (IS_ERR(clk_parent)) {
+			dev_err(dev, "failed to get FIMD src clk\n");
+			return PTR_ERR(clk_parent);
+		}
+
+		if (clk_set_parent(ctx->lcd_clk, clk_parent)) {
+			dev_err(dev, "failed to set FIMD parent\n");
+			return PTR_ERR(ctx->lcd_clk);
+		}
+
+		if (clk_set_rate(ctx->lcd_clk, pdata->clock_rate)) {
+			dev_err(dev, "failed to set FIMD src clk rate\n");
+			return PTR_ERR(ctx->lcd_clk);
+		}
+
+		clk_put(clk_parent);
+	}
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	ctx->regs = devm_request_and_ioremap(&pdev->dev, res);
@@ -934,6 +1130,11 @@ static int fimd_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
+	if (!ctx->regs_mie) {
+		dev_err(dev, "failed to map registers\n");
+		return -ENXIO;
+	}
 	ctx->vidcon0 = pdata->vidcon0;
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
@@ -964,6 +1165,7 @@ static int fimd_probe(struct platform_device *pdev)
 	for (win = 0; win < WINDOWS_NR; win++)
 		fimd_clear_win(ctx, win);
 
+	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
 	exynos_drm_subdrv_register(subdrv);
 
 	return 0;
@@ -1069,6 +1271,17 @@ static struct platform_device_id fimd_driver_ids[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(platform, fimd_driver_ids);
+
+#ifdef CONFIG_OF
+static const struct of_device_id fimd_dt_match[] = {
+	{ .compatible = "samsung,exynos5-fimd",
+	  .data	= &exynos5_fimd_driver_data },
+	{ .compatible = "samsung,exynos4-fimd",
+	  .data = &exynos4_fimd_driver_data },
+	{},
+};
+MODULE_DEVICE_TABLE(of, fimd_dt_match);
+#endif
 
 static const struct dev_pm_ops fimd_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(fimd_suspend, fimd_resume)

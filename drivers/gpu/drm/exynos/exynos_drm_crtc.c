@@ -173,7 +173,6 @@ static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_OFF);
-	exynos_drm_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 }
 
 static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {

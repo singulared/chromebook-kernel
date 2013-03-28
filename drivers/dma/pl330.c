@@ -2459,9 +2459,9 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	struct dma_pl330_chan *pch = to_pchan(chan);
 	unsigned long flags;
 
-	spin_lock_irqsave(&pch->lock, flags);
-
 	tasklet_kill(&pch->task);
+
+	spin_lock_irqsave(&pch->lock, flags);
 
 	pl330_release_channel(pch->pl330_chid);
 	pch->pl330_chid = NULL;
@@ -2472,11 +2472,64 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	spin_unlock_irqrestore(&pch->lock, flags);
 }
 
+static inline int
+pl330_src_addr_in_desc(struct dma_pl330_desc *desc, unsigned int sar)
+{
+	return ((desc->px.src_addr <= sar) &&
+		(sar <= (desc->px.src_addr + desc->px.bytes)));
+}
+
+static inline int
+pl330_dst_addr_in_desc(struct dma_pl330_desc *desc, unsigned int dar)
+{
+	return ((desc->px.dst_addr <= dar) &&
+		(dar <= (desc->px.dst_addr + desc->px.bytes)));
+}
+
+static unsigned int pl330_tx_residue(struct dma_chan *chan)
+{
+	struct dma_pl330_chan *pch = to_pchan(chan);
+	void __iomem *regs = pch->dmac->pif.base;
+	struct pl330_thread *thrd = pch->pl330_chid;
+	struct dma_pl330_desc *desc;
+	unsigned int sar, dar;
+	unsigned int residue = 0;
+	unsigned long flags;
+
+	sar = readl(regs + SA(thrd->id));
+	dar = readl(regs + DA(thrd->id));
+
+	spin_lock_irqsave(&pch->lock, flags);
+
+	/* Find the desc related to the current buffer. */
+	list_for_each_entry(desc, &pch->work_list, node) {
+		if (desc->rqcfg.src_inc && pl330_src_addr_in_desc(desc, sar)) {
+			residue = desc->px.bytes - (sar - desc->px.src_addr);
+			goto found_unlock;
+		}
+		if (desc->rqcfg.dst_inc && pl330_dst_addr_in_desc(desc, dar)) {
+			residue = desc->px.bytes - (dar - desc->px.dst_addr);
+			goto found_unlock;
+		}
+	}
+
+found_unlock:
+	spin_unlock_irqrestore(&pch->lock, flags);
+
+	return residue;
+}
+
 static enum dma_status
 pl330_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 		 struct dma_tx_state *txstate)
 {
-	return dma_cookie_status(chan, cookie, txstate);
+	enum dma_status ret;
+
+	ret = dma_cookie_status(chan, cookie, txstate);
+	if (ret != DMA_SUCCESS) /* Not complete, check amount left. */
+		dma_set_residue(txstate, pl330_tx_residue(chan));
+
+	return ret;
 }
 
 static void pl330_issue_pending(struct dma_chan *chan)

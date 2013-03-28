@@ -20,7 +20,9 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 #include <linux/of.h>
+#include <linux/syscore_ops.h>
 
+#include <asm/sched_clock.h>
 #include <asm/arch_timer.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
@@ -128,10 +130,15 @@ static void exynos4_mct_frc_start(u32 hi, u32 lo)
 	exynos4_mct_write(reg, EXYNOS4_MCT_G_TCON);
 }
 
+static notrace u32 exynos4_read_sched_clock(void)
+{
+	return __raw_readl(EXYNOS4_MCT_G_CNT_L);
+}
+
 static cycle_t exynos4_frc_read(struct clocksource *cs)
 {
-	unsigned int lo, hi;
-	u32 hi2 = __raw_readl(EXYNOS4_MCT_G_CNT_U);
+	u32 lo, hi;
+	static u32 hi2;
 
 	do {
 		hi = hi2;
@@ -142,7 +149,7 @@ static cycle_t exynos4_frc_read(struct clocksource *cs)
 	return ((cycle_t)hi << 32) | lo;
 }
 
-static void exynos4_frc_resume(struct clocksource *cs)
+static void exynos4_frc_resume(void)
 {
 	exynos4_mct_frc_start(0, 0);
 }
@@ -153,15 +160,29 @@ struct clocksource mct_frc = {
 	.read		= exynos4_frc_read,
 	.mask		= CLOCKSOURCE_MASK(64),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+struct syscore_ops mct_frc_core = {
 	.resume		= exynos4_frc_resume,
 };
 
 static void __init exynos4_clocksource_init(void)
 {
+	u64 initial_time = exynos4_frc_read(&mct_frc);
+
+	do_div(initial_time, (clk_rate / 1000000));
+	printk(KERN_INFO "Initial usec timer %llu\n", initial_time);
+
 	exynos4_mct_frc_start(0, 0);
 
 	if (clocksource_register_hz(&mct_frc, clk_rate))
 		panic("%s: can't register clocksource\n", mct_frc.name);
+
+	setup_sched_clock(exynos4_read_sched_clock, 32, clk_rate);
+
+	/* FRC resume must happen prior to sched_clock_resume, so we
+	   register it via syscore_ops instead of via clocksource. */
+	register_syscore_ops(&mct_frc_core);
 }
 
 static void exynos4_mct_comp0_stop(void)
@@ -365,7 +386,12 @@ static int exynos4_mct_tick_clear(struct mct_clock_event_device *mevt)
 static irqreturn_t exynos4_mct_tick_isr(int irq, void *dev_id)
 {
 	struct mct_clock_event_device *mevt = dev_id;
-	struct clock_event_device *evt = mevt->evt;
+	struct clock_event_device *evt;
+
+	if (!mevt)
+		return IRQ_NONE;
+
+	evt = mevt->evt;
 
 	exynos4_mct_tick_clear(mevt);
 
@@ -421,15 +447,14 @@ static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 						EXYNOS5_IRQ_MCT_L0;
 			mct_tick0_event_irq.dev_id = mevt;
 			evt->irq = mct_lx_irq;
-			setup_irq(mct_lx_irq, &mct_tick0_event_irq);
 		} else {
 			mct_lx_irq = soc_is_exynos4210() ? EXYNOS4_IRQ_MCT_L1 :
 						EXYNOS5_IRQ_MCT_L1;
 			mct_tick1_event_irq.dev_id = mevt;
 			evt->irq = mct_lx_irq;
-			setup_irq(mct_lx_irq, &mct_tick1_event_irq);
 			irq_set_affinity(mct_lx_irq, cpumask_of(1));
 		}
+		enable_irq(evt->irq);
 	} else {
 		enable_percpu_irq(EXYNOS_IRQ_MCT_LOCALTIMER, 0);
 	}
@@ -439,13 +464,9 @@ static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 
 static void exynos4_local_timer_stop(struct clock_event_device *evt)
 {
-	unsigned int cpu = smp_processor_id();
 	evt->set_mode(CLOCK_EVT_MODE_UNUSED, evt);
 	if (mct_int_type == MCT_INT_SPI)
-		if (cpu == 0)
-			remove_irq(evt->irq, &mct_tick0_event_irq);
-		else
-			remove_irq(evt->irq, &mct_tick1_event_irq);
+		disable_irq(evt->irq);
 	else
 		disable_percpu_irq(EXYNOS_IRQ_MCT_LOCALTIMER);
 }
@@ -454,6 +475,23 @@ static struct local_timer_ops exynos4_mct_tick_ops __cpuinitdata = {
 	.setup	= exynos4_local_timer_setup,
 	.stop	= exynos4_local_timer_stop,
 };
+
+static void __init exynos4_local_timer_init(void)
+{
+	if (mct_int_type == MCT_INT_SPI) {
+		if (soc_is_exynos5250()) {
+			setup_irq(EXYNOS5_IRQ_MCT_L0, &mct_tick0_event_irq);
+			disable_irq(EXYNOS5_IRQ_MCT_L0);
+			setup_irq(EXYNOS5_IRQ_MCT_L1, &mct_tick1_event_irq);
+			disable_irq(EXYNOS5_IRQ_MCT_L1);
+		} else {
+			setup_irq(EXYNOS4_IRQ_MCT_L0, &mct_tick0_event_irq);
+			disable_irq(EXYNOS4_IRQ_MCT_L0);
+			setup_irq(EXYNOS4_IRQ_MCT_L1, &mct_tick1_event_irq);
+			disable_irq(EXYNOS4_IRQ_MCT_L1);
+		}
+	}
+}
 #endif /* CONFIG_LOCAL_TIMERS */
 
 static void __init exynos4_timer_resources(void)
@@ -491,6 +529,9 @@ static void __init exynos_timer_init(void)
 		mct_int_type = MCT_INT_PPI;
 
 	exynos4_timer_resources();
+#ifdef CONFIG_LOCAL_TIMERS
+	exynos4_local_timer_init();
+#endif
 	exynos4_clocksource_init();
 	exynos4_clockevent_init();
 }

@@ -38,6 +38,9 @@ struct exynos_drm_panel_info {
  */
 struct exynos_drm_fimd_pdata {
 	struct exynos_drm_panel_info panel;
+	u32				clock_rate;
+	const char			*src_clk_name;
+
 	u32				vidcon0;
 	u32				vidcon1;
 	unsigned int			default_win;

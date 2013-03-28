@@ -611,6 +611,18 @@ void exynos_gem_unmap_sgt_from_dma(struct drm_device *drm_dev,
 	dma_unmap_sg(drm_dev->dev, sgt->sgl, sgt->nents, dir);
 }
 
+int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file)
+{
+	return 0;
+}
+
+int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
+				struct drm_file *file)
+{
+	return 0;
+}
+
 int exynos_drm_gem_init_object(struct drm_gem_object *obj)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);

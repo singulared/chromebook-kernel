@@ -34,14 +34,6 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 	init_dma_attrs(&buf->dma_attrs);
 
 	/*
-	 * if EXYNOS_BO_CONTIG, fully physically contiguous memory
-	 * region will be allocated else physically contiguous
-	 * as possible.
-	 */
-	if (!(flags & EXYNOS_BO_NONCONTIG))
-		dma_set_attr(DMA_ATTR_FORCE_CONTIGUOUS, &buf->dma_attrs);
-
-	/*
 	 * if EXYNOS_BO_WC or EXYNOS_BO_NONCACHABLE, writecombine mapping
 	 * else cachable mapping.
 	 */

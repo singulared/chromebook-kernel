@@ -219,7 +219,7 @@
 	#define M98095_DAI_DHF                  (1<<3)
 
 /* M98095_045_DSP_CFG */
-	#define M98095_DSPNORMAL                (5<<4)
+	#define M98095_DSPNORMAL                (4<<4)
 
 /* M98095_048_MIX_DAC_LR */
 	#define M98095_DAI1L_TO_DACR            (1<<7)
@@ -294,6 +294,7 @@
 
 /* M98095_097_PWR_SYS */
 	#define M98095_SHDNRUN                  (1<<7)
+	#define M98095_CODECSHDN                (1<<6)
 	#define M98095_PERFMODE                 (1<<3)
 	#define M98095_HPPLYBACK                (1<<2)
 	#define M98095_PWRSV8K                  (1<<1)

@@ -119,9 +119,11 @@ static void audio_buffdone(void *data)
 	pr_debug("Entered %s\n", __func__);
 
 	if (prtd->state & ST_RUNNING) {
+		spin_lock(&prtd->lock);
 		prtd->dma_pos += prtd->dma_period;
 		if (prtd->dma_pos >= prtd->dma_end)
 			prtd->dma_pos = prtd->dma_start;
+		spin_unlock(&prtd->lock);
 
 		if (substream)
 			snd_pcm_period_elapsed(substream);
@@ -168,6 +170,7 @@ static int dma_hw_params(struct snd_pcm_substream *substream,
 		req.cap = (samsung_dma_has_circular() ?
 			DMA_CYCLIC : DMA_SLAVE);
 		req.client = prtd->params->client;
+		req.dt_dmach_prop = prtd->params->dma_prop;
 		config.direction =
 			(substream->stream == SNDRV_PCM_STREAM_PLAYBACK
 			? DMA_MEM_TO_DEV : DMA_DEV_TO_MEM);
@@ -270,13 +273,24 @@ dma_pointer(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct runtime_data *prtd = runtime->private_data;
-	unsigned long res;
+	unsigned long offset;
+	unsigned long xfd; /* Number of bytes transfered by current dma. */
+	unsigned int ret = 0;
 
 	pr_debug("Entered %s\n", __func__);
 
-	res = prtd->dma_pos - prtd->dma_start;
+	/* If we can inspect how much of the transfer is left, use that for a
+	 * more accurate number.  Otherwise, assume no bytes have been
+	 * transfered.
+	 */
+	if (prtd->params->ops->residue)
+		ret = prtd->params->ops->residue(prtd->params->ch);
 
-	pr_debug("Pointer offset: %lu\n", res);
+	spin_lock(&prtd->lock);
+	xfd = prtd->dma_period - ret;
+
+	offset = prtd->dma_pos + xfd - prtd->dma_start;
+	spin_unlock(&prtd->lock);
 
 	/* we seem to be getting the odd error from the pcm library due
 	 * to out-of-bounds pointers. this is maybe due to the dma engine
@@ -284,12 +298,12 @@ dma_pointer(struct snd_pcm_substream *substream)
 	 * called... (todo - fix )
 	 */
 
-	if (res >= snd_pcm_lib_buffer_bytes(substream)) {
-		if (res == snd_pcm_lib_buffer_bytes(substream))
-			res = 0;
-	}
+	if (offset >= snd_pcm_lib_buffer_bytes(substream))
+		offset = 0;
 
-	return bytes_to_frames(substream->runtime, res);
+	pr_debug("Pointer offset: %lu\n", offset);
+
+	return bytes_to_frames(substream->runtime, offset);
 }
 
 static int dma_open(struct snd_pcm_substream *substream)
