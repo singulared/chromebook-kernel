@@ -97,6 +97,7 @@ static unsigned int ata_dev_init_params(struct ata_device *dev,
 static unsigned int ata_dev_set_xfermode(struct ata_device *dev);
 static void ata_dev_xfermask(struct ata_device *dev);
 static unsigned long ata_dev_blacklisted(const struct ata_device *dev);
+static void __ata_port_resume(struct work_struct *work);
 
 atomic_t ata_print_id = ATOMIC_INIT(0);
 
@@ -1324,7 +1325,7 @@ static int ata_hpa_resize(struct ata_device *dev)
 	int print_info = ehc->i.flags & ATA_EHI_PRINTINFO;
 	bool unlock_hpa = ata_ignore_hpa || dev->flags & ATA_DFLAG_UNLOCK_HPA;
 	u64 sectors = ata_id_n_sectors(dev->id);
-	u64 native_sectors;
+	u64 native_sectors = 0;
 	int rc;
 
 	/* do we need to do it? */
@@ -3562,12 +3563,6 @@ int sata_link_resume(struct ata_link *link, const unsigned long *params,
 		scontrol = (scontrol & 0x0f0) | 0x300;
 		if ((rc = sata_scr_write(link, SCR_CONTROL, scontrol)))
 			return rc;
-		/*
-		 * Some PHYs react badly if SStatus is pounded
-		 * immediately after resuming.  Delay 200ms before
-		 * debouncing.
-		 */
-		ata_msleep(link->ap, 200);
 
 		/* is SControl restored correctly? */
 		if ((rc = sata_scr_read(link, SCR_CONTROL, &scontrol)))
@@ -5358,6 +5353,12 @@ static int ata_port_suspend_common(struct device *dev, pm_message_t mesg)
 
 static int ata_port_suspend(struct device *dev)
 {
+	struct ata_port *ap = to_ata_port(dev);
+
+	/* prevent the race between suspend and resume */
+	if (work_pending(&ap->resume_work))
+		flush_work_sync(&ap->resume_work);
+
 	if (pm_runtime_suspended(dev))
 		return 0;
 
@@ -5366,6 +5367,12 @@ static int ata_port_suspend(struct device *dev)
 
 static int ata_port_do_freeze(struct device *dev)
 {
+	struct ata_port *ap = to_ata_port(dev);
+
+	/* prevent the race between suspend and resume */
+	if (work_pending(&ap->resume_work))
+		flush_work_sync(&ap->resume_work);
+
 	if (pm_runtime_suspended(dev))
 		pm_runtime_resume(dev);
 
@@ -5374,6 +5381,12 @@ static int ata_port_do_freeze(struct device *dev)
 
 static int ata_port_poweroff(struct device *dev)
 {
+	struct ata_port *ap = to_ata_port(dev);
+
+	/* prevent the race between suspend and resume */
+	if (work_pending(&ap->resume_work))
+		flush_work_sync(&ap->resume_work);
+
 	if (pm_runtime_suspended(dev))
 		return 0;
 
@@ -5396,8 +5409,10 @@ static int ata_port_resume_common(struct device *dev)
 	return __ata_port_resume_common(ap, NULL);
 }
 
-static int ata_port_resume(struct device *dev)
+static void __ata_port_resume(struct work_struct *work)
 {
+	struct ata_port *ap = container_of(work, struct ata_port, resume_work);
+	struct device *dev = &ap->tdev;
 	int rc;
 
 	rc = ata_port_resume_common(dev);
@@ -5406,8 +5421,22 @@ static int ata_port_resume(struct device *dev)
 		pm_runtime_set_active(dev);
 		pm_runtime_enable(dev);
 	}
+	put_device(dev);
 
-	return rc;
+	WARN_ON(rc);
+
+	return;
+}
+
+static int ata_port_resume(struct device *dev)
+{
+	struct ata_port *ap = to_ata_port(dev);
+
+	get_device(dev);
+	PREPARE_WORK(&ap->resume_work, __ata_port_resume);
+	schedule_work(&ap->resume_work);
+
+	return 0;
 }
 
 static int ata_port_runtime_idle(struct device *dev)
@@ -5623,6 +5652,7 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 	mutex_init(&ap->scsi_scan_mutex);
 	INIT_DELAYED_WORK(&ap->hotplug_task, ata_scsi_hotplug);
 	INIT_WORK(&ap->scsi_rescan_task, ata_scsi_dev_rescan);
+	INIT_WORK(&ap->resume_work, __ata_port_resume);
 	INIT_LIST_HEAD(&ap->eh_done_q);
 	init_waitqueue_head(&ap->eh_wait_q);
 	init_completion(&ap->park_req_pending);
