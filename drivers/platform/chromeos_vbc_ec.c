@@ -111,7 +111,7 @@ static int chromeos_vbc_ec_write(const void *buf, size_t count)
 	return count;
 }
 
-static int __devinit chromeos_vbc_ec_probe(struct platform_device *pdev)
+static int chromeos_vbc_ec_probe(struct platform_device *pdev)
 {
 	if (!ec_phandle)
 		return -ENODEV;
