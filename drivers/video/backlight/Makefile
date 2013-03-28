@@ -45,3 +45,4 @@ obj-$(CONFIG_BACKLIGHT_PCF50633)	+= pcf50633-backlight.o
 obj-$(CONFIG_BACKLIGHT_AAT2870) += aat2870_bl.o
 obj-$(CONFIG_BACKLIGHT_OT200) += ot200_bl.o
 obj-$(CONFIG_BACKLIGHT_TPS65217) += tps65217_bl.o
+obj-$(CONFIG_BACKLIGHT_CHROMEOS_KEYBOARD) += chromeos_keyboard_bl.o

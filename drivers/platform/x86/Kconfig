@@ -79,6 +79,17 @@ config ASUS_LAPTOP
 
 	  If you have an ACPI-compatible ASUS laptop, say Y or M here.
 
+config CHROMEOS_LAPTOP
+	tristate "Chrome OS Laptop"
+	depends on I2C
+	depends on DMI
+	---help---
+	  This driver instantiates i2c and smbus devices such as
+	  light sensors and touchpads.
+
+	  If you have a supported Chromebook, choose Y or M here.
+	  The module will be called chromeos_laptop.
+
 config DELL_LAPTOP
 	tristate "Dell Laptop Extras (EXPERIMENTAL)"
 	depends on X86
@@ -681,6 +692,13 @@ config INTEL_IPS
 	  along with the CPU frequency and i915 drivers, provides that
 	  functionality.  If in doubt, say Y here; it will only load on
 	  supported platforms.
+config ACPI_CHROMEOS
+	bool "ChromeOS specific ACPI extensions"
+	depends on ACPI
+	select CHROMEOS
+	---help---
+	  This driver provides the firmware interface for the services exported
+	  through the CHROMEOS interfaces when using ChromeOS ACPI firmware.
 
 config IBM_RTL
 	tristate "Device driver to enable PRTL support"
