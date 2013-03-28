@@ -30,6 +30,7 @@
 #include "intel_drv.h"
 #include "../../../platform/x86/intel_ips.h"
 #include <linux/module.h>
+#include <linux/kernel.h>
 
 #define FORCEWAKE_ACK_TIMEOUT_MS 2
 
@@ -2572,7 +2573,7 @@ static void gen6_enable_rps(struct drm_device *dev)
 	I915_WRITE(GEN6_RC_SLEEP, 0);
 	I915_WRITE(GEN6_RC1e_THRESHOLD, 1000);
 	I915_WRITE(GEN6_RC6_THRESHOLD, 50000);
-	I915_WRITE(GEN6_RC6p_THRESHOLD, 100000);
+	I915_WRITE(GEN6_RC6p_THRESHOLD, 150000);
 	I915_WRITE(GEN6_RC6pp_THRESHOLD, 64000); /* unused */
 
 	/* Check if we are enabling RC6 */
@@ -2611,8 +2612,8 @@ static void gen6_enable_rps(struct drm_device *dev)
 		   dev_priv->rps.max_delay << 24 |
 		   dev_priv->rps.min_delay << 16);
 
-	I915_WRITE(GEN6_RP_UP_THRESHOLD, 59400);
-	I915_WRITE(GEN6_RP_DOWN_THRESHOLD, 245000);
+	I915_WRITE(GEN6_RP_UP_THRESHOLD, 0x4000);
+	I915_WRITE(GEN6_RP_DOWN_THRESHOLD, 0x4000);
 	I915_WRITE(GEN6_RP_UP_EI, 66000);
 	I915_WRITE(GEN6_RP_DOWN_EI, 350000);
 
@@ -2637,7 +2638,7 @@ static void gen6_enable_rps(struct drm_device *dev)
 		DRM_DEBUG_DRIVER("Failed to set the min frequency\n");
 	}
 
-	gen6_set_rps(dev_priv->dev, (gt_perf_status & 0xff00) >> 8);
+	gen6_set_rps(dev_priv->dev, (u8)max((gt_perf_status & 0xff00) >> 8, 10u));
 
 	/* requires MSI enabled */
 	I915_WRITE(GEN6_PMIER, GEN6_PM_DEFERRED_EVENTS);

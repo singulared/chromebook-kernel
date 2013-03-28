@@ -30,10 +30,18 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/dmi.h>
 #include <linux/moduleparam.h>
 #include "intel_drv.h"
+#include "i915_drv.h"
 
 #define PCI_LBPC 0xf4 /* legacy/combination backlight modes */
+
+/* These are used to calculate a reasonable default when firmware has not
+ * configured a maximum PWM frequency, with 200Hz as the current default target.
+ */
+#define DEFAULT_BACKLIGHT_PWM_FREQ   200
+#define BACKLIGHT_REFCLK_DIVISOR     128
 
 void
 intel_fixed_panel_mode(struct drm_display_mode *fixed_mode,
@@ -130,13 +138,34 @@ static int is_backlight_combination_mode(struct drm_device *dev)
 	return 0;
 }
 
+static void i915_set_default_max_backlight(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	u32 refclk_freq_mhz = 0;
+	u32 max_pwm;
+
+	if (HAS_PCH_SPLIT(dev_priv->dev))
+		refclk_freq_mhz = I915_READ(PCH_RAWCLK_FREQ) & RAWCLK_FREQ_MASK;
+	else if (dev_priv->lvds_use_ssc)
+		refclk_freq_mhz = dev_priv->lvds_ssc_freq;
+
+	max_pwm = refclk_freq_mhz * 1000000 /
+			(BACKLIGHT_REFCLK_DIVISOR * DEFAULT_BACKLIGHT_PWM_FREQ);
+
+	if (HAS_PCH_SPLIT(dev_priv->dev))
+		dev_priv->regfile.saveBLC_PWM_CTL2 = max_pwm << 16;
+	else if (IS_PINEVIEW(dev_priv->dev))
+		dev_priv->regfile.saveBLC_PWM_CTL = max_pwm << 17;
+	else
+		dev_priv->regfile.saveBLC_PWM_CTL = max_pwm << 16;
+}
+
 static u32 i915_read_blc_pwm_ctl(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 val;
 
-	/* Restore the CTL value if it lost, e.g. GPU reset */
-
+	/* Restore the CTL value if it was lost, e.g. GPU reset */
 	if (HAS_PCH_SPLIT(dev_priv->dev)) {
 		val = I915_READ(BLC_PWM_PCH_CTL2);
 		if (dev_priv->regfile.saveBLC_PWM_CTL2 == 0) {
@@ -191,11 +220,11 @@ u32 intel_panel_get_max_backlight(struct drm_device *dev)
 
 	max = _intel_panel_get_max_backlight(dev);
 	if (max == 0) {
-		/* XXX add code here to query mode clock or hardware clock
-		 * and program max PWM appropriately.
+		/* If backlight PWM registers have not been set, set them to
+		 * default backlight PWM settings.
 		 */
-		pr_warn_once("fixme: max PWM is zero\n");
-		return 1;
+		i915_set_default_max_backlight(dev);
+		max = i915_read_blc_pwm_ctl(dev);
 	}
 
 	DRM_DEBUG_DRIVER("max backlight PWM = %d\n", max);
@@ -218,7 +247,7 @@ static u32 intel_panel_compute_brightness(struct drm_device *dev, u32 val)
 
 	if (i915_panel_invert_brightness > 0 ||
 	    dev_priv->quirks & QUIRK_INVERT_BRIGHTNESS)
-		return intel_panel_get_max_backlight(dev) - val;
+		return dev_priv->get_max_backlight(dev) - val;
 
 	return val;
 }
@@ -260,6 +289,9 @@ static void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 tmp;
 
+	if (dev_priv->adaptive_backlight_enabled)
+		level = level * dev_priv->backlight_correction_level >> 8;
+
 	DRM_DEBUG_DRIVER("set backlight PWM = %d\n", level);
 	level = intel_panel_compute_brightness(dev, level);
 
@@ -267,7 +299,7 @@ static void intel_panel_actually_set_backlight(struct drm_device *dev, u32 level
 		return intel_pch_panel_set_backlight(dev, level);
 
 	if (is_backlight_combination_mode(dev)) {
-		u32 max = intel_panel_get_max_backlight(dev);
+		u32 max = dev_priv->get_max_backlight(dev);
 		u8 lbpc;
 
 		lbpc = level * 0xfe / max + 1;
@@ -287,11 +319,13 @@ void intel_panel_set_backlight(struct drm_device *dev, u32 level)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	dev_priv->backlight_level = level;
+	if (level > 0)
+		dev_priv->backlight_level_has_been_set = true;
 	if (dev_priv->backlight_enabled)
 		intel_panel_actually_set_backlight(dev, level);
 }
 
-void intel_panel_disable_backlight(struct drm_device *dev)
+static void intel_panel_disable_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
@@ -313,13 +347,17 @@ void intel_panel_disable_backlight(struct drm_device *dev)
 	}
 }
 
-void intel_panel_enable_backlight(struct drm_device *dev,
-				  enum pipe pipe)
+static void intel_panel_enable_backlight(struct drm_device *dev,
+					 enum pipe pipe)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	if (dev_priv->backlight_level == 0)
-		dev_priv->backlight_level = intel_panel_get_max_backlight(dev);
+	/* Increase the level from 0 unless someone in userspace has requested a
+	 * nonzero level at least once already -- in that case, we assume that
+	 * they know what they're doing and will raise the level themselves. */
+	if (dev_priv->backlight_level == 0 &&
+	    !dev_priv->backlight_level_has_been_set)
+		dev_priv->backlight_level = dev_priv->get_max_backlight(dev);
 
 	if (INTEL_INFO(dev)->gen >= 4) {
 		uint32_t reg, tmp;
@@ -364,12 +402,56 @@ set_level:
 	intel_panel_actually_set_backlight(dev, dev_priv->backlight_level);
 }
 
+static int intel_link_backlight(const struct dmi_system_id *id)
+{
+	DRM_DEBUG_KMS("Using Link backlight\n");
+	return 1;
+}
+
+static const struct dmi_system_id link_dmi_table[] = {
+	{
+		.callback = intel_link_backlight,
+		.ident = "Link",
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Link"),
+		},
+	},
+	{ }
+};
+
 static void intel_panel_init_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	dev_priv->backlight_level = intel_panel_get_backlight(dev);
+	dev_priv->get_backlight = intel_panel_get_backlight;
+	dev_priv->get_max_backlight = intel_panel_get_max_backlight;
+	dev_priv->set_backlight = intel_panel_set_backlight;
+	dev_priv->disable_backlight = intel_panel_disable_backlight;
+	dev_priv->enable_backlight = intel_panel_enable_backlight;
+
+	dev_priv->backlight_level = dev_priv->get_backlight(dev);
+	dev_priv->backlight_level_has_been_set = false;
 	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
+
+	if (dmi_check_system(link_dmi_table)) {
+		struct drm_connector *connector;
+		bool found = false;
+		/* Find the connector */
+		list_for_each_entry(connector,
+				    &dev->mode_config.connector_list,
+				    head)
+			if (connector->connector_type ==
+			    DRM_MODE_CONNECTOR_eDP) {
+				found = true;
+				break;
+			}
+
+		if (found) {
+			intel_adaptive_backlight_setup(dev);
+			intel_attach_adaptive_backlight_property(connector);
+			intel_attach_panel_gamma_property(connector);
+		}
+	}
 }
 
 enum drm_connector_status
@@ -398,7 +480,9 @@ intel_panel_detect(struct drm_device *dev)
 static int intel_panel_update_status(struct backlight_device *bd)
 {
 	struct drm_device *dev = bl_get_data(bd);
-	intel_panel_set_backlight(dev, bd->props.brightness);
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	dev_priv->set_backlight(dev, bd->props.brightness);
 	return 0;
 }
 

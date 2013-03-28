@@ -967,6 +967,9 @@ void intel_wait_for_vblank(struct drm_device *dev, int pipe)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int pipestat_reg = PIPESTAT(pipe);
+	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
+	int timeout = crtc->hwmode.vrefresh ?
+		DIV_ROUND_UP(1000, crtc->hwmode.vrefresh) : 50;
 
 	if (INTEL_INFO(dev)->gen >= 5) {
 		ironlake_wait_for_vblank(dev, pipe);
@@ -992,7 +995,7 @@ void intel_wait_for_vblank(struct drm_device *dev, int pipe)
 	/* Wait for vblank interrupt bit to set */
 	if (wait_for(I915_READ(pipestat_reg) &
 		     PIPE_VBLANK_INTERRUPT_STATUS,
-		     50))
+		     timeout))
 		DRM_DEBUG_KMS("vblank wait timed out\n");
 }
 
@@ -1045,6 +1048,39 @@ void intel_wait_for_pipe_off(struct drm_device *dev, int pipe)
 		if (time_after(jiffies, timeout))
 			WARN(1, "pipe_off wait timed out\n");
 	}
+}
+
+/*
+ * ibx_digital_port_connected - is the specified port connected?
+ * @dev_priv: i915 private structure
+ * @port: the port to test
+ *
+ * Returns true if @port is connected, false otherwise.
+ */
+bool ibx_digital_port_connected(struct drm_i915_private *dev_priv,
+				struct intel_digital_port *port)
+{
+	u32 bit;
+
+	/* XXX: IBX has different SDEISR bits */
+	if (HAS_PCH_IBX(dev_priv->dev))
+		return true;
+
+	switch(port->port) {
+	case PORT_B:
+		bit = SDE_PORTB_HOTPLUG_CPT;
+		break;
+	case PORT_C:
+		bit = SDE_PORTC_HOTPLUG_CPT;
+		break;
+	case PORT_D:
+		bit = SDE_PORTD_HOTPLUG_CPT;
+		break;
+	default:
+		return true;
+	}
+
+	return I915_READ(SDEISR) & bit;
 }
 
 static const char *state_string(bool enabled)
@@ -7511,6 +7547,60 @@ free_work:
 	return ret;
 }
 
+static void intel_sanitize_modesetting(struct drm_device *dev,
+				       int pipe, int plane)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	u32 reg, val;
+	int i;
+
+	/* Clear any frame start delays used for debugging left by the BIOS */
+	for_each_pipe(i) {
+		reg = PIPECONF(i);
+		I915_WRITE(reg, I915_READ(reg) & ~PIPECONF_FRAME_START_DELAY_MASK);
+	}
+
+	if (HAS_PCH_SPLIT(dev))
+		return;
+
+	/* Who knows what state these registers were left in by the BIOS or
+	 * grub?
+	 *
+	 * If we leave the registers in a conflicting state (e.g. with the
+	 * display plane reading from the other pipe than the one we intend
+	 * to use) then when we attempt to teardown the active mode, we will
+	 * not disable the pipes and planes in the correct order -- leaving
+	 * a plane reading from a disabled pipe and possibly leading to
+	 * undefined behaviour.
+	 */
+
+	reg = DSPCNTR(plane);
+	val = I915_READ(reg);
+
+	if ((val & DISPLAY_PLANE_ENABLE) == 0)
+		return;
+	if (!!(val & DISPPLANE_SEL_PIPE_MASK) == pipe)
+		return;
+
+	/* This display plane is active and attached to the other CPU pipe. */
+	pipe = !pipe;
+
+	/* Disable the plane and wait for it to stop reading from the pipe. */
+	intel_disable_plane(dev_priv, plane, pipe);
+	intel_disable_pipe(dev_priv, pipe);
+}
+
+static void intel_crtc_reset(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+
+	/* We need to fix up any BIOS configuration that conflicts with
+	 * our expectations.
+	 */
+	intel_sanitize_modesetting(dev, intel_crtc->pipe, intel_crtc->plane);
+}
+
 static struct drm_crtc_helper_funcs intel_helper_funcs = {
 	.mode_set_base_atomic = intel_pipe_set_base_atomic,
 	.load_lut = intel_crtc_load_lut,
@@ -8293,6 +8383,7 @@ out_config:
 }
 
 static const struct drm_crtc_funcs intel_crtc_funcs = {
+	.reset = intel_crtc_reset,
 	.cursor_set = intel_crtc_cursor_set,
 	.cursor_move = intel_crtc_cursor_move,
 	.gamma_set = intel_crtc_gamma_set,
@@ -9037,25 +9128,6 @@ static void intel_enable_pipe_a(struct drm_device *dev)
 
 }
 
-static bool
-intel_check_plane_mapping(struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = crtc->base.dev->dev_private;
-	u32 reg, val;
-
-	if (dev_priv->num_pipe == 1)
-		return true;
-
-	reg = DSPCNTR(!crtc->plane);
-	val = I915_READ(reg);
-
-	if ((val & DISPLAY_PLANE_ENABLE) &&
-	    (!!(val & DISPPLANE_SEL_PIPE_MASK) == crtc->pipe))
-		return false;
-
-	return true;
-}
-
 static void intel_sanitize_crtc(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
@@ -9065,37 +9137,6 @@ static void intel_sanitize_crtc(struct intel_crtc *crtc)
 	/* Clear any frame start delays used for debugging left by the BIOS */
 	reg = PIPECONF(crtc->cpu_transcoder);
 	I915_WRITE(reg, I915_READ(reg) & ~PIPECONF_FRAME_START_DELAY_MASK);
-
-	/* We need to sanitize the plane -> pipe mapping first because this will
-	 * disable the crtc (and hence change the state) if it is wrong. Note
-	 * that gen4+ has a fixed plane -> pipe mapping.  */
-	if (INTEL_INFO(dev)->gen < 4 && !intel_check_plane_mapping(crtc)) {
-		struct intel_connector *connector;
-		bool plane;
-
-		DRM_DEBUG_KMS("[CRTC:%d] wrong plane connection detected!\n",
-			      crtc->base.base.id);
-
-		/* Pipe has the wrong plane attached and the plane is active.
-		 * Temporarily change the plane mapping and disable everything
-		 * ...  */
-		plane = crtc->plane;
-		crtc->plane = !plane;
-		dev_priv->display.crtc_disable(&crtc->base);
-		crtc->plane = plane;
-
-		/* ... and break all links. */
-		list_for_each_entry(connector, &dev->mode_config.connector_list,
-				    base.head) {
-			if (connector->encoder->base.crtc != &crtc->base)
-				continue;
-
-			intel_connector_break_all_links(connector);
-		}
-
-		WARN_ON(crtc->active);
-		crtc->base.enabled = false;
-	}
 
 	if (dev_priv->quirks & QUIRK_PIPEA_FORCE &&
 	    crtc->pipe == PIPE_A && !crtc->active) {

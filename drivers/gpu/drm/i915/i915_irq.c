@@ -707,8 +707,10 @@ static irqreturn_t ivybridge_irq_handler(int irq, void *arg)
 			intel_opregion_gse_intr(dev);
 
 		for (i = 0; i < 3; i++) {
-			if (de_iir & (DE_PIPEA_VBLANK_IVB << (5 * i)))
+			if (de_iir & (DE_PIPEA_VBLANK_IVB << (5 * i))) {
 				drm_handle_vblank(dev, i);
+				intel_adaptive_backlight(dev, i);
+			}
 			if (de_iir & (DE_PLANEA_FLIP_DONE_IVB << (5 * i))) {
 				intel_prepare_page_flip(dev, i);
 				intel_finish_page_flip_plane(dev, i);

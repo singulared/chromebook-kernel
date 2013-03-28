@@ -423,6 +423,9 @@ int intel_ddc_get_modes(struct drm_connector *c, struct i2c_adapter *adapter);
 
 extern void intel_attach_force_audio_property(struct drm_connector *connector);
 extern void intel_attach_broadcast_rgb_property(struct drm_connector *connector);
+extern void
+intel_attach_adaptive_backlight_property(struct drm_connector *connector);
+extern void intel_attach_panel_gamma_property(struct drm_connector *connector);
 
 extern void intel_crt_init(struct drm_device *dev);
 extern void intel_hdmi_init(struct drm_device *dev,
@@ -488,9 +491,6 @@ extern void intel_pch_panel_fitting(struct drm_device *dev,
 extern u32 intel_panel_get_max_backlight(struct drm_device *dev);
 extern void intel_panel_set_backlight(struct drm_device *dev, u32 level);
 extern int intel_panel_setup_backlight(struct drm_connector *connector);
-extern void intel_panel_enable_backlight(struct drm_device *dev,
-					 enum pipe pipe);
-extern void intel_panel_disable_backlight(struct drm_device *dev);
 extern void intel_panel_destroy_backlight(struct drm_device *dev);
 extern enum drm_connector_status intel_panel_detect(struct drm_device *dev);
 
@@ -545,6 +545,9 @@ hdmi_to_dig_port(struct intel_hdmi *intel_hdmi)
 {
 	return container_of(intel_hdmi, struct intel_digital_port, hdmi);
 }
+
+bool ibx_digital_port_connected(struct drm_i915_private *dev_priv,
+				struct intel_digital_port *port);
 
 extern void intel_connector_attach_encoder(struct intel_connector *connector,
 					   struct intel_encoder *encoder);

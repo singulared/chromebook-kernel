@@ -651,7 +651,12 @@ init_vbt_defaults(struct drm_i915_private *dev_priv)
 
 	/* Default to using SSC */
 	dev_priv->lvds_use_ssc = 1;
-	dev_priv->lvds_ssc_freq = intel_bios_ssc_frequency(dev, 1);
+
+	/* Core/SandyBridge/IvyBridge use 120MHz reference clock for LVDS */
+	if (HAS_PCH_SPLIT(dev))
+		dev_priv->lvds_ssc_freq = intel_bios_ssc_frequency(dev, 0);
+	else
+		dev_priv->lvds_ssc_freq = intel_bios_ssc_frequency(dev, 1);
 	DRM_DEBUG_KMS("Set default to SSC at %dMHz\n", dev_priv->lvds_ssc_freq);
 }
 
