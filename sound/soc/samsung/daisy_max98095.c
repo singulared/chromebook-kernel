@@ -311,6 +311,11 @@ static const struct snd_soc_dapm_route daisy_audio_map[] = {
 	{"MIC2", "NULL", "Mic Jack"},
 };
 
+static const struct snd_soc_dapm_route max98089_audio_map[] = {
+	{"Mic Jack", "NULL", "MICBIAS"},
+	{"MIC2", "NULL", "Mic Jack"},
+};
+
 static const struct snd_soc_dapm_widget daisy_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
@@ -412,18 +417,13 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 		snd_soc_jack_new(codec, "HDMI Jack",
 				 SND_JACK_AVOUT, &daisy_hdmi_jack);
 
-	/* Microphone BIAS is needed to power the analog mic.
-	 * MICBIAS2 is connected to analog mic (MIC3, which is in turn
-	 * connected to MIC2 via 'External MIC') on Daisy.
-	 *
-	 * Ultimately, the following should hold:
-	 *
-	 *   Microphone in jack	    => MICBIAS2 enabled &&
-	 *			       'External Mic' = MIC2
-	 *   Microphone not in jack => MICBIAS2 disabled &&
-	 *			       'External Mic' = MIC1
-	*/
-	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	/* Microphone BIAS has to be kept on so that the mic-detection circuit
+	 * will operate correctly.
+	 */
+	if (of_machine_is_compatible("google,spring"))
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
+	else
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
 
 	snd_soc_dapm_sync(dapm);
 
@@ -534,6 +534,8 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089");
 		if (!dn)
 			return -ENODEV;
+		card->dapm_routes = max98089_audio_map;
+		card->num_dapm_routes = ARRAY_SIZE(max98089_audio_map);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++)
