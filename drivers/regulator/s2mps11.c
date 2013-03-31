@@ -24,6 +24,11 @@
 #include <linux/mfd/samsung/core.h>
 #include <linux/mfd/samsung/s2mps11.h>
 
+#define S2MPS11_CLOCK_OPMODE_MASK 	0x1
+#define S2MPS11_CLOCK_EN32KHZ_AP_SHIFT	0x0
+#define S2MPS11_CLOCK_EN32KHZ_CP_SHIFT	0x1
+#define S2MPS11_CLOCK_EN32KHZ_BT_SHIFT	0x2
+
 struct s2mps11_info {
 	struct regulator_dev *rdev[S2MPS11_REGULATOR_MAX];
 
@@ -75,6 +80,12 @@ static struct regulator_ops s2mps11_buck_ops = {
 	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
 	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
 	.set_voltage_time_sel	= regulator_set_voltage_time_sel,
+};
+
+static struct regulator_ops s2mps11_fixedvolt_ops = {
+	.is_enabled		= regulator_is_enabled_regmap,
+	.enable			= regulator_enable_regmap,
+	.disable		= regulator_disable_regmap,
 };
 
 #define regulator_desc_ldo1(num)	{		\
@@ -230,6 +241,34 @@ static struct regulator_desc regulators[] = {
 	regulator_desc_buck6_8(8),
 	regulator_desc_buck9,
 	regulator_desc_buck10,
+	{
+		.name = "EN32KHZ_AP",
+		.id = S2MPS11_AP_EN32KHZ,
+		.ops = &s2mps11_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = S2MPS11_REG_RTC_CTRL,
+		.enable_mask = S2MPS11_CLOCK_OPMODE_MASK	\
+			       << S2MPS11_CLOCK_EN32KHZ_AP_SHIFT,
+	}, {
+		.name = "EN32KHZ_CP",
+		.id = S2MPS11_CP_EN32KHZ,
+		.ops = &s2mps11_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = S2MPS11_REG_RTC_CTRL,
+		.enable_mask = S2MPS11_CLOCK_OPMODE_MASK	\
+			       << S2MPS11_CLOCK_EN32KHZ_CP_SHIFT,
+	}, {
+		.name = "EN32KHZ_BT",
+		.id = S2MPS11_BT_EN32KHZ,
+		.ops = &s2mps11_fixedvolt_ops,
+		.type = REGULATOR_VOLTAGE,
+		.owner = THIS_MODULE,
+		.enable_reg = S2MPS11_REG_RTC_CTRL,
+		.enable_mask = S2MPS11_CLOCK_OPMODE_MASK	\
+			       << S2MPS11_CLOCK_EN32KHZ_BT_SHIFT,
+	},
 };
 
 #ifdef CONFIG_OF
