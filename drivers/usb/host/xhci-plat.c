@@ -25,6 +25,14 @@ static void xhci_plat_quirks(struct device *dev, struct xhci_hcd *xhci)
 	 * dev struct in order to setup MSI
 	 */
 	xhci->quirks |= XHCI_BROKEN_MSI;
+	/*
+	 * the DesignWare USB3 controller IP sometimes returns success
+	 * on short packets, so it needs the same quirk as PantherPoint chipset.
+	 *
+	 * As it is the only existing XHCI platform driver, define the quirk
+	 * for all of them.
+	 */
+	xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
 }
 
 /* called during probe() after chip reset completes */
