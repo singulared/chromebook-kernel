@@ -457,10 +457,10 @@ static int exynos5250_asv_init(void)
 		exynos_orig_sp = (chip_id >> ORIG_SG_OFFSET) & ORIG_SG_MASK;
 		exynos_mod_sp = (chip_id >> MOD_SG_OFFSET) & MOD_SG_MASK;
 		exynos_cal_asv = exynos_orig_sp - exynos_mod_sp;
-		if (exynos_cal_asv < 0) {
-			pr_warn("Illegal ASV group: %d\n", exynos_cal_asv);
+
+		/* Treat negative calculated ASV as 0; expected and OK. */
+		if (exynos_cal_asv < 0)
 			exynos_cal_asv = 0;
-		}
 
 		exynos_result_of_asv = exynos_cal_asv;
 		pr_info("EXYNOS5250: ORIG: %d MOD: %d RESULT: %d\n",
