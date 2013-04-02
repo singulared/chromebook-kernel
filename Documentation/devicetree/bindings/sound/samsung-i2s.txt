@@ -18,6 +18,8 @@ Optional SoC Specific Properties:
   enabled or disabled based on need.
 - samsung,supports-secdai:If I2S block has a secondary FIFO and internal DMA,
   then this flag is enabled.
+- samsung,supports-tdm: If the I2S controller supports TDM, then this flag
+  must be enabled.
 - samsung,idma-addr: Internal DMA register base address of the audio
   sub system(used in secondary sound source).
 
