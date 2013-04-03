@@ -54,6 +54,7 @@
 #define EXYNOS_TMU_TRIM_TEMP_MASK	0xff
 #define EXYNOS_TMU_GAIN_SHIFT		8
 #define EXYNOS_TMU_REF_VOLTAGE_SHIFT	24
+#define EXYNOS_TMU_TRIP_EN		(1 << 12)
 #define EXYNOS_TMU_CORE_ON		3
 #define EXYNOS_TMU_CORE_OFF		2
 #define EXYNOS_TMU_DEF_CODE_TO_TEMP_OFFSET	50
@@ -565,6 +566,7 @@ static int exynos5_setup_temp_rise(struct platform_device *pdev)
 	u8 hwtrig_code, hwtrig_temp;
 	u32 rising_threshold;
 	int threshold_code;
+	bool was_enabled;
 
 	/* Write temperature code for thresholds */
 	threshold_code = temp_to_code(data, pdata->trigger_levels[0]);
@@ -585,6 +587,9 @@ static int exynos5_setup_temp_rise(struct platform_device *pdev)
 
 	rising_threshold |= (threshold_code << 16);
 
+	was_enabled = (readl(data->base + EXYNOS_TMU_REG_CONTROL) &
+		       EXYNOS_TMU_TRIP_EN) == EXYNOS_TMU_TRIP_EN;
+
 	/* On "warm" and "cold" reset, hwtrig_enable remains set
 	 * but TEMP_RISE gets cleared. :(
 	 * Value ranges copied from "62.3 Temperature Code Table"
@@ -592,7 +597,7 @@ static int exynos5_setup_temp_rise(struct platform_device *pdev)
 	 */
 	hwtrig_code = readl(data->base + EXYNOS_THD_TEMP_RISE) >> 24;
 	hwtrig_temp = code_to_temp(data, hwtrig_code);
-	if (hwtrig_temp >= 25 && hwtrig_temp <= 125
+	if (was_enabled && hwtrig_temp >= 25 && hwtrig_temp <= 125
 			&& (hwtrig_code < threshold_code)) {
 		/* Boot FW set the HW trig value.  */
 		pr_warn("Thermal: HW poweroff threshold (%d) "
@@ -716,7 +721,7 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 		con |= EXYNOS_MUX_ADDR_VALUE << EXYNOS_MUX_ADDR_SHIFT;
 
 		/* enable HW Trigger (must set multiple bits to enable) */
-		con |= 1 << 12;
+		con |= EXYNOS_TMU_TRIP_EN;
 	}
 
 	if (on) {
