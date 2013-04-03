@@ -30,6 +30,7 @@
 #include <asm/mach/time.h>
 #include <asm/smp_twd.h>
 #include <asm/sched_clock.h>
+#include <asm/arch_timer.h>
 
 #define RTC_SECONDS            0x08
 #define RTC_SHADOW_SECONDS     0x0c
@@ -241,8 +242,6 @@ static void __init tegra20_init_timer(void)
 		WARN(1, "Unknown clock rate");
 	}
 
-	setup_sched_clock(tegra_read_sched_clock, 32, 1000000);
-
 	if (clocksource_mmio_init(timer_reg_base + TIMERUS_CNTR_1US,
 		"timer_us", 1000000, 300, 32, clocksource_mmio_readl_up)) {
 		pr_err("Failed to register clocksource\n");
@@ -262,6 +261,12 @@ static void __init tegra20_init_timer(void)
 #ifdef CONFIG_HAVE_ARM_TWD
 	twd_local_timer_of_register();
 #endif
+
+	if (arch_timer_of_register())
+		setup_sched_clock(tegra_read_sched_clock, 32, 1000000);
+	else
+		arch_timer_sched_clock_init();
+
 	register_persistent_clock(NULL, tegra_read_persistent_clock);
 }
 CLOCKSOURCE_OF_DECLARE(tegra20, "nvidia,tegra20-timer", tegra20_init_timer);
