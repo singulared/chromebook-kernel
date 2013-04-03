@@ -70,6 +70,7 @@ static const struct of_device_id tegra_dt_irq_match[] __initconst = {
 void __init tegra_dt_init_irq(void)
 {
 	of_clk_init(NULL);
+	tegra_pmc_init();
 	tegra_init_irq();
 	of_irq_init(tegra_dt_irq_match);
 	tegra_legacy_irq_syscore_init();
@@ -110,7 +111,6 @@ void __init tegra_init_early(void)
 	tegra_apb_io_init();
 	tegra_init_fuse();
 	tegra_init_cache();
-	tegra_pmc_init();
 	tegra_powergate_init();
 	tegra_hotplug_init();
 }
