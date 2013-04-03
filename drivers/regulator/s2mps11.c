@@ -420,6 +420,7 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 		config.regmap = iodev->regmap;
 		config.init_data = pdata->regulators[i].initdata;
 		config.driver_data = s2mps11;
+		config.of_node = pdata->regulators[i].reg_node;
 
 		s2mps11->rdev[i] = regulator_register(&regulators[id], &config);
 		if (IS_ERR(s2mps11->rdev[i])) {
