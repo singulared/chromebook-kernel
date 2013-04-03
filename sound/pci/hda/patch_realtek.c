@@ -204,6 +204,7 @@ struct alc_spec {
 	unsigned int inv_dmic_fixup:1; /* has inverted digital-mic workaround */
 	unsigned int inv_dmic_muted:1; /* R-ch of inv d-mic is muted? */
 	unsigned int no_primary_hp:1; /* Don't prefer HP pins to speaker pins */
+	unsigned int ext_mic_gated:1; /* if the ext mic is gated by hp */
 
 	/* auto-mute control */
 	int automute_mode;
@@ -593,6 +594,8 @@ static void call_update_outputs(struct hda_codec *codec)
 		update_outputs(codec);
 }
 
+static void alc_mic_automute(struct hda_codec *codec, struct hda_jack_tbl *jack);
+
 /* standard HP-automute helper */
 static void alc_hp_automute(struct hda_codec *codec, struct hda_jack_tbl *jack)
 {
@@ -601,6 +604,10 @@ static void alc_hp_automute(struct hda_codec *codec, struct hda_jack_tbl *jack)
 	spec->hp_jack_present =
 		detect_jacks(codec, ARRAY_SIZE(spec->autocfg.hp_pins),
 			     spec->autocfg.hp_pins);
+	/* If the ext mic is gated by hp, the ext mic plugged state may
+	 * change when hp plugged state changes. */
+	if (spec->ext_mic_gated)
+		alc_mic_automute(codec, jack);
 	if (!spec->detect_hp || (!spec->automute_speaker && !spec->automute_lo))
 		return;
 	call_update_outputs(codec);
@@ -6062,9 +6069,11 @@ static void alc271_hp_gate_mic_jack(struct hda_codec *codec,
 {
 	struct alc_spec *spec = codec->spec;
 
-	if (action == ALC_FIXUP_ACT_PROBE)
+	if (action == ALC_FIXUP_ACT_PROBE) {
+		spec->ext_mic_gated = 1;
 		snd_hda_jack_set_gating_jack(codec, spec->ext_mic_pin,
 					     spec->autocfg.hp_pins[0]);
+	}
 }
 
 enum {
