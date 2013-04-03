@@ -189,6 +189,7 @@ struct alc_spec {
 	unsigned int vol_in_capsrc:1; /* use capsrc volume (ADC has no vol) */
 	unsigned int parse_flags; /* passed to snd_hda_parse_pin_defcfg() */
 	unsigned int shared_mic_hp:1; /* HP/Mic-in sharing */
+	unsigned int ext_mic_gated:1; /* if the ext mic is gated by hp */
 
 	/* auto-mute control */
 	int automute_mode;
@@ -658,9 +659,15 @@ static void alc_mic_automute(struct hda_codec *codec)
 /* handle the specified unsol action (ALC_XXX_EVENT) */
 static void alc_exec_unsol_event(struct hda_codec *codec, int action)
 {
+	struct alc_spec *spec = codec->spec;
+
 	switch (action) {
 	case ALC_HP_EVENT:
 		alc_hp_automute(codec);
+		/* If the ext mic is gated by hp, the ext mic plugged state may
+		 * change when hp plugged state changes. */
+		if (spec->ext_mic_gated)
+			alc_mic_automute(codec);
 		break;
 	case ALC_FRONT_EVENT:
 		alc_line_automute(codec);
@@ -5997,9 +6004,11 @@ static void alc271_hp_gate_mic_jack(struct hda_codec *codec,
 {
 	struct alc_spec *spec = codec->spec;
 
-	if (action == ALC_FIXUP_ACT_PROBE)
+	if (action == ALC_FIXUP_ACT_PROBE) {
+		spec->ext_mic_gated = 1;
 		snd_hda_jack_set_gating_jack(codec, spec->ext_mic_pin,
 					     spec->autocfg.hp_pins[0]);
+	}
 }
 
 enum {
