@@ -35,6 +35,7 @@
 #include "cpuidle.h"
 #include "fuse.h"
 #include "iomap.h"
+#include "irq.h"
 #include "pmc.h"
 #include "apbio.h"
 #include "sleep.h"
@@ -71,6 +72,7 @@ void __init tegra_dt_init_irq(void)
 	of_clk_init(NULL);
 	tegra_init_irq();
 	of_irq_init(tegra_dt_irq_match);
+	tegra_legacy_irq_syscore_init();
 }
 #endif
 
