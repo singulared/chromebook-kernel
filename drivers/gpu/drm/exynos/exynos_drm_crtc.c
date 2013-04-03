@@ -143,9 +143,6 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
 			      x, y, crtc_w, crtc_h);
 
-	plane->crtc = crtc;
-	plane->fb = crtc->fb;
-
 	exynos_drm_fn_encoder(crtc, &pipe, exynos_drm_encoder_crtc_pipe);
 
 	return 0;
@@ -444,6 +441,7 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 	}
 
 	crtc = &exynos_crtc->drm_crtc;
+	exynos_crtc->plane->crtc = crtc;
 
 	private->crtc[nr] = crtc;
 
