@@ -124,24 +124,8 @@ static unsigned long samsung_pll35xx_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)fvco;
 }
 
-/* todo: implement pl35xx clock round rate operation */
-static long samsung_pll35xx_round_rate(struct clk_hw *hw,
-				unsigned long drate, unsigned long *prate)
-{
-	return -ENOTSUPP;
-}
-
-/* todo: implement pl35xx clock set rate */
-static int samsung_pll35xx_set_rate(struct clk_hw *hw, unsigned long drate,
-				unsigned long prate)
-{
-	return -ENOTSUPP;
-}
-
 static const struct clk_ops samsung_pll35xx_clk_ops = {
 	.recalc_rate = samsung_pll35xx_recalc_rate,
-	.round_rate = samsung_pll35xx_round_rate,
-	.set_rate = samsung_pll35xx_set_rate,
 };
 
 struct clk * __init samsung_clk_register_pll35xx(const char *name,
@@ -219,24 +203,8 @@ static unsigned long samsung_pll36xx_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)fvco;
 }
 
-/* todo: implement pl36xx clock round rate operation */
-static long samsung_pll36xx_round_rate(struct clk_hw *hw,
-				unsigned long drate, unsigned long *prate)
-{
-	return -ENOTSUPP;
-}
-
-/* todo: implement pl36xx clock set rate */
-static int samsung_pll36xx_set_rate(struct clk_hw *hw, unsigned long drate,
-				unsigned long prate)
-{
-	return -ENOTSUPP;
-}
-
 static const struct clk_ops samsung_pll36xx_clk_ops = {
 	.recalc_rate = samsung_pll36xx_recalc_rate,
-	.round_rate = samsung_pll36xx_round_rate,
-	.set_rate = samsung_pll36xx_set_rate,
 };
 
 struct clk * __init samsung_clk_register_pll36xx(const char *name,
@@ -314,24 +282,8 @@ static unsigned long samsung_pll45xx_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)fvco;
 }
 
-/* todo: implement pl45xx clock round rate operation */
-static long samsung_pll45xx_round_rate(struct clk_hw *hw,
-				unsigned long drate, unsigned long *prate)
-{
-	return -ENOTSUPP;
-}
-
-/* todo: implement pl45xx clock set rate */
-static int samsung_pll45xx_set_rate(struct clk_hw *hw, unsigned long drate,
-				unsigned long prate)
-{
-	return -ENOTSUPP;
-}
-
 static const struct clk_ops samsung_pll45xx_clk_ops = {
 	.recalc_rate = samsung_pll45xx_recalc_rate,
-	.round_rate = samsung_pll45xx_round_rate,
-	.set_rate = samsung_pll45xx_set_rate,
 };
 
 struct clk * __init samsung_clk_register_pll45xx(const char *name,
@@ -417,24 +369,8 @@ static unsigned long samsung_pll46xx_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)fvco;
 }
 
-/* todo: implement pl46xx clock round rate operation */
-static long samsung_pll46xx_round_rate(struct clk_hw *hw,
-				unsigned long drate, unsigned long *prate)
-{
-	return -ENOTSUPP;
-}
-
-/* todo: implement pl46xx clock set rate */
-static int samsung_pll46xx_set_rate(struct clk_hw *hw, unsigned long drate,
-				unsigned long prate)
-{
-	return -ENOTSUPP;
-}
-
 static const struct clk_ops samsung_pll46xx_clk_ops = {
 	.recalc_rate = samsung_pll46xx_recalc_rate,
-	.round_rate = samsung_pll46xx_round_rate,
-	.set_rate = samsung_pll46xx_set_rate,
 };
 
 struct clk * __init samsung_clk_register_pll46xx(const char *name,
@@ -516,24 +452,8 @@ static unsigned long samsung_pll2550x_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)fvco;
 }
 
-/* todo: implement pl2550x clock round rate operation */
-static long samsung_pll2550x_round_rate(struct clk_hw *hw,
-				unsigned long drate, unsigned long *prate)
-{
-	return -ENOTSUPP;
-}
-
-/* todo: implement pl2550x clock set rate */
-static int samsung_pll2550x_set_rate(struct clk_hw *hw, unsigned long drate,
-				unsigned long prate)
-{
-	return -ENOTSUPP;
-}
-
 static const struct clk_ops samsung_pll2550x_clk_ops = {
 	.recalc_rate = samsung_pll2550x_recalc_rate,
-	.round_rate = samsung_pll2550x_round_rate,
-	.set_rate = samsung_pll2550x_set_rate,
 };
 
 struct clk * __init samsung_clk_register_pll2550x(const char *name,
