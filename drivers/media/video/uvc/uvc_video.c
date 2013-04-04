@@ -1611,7 +1611,7 @@ static int uvc_init_video(struct uvc_streaming *stream, gfp_t gfp_flags)
 
 			/* Check if the bandwidth is high enough. */
 			psize = uvc_endpoint_max_bpi(stream->dev->udev, ep);
-			if (psize >= bandwidth && psize <= best_psize) {
+			if (psize >= bandwidth && psize < best_psize) {
 				altsetting = i;
 				best_psize = psize;
 				best_ep = ep;
