@@ -16,12 +16,27 @@
 	model = "Google Snow";
 	compatible = "google,snow", "samsung,exynos5250";
 
+	pinctrl@11400000 {
+		sd3_clk: sd3-clk {
+			samsung,pin-drv = <0>;
+		};
+
+		sd3_cmd: sd3-cmd {
+			samsung,pin-pud = <3>;
+			samsung,pin-drv = <0>;
+		};
+
+		sd3_bus4: sd3-bus-width4 {
+			samsung,pin-drv = <0>;
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
 		lid-switch {
 			label = "Lid";
-			gpios = <&gpx3 5 0 0x10000 0>;
+			gpios = <&gpx3 5 1>;
 			linux,input-type = <5>; /* EV_SW */
 			linux,code = <0>; /* SW_LID */
 			debounce-interval = <1>;
@@ -38,24 +53,21 @@
 	 * reduce EMI.
 	 */
 	dwmmc3@12230000 {
-		slot@0 {
-			gpios = <&gpc4 0 2 0 0>, <&gpc4 1 2 3 0>,
-				<&gpc4 3 2 3 0>, <&gpc4 4 2 3 0>,
-				<&gpc4 5 2 3 0>, <&gpc4 6 2 3 0>;
-		};
+		pinctrl-names = "default";
+		pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_bus4>;
 	};
 
 	usb@12000000 {
-		samsung,vbus-gpio = <&gpx2 7 1 3 3>;
+		samsung,vbus-gpio = <&gpx2 7 0>;
 		status = "okay";
 	};
 
 	usbphy@12100000 {
-		samsung,phyclk-gpio = <&gpy1 1 1 0 3>;
+		samsung,phyclk-gpio = <&gpy1 1 0>;
 	};
 
 	usb@12110000 {
-		samsung,vbus-gpio = <&gpx1 1 1 3 3>;
+		samsung,vbus-gpio = <&gpx1 1 0>;
 		status = "okay";
 	};
 
@@ -64,7 +76,7 @@
 	};
 
 	hdmi {
-		hpd-gpio = <&gpx3 7 0xf 1 3>;
+		hpd-gpio = <&gpx3 7 0>;
 	};
 
 	lcd_fimd0: lcd_panel0 {
@@ -92,166 +104,9 @@
 		samsung,lane-count = <2>;
 	};
 
-	i2s_0: i2s@03830000 {
-		gpios = <&gpz 0 2 0 0>, <&gpz 1 2 0 0>, <&gpz 2 2 0 0>,
-			<&gpz 3 2 0 0>, <&gpz 4 2 0 0>, <&gpz 5 2 0 0>,
-			<&gpz 6 2 0 0>;
-	};
-
 	sound {
-		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
-		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
-	};
-
-	gpio-controllers {
-		gpa0: gpio-controller@11400000 {
-			powerdown-settings = <6 6 6 6 3 3 2 2>;
-		};
-
-		gpa1: gpio-controller@11400020 {
-			powerdown-settings = <3 3 2 2 3 3>;
-		};
-
-		gpa2: gpio-controller@11400040 {
-			powerdown-settings = <2 2 2 2 3 2 2 2>;
-		};
-
-		gpb0: gpio-controller@11400060 {
-			powerdown-settings = <3 3 3 3 3>;
-		};
-
-		gpb1: gpio-controller@11400080 {
-			powerdown-settings = <3 3 3 3 3>;
-		};
-
-		gpb2: gpio-controller@114000A0 {
-			powerdown-settings = <3 3 2 2>;
-		};
-
-		gpb3: gpio-controller@114000C0 {
-			powerdown-settings = <2 2 2 2>;
-		};
-
-		gpc0: gpio-controller@114000E0 {
-			powerdown-settings = <6 2 2 2 2 2 2>;
-		};
-
-		gpc1: gpio-controller@11400100 {
-			powerdown-settings = <2 2 2 2>;
-		};
-
-		gpc2: gpio-controller@11400120 {
-			powerdown-settings = <3 1 3 3 3 3 3>;
-		};
-
-		gpc3: gpio-controller@11400140 {
-			powerdown-settings = <6 2 1 2 2 2 2>;
-		};
-
-		gpc4: gpio-controller@114002E0 {
-			powerdown-settings = <6 2 3 2 2 2 2>;
-		};
-
-		gpd0: gpio-controller@11400160 {
-			powerdown-settings = <6 6 3 3>;
-		};
-
-		gpd1: gpio-controller@11400180 {
-			powerdown-settings = <6 6 6 3 3 6 1 1>;
-		};
-
-		gpy0: gpio-controller@114001A0 {
-			powerdown-settings = <3 3 6 3 3 3>;
-		};
-
-		gpy1: gpio-controller@114001C0 {
-			powerdown-settings = <5 3 3 3>;
-		};
-
-		gpy2: gpio-controller@114001E0 {
-			powerdown-settings = <3 3 3 3 3 2>;
-		};
-
-		gpy3: gpio-controller@11400200 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpy4: gpio-controller@11400220 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpy5: gpio-controller@11400240 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpy6: gpio-controller@11400260 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		/* gpx0: No powerdown mode, uses active mode on suspend */
-		/* gpx1: No powerdown mode, uses active mode on suspend */
-		/* gpx2: No powerdown mode, uses active mode on suspend */
-		/* gpx3: No powerdown mode, uses active mode on suspend */
-
-		gpe0: gpio-controller@13400000 {
-			powerdown-settings = <5 3 3 3 2 2 3 3>;
-		};
-
-		gpe1: gpio-controller@13400020 {
-			powerdown-settings = <5 3>;
-		};
-
-		gpf0: gpio-controller@13400040 {
-			powerdown-settings = <3 3 1 2>;
-		};
-
-		gpf1: gpio-controller@13400060 {
-			powerdown-settings = <3 3 3 3>;
-		};
-
-		gpg0: gpio-controller@13400080 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpg1: gpio-controller@134000A0 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpg2: gpio-controller@134000C0 {
-			powerdown-settings = <3 3>;
-		};
-
-		gph0: gpio-controller@134000E0 {
-			powerdown-settings = <3 3 3 3>;
-		};
-
-		gph1: gpio-controller@13400100 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpv0: gpio-controller@10D10000 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpv1: gpio-controller@10D10020 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpv2: gpio-controller@10D10040 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpv3: gpio-controller@10D10060 {
-			powerdown-settings = <3 3 3 3 3 3 3 3>;
-		};
-
-		gpv4: gpio-controller@10D10080 {
-			powerdown-settings = <3 3>;
-		};
-
-		gpz: gpio-controller@03860000 {
-			powerdown-settings = <6 3 6 6 6 3 3>;
-		};
+		samsung,mic-det-gpios = <&gpx2 0 1>;
+		samsung,hp-det-gpios = <&gpx2 2 0>;
 	};
 
 	i2c@12C90000 {
@@ -270,16 +125,16 @@
 		 * driver bugs are fixed.
 		 */
 		samsung,wait-free-us = <500000>;
-		samsung,arbitration-gpios = <&gpf0 3 1 0 0>,
-			<&gpe0 4 0 3 0>;
+		samsung,arbitration-gpios = <&gpf0 3 0>,
+			<&gpe0 4 0>;
 	};
 
 	i2c@12CD0000 {
 		ptn3460-bridge@20 {
 			compatible = "nxp,ptn3460";
 			reg = <0x20>;
-			powerdown-gpio = <&gpy2 5 1 0 0>;
-			reset-gpio = <&gpx1 5 1 0 0>;
+			powerdown-gpio = <&gpy2 5 0>;
+			reset-gpio = <&gpx1 5 0>;
 			edid-emulation = <5>;
 		};
 	};
