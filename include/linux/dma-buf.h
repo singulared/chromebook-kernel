@@ -116,6 +116,7 @@ struct dma_buf_ops {
  * @attachments: list of dma_buf_attachment that denotes all devices attached.
  * @ops: dma_buf_ops associated with this buffer object.
  * @exp_name: name of the exporter; useful for debugging.
+ * @list_node: node for dma_buf accounting and debugging.
  * @priv: exporter specific private data for this buffer object.
  */
 struct dma_buf {
@@ -131,6 +132,7 @@ struct dma_buf {
 	unsigned vmapping_counter;
 	void *vmap_ptr;
 	const char *exp_name;
+	struct list_head list_node;
 	void *priv;
 };
 
@@ -215,5 +217,6 @@ int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 		 unsigned long);
 void *dma_buf_vmap(struct dma_buf *);
 void dma_buf_vunmap(struct dma_buf *, void *vaddr);
-
+int dma_buf_debugfs_create_file(const char *name,
+				int (*write)(struct seq_file *));
 #endif /* __DMA_BUF_H__ */
