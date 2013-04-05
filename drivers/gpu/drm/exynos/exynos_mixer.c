@@ -52,6 +52,12 @@
 #define MIXER_WIN_NR		3
 #define MIXER_DEFAULT_WIN	0
 
+enum toggle_3d_workaround_state {
+	TOGGLE_3D_STATE_ACTIVE,
+	TOGGLE_3D_STATE_ESTABLISHED,
+	TOGGLE_3D_STATE_DISABLED,
+};
+
 struct hdmi_win_data {
 	dma_addr_t		dma_addr;
 	dma_addr_t		chroma_dma_addr;
@@ -99,6 +105,7 @@ struct mixer_context {
 	struct hdmi_win_data	win_data[MIXER_WIN_NR];
 	unsigned long		event_flags;
 	int			previous_dxy;
+	enum toggle_3d_workaround_state	toggle_3d_state;
 };
 
 struct mixer_scan_range {
@@ -155,6 +162,11 @@ struct mixer_scan_range scan_ranges[] = {
 		.min_res = { 464, 481 },
 		.max_res = { 720, 576 },
 		.mode_type = EXYNOS_MIXER_MODE_SD_PAL,
+	},
+	{
+		.min_res = { 800, 600 },
+		.max_res = { 800, 600 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
 	},
 	{
 		.min_res = { 1024, 0 },
@@ -224,6 +236,25 @@ static inline void mixer_reg_writemask(struct mixer_resources *res,
 
 	val = (val & mask) | (old & ~mask);
 	writel(val, res->mixer_regs + reg_id);
+}
+
+static inline void mixer_workaround_action(struct mixer_context *mctx)
+{
+	struct mixer_resources *res = &mctx->mixer_res;
+
+	switch (mctx->toggle_3d_state) {
+	case TOGGLE_3D_STATE_ACTIVE:
+		mixer_reg_writemask(res, MXR_TVOUT_CFG,
+			MXR_STATUS_3D_TWO_PATH, MXR_TVOUT_CFG_MASK);
+		mctx->toggle_3d_state = TOGGLE_3D_STATE_ESTABLISHED;
+		break;
+	case TOGGLE_3D_STATE_ESTABLISHED:
+		mixer_reg_writemask(res, MXR_TVOUT_CFG,
+			MXR_STATUS_3D_ONE_PATH, MXR_TVOUT_CFG_MASK);
+		break;
+	default:
+		break;
+	}
 }
 
 enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height)
@@ -771,10 +802,14 @@ static void mixer_graph_buffer(struct mixer_context *mctx, int win)
 
 	mixer_cfg_scan(mctx, mode_width, mode_height);
 
-	/* Workaround 4 implementation for 1440x900 resolution support */
-	if (res->is_soc_exynos5) {
+	if (res->is_soc_exynos5 && win == MIXER_DEFAULT_WIN) {
+		/* Workaround 4:implementation of 1440x900 resolution */
 		if (mode_width == 1440 && mode_height == 900)
 			mixer_set_layer_offset(mctx, 224);
+
+		/* Workaround 3:implementation of 800x600 resolution */
+		if (mode_width == 800 && mode_height == 600)
+			mixer_set_layer_offset(mctx, 32);
 	}
 
 	mixer_cfg_rgb_fmt(mctx, mode_height);
@@ -862,10 +897,10 @@ static void mixer_win_mode_set(void *ctx,
 	}
 
 	DRM_DEBUG_KMS("set [%d]x[%d] at (%d,%d) to [%d]x[%d] at (%d,%d)\n",
-				 overlay->fb_width, overlay->fb_height,
-				 overlay->fb_x, overlay->fb_y,
-				 overlay->crtc_width, overlay->crtc_height,
-				 overlay->crtc_x, overlay->crtc_y);
+				overlay->fb_width, overlay->fb_height,
+				overlay->fb_x, overlay->fb_y,
+				overlay->crtc_width, overlay->crtc_height,
+				overlay->crtc_x, overlay->crtc_y);
 
 	win = overlay->zpos;
 	if (win == DEFAULT_ZPOS)
@@ -892,6 +927,11 @@ static void mixer_win_mode_set(void *ctx,
 	win_data->fb_y = overlay->fb_y;
 	win_data->fb_width = overlay->fb_pitch / (overlay->bpp >> 3);
 	win_data->fb_height = overlay->fb_height;
+
+	if (win_data->mode_width == 800 &&
+			win_data->mode_height == 600 &&
+			mctx->toggle_3d_state != TOGGLE_3D_STATE_ESTABLISHED)
+		mctx->toggle_3d_state = TOGGLE_3D_STATE_ACTIVE;
 
 	win_data->mode_width = overlay->mode_width;
 	win_data->mode_height = overlay->mode_height;
@@ -1014,6 +1054,8 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 		/* Bail out if a layer update is pending */
 		if (mixer_get_layer_update_count(mctx))
 			goto out;
+
+		mixer_workaround_action(mctx);
 
 		for (i = 0; i < MIXER_WIN_NR; i++)
 			mctx->win_data[i].updated = false;
@@ -1147,6 +1189,7 @@ static void mixer_resource_poweroff(struct mixer_context *mctx)
 		clk_disable(res->sclk_mixer);
 	}
 	mixer_win_reset(mctx);
+	mctx->toggle_3d_state = TOGGLE_3D_STATE_DISABLED;
 	mctx->is_mixer_powered_on = false;
 }
 
@@ -1420,6 +1463,11 @@ static int __devinit mixer_probe(struct platform_device *pdev)
 		goto fail;
 
 	mctx->is_mixer_powered_on = false;
+	/* Initialize the mixer state as disabled
+	 * It shall be updated in the mode set
+	 */
+	mctx->toggle_3d_state = TOGGLE_3D_STATE_DISABLED;
+
 	pm_runtime_enable(dev);
 
 	exynos_display_attach_controller(EXYNOS_DRM_DISPLAY_TYPE_MIXER,

@@ -1894,6 +1894,14 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 				m->crtc_htotal - m->crtc_hdisplay - 0xe0);
 			hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay + 0xe0);
 		}
+
+		/* Workaround 3 implementation for 800x600 resolution support */
+		if (m->hdisplay == 800 && m->vdisplay == 600
+					&& m->clock == 40000) {
+			hdmi_set_reg(tg->hact_st, 2,
+				m->crtc_htotal - m->crtc_hdisplay - 0x20);
+			hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay + 0x20);
+		}
 	}
 }
 

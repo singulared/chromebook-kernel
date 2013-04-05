@@ -77,6 +77,9 @@
 #define MXR_STATUS_SYNC_ENABLE		(1 << 2)
 #define MXR_STATUS_REG_RUN		(1 << 0)
 
+/* bits for MXR_TVOUT_CFG */
+#define MXR_TVOUT_CFG_MASK		0x3F
+
 /* bits for MXR_CFG */
 #define MXR_CFG_RGB601_0_255		(0 << 9)
 #define MXR_CFG_RGB601_16_235		(1 << 9)
@@ -143,6 +146,19 @@
 #define MXR_CFG_LAYER_UPDATE_COUNT0	29
 #define MXR_CFG_LAYER_UPDATE_COUNT_MASK	((1 << 29) | (1 << 30))
 #define MXR_STATUS_SOFT_RESET           (1 << 8)
-
+/*
+ * Enable:
+ *	Side by Side Frame Packing
+ *	Stereoscopic format
+ */
+#define MXR_STATUS_3D_ONE_PATH           ((1 << 4) | (1 << 1) | (1 << 0))
+/*
+ * Enable:
+ *	Side by Side Frame Packing
+ *	3D Two path mode
+ *	Stereoscopic format
+ */
+#define MXR_STATUS_3D_TWO_PATH           ((1 << 4) | (1 << 2) | \
+						(1 << 1) | (1 << 0))
 #endif /* SAMSUNG_REGS_MIXER_H */
 
