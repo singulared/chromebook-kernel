@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Infineon Technologies
+ * Copyright (C) 2012,2013 Infineon Technologies
  *
  * Authors:
  * Peter Huewe <peter.huewe@infineon.com>
@@ -26,6 +26,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 #include "tpm.h"
 
 /* max. buffer size supported by our TPM */
@@ -57,12 +58,23 @@
 
 /* expected value for DIDVID register */
 #define TPM_TIS_I2C_DID_VID 0x000b15d1L
+#define TPM_TIS_I2C_DID_VID_9635 0xd1150b00L
+#define TPM_TIS_I2C_DID_VID_9645 0x001a15d1L
+
+enum i2c_chip_type {
+	SLB9635,
+	SLB9645,
+	UNKNOWN,
+};
 
 /* Structure to store I2C TPM specific stuff */
 struct tpm_inf_dev {
 	struct i2c_client *client;
 	u8 buf[TPM_BUFSIZE + sizeof(u8)]; /* max. buffer size + addr */
 	struct tpm_chip *chip;
+	enum i2c_chip_type chip_type;
+	bool powered_while_suspended;
+	struct work_struct init_work;
 };
 
 static struct tpm_inf_dev tpm_dev;
@@ -92,39 +104,62 @@ static int iic_tpm_read(u8 addr, u8 *buffer, size_t len)
 
 	struct i2c_msg msg1 = { tpm_dev.client->addr, 0, 1, &addr };
 	struct i2c_msg msg2 = { tpm_dev.client->addr, I2C_M_RD, len, buffer };
+	struct i2c_msg msgs[] = {msg1, msg2};
 
-	int rc;
+	int rc = 0;
 	int count;
+
+	if (work_pending(&tpm_dev.init_work))
+		flush_work(&tpm_dev.init_work);
 
 	/* Lock the adapter for the duration of the whole sequence. */
 	if (!tpm_dev.client->adapter->algo->master_xfer)
 		return -EOPNOTSUPP;
 	i2c_lock_adapter(tpm_dev.client->adapter);
 
-	for (count = 0; count < MAX_COUNT; count++) {
-		rc = __i2c_transfer(tpm_dev.client->adapter, &msg1, 1);
-		if (rc > 0)
-			break;	/* break here to skip sleep */
+	if (tpm_dev.chip_type == SLB9645) {
+		/* use a combined read for newer chips
+		 * unfortunately the smbus functions are not suitable due to
+		 * the 32 byte limit of the smbus.
+		 * retries should usually not be needed, but are kept just to
+		 * be on the safe side.
+		*/
+		for (count = 0; count < MAX_COUNT; count++) {
+			rc = __i2c_transfer(tpm_dev.client->adapter, msgs, 2);
+			if (rc > 0)
+				break;	/* break here to skip sleep */
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+		}
+	} else {
+		/* slb9635 protocol should work in all cases */
+		for (count = 0; count < MAX_COUNT; count++) {
+			rc = __i2c_transfer(tpm_dev.client->adapter, &msg1, 1);
+			if (rc > 0)
+				break;	/* break here to skip sleep */
 
-		usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
-	}
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+		}
 
-	if (rc <= 0)
-		goto out;
+		if (rc <= 0)
+			goto out;
 
-	/* After the TPM has successfully received the register address it needs
-	 * some time, thus we're sleeping here again, before retrieving the data
-	 */
-	for (count = 0; count < MAX_COUNT; count++) {
-		usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
-		rc = __i2c_transfer(tpm_dev.client->adapter, &msg2, 1);
-		if (rc > 0)
-			break;
-
+		/* After the TPM has successfully received the register address
+		 * it needs some time, thus we're sleeping here again, before
+		 * retrieving the data
+		 */
+		for (count = 0; count < MAX_COUNT; count++) {
+			usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+			rc = __i2c_transfer(tpm_dev.client->adapter, &msg2, 1);
+			if (rc > 0)
+				break;
+		}
 	}
 
 out:
 	i2c_unlock_adapter(tpm_dev.client->adapter);
+	/* take care of 'guard time' */
+	usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
+
 	if (rc <= 0)
 		return -EIO;
 
@@ -140,6 +175,9 @@ static int iic_tpm_write_generic(u8 addr, u8 *buffer, size_t len,
 
 	struct i2c_msg msg1 = { tpm_dev.client->addr, 0, len + 1, tpm_dev.buf };
 
+	if (work_pending(&tpm_dev.init_work))
+		flush_work(&tpm_dev.init_work);
+
 	if (len > TPM_BUFSIZE)
 		return -EINVAL;
 
@@ -154,16 +192,19 @@ static int iic_tpm_write_generic(u8 addr, u8 *buffer, size_t len,
 	/*
 	 * NOTE: We have to use these special mechanisms here and unfortunately
 	 * cannot rely on the standard behavior of i2c_transfer.
+	 * Even for newer chips the smbus functions are not
+	 * suitable due to the 32 byte limit of the smbus.
 	 */
 	for (count = 0; count < max_count; count++) {
 		rc = __i2c_transfer(tpm_dev.client->adapter, &msg1, 1);
 		if (rc > 0)
 			break;
-
 		usleep_range(sleep_low, sleep_hi);
 	}
 
 	i2c_unlock_adapter(tpm_dev.client->adapter);
+	/* take care of 'guard time' */
+	usleep_range(SLEEP_DURATION_LOW, SLEEP_DURATION_HI);
 	if (rc <= 0)
 		return -EIO;
 
@@ -283,11 +324,18 @@ static int request_locality(struct tpm_chip *chip, int loc)
 static u8 tpm_tis_i2c_status(struct tpm_chip *chip)
 {
 	/* NOTE: since I2C read may fail, return 0 in this case --> time-out */
-	u8 buf;
-	if (iic_tpm_read(TPM_STS(chip->vendor.locality), &buf, 1) < 0)
-		return 0;
-	else
-		return buf;
+	u8 buf = 0xFF;
+	u8 i = 0;
+
+	do {
+		if (iic_tpm_read(TPM_STS(chip->vendor.locality), &buf, 1) < 0)
+			return 0;
+
+		i++;
+	/* if locallity is set STS should not be 0xFF */
+	} while ((buf == 0xFF) && i < 10);
+
+	return buf;
 }
 
 static void tpm_tis_i2c_ready(struct tpm_chip *chip)
@@ -328,7 +376,7 @@ static int wait_for_stat(struct tpm_chip *chip, u8 mask, unsigned long timeout,
 
 	/* check current status */
 	*status = tpm_tis_i2c_status(chip);
-	if ((*status & mask) == mask)
+	if ((*status != 0xFF) && (*status & mask) == mask)
 		return 0;
 
 	stop = jiffies + timeout;
@@ -372,7 +420,6 @@ static int recv_data(struct tpm_chip *chip, u8 *buf, size_t count)
 		/* avoid endless loop in case of broken HW */
 		if (retries > MAX_COUNT_LONG)
 			return -EIO;
-
 	}
 	return size;
 }
@@ -480,7 +527,6 @@ static int tpm_tis_i2c_send(struct tpm_chip *chip, u8 *buf, size_t len)
 			rc = -EIO;
 			goto out_err;
 		}
-
 	}
 
 	/* write last byte */
@@ -555,6 +601,11 @@ static struct tpm_vendor_specific tpm_tis_i2c = {
 	.miscdev.fops = &tis_ops,
 };
 
+static void tpm_tis_i2c_selftest(struct work_struct *work)
+{
+	tpm_do_selftest(tpm_dev.chip);
+}
+
 static int tpm_tis_i2c_init(struct device *dev)
 {
 	u32 vendor;
@@ -563,6 +614,7 @@ static int tpm_tis_i2c_init(struct device *dev)
 
 	chip = tpm_register_hardware(dev, &tpm_tis_i2c);
 	if (!chip) {
+		dev_err(dev, "could not register hardware\n");
 		rc = -ENODEV;
 		goto out_err;
 	}
@@ -577,20 +629,24 @@ static int tpm_tis_i2c_init(struct device *dev)
 	chip->vendor.timeout_d = msecs_to_jiffies(TIS_SHORT_TIMEOUT);
 
 	if (request_locality(chip, 0) != 0) {
+		dev_err(dev, "could not request locality\n");
 		rc = -ENODEV;
 		goto out_vendor;
 	}
 
 	/* read four bytes from DID_VID register */
 	if (iic_tpm_read(TPM_DID_VID(0), (u8 *)&vendor, 4) < 0) {
+		dev_err(dev, "could not read vendor id\n");
 		rc = -EIO;
 		goto out_release;
 	}
 
-	/* create DID_VID register value, after swapping to little-endian */
-	vendor = be32_to_cpu((__be32) vendor);
-
-	if (vendor != TPM_TIS_I2C_DID_VID) {
+	if (vendor == TPM_TIS_I2C_DID_VID_9645) {
+		tpm_dev.chip_type = SLB9645;
+	} else if (vendor == TPM_TIS_I2C_DID_VID_9635) {
+		tpm_dev.chip_type = SLB9635;
+	} else {
+		dev_err(dev, "vendor id did not match! ID was %08x\n", vendor);
 		rc = -ENODEV;
 		goto out_release;
 	}
@@ -600,8 +656,19 @@ static int tpm_tis_i2c_init(struct device *dev)
 	INIT_LIST_HEAD(&chip->vendor.list);
 	tpm_dev.chip = chip;
 
-	tpm_get_timeouts(chip);
-	tpm_do_selftest(chip);
+	if (tpm_get_timeouts(chip)) {
+		dev_err(dev, "Could not get TPM timeouts and durations\n");
+		rc = -ENODEV;
+		goto out_release;
+	}
+
+	INIT_WORK(&tpm_dev.init_work, tpm_tis_i2c_selftest);
+	schedule_work(&tpm_dev.init_work);
+
+	if (dev->of_node &&
+	    of_get_property(dev->of_node, "powered-while-suspended", NULL)) {
+		tpm_dev.powered_while_suspended = true;
+	}
 
 	return 0;
 
@@ -626,22 +693,55 @@ out_err:
 
 static const struct i2c_device_id tpm_tis_i2c_table[] = {
 	{"tpm_i2c_infineon", 0},
+	{"slb9635tt", 0 },
+	{"slb9645tt", 1 },
 	{},
 };
 
 MODULE_DEVICE_TABLE(i2c, tpm_tis_i2c_table);
-static SIMPLE_DEV_PM_OPS(tpm_tis_i2c_ops, tpm_pm_suspend, tpm_pm_resume);
+
+#ifdef CONFIG_OF
+static const struct of_device_id tpm_tis_i2c_of_match[] = {
+	{ .compatible = "infineon,tpm_i2c_infineon", .data = (void *)0 },
+	{ .compatible = "infineon,slb9635tt", .data = (void *)0 },
+	{ .compatible = "infineon,slb9645tt", .data = (void *)1 },
+	{},
+};
+MODULE_DEVICE_TABLE(of, tpm_tis_i2c_of_match);
+#endif
+
+static int tpm_tis_i2c_suspend(struct device *dev)
+{
+	if (tpm_dev.powered_while_suspended)
+		return 0;
+
+	return tpm_pm_suspend(dev);
+}
+
+static int tpm_tis_i2c_resume(struct device *dev)
+{
+	if (tpm_dev.powered_while_suspended)
+		return 0;
+
+	return tpm_pm_resume(dev);
+}
+
+static SIMPLE_DEV_PM_OPS(tpm_tis_i2c_ops, tpm_tis_i2c_suspend,
+			 tpm_tis_i2c_resume);
 
 static int tpm_tis_i2c_probe(struct i2c_client *client,
 			     const struct i2c_device_id *id)
 {
 	int rc;
-	if (tpm_dev.client != NULL)
+	struct device *dev = &(client->dev);
+
+	if (tpm_dev.client != NULL) {
+		dev_err(dev, "This driver only supports one client at a time\n");
 		return -EBUSY;	/* We only support one client */
+	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev,
-			"no algorithms associated to the i2c bus\n");
+		dev_err(dev, "no algorithms associated to the i2c bus\n");
 		return -ENODEV;
 	}
 
@@ -661,6 +761,8 @@ static int tpm_tis_i2c_remove(struct i2c_client *client)
 	struct tpm_chip *chip = tpm_dev.chip;
 	release_locality(chip, chip->vendor.locality, 1);
 
+	cancel_work_sync(&tpm_dev.init_work);
+
 	/* close file handles */
 	tpm_dev_vendor_release(chip);
 
@@ -677,7 +779,6 @@ static int tpm_tis_i2c_remove(struct i2c_client *client)
 }
 
 static struct i2c_driver tpm_tis_i2c_driver = {
-
 	.id_table = tpm_tis_i2c_table,
 	.probe = tpm_tis_i2c_probe,
 	.remove = tpm_tis_i2c_remove,
@@ -685,11 +786,12 @@ static struct i2c_driver tpm_tis_i2c_driver = {
 		   .name = "tpm_i2c_infineon",
 		   .owner = THIS_MODULE,
 		   .pm = &tpm_tis_i2c_ops,
+		   .of_match_table = of_match_ptr(tpm_tis_i2c_of_match),
 		   },
 };
 
 module_i2c_driver(tpm_tis_i2c_driver);
 MODULE_AUTHOR("Peter Huewe <peter.huewe@infineon.com>");
 MODULE_DESCRIPTION("TPM TIS I2C Infineon Driver");
-MODULE_VERSION("2.1.5");
+MODULE_VERSION("2.2.0");
 MODULE_LICENSE("GPL");
