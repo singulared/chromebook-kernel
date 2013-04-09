@@ -995,7 +995,8 @@ int mwifiex_get_bss_info(struct mwifiex_private *,
 			 struct mwifiex_bss_info *);
 int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 			      struct cfg80211_bss *bss,
-			      struct mwifiex_bssdescriptor *bss_desc);
+			      struct mwifiex_bssdescriptor *bss_desc,
+			      u8 *beacon_ie, size_t beacon_ie_len);
 int mwifiex_update_bss_desc_with_ie(struct mwifiex_adapter *adapter,
 				    struct mwifiex_bssdescriptor *bss_entry);
 int mwifiex_check_network_compatibility(struct mwifiex_private *priv,

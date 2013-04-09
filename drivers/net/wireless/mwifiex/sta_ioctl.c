@@ -152,19 +152,10 @@ int mwifiex_request_set_multicast_list(struct mwifiex_private *priv,
  */
 int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 			      struct cfg80211_bss *bss,
-			      struct mwifiex_bssdescriptor *bss_desc)
+			      struct mwifiex_bssdescriptor *bss_desc,
+			      u8 *beacon_ie, size_t beacon_ie_len)
 {
-	int ret;
-	u8 *beacon_ie;
 	struct mwifiex_bss_priv *bss_priv = (void *)bss->priv;
-	size_t beacon_ie_len = bss->len_information_elements;
-
-	beacon_ie = kmemdup(bss->information_elements, beacon_ie_len,
-			    GFP_KERNEL);
-	if (!beacon_ie) {
-		dev_err(priv->adapter->dev, " failed to alloc beacon_ie\n");
-		return -ENOMEM;
-	}
 
 	memcpy(bss_desc->mac_address, bss->bssid, ETH_ALEN);
 	bss_desc->rssi = bss->signal;
@@ -186,10 +177,7 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	else
 		bss_desc->bss_mode = NL80211_IFTYPE_STATION;
 
-	ret = mwifiex_update_bss_desc_with_ie(priv->adapter, bss_desc);
-
-	kfree(beacon_ie);
-	return ret;
+	return mwifiex_update_bss_desc_with_ie(priv->adapter, bss_desc);
 }
 
 static int mwifiex_process_country_ie(struct mwifiex_private *priv,
@@ -241,6 +229,8 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 	int ret;
 	struct mwifiex_adapter *adapter = priv->adapter;
 	struct mwifiex_bssdescriptor *bss_desc = NULL;
+	u8 *beacon_ie = NULL;
+	size_t beacon_ie_len = bss->len_information_elements;
 
 	priv->scan_block = false;
 
@@ -255,7 +245,15 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 			return -ENOMEM;
 		}
 
-		ret = mwifiex_fill_new_bss_desc(priv, bss, bss_desc);
+		beacon_ie = kmemdup(bss->information_elements, beacon_ie_len,
+				    GFP_KERNEL);
+		if (!beacon_ie) {
+			kfree(bss_desc);
+			return -ENOMEM;
+		}
+
+		ret = mwifiex_fill_new_bss_desc(priv, bss, bss_desc, beacon_ie,
+						beacon_ie_len);
 		if (ret)
 			goto done;
 	}
@@ -300,8 +298,8 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 		if (bss_desc && bss_desc->ssid.ssid_len &&
 		    (!mwifiex_ssid_cmp(&priv->curr_bss_params.bss_descriptor.
 				       ssid, &bss_desc->ssid))) {
-			kfree(bss_desc);
-			return 0;
+			ret = 0;
+			goto done;
 		}
 
 		/* Exit Adhoc mode first */
@@ -333,6 +331,7 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 	}
 
 done:
+	kfree(beacon_ie);
 	kfree(bss_desc);
 	return ret;
 }

@@ -1432,6 +1432,8 @@ static int mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
 	struct mwifiex_bssdescriptor *bss_desc;
 	int ret;
 	unsigned long flags;
+	u8 *beacon_ie;
+	size_t beacon_ie_len = bss->len_information_elements;
 
 	/* Allocate and fill new bss descriptor */
 	bss_desc = kzalloc(sizeof(struct mwifiex_bssdescriptor),
@@ -1441,7 +1443,15 @@ static int mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
 		return -ENOMEM;
 	}
 
-	ret = mwifiex_fill_new_bss_desc(priv, bss, bss_desc);
+	beacon_ie = kmemdup(bss->information_elements, beacon_ie_len,
+			    GFP_KERNEL);
+	if (!beacon_ie) {
+		kfree(bss_desc);
+		return -ENOMEM;
+	}
+
+	ret = mwifiex_fill_new_bss_desc(priv, bss, bss_desc, beacon_ie,
+					beacon_ie_len);
 	if (ret)
 		goto done;
 
@@ -1476,10 +1486,15 @@ static int mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
 	/* Make a copy of current BSSID descriptor */
 	memcpy(&priv->curr_bss_params.bss_descriptor, bss_desc,
 	       sizeof(priv->curr_bss_params.bss_descriptor));
+
+	/* The contents of beacon_ie will be copied to its own buffer
+	 * in mwifiex_save_curr_bcn()
+	 */
 	mwifiex_save_curr_bcn(priv);
 	spin_unlock_irqrestore(&priv->curr_bcn_buf_lock, flags);
 
 done:
+	kfree(beacon_ie);
 	kfree(bss_desc);
 	return 0;
 }
