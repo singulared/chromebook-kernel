@@ -75,7 +75,7 @@ static void mcpm_cpu_die(unsigned int cpu)
 
 #endif
 
-struct smp_operations __initdata mcpm_smp_ops = {
+static struct smp_operations __initdata mcpm_smp_ops = {
 	.smp_init_cpus		= simple_smp_init_cpus,
 	.smp_boot_secondary	= mcpm_boot_secondary,
 	.smp_secondary_init	= mcpm_secondary_init,
@@ -84,3 +84,8 @@ struct smp_operations __initdata mcpm_smp_ops = {
 	.cpu_die		= mcpm_cpu_die,
 #endif
 };
+
+void __init mcpm_smp_set_ops(void)
+{
+	smp_set_ops(&mcpm_smp_ops);
+}
