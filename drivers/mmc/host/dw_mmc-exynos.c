@@ -202,10 +202,10 @@ static int dw_mci_exynos_setup_bus(struct dw_mci *host,
 /* Exynos5250 controller specific capabilities */
 static unsigned long exynos5250_dwmmc_caps[4] = {
 	MMC_CAP_UHS_DDR50 | MMC_CAP_1_8V_DDR |
-		MMC_CAP_8_BIT_DATA | MMC_CAP_CMD23,
-	MMC_CAP_CMD23,
-	MMC_CAP_CMD23,
-	MMC_CAP_CMD23,
+		MMC_CAP_8_BIT_DATA | MMC_CAP_CMD23 | MMC_CAP_SDIO_IRQ,
+	MMC_CAP_CMD23 | MMC_CAP_SDIO_IRQ,
+	MMC_CAP_CMD23 | MMC_CAP_SDIO_IRQ,
+	MMC_CAP_CMD23 | MMC_CAP_SDIO_IRQ,
 };
 
 static const struct dw_mci_drv_data exynos5250_drv_data = {
