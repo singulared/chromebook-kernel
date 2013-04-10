@@ -110,7 +110,7 @@ static void exynos_drm_encoder_prepare(struct drm_encoder *encoder)
 	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
 			drm_get_encoder_name(encoder));
 
-	/* drm framework doesn't check NULL. */
+	exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
 }
 
 static void exynos_drm_encoder_commit(struct drm_encoder *encoder)

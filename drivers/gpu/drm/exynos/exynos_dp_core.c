@@ -1022,12 +1022,6 @@ static int exynos_dp_power_on(struct exynos_dp_device *dp)
 	if (dp->irq < 0 && !exynos_dp_detect_hpd(dp))
 		schedule_work(&dp->hotplug_work);
 
-	/*
-	 * These calls are required to make sure we train the dp link when dpms
-	 * off/on is called from userspace. In the boot and resume cases, the
-	 * link training is handled via the modeset, but unfortunately modeset
-	 * isn't being called in the dpms off/on case.
-	 */
 	exynos_dp_train_link(dp);
 	exynos_dp_commit(dp);
 
@@ -1096,19 +1090,11 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 	return 0;
 }
 
-static void exynos_dp_mode_set(void *ctx, struct drm_display_mode *mode)
-{
-	struct exynos_dp_device *dp = ctx;
-
-	exynos_dp_train_link(dp);
-}
-
 static struct exynos_panel_ops dp_panel_ops = {
 	.subdrv_probe = exynos_dp_subdrv_probe,
 	.is_connected = exynos_dp_is_connected,
 	.check_timing = exynos_dp_check_timing,
 	.dpms = exynos_dp_dpms,
-	.mode_set = exynos_dp_mode_set,
 	.commit = exynos_dp_commit,
 };
 
