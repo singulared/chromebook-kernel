@@ -187,6 +187,8 @@ struct rt2x00_chip {
 #define RT3070		0x3070
 #define RT3071		0x3071
 #define RT3090		0x3090	/* 2.4GHz PCIe */
+#define RT3290		0x3290
+#define RT3352		0x3352  /* WSOC */
 #define RT3390		0x3390
 #define RT3572		0x3572
 #define RT3593		0x3593
@@ -396,8 +398,7 @@ struct rt2x00_intf {
 	 * for hardware which doesn't support hardware
 	 * sequence counting.
 	 */
-	spinlock_t seqlock;
-	u16 seqno;
+	atomic_t seqno;
 };
 
 static inline struct rt2x00_intf* vif_to_intf(struct ieee80211_vif *vif)
@@ -655,7 +656,6 @@ struct rt2x00lib_ops {
 struct rt2x00_ops {
 	const char *name;
 	const unsigned int drv_data_size;
-	const unsigned int max_sta_intf;
 	const unsigned int max_ap_intf;
 	const unsigned int eeprom_size;
 	const unsigned int rf_size;
@@ -692,6 +692,8 @@ enum rt2x00_state_flags {
 	 */
 	CONFIG_CHANNEL_HT40,
 	CONFIG_POWERSAVING,
+	CONFIG_HT_DISABLED,
+	CONFIG_QOS_DISABLED,
 
 	/*
 	 * Mark we currently are sequentially reading TX_STA_FIFO register
@@ -736,6 +738,14 @@ enum rt2x00_capability_flags {
 	CAPABILITY_DOUBLE_ANTENNA,
 	CAPABILITY_BT_COEXIST,
 	CAPABILITY_VCO_RECALIBRATION,
+};
+
+/*
+ * Interface combinations
+ */
+enum {
+	IF_COMB_AP = 0,
+	NUM_IF_COMB,
 };
 
 /*
@@ -863,6 +873,12 @@ struct rt2x00_dev {
 	unsigned int intf_sta_count;
 	unsigned int intf_associated;
 	unsigned int intf_beaconing;
+
+	/*
+	 * Interface combinations
+	 */
+	struct ieee80211_iface_limit if_limits_ap;
+	struct ieee80211_iface_combination if_combinations[NUM_IF_COMB];
 
 	/*
 	 * Link quality
@@ -1280,12 +1296,14 @@ void rt2x00lib_dmadone(struct queue_entry *entry);
 void rt2x00lib_txdone(struct queue_entry *entry,
 		      struct txdone_entry_desc *txdesc);
 void rt2x00lib_txdone_noinfo(struct queue_entry *entry, u32 status);
-void rt2x00lib_rxdone(struct queue_entry *entry);
+void rt2x00lib_rxdone(struct queue_entry *entry, gfp_t gfp);
 
 /*
  * mac80211 handlers.
  */
-void rt2x00mac_tx(struct ieee80211_hw *hw, struct sk_buff *skb);
+void rt2x00mac_tx(struct ieee80211_hw *hw,
+		  struct ieee80211_tx_control *control,
+		  struct sk_buff *skb);
 int rt2x00mac_start(struct ieee80211_hw *hw);
 void rt2x00mac_stop(struct ieee80211_hw *hw);
 int rt2x00mac_add_interface(struct ieee80211_hw *hw,

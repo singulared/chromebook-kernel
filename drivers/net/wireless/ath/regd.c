@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <net/cfg80211.h>
@@ -129,7 +131,6 @@ bool ath_is_world_regd(struct ath_regulatory *reg)
 }
 EXPORT_SYMBOL(ath_is_world_regd);
 
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 static const struct ieee80211_regdomain *ath_default_world_regdomain(void)
 {
 	/* this is the most restrictive */
@@ -162,7 +163,6 @@ ieee80211_regdomain *ath_world_regdomain(struct ath_regulatory *reg)
 		return ath_default_world_regdomain();
 	}
 }
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 
 bool ath_is_49ghz_allowed(u16 regdomain)
 {
@@ -171,13 +171,11 @@ bool ath_is_49ghz_allowed(u16 regdomain)
 }
 EXPORT_SYMBOL(ath_is_49ghz_allowed);
 
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 /* Frequency is one where radar detection is required */
 static bool ath_is_radar_freq(u16 center_freq)
 {
 	return (center_freq >= 5260 && center_freq <= 5700);
 }
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 
 /*
  * N.B: These exception rules do not apply radar freqs.
@@ -192,7 +190,6 @@ static void
 ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 			      enum nl80211_reg_initiator initiator)
 {
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 	enum ieee80211_band band;
 	struct ieee80211_supported_band *sband;
 	const struct ieee80211_reg_rule *reg_rule;
@@ -246,7 +243,6 @@ ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 			}
 		}
 	}
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 
 }
 
@@ -255,7 +251,6 @@ static void
 ath_reg_apply_active_scan_flags(struct wiphy *wiphy,
 				enum nl80211_reg_initiator initiator)
 {
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *ch;
 	const struct ieee80211_reg_rule *reg_rule;
@@ -302,13 +297,11 @@ ath_reg_apply_active_scan_flags(struct wiphy *wiphy,
 			if (ch->flags & IEEE80211_CHAN_PASSIVE_SCAN)
 				ch->flags &= ~IEEE80211_CHAN_PASSIVE_SCAN;
 	}
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 }
 
 /* Always apply Radar/DFS rules on freq range 5260 MHz - 5700 MHz */
 static void ath_reg_apply_radar_flags(struct wiphy *wiphy)
 {
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *ch;
 	unsigned int i;
@@ -337,7 +330,6 @@ static void ath_reg_apply_radar_flags(struct wiphy *wiphy)
 				     IEEE80211_CHAN_NO_IBSS |
 				     IEEE80211_CHAN_PASSIVE_SCAN;
 	}
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 }
 
 static void ath_reg_apply_world_flags(struct wiphy *wiphy,
@@ -518,7 +510,6 @@ ath_regd_init_wiphy(struct ath_regulatory *reg,
 		    int (*reg_notifier)(struct wiphy *wiphy,
 					struct regulatory_request *request))
 {
-#ifndef CONFIG_ATH_DEFER_EEPROM_REGULATORY
 	const struct ieee80211_regdomain *regd;
 
 	wiphy->reg_notifier = reg_notifier;
@@ -542,7 +533,6 @@ ath_regd_init_wiphy(struct ath_regulatory *reg,
 	wiphy_apply_custom_regulatory(wiphy, regd);
 	ath_reg_apply_radar_flags(wiphy);
 	ath_reg_apply_world_flags(wiphy, NL80211_REGDOM_SET_BY_DRIVER, reg);
-#endif  /* CONFIG_ATH_DEFER_EEPROM_REGULATORY */
 	return 0;
 }
 
@@ -574,7 +564,7 @@ static int __ath_regd_init(struct ath_regulatory *reg)
 	printk(KERN_DEBUG "ath: EEPROM regdomain: 0x%0x\n", reg->current_rd);
 
 	if (!ath_regd_is_eeprom_valid(reg)) {
-		printk(KERN_ERR "ath: Invalid EEPROM contents\n");
+		pr_err("Invalid EEPROM contents\n");
 		return -EINVAL;
 	}
 

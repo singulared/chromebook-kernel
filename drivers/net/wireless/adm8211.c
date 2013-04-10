@@ -1661,7 +1661,9 @@ static void adm8211_tx_raw(struct ieee80211_hw *dev, struct sk_buff *skb,
 }
 
 /* Put adm8211_tx_hdr on skb and transmit */
-static void adm8211_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
+static void adm8211_tx(struct ieee80211_hw *dev,
+		       struct ieee80211_tx_control *control,
+		       struct sk_buff *skb)
 {
 	struct adm8211_tx_hdr *txhdr;
 	size_t payload_len, hdrlen;
@@ -1738,8 +1740,7 @@ static int adm8211_alloc_rings(struct ieee80211_hw *dev)
 		return -ENOMEM;
 	}
 
-	priv->tx_ring = (struct adm8211_desc *)(priv->rx_ring +
-						priv->rx_ring_size);
+	priv->tx_ring = priv->rx_ring + priv->rx_ring_size;
 	priv->tx_ring_dma = priv->rx_ring_dma +
 			    sizeof(struct adm8211_desc) * priv->rx_ring_size;
 
@@ -1855,7 +1856,7 @@ static int adm8211_probe(struct pci_dev *pdev,
 	if (!is_valid_ether_addr(perm_addr)) {
 		printk(KERN_WARNING "%s (adm8211): Invalid hwaddr in EEPROM!\n",
 		       pci_name(pdev));
-		random_ether_addr(perm_addr);
+		eth_random_addr(perm_addr);
 	}
 	SET_IEEE80211_PERM_ADDR(dev, perm_addr);
 
@@ -1991,19 +1992,4 @@ static struct pci_driver adm8211_driver = {
 #endif /* CONFIG_PM */
 };
 
-
-
-static int __init adm8211_init(void)
-{
-	return pci_register_driver(&adm8211_driver);
-}
-
-
-static void __exit adm8211_exit(void)
-{
-	pci_unregister_driver(&adm8211_driver);
-}
-
-
-module_init(adm8211_init);
-module_exit(adm8211_exit);
+module_pci_driver(adm8211_driver);

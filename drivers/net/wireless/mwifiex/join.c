@@ -615,33 +615,23 @@ int mwifiex_ret_802_11_associate(struct mwifiex_private *priv,
 	struct ieee_types_assoc_rsp *assoc_rsp;
 	struct mwifiex_bssdescriptor *bss_desc;
 	u8 enable_data = true;
-	u16 cap_info, status_code;
 
 	assoc_rsp = (struct ieee_types_assoc_rsp *) &resp->params;
-
-	cap_info = le16_to_cpu(assoc_rsp->cap_info_bitmap);
-	status_code = le16_to_cpu(assoc_rsp->status_code);
 
 	priv->assoc_rsp_size = min(le16_to_cpu(resp->size) - S_DS_GEN,
 				   sizeof(priv->assoc_rsp_buf));
 
 	memcpy(priv->assoc_rsp_buf, &resp->params, priv->assoc_rsp_size);
 
-	if (status_code) {
+	if (le16_to_cpu(assoc_rsp->status_code)) {
 		priv->adapter->dbg.num_cmd_assoc_failure++;
 		dev_err(priv->adapter->dev,
 			"ASSOC_RESP: failed, status code=%d err=%#x a_id=%#x\n",
-			status_code, cap_info, le16_to_cpu(assoc_rsp->a_id));
+			le16_to_cpu(assoc_rsp->status_code),
+			le16_to_cpu(assoc_rsp->cap_info_bitmap),
+			le16_to_cpu(assoc_rsp->a_id));
 
-		if (cap_info == MWIFIEX_TIMEOUT_FOR_AP_RESP) {
-			if (status_code == MWIFIEX_STATUS_CODE_AUTH_TIMEOUT)
-				ret = WLAN_STATUS_AUTH_TIMEOUT;
-			else
-				ret = WLAN_STATUS_UNSPECIFIED_FAILURE;
-		} else {
-			ret = status_code;
-		}
-
+		ret = le16_to_cpu(assoc_rsp->status_code);
 		goto done;
 	}
 
@@ -979,36 +969,26 @@ mwifiex_cmd_802_11_ad_hoc_start(struct mwifiex_private *priv,
 					priv->adapter->config_bands);
 		mwifiex_fill_cap_info(priv, radio_type, ht_cap);
 
-		if (adapter->sec_chan_offset ==
-					IEEE80211_HT_PARAM_CHA_SEC_NONE) {
-			u16 tmp_ht_cap;
-
-			tmp_ht_cap = le16_to_cpu(ht_cap->ht_cap.cap_info);
-			tmp_ht_cap &= ~IEEE80211_HT_CAP_SUP_WIDTH_20_40;
-			tmp_ht_cap &= ~IEEE80211_HT_CAP_SGI_40;
-			ht_cap->ht_cap.cap_info = cpu_to_le16(tmp_ht_cap);
-		}
-
 		pos += sizeof(struct mwifiex_ie_types_htcap);
 		cmd_append_size += sizeof(struct mwifiex_ie_types_htcap);
 
 		/* Fill HT INFORMATION */
 		ht_info = (struct mwifiex_ie_types_htinfo *) pos;
 		memset(ht_info, 0, sizeof(struct mwifiex_ie_types_htinfo));
-		ht_info->header.type = cpu_to_le16(WLAN_EID_HT_INFORMATION);
+		ht_info->header.type = cpu_to_le16(WLAN_EID_HT_OPERATION);
 		ht_info->header.len =
-				cpu_to_le16(sizeof(struct ieee80211_ht_info));
+			cpu_to_le16(sizeof(struct ieee80211_ht_operation));
 
-		ht_info->ht_info.control_chan =
+		ht_info->ht_oper.primary_chan =
 			(u8) priv->curr_bss_params.bss_descriptor.channel;
 		if (adapter->sec_chan_offset) {
-			ht_info->ht_info.ht_param = adapter->sec_chan_offset;
-			ht_info->ht_info.ht_param |=
+			ht_info->ht_oper.ht_param = adapter->sec_chan_offset;
+			ht_info->ht_oper.ht_param |=
 					IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
 		}
-		ht_info->ht_info.operation_mode =
+		ht_info->ht_oper.operation_mode =
 		     cpu_to_le16(IEEE80211_HT_OP_MODE_NON_GF_STA_PRSNT);
-		ht_info->ht_info.basic_set[0] = 0xff;
+		ht_info->ht_oper.basic_set[0] = 0xff;
 		pos += sizeof(struct mwifiex_ie_types_htinfo);
 		cmd_append_size +=
 				sizeof(struct mwifiex_ie_types_htinfo);
@@ -1369,22 +1349,16 @@ static int mwifiex_deauthenticate_infra(struct mwifiex_private *priv, u8 *mac)
 {
 	u8 mac_address[ETH_ALEN];
 	int ret;
-	u8 zero_mac[ETH_ALEN] = { 0, 0, 0, 0, 0, 0 };
 
-	if (mac) {
-		if (!memcmp(mac, zero_mac, sizeof(zero_mac)))
-			memcpy((u8 *) &mac_address,
-			       (u8 *) &priv->curr_bss_params.bss_descriptor.
-			       mac_address, ETH_ALEN);
-		else
-			memcpy((u8 *) &mac_address, (u8 *) mac, ETH_ALEN);
-	} else {
-		memcpy((u8 *) &mac_address, (u8 *) &priv->curr_bss_params.
-		       bss_descriptor.mac_address, ETH_ALEN);
-	}
+	if (!mac || is_zero_ether_addr(mac))
+		memcpy(mac_address,
+		       priv->curr_bss_params.bss_descriptor.mac_address,
+		       ETH_ALEN);
+	else
+		memcpy(mac_address, mac, ETH_ALEN);
 
 	ret = mwifiex_send_cmd_sync(priv, HostCmd_CMD_802_11_DEAUTHENTICATE,
-				    HostCmd_ACT_GEN_SET, 0, &mac_address);
+				    HostCmd_ACT_GEN_SET, 0, mac_address);
 
 	return ret;
 }
@@ -1394,22 +1368,28 @@ static int mwifiex_deauthenticate_infra(struct mwifiex_private *priv, u8 *mac)
  *
  * In case of infra made, it sends deauthentication request, and
  * in case of ad-hoc mode, a stop network request is sent to the firmware.
+ * In AP mode, a command to stop bss is sent to firmware.
  */
 int mwifiex_deauthenticate(struct mwifiex_private *priv, u8 *mac)
 {
-	int ret = 0;
+	if (!priv->media_connected)
+		return 0;
 
-	if (priv->media_connected) {
-		if (priv->bss_mode == NL80211_IFTYPE_STATION) {
-			ret = mwifiex_deauthenticate_infra(priv, mac);
-		} else if (priv->bss_mode == NL80211_IFTYPE_ADHOC) {
-			ret = mwifiex_send_cmd_sync(priv,
-						HostCmd_CMD_802_11_AD_HOC_STOP,
-						HostCmd_ACT_GEN_SET, 0, NULL);
-		}
+	switch (priv->bss_mode) {
+	case NL80211_IFTYPE_STATION:
+		return mwifiex_deauthenticate_infra(priv, mac);
+	case NL80211_IFTYPE_ADHOC:
+		return mwifiex_send_cmd_sync(priv,
+					     HostCmd_CMD_802_11_AD_HOC_STOP,
+					     HostCmd_ACT_GEN_SET, 0, NULL);
+	case NL80211_IFTYPE_AP:
+		return mwifiex_send_cmd_sync(priv, HostCmd_CMD_UAP_BSS_STOP,
+					     HostCmd_ACT_GEN_SET, 0, NULL);
+	default:
+		break;
 	}
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(mwifiex_deauthenticate);
 

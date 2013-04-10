@@ -56,12 +56,15 @@ enum mesh_path_flags {
  * @MESH_WORK_GROW_MPP_TABLE: the mesh portals table is full and needs to
  * grow
  * @MESH_WORK_ROOT: the mesh root station needs to send a frame
+ * @MESH_WORK_DRIFT_ADJUST: time to compensate for clock drift relative to other
+ * mesh nodes
  */
 enum mesh_deferred_task_flags {
 	MESH_WORK_HOUSEKEEPING,
 	MESH_WORK_GROW_MPATH_TABLE,
 	MESH_WORK_GROW_MPP_TABLE,
 	MESH_WORK_ROOT,
+	MESH_WORK_DRIFT_ADJUST,
 };
 
 /**
@@ -86,6 +89,8 @@ enum mesh_deferred_task_flags {
  * mpath itself.  No need to take this lock when adding or removing
  * an mpath to a hash bucket on a path table.
  * @rann_snd_addr: the RANN sender address
+ * @rann_metric: the aggregated path metric towards the root node
+ * @last_preq_to_root: Timestamp of last PREQ sent to root
  * @is_root: the destination station of this path is a root node
  * @is_gate: the destination station of this path is a mesh gate
  *
@@ -112,6 +117,8 @@ struct mesh_path {
 	enum mesh_path_flags flags;
 	spinlock_t state_lock;
 	u8 rann_snd_addr[ETH_ALEN];
+	u32 rann_metric;
+	unsigned long last_preq_to_root;
 	bool is_root;
 	bool is_gate;
 };
@@ -177,7 +184,7 @@ struct rmc_entry {
 };
 
 struct mesh_rmc {
-	struct rmc_entry bucket[RMC_BUCKETS];
+	struct list_head bucket[RMC_BUCKETS];
 	u32 idx_mask;
 };
 
@@ -194,6 +201,9 @@ struct mesh_rmc {
 /* Maximum number of paths per interface */
 #define MESH_MAX_MPATHS		1024
 
+/* Number of frames buffered per destination for unresolved destinations */
+#define MESH_FRAME_QUEUE_LEN	10
+
 /* Public interfaces */
 /* Various */
 int ieee80211_fill_mesh_addresses(struct ieee80211_hdr *hdr, __le16 *fc,
@@ -203,8 +213,8 @@ int ieee80211_new_mesh_header(struct ieee80211s_hdr *meshhdr,
 		char *addr6);
 int mesh_rmc_check(u8 *addr, struct ieee80211s_hdr *mesh_hdr,
 		struct ieee80211_sub_if_data *sdata);
-bool mesh_matches_local(struct ieee802_11_elems *ie,
-		struct ieee80211_sub_if_data *sdata);
+bool mesh_matches_local(struct ieee80211_sub_if_data *sdata,
+			struct ieee802_11_elems *ie);
 void mesh_ids_set_default(struct ieee80211_if_mesh *mesh);
 void mesh_mgmt_ies_add(struct sk_buff *skb,
 		struct ieee80211_sub_if_data *sdata);
@@ -220,18 +230,19 @@ int mesh_add_ds_params_ie(struct sk_buff *skb,
 			  struct ieee80211_sub_if_data *sdata);
 int mesh_add_ht_cap_ie(struct sk_buff *skb,
 		       struct ieee80211_sub_if_data *sdata);
-int mesh_add_ht_info_ie(struct sk_buff *skb,
+int mesh_add_ht_oper_ie(struct sk_buff *skb,
 			struct ieee80211_sub_if_data *sdata);
 void mesh_rmc_free(struct ieee80211_sub_if_data *sdata);
 int mesh_rmc_init(struct ieee80211_sub_if_data *sdata);
 void ieee80211s_init(void);
 void ieee80211s_update_metric(struct ieee80211_local *local,
-		struct sta_info *stainfo, struct sk_buff *skb);
+		struct sta_info *sta, struct sk_buff *skb);
 void ieee80211s_stop(void);
 void ieee80211_mesh_init_sdata(struct ieee80211_sub_if_data *sdata);
 void ieee80211_start_mesh(struct ieee80211_sub_if_data *sdata);
 void ieee80211_stop_mesh(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mesh_root_setup(struct ieee80211_if_mesh *ifmsh);
+const struct ieee80211_mesh_sync_ops *ieee80211_mesh_sync_ops_get(u8 method);
 
 /* Mesh paths */
 int mesh_nexthop_lookup(struct sk_buff *skb,
@@ -256,11 +267,11 @@ int mesh_path_add_gate(struct mesh_path *mpath);
 int mesh_path_send_to_gates(struct mesh_path *mpath);
 int mesh_gate_num(struct ieee80211_sub_if_data *sdata);
 /* Mesh plinks */
-void mesh_neighbour_update(u8 *hw_addr, u32 rates,
-		struct ieee80211_sub_if_data *sdata,
-		struct ieee802_11_elems *ie);
+void mesh_neighbour_update(struct ieee80211_sub_if_data *sdata,
+			   u8 *hw_addr,
+			   struct ieee802_11_elems *ie);
 bool mesh_peer_accepts_plinks(struct ieee802_11_elems *ie);
-void mesh_accept_plinks_update(struct ieee80211_sub_if_data *sdata);
+u32 mesh_accept_plinks_update(struct ieee80211_sub_if_data *sdata);
 void mesh_plink_broken(struct sta_info *sta);
 void mesh_plink_deactivate(struct sta_info *sta);
 int mesh_plink_open(struct sta_info *sta);
@@ -284,7 +295,6 @@ void mesh_pathtbl_unregister(void);
 int mesh_path_del(u8 *addr, struct ieee80211_sub_if_data *sdata);
 void mesh_path_timer(unsigned long data);
 void mesh_path_flush_by_nexthop(struct sta_info *sta);
-void mesh_path_flush_by_iface(struct ieee80211_sub_if_data *sdata);
 void mesh_path_discard_frame(struct sk_buff *skb,
 		struct ieee80211_sub_if_data *sdata);
 void mesh_path_quiesce(struct ieee80211_sub_if_data *sdata);
@@ -300,7 +310,7 @@ extern int mesh_allocated;
 static inline int mesh_plink_free_count(struct ieee80211_sub_if_data *sdata)
 {
 	return sdata->u.mesh.mshcfg.dot11MeshMaxPeerLinks -
-	       atomic_read(&sdata->u.mesh.mshstats.estab_plinks);
+	       atomic_read(&sdata->u.mesh.estab_plinks);
 }
 
 static inline bool mesh_plink_availables(struct ieee80211_sub_if_data *sdata)
@@ -325,6 +335,8 @@ void ieee80211_mesh_quiesce(struct ieee80211_sub_if_data *sdata);
 void ieee80211_mesh_restart(struct ieee80211_sub_if_data *sdata);
 void mesh_plink_quiesce(struct sta_info *sta);
 void mesh_plink_restart(struct sta_info *sta);
+void mesh_path_flush_by_iface(struct ieee80211_sub_if_data *sdata);
+void mesh_sync_adjust_tbtt(struct ieee80211_sub_if_data *sdata);
 #else
 #define mesh_allocated	0
 static inline void
@@ -337,6 +349,8 @@ static inline void mesh_plink_quiesce(struct sta_info *sta) {}
 static inline void mesh_plink_restart(struct sta_info *sta) {}
 static inline bool mesh_path_sel_is_hwmp(struct ieee80211_sub_if_data *sdata)
 { return false; }
+static inline void mesh_path_flush_by_iface(struct ieee80211_sub_if_data *sdata)
+{}
 #endif
 
 #endif /* IEEE80211S_H */

@@ -151,7 +151,6 @@ struct ath_common {
 	spinlock_t cc_lock;
 	struct ath_cycle_counters cc_ani;
 	struct ath_cycle_counters cc_survey;
-	struct ath_cycle_counters cc_rxpoll;
 
 	struct ath_regulatory regulatory;
 	struct ath_regulatory reg_world_copy;
@@ -160,6 +159,7 @@ struct ath_common {
 
 	bool btcoex_enabled;
 	bool disable_ani;
+	bool antenna_diversity;
 };
 
 struct sk_buff *ath_rxbuf_alloc(struct ath_common *common,
@@ -217,6 +217,7 @@ void ath_printk(const char *level, const struct ath_common *common,
  *	used exclusively for WLAN-BT coexistence starting from
  *	AR9462.
  * @ATH_DBG_DFS: radar datection
+ * @ATH_DBG_WOW: Wake on Wireless
  * @ATH_DBG_ANY: enable all debugging
  *
  * The debug level is used to control the amount and type of debugging output
@@ -244,7 +245,7 @@ enum ATH_DEBUG {
 	ATH_DBG_BSTUCK		= 0x00008000,
 	ATH_DBG_MCI		= 0x00010000,
 	ATH_DBG_DFS		= 0x00020000,
-	ATH_DBG_RX_STUCK	= 0x00040000,
+	ATH_DBG_WOW		= 0x00040000,
 	ATH_DBG_ANY		= 0xffffffff
 };
 

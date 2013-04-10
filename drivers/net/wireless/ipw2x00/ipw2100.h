@@ -135,15 +135,6 @@ enum {
 	IPW_HW_STATE_ENABLED = 0
 };
 
-struct ssid_context {
-	char ssid[IW_ESSID_MAX_SIZE + 1];
-	int ssid_len;
-	unsigned char bssid[ETH_ALEN];
-	int port_type;
-	int channel;
-
-};
-
 extern const char *port_type_str[];
 extern const char *band_str[];
 
@@ -488,6 +479,7 @@ enum {
 #define CAP_PRIVACY_ON          (1<<1)	/* Off = No privacy */
 
 struct ipw2100_priv {
+	void __iomem *ioaddr;
 
 	int stop_hang_check;	/* Set 1 when shutting down to kill hang_check */
 	int stop_rf_kill;	/* Set 1 when shutting down to kill rf_kill */
@@ -1053,7 +1045,7 @@ typedef enum _ORDINAL_TABLE_1 {	// NS - means Not Supported by FW
 	IPW_ORD_POWER_MGMT_MODE,	// Power mode - 0=CAM, 1=PSP
 	IPW_ORD_POWER_MGMT_INDEX,	//NS //
 	IPW_ORD_COUNTRY_CODE,	// IEEE country code as recv'd from beacon
-	IPW_ORD_COUNTRY_CHANNELS,	// channels suported by country
+	IPW_ORD_COUNTRY_CHANNELS,	// channels supported by country
 // IPW_ORD_COUNTRY_CHANNELS:
 // For 11b the lower 2-byte are used for channels from 1-14
 //   and the higher 2-byte are not used.

@@ -267,7 +267,7 @@ static inline unsigned int FH_MEM_CBBC_QUEUE(unsigned int chnl)
 
 #define FH_RCSR_RX_CONFIG_RBDCB_SIZE_POS	(20)
 #define FH_RCSR_RX_CONFIG_REG_IRQ_RBTH_POS	(4)
-#define RX_RB_TIMEOUT	(0x10)
+#define RX_RB_TIMEOUT	(0x11)
 
 #define FH_RCSR_RX_CONFIG_CHNL_EN_PAUSE_VAL         (0x00000000)
 #define FH_RCSR_RX_CONFIG_CHNL_EN_PAUSE_EOF_VAL     (0x40000000)
@@ -421,6 +421,8 @@ static inline unsigned int FH_MEM_CBBC_QUEUE(unsigned int chnl)
 		(FH_SRVC_LOWER_BOUND + ((_chnl) - 9) * 0x4)
 
 #define FH_TX_CHICKEN_BITS_REG	(FH_MEM_LOWER_BOUND + 0xE98)
+#define FH_TX_TRB_REG(_chan)	(FH_MEM_LOWER_BOUND + 0x958 + (_chan) * 4)
+
 /* Instruct FH to increment the retry count of a packet when
  * it is brought from the memory to TX-FIFO
  */

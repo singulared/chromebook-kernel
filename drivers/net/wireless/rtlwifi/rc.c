@@ -55,7 +55,8 @@ static u8 _rtl_rc_get_highest_rix(struct rtl_priv *rtlpriv,
 	 *      1M we will not use FW rate but user rate.
 	 */
 	if (rtlmac->opmode == NL80211_IFTYPE_AP ||
-		rtlmac->opmode == NL80211_IFTYPE_ADHOC) {
+	    rtlmac->opmode == NL80211_IFTYPE_ADHOC ||
+	    rtlmac->opmode == NL80211_IFTYPE_MESH_POINT) {
 		if (sta) {
 			sta_entry = (struct rtl_sta_info *) sta->drv_priv;
 			wireless_mode = sta_entry->wireless_mode;
@@ -225,8 +226,7 @@ static void rtl_rate_init(void *ppriv,
 static void rtl_rate_update(void *ppriv,
 			    struct ieee80211_supported_band *sband,
 			    struct ieee80211_sta *sta, void *priv_sta,
-			    u32 changed,
-			    enum nl80211_channel_type oper_chan_type)
+			    u32 changed)
 {
 }
 

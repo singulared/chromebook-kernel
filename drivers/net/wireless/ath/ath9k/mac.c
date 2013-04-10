@@ -133,7 +133,15 @@ EXPORT_SYMBOL(ath9k_hw_updatetxtriglevel);
 
 void ath9k_hw_abort_tx_dma(struct ath_hw *ah)
 {
+	int maxdelay = 1000;
 	int i, q;
+
+	if (ah->curchan) {
+		if (IS_CHAN_HALF_RATE(ah->curchan))
+			maxdelay *= 2;
+		else if (IS_CHAN_QUARTER_RATE(ah->curchan))
+			maxdelay *= 4;
+	}
 
 	REG_WRITE(ah, AR_Q_TXD, AR_Q_TXD_M);
 
@@ -142,7 +150,7 @@ void ath9k_hw_abort_tx_dma(struct ath_hw *ah)
 	REG_SET_BIT(ah, AR_D_GBL_IFS_MISC, AR_D_GBL_IFS_MISC_IGNORE_BACKOFF);
 
 	for (q = 0; q < AR_NUM_QCU; q++) {
-		for (i = 0; i < 1000; i++) {
+		for (i = 0; i < maxdelay; i++) {
 			if (i)
 				udelay(5);
 
@@ -765,14 +773,9 @@ bool ath9k_hw_intrpend(struct ath_hw *ah)
 }
 EXPORT_SYMBOL(ath9k_hw_intrpend);
 
-void ath9k_hw_disable_interrupts(struct ath_hw *ah)
+void ath9k_hw_kill_interrupts(struct ath_hw *ah)
 {
 	struct ath_common *common = ath9k_hw_common(ah);
-
-	if (!(ah->imask & ATH9K_INT_GLOBAL))
-		atomic_set(&ah->intr_ref_cnt, -1);
-	else
-		atomic_dec(&ah->intr_ref_cnt);
 
 	ath_dbg(common, INTERRUPT, "disable IER\n");
 	REG_WRITE(ah, AR_IER, AR_IER_DISABLE);
@@ -784,6 +787,17 @@ void ath9k_hw_disable_interrupts(struct ath_hw *ah)
 		REG_WRITE(ah, AR_INTR_SYNC_ENABLE, 0);
 		(void) REG_READ(ah, AR_INTR_SYNC_ENABLE);
 	}
+}
+EXPORT_SYMBOL(ath9k_hw_kill_interrupts);
+
+void ath9k_hw_disable_interrupts(struct ath_hw *ah)
+{
+	if (!(ah->imask & ATH9K_INT_GLOBAL))
+		atomic_set(&ah->intr_ref_cnt, -1);
+	else
+		atomic_dec(&ah->intr_ref_cnt);
+
+	ath9k_hw_kill_interrupts(ah);
 }
 EXPORT_SYMBOL(ath9k_hw_disable_interrupts);
 
@@ -802,7 +816,7 @@ void ath9k_hw_enable_interrupts(struct ath_hw *ah)
 		return;
 	}
 
-	if (AR_SREV_9340(ah))
+	if (AR_SREV_9340(ah) || AR_SREV_9550(ah))
 		sync_default &= ~AR_INTR_SYNC_HOST1_FATAL;
 
 	async_mask = AR_INTR_MAC_IRQ;

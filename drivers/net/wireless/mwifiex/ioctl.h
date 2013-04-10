@@ -21,6 +21,7 @@
 #define _MWIFIEX_IOCTL_H_
 
 #include <net/mac80211.h>
+#include <net/lib80211.h>
 
 enum {
 	MWIFIEX_SCAN_TYPE_UNCHANGED = 0,
@@ -60,6 +61,52 @@ enum {
 	BAND_A = 4,
 	BAND_GN = 8,
 	BAND_AN = 16,
+};
+
+#define MWIFIEX_WPA_PASSHPHRASE_LEN 64
+struct wpa_param {
+	u8 pairwise_cipher_wpa;
+	u8 pairwise_cipher_wpa2;
+	u8 group_cipher;
+	u32 length;
+	u8 passphrase[MWIFIEX_WPA_PASSHPHRASE_LEN];
+};
+
+struct wep_key {
+	u8 key_index;
+	u8 is_default;
+	u16 length;
+	u8 key[WLAN_KEY_LEN_WEP104];
+};
+
+#define KEY_MGMT_ON_HOST        0x03
+#define MWIFIEX_AUTH_MODE_AUTO  0xFF
+#define BAND_CONFIG_BG          0x00
+#define BAND_CONFIG_A           0x01
+#define MWIFIEX_SUPPORTED_RATES                 14
+#define MWIFIEX_SUPPORTED_RATES_EXT             32
+
+struct mwifiex_uap_bss_param {
+	u8 channel;
+	u8 band_cfg;
+	u16 rts_threshold;
+	u16 frag_threshold;
+	u8 retry_limit;
+	struct mwifiex_802_11_ssid ssid;
+	u8 bcast_ssid_ctl;
+	u8 radio_ctl;
+	u8 dtim_period;
+	u16 beacon_period;
+	u16 auth_mode;
+	u16 protocol;
+	u16 key_mgmt;
+	u16 key_mgmt_operation;
+	struct wpa_param wpa_cfg;
+	struct wep_key wep_cfg[NUM_WEP_KEYS];
+	struct ieee80211_ht_cap ht_cap;
+	u8 rates[MWIFIEX_SUPPORTED_RATES];
+	u32 sta_ao_timer;
+	u32 ps_sta_ao_timer;
 };
 
 enum {
@@ -173,7 +220,7 @@ struct mwifiex_debug_info {
 };
 
 #define MWIFIEX_KEY_INDEX_UNICAST	0x40000000
-#define WAPI_RXPN_LEN			16
+#define PN_LEN				16
 
 struct mwifiex_ds_encrypt_key {
 	u32 key_disable;
@@ -182,13 +229,8 @@ struct mwifiex_ds_encrypt_key {
 	u8 key_material[WLAN_MAX_KEY_LEN];
 	u8 mac_addr[ETH_ALEN];
 	u32 is_wapi_key;
-	u8 wapi_rxpn[WAPI_RXPN_LEN];
-};
-
-struct mwifiex_rate_cfg {
-	u32 action;
-	u32 is_rate_auto;
-	u32 rate;
+	u8 pn[PN_LEN];		/* packet number */
+	u8 is_igtk_key;
 };
 
 struct mwifiex_power_cfg {
@@ -242,7 +284,7 @@ struct mwifiex_ds_ant_cfg {
 	u32 rx_ant;
 };
 
-#define MWIFIEX_NUM_OF_CMD_BUFFER	50
+#define MWIFIEX_NUM_OF_CMD_BUFFER	20
 #define MWIFIEX_SIZE_OF_CMD_BUFFER	2048
 
 enum {
@@ -273,6 +315,8 @@ struct mwifiex_ds_read_eeprom {
 };
 
 #define IEEE_MAX_IE_SIZE		256
+
+#define MWIFIEX_IE_HDR_SIZE	(sizeof(struct mwifiex_ie) - IEEE_MAX_IE_SIZE)
 
 struct mwifiex_ds_misc_gen_ie {
 	u32 type;

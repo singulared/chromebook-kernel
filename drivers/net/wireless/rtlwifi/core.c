@@ -124,7 +124,9 @@ static void rtl_op_stop(struct ieee80211_hw *hw)
 	mutex_unlock(&rtlpriv->locks.conf_mutex);
 }
 
-static void rtl_op_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
+static void rtl_op_tx(struct ieee80211_hw *hw,
+		      struct ieee80211_tx_control *control,
+		      struct sk_buff *skb)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_hal *rtlhal = rtl_hal(rtl_priv(hw));
@@ -138,8 +140,8 @@ static void rtl_op_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
 	if (!test_bit(RTL_STATUS_INTERFACE_START, &rtlpriv->status))
 		goto err_free;
 
-	if (!rtlpriv->intf_ops->waitq_insert(hw, skb))
-		rtlpriv->intf_ops->adapter_tx(hw, skb, &tcb_desc);
+	if (!rtlpriv->intf_ops->waitq_insert(hw, control->sta, skb))
+		rtlpriv->intf_ops->adapter_tx(hw, control->sta, skb, &tcb_desc);
 
 	return;
 
@@ -680,7 +682,7 @@ static void rtl_op_bss_info_changed(struct ieee80211_hw *hw,
 
 		mac->short_preamble = bss_conf->use_short_preamble;
 		rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_ACK_PREAMBLE,
-					      (u8 *) (&mac->short_preamble));
+					      &mac->short_preamble);
 	}
 
 	if (changed & BSS_CHANGED_ERP_SLOT) {
@@ -693,7 +695,7 @@ static void rtl_op_bss_info_changed(struct ieee80211_hw *hw,
 			mac->slot_time = RTL_SLOT_TIME_20;
 
 		rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_SLOT_TIME,
-					      (u8 *) (&mac->slot_time));
+					      &mac->slot_time);
 	}
 
 	if (changed & BSS_CHANGED_HT) {
@@ -713,7 +715,7 @@ static void rtl_op_bss_info_changed(struct ieee80211_hw *hw,
 		rcu_read_unlock();
 
 		rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_SHORTGI_DENSITY,
-					      (u8 *) (&mac->max_mss_density));
+					      &mac->max_mss_density);
 		rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_AMPDU_FACTOR,
 					      &mac->current_ampdu_factor);
 		rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_AMPDU_MIN_SPACE,
@@ -801,7 +803,7 @@ static void rtl_op_bss_info_changed(struct ieee80211_hw *hw,
 				u8 mstatus = RT_MEDIA_CONNECT;
 				rtlpriv->cfg->ops->set_hw_reg(hw,
 						      HW_VAR_H2C_FW_JOINBSSRPT,
-						      (u8 *) (&mstatus));
+						      &mstatus);
 				ppsc->report_linked = true;
 			}
 		} else {
@@ -809,7 +811,7 @@ static void rtl_op_bss_info_changed(struct ieee80211_hw *hw,
 				u8 mstatus = RT_MEDIA_DISCONNECT;
 				rtlpriv->cfg->ops->set_hw_reg(hw,
 						      HW_VAR_H2C_FW_JOINBSSRPT,
-						      (u8 *)(&mstatus));
+						      &mstatus);
 				ppsc->report_linked = false;
 			}
 		}
@@ -836,7 +838,7 @@ static void rtl_op_set_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	u8 bibss = (mac->opmode == NL80211_IFTYPE_ADHOC) ? 1 : 0;
 
 	mac->tsf = tsf;
-	rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_CORRECT_TSF, (u8 *) (&bibss));
+	rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_CORRECT_TSF, &bibss);
 }
 
 static void rtl_op_reset_tsf(struct ieee80211_hw *hw,
@@ -845,7 +847,7 @@ static void rtl_op_reset_tsf(struct ieee80211_hw *hw,
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	u8 tmp = 0;
 
-	rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_DUAL_TSF_RST, (u8 *) (&tmp));
+	rtlpriv->cfg->ops->set_hw_reg(hw, HW_VAR_DUAL_TSF_RST, &tmp);
 }
 
 static void rtl_op_sta_notify(struct ieee80211_hw *hw,
@@ -960,7 +962,6 @@ static int rtl_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	int err = 0;
 	u8 mac_addr[ETH_ALEN];
 	u8 bcast_addr[ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-	u8 zero_addr[ETH_ALEN] = { 0 };
 
 	if (rtlpriv->cfg->mod_params->sw_crypto || rtlpriv->sec.use_sw_sec) {
 		RT_TRACE(rtlpriv, COMP_ERR, DBG_WARNING,
@@ -1055,7 +1056,7 @@ static int rtl_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			memcpy(rtlpriv->sec.key_buf[key_idx],
 			       key->key, key->keylen);
 			rtlpriv->sec.key_len[key_idx] = key->keylen;
-			memcpy(mac_addr, zero_addr, ETH_ALEN);
+			eth_zero_addr(mac_addr);
 		} else if (group_key) {	/* group key */
 			RT_TRACE(rtlpriv, COMP_SEC, DBG_DMESG,
 				 "set group key\n");
@@ -1106,7 +1107,7 @@ static int rtl_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		}
 		memset(rtlpriv->sec.key_buf[key_idx], 0, key->keylen);
 		rtlpriv->sec.key_len[key_idx] = 0;
-		memcpy(mac_addr, zero_addr, ETH_ALEN);
+		eth_zero_addr(mac_addr);
 		/*
 		 *mac80211 will delete entrys one by one,
 		 *so don't use rtl_cam_reset_all_entry

@@ -2952,10 +2952,10 @@ static void send_association_request(struct atmel_private *priv, int is_reassoc)
 	/* current AP address - only in reassoc frame */
 	if (is_reassoc) {
 		memcpy(body.ap, priv->CurrentBSSID, 6);
-		ssid_el_p = (u8 *)&body.ssid_el_id;
+		ssid_el_p = &body.ssid_el_id;
 		bodysize = 18 + priv->SSID_size;
 	} else {
-		ssid_el_p = (u8 *)&body.ap[0];
+		ssid_el_p = &body.ap[0];
 		bodysize = 12 + priv->SSID_size;
 	}
 
@@ -2963,7 +2963,7 @@ static void send_association_request(struct atmel_private *priv, int is_reassoc)
 	ssid_el_p[1] = priv->SSID_size;
 	memcpy(ssid_el_p + 2, priv->SSID, priv->SSID_size);
 	ssid_el_p[2 + priv->SSID_size] = WLAN_EID_SUPP_RATES;
-	ssid_el_p[3 + priv->SSID_size] = 4; /* len of suported rates */
+	ssid_el_p[3 + priv->SSID_size] = 4; /* len of supported rates */
 	memcpy(ssid_el_p + 4 + priv->SSID_size, atmel_basic_rates, 4);
 
 	atmel_transmit_management_frame(priv, &header, (void *)&body, bodysize);
@@ -3989,8 +3989,7 @@ static int reset_atmel_card(struct net_device *dev)
 			atmel_copy_to_card(priv->dev, 0x8000, &fw[0x6000], len - 0x6000);
 		}
 
-		if (fw_entry)
-			release_firmware(fw_entry);
+		release_firmware(fw_entry);
 	}
 
 	err = atmel_wakeup_firmware(priv);

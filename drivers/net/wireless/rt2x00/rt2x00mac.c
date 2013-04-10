@@ -99,7 +99,9 @@ static int rt2x00mac_tx_rts_cts(struct rt2x00_dev *rt2x00dev,
 	return retval;
 }
 
-void rt2x00mac_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
+void rt2x00mac_tx(struct ieee80211_hw *hw,
+		  struct ieee80211_tx_control *control,
+		  struct sk_buff *skb)
 {
 	struct rt2x00_dev *rt2x00dev = hw->priv;
 	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(skb);
@@ -212,46 +214,6 @@ int rt2x00mac_add_interface(struct ieee80211_hw *hw,
 	    !test_bit(DEVICE_STATE_STARTED, &rt2x00dev->flags))
 		return -ENODEV;
 
-	switch (vif->type) {
-	case NL80211_IFTYPE_AP:
-		/*
-		 * We don't support mixed combinations of
-		 * sta and ap interfaces.
-		 */
-		if (rt2x00dev->intf_sta_count)
-			return -ENOBUFS;
-
-		/*
-		 * Check if we exceeded the maximum amount
-		 * of supported interfaces.
-		 */
-		if (rt2x00dev->intf_ap_count >= rt2x00dev->ops->max_ap_intf)
-			return -ENOBUFS;
-
-		break;
-	case NL80211_IFTYPE_STATION:
-	case NL80211_IFTYPE_ADHOC:
-	case NL80211_IFTYPE_MESH_POINT:
-	case NL80211_IFTYPE_WDS:
-		/*
-		 * We don't support mixed combinations of
-		 * sta and ap interfaces.
-		 */
-		if (rt2x00dev->intf_ap_count)
-			return -ENOBUFS;
-
-		/*
-		 * Check if we exceeded the maximum amount
-		 * of supported interfaces.
-		 */
-		if (rt2x00dev->intf_sta_count >= rt2x00dev->ops->max_sta_intf)
-			return -ENOBUFS;
-
-		break;
-	default:
-		return -EINVAL;
-	}
-
 	/*
 	 * Loop through all beacon queues to find a free
 	 * entry. Since there are as much beacon entries
@@ -277,7 +239,6 @@ int rt2x00mac_add_interface(struct ieee80211_hw *hw,
 	else
 		rt2x00dev->intf_sta_count++;
 
-	spin_lock_init(&intf->seqlock);
 	mutex_init(&intf->beacon_skb_mutex);
 	intf->beacon = entry;
 
@@ -463,9 +424,9 @@ int rt2x00mac_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 	if (!test_bit(DEVICE_STATE_ENABLED_RADIO, &rt2x00dev->flags))
 		return 0;
 
-	ieee80211_iterate_active_interfaces_atomic(rt2x00dev->hw,
-						   rt2x00mac_set_tim_iter,
-						   rt2x00dev);
+	ieee80211_iterate_active_interfaces_atomic(
+		rt2x00dev->hw, IEEE80211_IFACE_ITER_RESUME_ALL,
+		rt2x00mac_set_tim_iter, rt2x00dev);
 
 	/* queue work to upodate the beacon template */
 	ieee80211_queue_work(rt2x00dev->hw, &rt2x00dev->intf_work);
@@ -507,9 +468,19 @@ int rt2x00mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	if (!test_bit(DEVICE_STATE_PRESENT, &rt2x00dev->flags))
 		return 0;
-	else if (!test_bit(CAPABILITY_HW_CRYPTO, &rt2x00dev->cap_flags))
+
+	if (!test_bit(CAPABILITY_HW_CRYPTO, &rt2x00dev->cap_flags))
 		return -EOPNOTSUPP;
-	else if (key->keylen > 32)
+
+	/*
+	 * To support IBSS RSN, don't program group keys in IBSS, the
+	 * hardware will then not attempt to decrypt the frames.
+	 */
+	if (vif->type == NL80211_IFTYPE_ADHOC &&
+	    !(key->flags & IEEE80211_KEY_FLAG_PAIRWISE))
+		return -EOPNOTSUPP;
+
+	if (key->keylen > 32)
 		return -ENOSPC;
 
 	memset(&crypto, 0, sizeof(crypto));
@@ -709,7 +680,17 @@ void rt2x00mac_bss_info_changed(struct ieee80211_hw *hw,
 			rt2x00dev->intf_associated--;
 
 		rt2x00leds_led_assoc(rt2x00dev, !!rt2x00dev->intf_associated);
+
+		clear_bit(CONFIG_QOS_DISABLED, &rt2x00dev->flags);
 	}
+
+	/*
+	 * Check for access point which do not support 802.11e . We have to
+	 * generate data frames sequence number in S/W for such AP, because
+	 * of H/W bug.
+	 */
+	if (changes & BSS_CHANGED_QOS && !bss_conf->qos)
+		set_bit(CONFIG_QOS_DISABLED, &rt2x00dev->flags);
 
 	/*
 	 * When the erp information has changed, we should perform

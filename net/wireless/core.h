@@ -13,6 +13,7 @@
 #include <linux/debugfs.h>
 #include <linux/rfkill.h>
 #include <linux/workqueue.h>
+#include <linux/rtnetlink.h>
 #include <net/genetlink.h>
 #include <net/cfg80211.h>
 #include "reg.h"
@@ -46,15 +47,20 @@ struct cfg80211_registered_device {
 	/* wiphy index, internal only */
 	int wiphy_idx;
 
-	/* associate netdev list */
+	/* associated wireless interfaces */
 	struct mutex devlist_mtx;
 	/* protected by devlist_mtx or RCU */
-	struct list_head netdev_list;
-	int devlist_generation;
+	struct list_head wdev_list;
+	int devlist_generation, wdev_id;
 	int opencount; /* also protected by devlist_mtx */
 	wait_queue_head_t dev_wait;
 
-	u32 ap_beacons_nlpid;
+	struct list_head beacon_registrations;
+	spinlock_t beacon_registrations_lock;
+
+	/* protected by RTNL only */
+	int num_running_ifaces;
+	int num_running_monitor_ifaces;
 
 	/* BSSes/scanning */
 	spinlock_t bss_lock;
@@ -132,8 +138,6 @@ struct cfg80211_internal_bss {
 	unsigned long ts;
 	struct kref ref;
 	atomic_t hold;
-	bool beacon_ies_allocated;
-	bool proberesp_ies_allocated;
 
 	/* must be last because of priv member */
 	struct cfg80211_bss pub;
@@ -158,32 +162,6 @@ static inline void cfg80211_unhold_bss(struct cfg80211_internal_bss *bss)
 
 struct cfg80211_registered_device *cfg80211_rdev_by_wiphy_idx(int wiphy_idx);
 int get_wiphy_idx(struct wiphy *wiphy);
-
-struct cfg80211_registered_device *
-__cfg80211_rdev_from_info(struct genl_info *info);
-
-/*
- * This function returns a pointer to the driver
- * that the genl_info item that is passed refers to.
- * If successful, it returns non-NULL and also locks
- * the driver's mutex!
- *
- * This means that you need to call cfg80211_unlock_rdev()
- * before being allowed to acquire &cfg80211_mutex!
- *
- * This is necessary because we need to lock the global
- * mutex to get an item off the list safely, and then
- * we lock the rdev mutex so it doesn't go away under us.
- *
- * We don't want to keep cfg80211_mutex locked
- * for all the time in order to allow requests on
- * other interfaces to go through at the same time.
- *
- * The result of this can be a PTR_ERR and hence must
- * be checked with IS_ERR() for errors.
- */
-extern struct cfg80211_registered_device *
-cfg80211_get_dev_from_info(struct genl_info *info);
 
 /* requires cfg80211_rdev_mutex to be held! */
 struct wiphy *wiphy_idx_to_wiphy(int wiphy_idx);
@@ -222,6 +200,14 @@ static inline void wdev_unlock(struct wireless_dev *wdev)
 
 #define ASSERT_RDEV_LOCK(rdev) lockdep_assert_held(&(rdev)->mtx)
 #define ASSERT_WDEV_LOCK(wdev) lockdep_assert_held(&(wdev)->mtx)
+
+static inline bool cfg80211_has_monitors_only(struct cfg80211_registered_device *rdev)
+{
+	ASSERT_RTNL();
+
+	return rdev->num_running_ifaces == rdev->num_running_monitor_ifaces &&
+	       rdev->num_running_ifaces > 0;
+}
 
 enum cfg80211_event_type {
 	EVENT_CONNECT_RESULT,
@@ -267,6 +253,16 @@ struct cfg80211_cached_keys {
 	int def, defmgmt;
 };
 
+enum cfg80211_chan_mode {
+	CHAN_MODE_UNDEFINED,
+	CHAN_MODE_SHARED,
+	CHAN_MODE_EXCLUSIVE,
+};
+
+struct cfg80211_beacon_registration {
+	struct list_head list;
+	u32 nlportid;
+};
 
 /* free object */
 extern void cfg80211_dev_free(struct cfg80211_registered_device *rdev);
@@ -303,14 +299,21 @@ extern const struct mesh_config default_mesh_config;
 extern const struct mesh_setup default_mesh_setup;
 int __cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 			 struct net_device *dev,
-			 const struct mesh_setup *setup,
+			 struct mesh_setup *setup,
 			 const struct mesh_config *conf);
 int cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 		       struct net_device *dev,
-		       const struct mesh_setup *setup,
+		       struct mesh_setup *setup,
 		       const struct mesh_config *conf);
 int cfg80211_leave_mesh(struct cfg80211_registered_device *rdev,
 			struct net_device *dev);
+int cfg80211_set_mesh_channel(struct cfg80211_registered_device *rdev,
+			      struct wireless_dev *wdev,
+			      struct cfg80211_chan_def *chandef);
+
+/* AP */
+int cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
+		     struct net_device *dev);
 
 /* MLME */
 int __cfg80211_mlme_auth(struct cfg80211_registered_device *rdev,
@@ -320,13 +323,15 @@ int __cfg80211_mlme_auth(struct cfg80211_registered_device *rdev,
 			 const u8 *bssid,
 			 const u8 *ssid, int ssid_len,
 			 const u8 *ie, int ie_len,
-			 const u8 *key, int key_len, int key_idx);
+			 const u8 *key, int key_len, int key_idx,
+			 const u8 *sae_data, int sae_data_len);
 int cfg80211_mlme_auth(struct cfg80211_registered_device *rdev,
 		       struct net_device *dev, struct ieee80211_channel *chan,
 		       enum nl80211_auth_type auth_type, const u8 *bssid,
 		       const u8 *ssid, int ssid_len,
 		       const u8 *ie, int ie_len,
-		       const u8 *key, int key_len, int key_idx);
+		       const u8 *key, int key_len, int key_idx,
+		       const u8 *sae_data, int sae_data_len);
 int __cfg80211_mlme_assoc(struct cfg80211_registered_device *rdev,
 			  struct net_device *dev,
 			  struct ieee80211_channel *chan,
@@ -363,18 +368,16 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 			       const u8 *resp_ie, size_t resp_ie_len,
 			       u16 status, bool wextev,
 			       struct cfg80211_bss *bss);
-int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
+int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_pid,
 				u16 frame_type, const u8 *match_data,
 				int match_len);
 void cfg80211_mlme_unregister_socket(struct wireless_dev *wdev, u32 nlpid);
 void cfg80211_mlme_purge_registrations(struct wireless_dev *wdev);
 int cfg80211_mlme_mgmt_tx(struct cfg80211_registered_device *rdev,
-			  struct net_device *dev,
+			  struct wireless_dev *wdev,
 			  struct ieee80211_channel *chan, bool offchan,
-			  enum nl80211_channel_type channel_type,
-			  bool channel_type_valid, unsigned int wait,
-			  const u8 *buf, size_t len, bool no_cck,
-			  bool dont_wait_for_ack, u64 *cookie);
+			  unsigned int wait, const u8 *buf, size_t len,
+			  bool no_cck, bool dont_wait_for_ack, u64 *cookie);
 void cfg80211_oper_and_ht_capa(struct ieee80211_ht_cap *ht_capa,
 			       const struct ieee80211_ht_cap *ht_capa_mask);
 
@@ -426,10 +429,22 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 			  struct net_device *dev, enum nl80211_iftype ntype,
 			  u32 *flags, struct vif_params *params);
 void cfg80211_process_rdev_events(struct cfg80211_registered_device *rdev);
+void cfg80211_process_wdev_events(struct wireless_dev *wdev);
 
-int cfg80211_can_change_interface(struct cfg80211_registered_device *rdev,
-				  struct wireless_dev *wdev,
-				  enum nl80211_iftype iftype);
+int cfg80211_can_use_iftype_chan(struct cfg80211_registered_device *rdev,
+				 struct wireless_dev *wdev,
+				 enum nl80211_iftype iftype,
+				 struct ieee80211_channel *chan,
+				 enum cfg80211_chan_mode chanmode);
+
+static inline int
+cfg80211_can_change_interface(struct cfg80211_registered_device *rdev,
+			      struct wireless_dev *wdev,
+			      enum nl80211_iftype iftype)
+{
+	return cfg80211_can_use_iftype_chan(rdev, wdev, iftype, NULL,
+					    CHAN_MODE_UNDEFINED);
+}
 
 static inline int
 cfg80211_can_add_interface(struct cfg80211_registered_device *rdev,
@@ -438,14 +453,23 @@ cfg80211_can_add_interface(struct cfg80211_registered_device *rdev,
 	return cfg80211_can_change_interface(rdev, NULL, iftype);
 }
 
-struct ieee80211_channel *
-rdev_freq_to_chan(struct cfg80211_registered_device *rdev,
-		  int freq, enum nl80211_channel_type channel_type);
-int cfg80211_set_freq(struct cfg80211_registered_device *rdev,
-		      struct wireless_dev *wdev, int freq,
-		      enum nl80211_channel_type channel_type);
+static inline int
+cfg80211_can_use_chan(struct cfg80211_registered_device *rdev,
+		      struct wireless_dev *wdev,
+		      struct ieee80211_channel *chan,
+		      enum cfg80211_chan_mode chanmode)
+{
+	return cfg80211_can_use_iftype_chan(rdev, wdev, wdev->iftype,
+					    chan, chanmode);
+}
 
-u16 cfg80211_calculate_bitrate(struct rate_info *rate);
+void
+cfg80211_get_chan_state(struct wireless_dev *wdev,
+		        struct ieee80211_channel **chan,
+		        enum cfg80211_chan_mode *chanmode);
+
+int cfg80211_set_monitor_channel(struct cfg80211_registered_device *rdev,
+				 struct cfg80211_chan_def *chandef);
 
 int ieee80211_get_ratemask(struct ieee80211_supported_band *sband,
 			   const u8 *rates, unsigned int n_rates,
@@ -453,6 +477,11 @@ int ieee80211_get_ratemask(struct ieee80211_supported_band *sband,
 
 int cfg80211_validate_beacon_int(struct cfg80211_registered_device *rdev,
 				 u32 beacon_int);
+
+void cfg80211_update_iface_num(struct cfg80211_registered_device *rdev,
+			       enum nl80211_iftype iftype, int num);
+
+#define CFG80211_MAX_NUM_DIFFERENT_CHANNELS 10
 
 #ifdef CONFIG_CFG80211_DEVELOPER_WARNINGS
 #define CFG80211_DEV_WARN_ON(cond)	WARN_ON(cond)
