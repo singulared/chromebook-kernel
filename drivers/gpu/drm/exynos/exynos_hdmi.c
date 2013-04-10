@@ -133,7 +133,6 @@ struct hdmi_context {
 	unsigned int			default_win;
 	unsigned int			default_bpp;
 	bool				hpd_handle;
-	bool				enabled;
 	bool				has_hdmi_sink;
 	bool				has_hdmi_audio;
 	bool				is_soc_exynos5;
@@ -1903,7 +1902,6 @@ static void hdmi_commit(void *ctx)
 		return;
 
 	hdmi_conf_apply(hdata);
-	hdata->enabled = true;
 }
 
 static int hdmiphy_update_bits(struct i2c_client *client, u8 *reg_cache,
