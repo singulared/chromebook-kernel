@@ -1071,7 +1071,7 @@ static void iommu_deinit(struct device *mfc_l, struct device *mfc_r)
 #else
 static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 {
-	unsigned int mem_info[2];
+	unsigned int mem_info[2] = { };
 
 	of_property_read_u32_array(dev->plat_dev->dev.of_node,
 			"samsung,mfc-l", mem_info, 2);
