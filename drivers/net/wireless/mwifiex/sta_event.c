@@ -185,7 +185,7 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 	struct mwifiex_adapter *adapter = priv->adapter;
 	int ret = 0;
 	u32 eventcause = adapter->event_cause;
-	u16 ctrl, reason_code;
+	u16 reason_code;
 
 	switch (eventcause) {
 	case EVENT_DUMMY_HOST_WAKEUP_SIGNAL:
@@ -395,11 +395,11 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 					      adapter->event_body);
 		break;
 	case EVENT_AMSDU_AGGR_CTRL:
-		ctrl = le16_to_cpu(*(__le16 *)adapter->event_body);
-		dev_dbg(adapter->dev, "event: AMSDU_AGGR_CTRL %d\n", ctrl);
-
+		dev_dbg(adapter->dev, "event:  AMSDU_AGGR_CTRL %d\n",
+			*(u16 *) adapter->event_body);
 		adapter->tx_buf_size =
-				min_t(u16, adapter->curr_tx_buf_size, ctrl);
+			min(adapter->curr_tx_buf_size,
+			    le16_to_cpu(*(__le16 *) adapter->event_body));
 		dev_dbg(adapter->dev, "event: tx_buf_size %d\n",
 			adapter->tx_buf_size);
 		break;
@@ -415,18 +415,6 @@ int mwifiex_process_sta_event(struct mwifiex_private *priv)
 	case EVENT_HOSTWAKE_STAIE:
 		dev_dbg(adapter->dev, "event: HOSTWAKE_STAIE %d\n", eventcause);
 		break;
-
-	case EVENT_REMAIN_ON_CHAN_EXPIRED:
-		dev_dbg(adapter->dev, "event: Remain on channel expired\n");
-		cfg80211_remain_on_channel_expired(priv->wdev,
-						   priv->roc_cfg.cookie,
-						   &priv->roc_cfg.chan,
-						   GFP_ATOMIC);
-
-		memset(&priv->roc_cfg, 0x00, sizeof(struct mwifiex_roc_cfg));
-
-		break;
-
 	default:
 		dev_dbg(adapter->dev, "event: unknown event id: %#x\n",
 			eventcause);

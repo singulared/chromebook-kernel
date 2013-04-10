@@ -17,7 +17,6 @@
 #include <net/mac80211.h>
 #include "ieee80211_i.h"
 #include "sta_info.h"
-#include "driver-ops.h"
 
 struct rate_control_ref {
 	struct ieee80211_local *local;
@@ -52,21 +51,11 @@ static inline void rate_control_rate_init(struct sta_info *sta)
 	struct ieee80211_sta *ista = &sta->sta;
 	void *priv_sta = sta->rate_ctrl_priv;
 	struct ieee80211_supported_band *sband;
-	struct ieee80211_chanctx_conf *chanctx_conf;
 
 	if (!ref)
 		return;
 
-	rcu_read_lock();
-
-	chanctx_conf = rcu_dereference(sta->sdata->vif.chanctx_conf);
-	if (WARN_ON(!chanctx_conf)) {
-		rcu_read_unlock();
-		return;
-	}
-
-	sband = local->hw.wiphy->bands[chanctx_conf->def.chan->band];
-	rcu_read_unlock();
+	sband = local->hw.wiphy->bands[local->hw.conf.channel->band];
 
 	ref->ops->rate_init(ref->priv, sband, ista, priv_sta);
 	set_sta_flag(sta, WLAN_STA_RATE_CONTROL);
@@ -74,7 +63,8 @@ static inline void rate_control_rate_init(struct sta_info *sta)
 
 static inline void rate_control_rate_update(struct ieee80211_local *local,
 				    struct ieee80211_supported_band *sband,
-				    struct sta_info *sta, u32 changed)
+				    struct sta_info *sta, u32 changed,
+				    enum nl80211_channel_type oper_chan_type)
 {
 	struct rate_control_ref *ref = local->rate_ctrl;
 	struct ieee80211_sta *ista = &sta->sta;
@@ -82,8 +72,7 @@ static inline void rate_control_rate_update(struct ieee80211_local *local,
 
 	if (ref && ref->ops->rate_update)
 		ref->ops->rate_update(ref->priv, sband, ista,
-				      priv_sta, changed);
-	drv_sta_rc_update(local, sta->sdata, &sta->sta, changed);
+				      priv_sta, changed, oper_chan_type);
 }
 
 static inline void *rate_control_alloc_sta(struct rate_control_ref *ref,

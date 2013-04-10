@@ -166,7 +166,6 @@ that only one external action is invoked at a time.
 #include <net/lib80211.h>
 
 #include "ipw2100.h"
-#include "ipw.h"
 
 #define IPW2100_VERSION "git-1.2.2"
 
@@ -344,50 +343,38 @@ static struct iw_handler_def ipw2100_wx_handler_def;
 
 static inline void read_register(struct net_device *dev, u32 reg, u32 * val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	*val = ioread32(priv->ioaddr + reg);
+	*val = readl((void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("r: 0x%08X => 0x%08X\n", reg, *val);
 }
 
 static inline void write_register(struct net_device *dev, u32 reg, u32 val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	iowrite32(val, priv->ioaddr + reg);
+	writel(val, (void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("w: 0x%08X <= 0x%08X\n", reg, val);
 }
 
 static inline void read_register_word(struct net_device *dev, u32 reg,
 				      u16 * val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	*val = ioread16(priv->ioaddr + reg);
+	*val = readw((void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("r: 0x%08X => %04X\n", reg, *val);
 }
 
 static inline void read_register_byte(struct net_device *dev, u32 reg, u8 * val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	*val = ioread8(priv->ioaddr + reg);
+	*val = readb((void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("r: 0x%08X => %02X\n", reg, *val);
 }
 
 static inline void write_register_word(struct net_device *dev, u32 reg, u16 val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	iowrite16(val, priv->ioaddr + reg);
+	writew(val, (void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("w: 0x%08X <= %04X\n", reg, val);
 }
 
 static inline void write_register_byte(struct net_device *dev, u32 reg, u8 val)
 {
-	struct ipw2100_priv *priv = libipw_priv(dev);
-
-	iowrite8(val, priv->ioaddr + reg);
+	writeb(val, (void __iomem *)(dev->base_addr + reg));
 	IPW_DEBUG_IO("w: 0x%08X =< %02X\n", reg, val);
 }
 
@@ -519,13 +506,13 @@ static void read_nic_memory(struct net_device *dev, u32 addr, u32 len,
 		read_register_byte(dev, IPW_REG_INDIRECT_ACCESS_DATA + i, buf);
 }
 
-static bool ipw2100_hw_is_adapter_in_system(struct net_device *dev)
+static inline int ipw2100_hw_is_adapter_in_system(struct net_device *dev)
 {
-	u32 dbg;
-
-	read_register(dev, IPW_REG_DOA_DEBUG_AREA_START, &dbg);
-
-	return dbg == IPW_DATA_DOA_DEBUG_VALUE;
+	return (dev->base_addr &&
+		(readl
+		 ((void __iomem *)(dev->base_addr +
+				   IPW_REG_DOA_DEBUG_AREA_START))
+		 == IPW_DATA_DOA_DEBUG_VALUE));
 }
 
 static int ipw2100_get_ordinal(struct ipw2100_priv *priv, u32 ord,
@@ -1788,7 +1775,10 @@ static int ipw2100_up(struct ipw2100_priv *priv, int deferred)
 	}
 
 	/* Initialize the geo */
-	libipw_set_geo(priv->ieee, &ipw_geos[0]);
+	if (libipw_set_geo(priv->ieee, &ipw_geos[0])) {
+		printk(KERN_WARNING DRV_NAME "Could not set geo\n");
+		return 0;
+	}
 	priv->ieee->freq_band = LIBIPW_24GHZ_BAND;
 
 	lock = LOCK_NONE;
@@ -1900,6 +1890,14 @@ static void ipw2100_down(struct ipw2100_priv *priv)
 	netif_stop_queue(priv->net_dev);
 }
 
+/* Called by register_netdev() */
+static int ipw2100_net_init(struct net_device *dev)
+{
+	struct ipw2100_priv *priv = libipw_priv(dev);
+
+	return ipw2100_up(priv, 1);
+}
+
 static int ipw2100_wdev_init(struct net_device *dev)
 {
 	struct ipw2100_priv *priv = libipw_priv(dev);
@@ -1948,12 +1946,11 @@ static int ipw2100_wdev_init(struct net_device *dev)
 		wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = bg_band;
 	}
 
-	wdev->wiphy->cipher_suites = ipw_cipher_suites;
-	wdev->wiphy->n_cipher_suites = ARRAY_SIZE(ipw_cipher_suites);
-
 	set_wiphy_dev(wdev->wiphy, &priv->pci_dev->dev);
-	if (wiphy_register(wdev->wiphy))
+	if (wiphy_register(wdev->wiphy)) {
+		ipw2100_down(priv);
 		return -EIO;
+	}
 	return 0;
 }
 
@@ -2039,8 +2036,7 @@ static void isr_indicate_associated(struct ipw2100_priv *priv, u32 status)
 		return;
 	}
 	len = ETH_ALEN;
-	ret = ipw2100_get_ordinal(priv, IPW_ORD_STAT_ASSN_AP_BSSID, bssid,
-				  &len);
+	ipw2100_get_ordinal(priv, IPW_ORD_STAT_ASSN_AP_BSSID, &bssid, &len);
 	if (ret) {
 		IPW_DEBUG_INFO("failed querying ordinals at line %d\n",
 			       __LINE__);
@@ -2178,7 +2174,8 @@ static void isr_indicate_rf_kill(struct ipw2100_priv *priv, u32 status)
 
 	/* Make sure the RF Kill check timer is running */
 	priv->stop_rf_kill = 0;
-	mod_delayed_work(system_wq, &priv->rf_kill, round_jiffies_relative(HZ));
+	cancel_delayed_work(&priv->rf_kill);
+	schedule_delayed_work(&priv->rf_kill, round_jiffies_relative(HZ));
 }
 
 static void send_scan_event(void *data)
@@ -3776,7 +3773,7 @@ IPW2100_ORD(STAT_TX_HOST_REQUESTS, "requested Host Tx's (MSDU)"),
 	    IPW2100_ORD(COUNTRY_CODE,
 				"IEEE country code as recv'd from beacon"),
 	    IPW2100_ORD(COUNTRY_CHANNELS,
-				"channels supported by country"),
+				"channels suported by country"),
 	    IPW2100_ORD(RESET_CNT, "adapter resets (warm)"),
 	    IPW2100_ORD(BEACON_INTERVAL, "Beacon interval"),
 	    IPW2100_ORD(ANTENNA_DIVERSITY,
@@ -4065,7 +4062,7 @@ static int ipw2100_switch_mode(struct ipw2100_priv *priv, u32 mode)
 	ipw2100_firmware.version = 0;
 #endif
 
-	printk(KERN_INFO "%s: Resetting on mode change.\n", priv->net_dev->name);
+	printk(KERN_INFO "%s: Reseting on mode change.\n", priv->net_dev->name);
 	priv->reset_backoff = 0;
 	schedule_reset(priv);
 
@@ -4318,8 +4315,9 @@ static int ipw_radio_kill_sw(struct ipw2100_priv *priv, int disable_radio)
 					  "disabled by HW switch\n");
 			/* Make sure the RF_KILL check timer is running */
 			priv->stop_rf_kill = 0;
-			mod_delayed_work(system_wq, &priv->rf_kill,
-					 round_jiffies_relative(HZ));
+			cancel_delayed_work(&priv->rf_kill);
+			schedule_delayed_work(&priv->rf_kill,
+					      round_jiffies_relative(HZ));
 		} else
 			schedule_reset(priv);
 	}
@@ -6075,6 +6073,7 @@ static const struct net_device_ops ipw2100_netdev_ops = {
 	.ndo_stop		= ipw2100_close,
 	.ndo_start_xmit		= libipw_xmit,
 	.ndo_change_mtu		= libipw_change_mtu,
+	.ndo_init		= ipw2100_net_init,
 	.ndo_tx_timeout		= ipw2100_tx_timeout,
 	.ndo_set_mac_address	= ipw2100_set_address,
 	.ndo_validate_addr	= eth_validate_addr,
@@ -6083,7 +6082,9 @@ static const struct net_device_ops ipw2100_netdev_ops = {
 /* Look into using netdev destructor to shutdown libipw? */
 
 static struct net_device *ipw2100_alloc_device(struct pci_dev *pci_dev,
-					       void __iomem * ioaddr)
+					       void __iomem * base_addr,
+					       unsigned long mem_start,
+					       unsigned long mem_len)
 {
 	struct ipw2100_priv *priv;
 	struct net_device *dev;
@@ -6095,7 +6096,6 @@ static struct net_device *ipw2100_alloc_device(struct pci_dev *pci_dev,
 	priv->ieee = netdev_priv(dev);
 	priv->pci_dev = pci_dev;
 	priv->net_dev = dev;
-	priv->ioaddr = ioaddr;
 
 	priv->ieee->hard_start_xmit = ipw2100_tx;
 	priv->ieee->set_security = shim__set_security;
@@ -6110,6 +6110,10 @@ static struct net_device *ipw2100_alloc_device(struct pci_dev *pci_dev,
 	dev->wireless_data = &priv->wireless_data;
 	dev->watchdog_timeo = 3 * HZ;
 	dev->irq = 0;
+
+	dev->base_addr = (unsigned long)base_addr;
+	dev->mem_start = mem_start;
+	dev->mem_end = dev->mem_start + mem_len - 1;
 
 	/* NOTE: We don't use the wireless_handlers hook
 	 * in dev as the system will start throwing WX requests
@@ -6211,7 +6215,8 @@ static struct net_device *ipw2100_alloc_device(struct pci_dev *pci_dev,
 static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 				const struct pci_device_id *ent)
 {
-	void __iomem *ioaddr;
+	unsigned long mem_start, mem_len, mem_flags;
+	void __iomem *base_addr = NULL;
 	struct net_device *dev = NULL;
 	struct ipw2100_priv *priv = NULL;
 	int err = 0;
@@ -6220,14 +6225,18 @@ static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 
 	IPW_DEBUG_INFO("enter\n");
 
-	if (!(pci_resource_flags(pci_dev, 0) & IORESOURCE_MEM)) {
+	mem_start = pci_resource_start(pci_dev, 0);
+	mem_len = pci_resource_len(pci_dev, 0);
+	mem_flags = pci_resource_flags(pci_dev, 0);
+
+	if ((mem_flags & IORESOURCE_MEM) != IORESOURCE_MEM) {
 		IPW_DEBUG_INFO("weird - resource type is not memory\n");
 		err = -ENODEV;
-		goto out;
+		goto fail;
 	}
 
-	ioaddr = pci_iomap(pci_dev, 0, 0);
-	if (!ioaddr) {
+	base_addr = ioremap_nocache(mem_start, mem_len);
+	if (!base_addr) {
 		printk(KERN_WARNING DRV_NAME
 		       "Error calling ioremap_nocache.\n");
 		err = -EIO;
@@ -6235,7 +6244,7 @@ static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 	}
 
 	/* allocate and initialize our net_device */
-	dev = ipw2100_alloc_device(pci_dev, ioaddr);
+	dev = ipw2100_alloc_device(pci_dev, base_addr, mem_start, mem_len);
 	if (!dev) {
 		printk(KERN_WARNING DRV_NAME
 		       "Error calling ipw2100_alloc_device.\n");
@@ -6316,27 +6325,27 @@ static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 	printk(KERN_INFO DRV_NAME
 	       ": Detected Intel PRO/Wireless 2100 Network Connection\n");
 
-	err = ipw2100_up(priv, 1);
-	if (err)
-		goto fail;
-
-	err = ipw2100_wdev_init(dev);
-	if (err)
-		goto fail;
-	registered = 1;
-
 	/* Bring up the interface.  Pre 0.46, after we registered the
 	 * network device we would call ipw2100_up.  This introduced a race
 	 * condition with newer hotplug configurations (network was coming
 	 * up and making calls before the device was initialized).
-	 */
+	 *
+	 * If we called ipw2100_up before we registered the device, then the
+	 * device name wasn't registered.  So, we instead use the net_dev->init
+	 * member to call a function that then just turns and calls ipw2100_up.
+	 * net_dev->init is called after name allocation but before the
+	 * notifier chain is called */
 	err = register_netdev(dev);
 	if (err) {
 		printk(KERN_WARNING DRV_NAME
 		       "Error calling register_netdev.\n");
 		goto fail;
 	}
-	registered = 2;
+	registered = 1;
+
+	err = ipw2100_wdev_init(dev);
+	if (err)
+		goto fail;
 
 	mutex_lock(&priv->action_mutex);
 
@@ -6370,20 +6379,17 @@ static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 	priv->status |= STATUS_INITIALIZED;
 
 	mutex_unlock(&priv->action_mutex);
-out:
-	return err;
+
+	return 0;
 
       fail_unlock:
 	mutex_unlock(&priv->action_mutex);
+	wiphy_unregister(priv->ieee->wdev.wiphy);
+	kfree(priv->ieee->bg_band.channels);
       fail:
 	if (dev) {
-		if (registered >= 2)
+		if (registered)
 			unregister_netdev(dev);
-
-		if (registered) {
-			wiphy_unregister(priv->ieee->wdev.wiphy);
-			kfree(priv->ieee->bg_band.channels);
-		}
 
 		ipw2100_hw_stop_adapter(priv);
 
@@ -6403,56 +6409,63 @@ out:
 		pci_set_drvdata(pci_dev, NULL);
 	}
 
-	pci_iounmap(pci_dev, ioaddr);
+	if (base_addr)
+		iounmap(base_addr);
 
 	pci_release_regions(pci_dev);
 	pci_disable_device(pci_dev);
-	goto out;
+
+	return err;
 }
 
-static void ipw2100_pci_remove_one(struct pci_dev *pci_dev)
+static void __devexit ipw2100_pci_remove_one(struct pci_dev *pci_dev)
 {
 	struct ipw2100_priv *priv = pci_get_drvdata(pci_dev);
-	struct net_device *dev = priv->net_dev;
+	struct net_device *dev;
 
-	mutex_lock(&priv->action_mutex);
+	if (priv) {
+		mutex_lock(&priv->action_mutex);
 
-	priv->status &= ~STATUS_INITIALIZED;
+		priv->status &= ~STATUS_INITIALIZED;
 
-	sysfs_remove_group(&pci_dev->dev.kobj, &ipw2100_attribute_group);
+		dev = priv->net_dev;
+		sysfs_remove_group(&pci_dev->dev.kobj,
+				   &ipw2100_attribute_group);
 
 #ifdef CONFIG_PM
-	if (ipw2100_firmware.version)
-		ipw2100_release_firmware(priv, &ipw2100_firmware);
+		if (ipw2100_firmware.version)
+			ipw2100_release_firmware(priv, &ipw2100_firmware);
 #endif
-	/* Take down the hardware */
-	ipw2100_down(priv);
+		/* Take down the hardware */
+		ipw2100_down(priv);
 
-	/* Release the mutex so that the network subsystem can
-	 * complete any needed calls into the driver... */
-	mutex_unlock(&priv->action_mutex);
+		/* Release the mutex so that the network subsystem can
+		 * complete any needed calls into the driver... */
+		mutex_unlock(&priv->action_mutex);
 
-	/* Unregister the device first - this results in close()
-	 * being called if the device is open.  If we free storage
-	 * first, then close() will crash.
-	 * FIXME: remove the comment above. */
-	unregister_netdev(dev);
+		/* Unregister the device first - this results in close()
+		 * being called if the device is open.  If we free storage
+		 * first, then close() will crash. */
+		unregister_netdev(dev);
 
-	ipw2100_kill_works(priv);
+		ipw2100_kill_works(priv);
 
-	ipw2100_queues_free(priv);
+		ipw2100_queues_free(priv);
 
-	/* Free potential debugging firmware snapshot */
-	ipw2100_snapshot_free(priv);
+		/* Free potential debugging firmware snapshot */
+		ipw2100_snapshot_free(priv);
 
-	free_irq(dev->irq, priv);
+		if (dev->irq)
+			free_irq(dev->irq, priv);
 
-	pci_iounmap(pci_dev, priv->ioaddr);
+		if (dev->base_addr)
+			iounmap((void __iomem *)dev->base_addr);
 
-	/* wiphy_unregister needs to be here, before free_libipw */
-	wiphy_unregister(priv->ieee->wdev.wiphy);
-	kfree(priv->ieee->bg_band.channels);
-	free_libipw(dev, 0);
+		/* wiphy_unregister needs to be here, before free_libipw */
+		wiphy_unregister(priv->ieee->wdev.wiphy);
+		kfree(priv->ieee->bg_band.channels);
+		free_libipw(dev, 0);
+	}
 
 	pci_release_regions(pci_dev);
 	pci_disable_device(pci_dev);
@@ -6606,7 +6619,7 @@ static struct pci_driver ipw2100_pci_driver = {
 	.name = DRV_NAME,
 	.id_table = ipw2100_pci_id_table,
 	.probe = ipw2100_pci_init_one,
-	.remove = ipw2100_pci_remove_one,
+	.remove = __devexit_p(ipw2100_pci_remove_one),
 #ifdef CONFIG_PM
 	.suspend = ipw2100_suspend,
 	.resume = ipw2100_resume,
@@ -6959,6 +6972,13 @@ static int ipw2100_wx_set_wap(struct net_device *dev,
 	struct ipw2100_priv *priv = libipw_priv(dev);
 	int err = 0;
 
+	static const unsigned char any[] = {
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+	};
+	static const unsigned char off[] = {
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+
 	// sanity checks
 	if (wrqu->ap_addr.sa_family != ARPHRD_ETHER)
 		return -EINVAL;
@@ -6969,8 +6989,8 @@ static int ipw2100_wx_set_wap(struct net_device *dev,
 		goto done;
 	}
 
-	if (is_broadcast_ether_addr(wrqu->ap_addr.sa_data) ||
-	    is_zero_ether_addr(wrqu->ap_addr.sa_data)) {
+	if (!memcmp(any, wrqu->ap_addr.sa_data, ETH_ALEN) ||
+	    !memcmp(off, wrqu->ap_addr.sa_data, ETH_ALEN)) {
 		/* we disable mandatory BSSID association */
 		IPW_DEBUG_WX("exit - disable mandatory BSSID\n");
 		priv->config &= ~CFG_STATIC_BSSID;
@@ -8488,7 +8508,8 @@ static void ipw2100_release_firmware(struct ipw2100_priv *priv,
 				     struct ipw2100_fw *fw)
 {
 	fw->version = 0;
-	release_firmware(fw->fw_entry);
+	if (fw->fw_entry)
+		release_firmware(fw->fw_entry);
 	fw->fw_entry = NULL;
 }
 
@@ -8588,7 +8609,7 @@ static int ipw2100_ucode_download(struct ipw2100_priv *priv,
 	struct net_device *dev = priv->net_dev;
 	const unsigned char *microcode_data = fw->uc.data;
 	unsigned int microcode_data_left = fw->uc.size;
-	void __iomem *reg = priv->ioaddr;
+	void __iomem *reg = (void __iomem *)dev->base_addr;
 
 	struct symbol_alive_response response;
 	int i, j;

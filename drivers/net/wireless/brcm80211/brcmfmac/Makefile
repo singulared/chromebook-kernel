@@ -24,8 +24,6 @@ ccflags-y += -D__CHECK_ENDIAN__
 obj-$(CONFIG_BRCMFMAC) += brcmfmac.o
 brcmfmac-objs += \
 		wl_cfg80211.o \
-		fwil.o \
-		fweh.o \
 		dhd_cdc.o \
 		dhd_common.o \
 		dhd_linux.o
@@ -36,5 +34,3 @@ brcmfmac-$(CONFIG_BRCMFMAC_SDIO) += \
 		sdio_chip.o
 brcmfmac-$(CONFIG_BRCMFMAC_USB) += \
 		usb.o
-brcmfmac-$(CONFIG_BRCMDBG) += \
-		dhd_dbg.o

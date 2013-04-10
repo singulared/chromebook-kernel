@@ -20,8 +20,8 @@
 #include "ath.h"
 #include "reg.h"
 
-#define REG_READ			(common->ops->read)
-#define REG_WRITE(_ah, _reg, _val)	(common->ops->write)(_ah, _val, _reg)
+#define REG_READ	(common->ops->read)
+#define REG_WRITE	(common->ops->write)
 
 /**
  * ath_hw_set_bssid_mask - filter out bssids we listen
@@ -119,8 +119,8 @@ void ath_hw_setbssidmask(struct ath_common *common)
 {
 	void *ah = common->ah;
 
-	REG_WRITE(ah, AR_BSSMSKL, get_unaligned_le32(common->bssidmask));
-	REG_WRITE(ah, AR_BSSMSKU, get_unaligned_le16(common->bssidmask + 4));
+	REG_WRITE(ah, get_unaligned_le32(common->bssidmask), AR_BSSMSKL);
+	REG_WRITE(ah, get_unaligned_le16(common->bssidmask + 4), AR_BSSMSKU);
 }
 EXPORT_SYMBOL(ath_hw_setbssidmask);
 
@@ -139,7 +139,7 @@ void ath_hw_cycle_counters_update(struct ath_common *common)
 	void *ah = common->ah;
 
 	/* freeze */
-	REG_WRITE(ah, AR_MIBC, AR_MIBC_FMC);
+	REG_WRITE(ah, AR_MIBC_FMC, AR_MIBC);
 
 	/* read */
 	cycles = REG_READ(ah, AR_CCCNT);
@@ -148,13 +148,13 @@ void ath_hw_cycle_counters_update(struct ath_common *common)
 	tx = REG_READ(ah, AR_TFCNT);
 
 	/* clear */
-	REG_WRITE(ah, AR_CCCNT, 0);
-	REG_WRITE(ah, AR_RFCNT, 0);
-	REG_WRITE(ah, AR_RCCNT, 0);
-	REG_WRITE(ah, AR_TFCNT, 0);
+	REG_WRITE(ah, 0, AR_CCCNT);
+	REG_WRITE(ah, 0, AR_RFCNT);
+	REG_WRITE(ah, 0, AR_RCCNT);
+	REG_WRITE(ah, 0, AR_TFCNT);
 
 	/* unfreeze */
-	REG_WRITE(ah, AR_MIBC, 0);
+	REG_WRITE(ah, 0, AR_MIBC);
 
 	/* update all cycle counters here */
 	common->cc_ani.cycles += cycles;
@@ -166,6 +166,11 @@ void ath_hw_cycle_counters_update(struct ath_common *common)
 	common->cc_survey.rx_busy += busy;
 	common->cc_survey.rx_frame += rx;
 	common->cc_survey.tx_frame += tx;
+
+	common->cc_rxpoll.cycles += cycles;
+	common->cc_rxpoll.rx_busy += busy;
+	common->cc_rxpoll.rx_frame += rx;
+	common->cc_rxpoll.tx_frame += tx;
 }
 EXPORT_SYMBOL(ath_hw_cycle_counters_update);
 

@@ -46,7 +46,7 @@
 
 #define LINK_Q	ui_link_quality
 #define RX_EVM	rx_evm_percentage
-#define RX_SIGQ	rx_mimo_sig_qual
+#define RX_SIGQ	rx_mimo_signalquality
 
 
 void rtl92c_read_chip_version(struct ieee80211_hw *hw)
@@ -982,27 +982,32 @@ static void _rtl92c_process_pwdb(struct ieee80211_hw *hw,
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_mac *mac = rtl_mac(rtl_priv(hw));
-	long undec_sm_pwdb = 0;
+	long undecorated_smoothed_pwdb = 0;
 
 	if (mac->opmode == NL80211_IFTYPE_ADHOC) {
 		return;
 	} else {
-		undec_sm_pwdb = rtlpriv->dm.undec_sm_pwdb;
+		undecorated_smoothed_pwdb =
+		    rtlpriv->dm.undecorated_smoothed_pwdb;
 	}
 	if (pstats->packet_toself || pstats->packet_beacon) {
-		if (undec_sm_pwdb < 0)
-			undec_sm_pwdb = pstats->rx_pwdb_all;
-		if (pstats->rx_pwdb_all > (u32) undec_sm_pwdb) {
-			undec_sm_pwdb = (((undec_sm_pwdb) *
+		if (undecorated_smoothed_pwdb < 0)
+			undecorated_smoothed_pwdb = pstats->rx_pwdb_all;
+		if (pstats->rx_pwdb_all > (u32) undecorated_smoothed_pwdb) {
+			undecorated_smoothed_pwdb =
+			    (((undecorated_smoothed_pwdb) *
 			      (RX_SMOOTH_FACTOR - 1)) +
 			     (pstats->rx_pwdb_all)) / (RX_SMOOTH_FACTOR);
-			undec_sm_pwdb += 1;
+			undecorated_smoothed_pwdb = undecorated_smoothed_pwdb
+			    + 1;
 		} else {
-			undec_sm_pwdb = (((undec_sm_pwdb) *
+			undecorated_smoothed_pwdb =
+			    (((undecorated_smoothed_pwdb) *
 			      (RX_SMOOTH_FACTOR - 1)) +
 			     (pstats->rx_pwdb_all)) / (RX_SMOOTH_FACTOR);
 		}
-		rtlpriv->dm.undec_sm_pwdb = undec_sm_pwdb;
+		rtlpriv->dm.undecorated_smoothed_pwdb =
+		    undecorated_smoothed_pwdb;
 		_rtl92c_update_rxsignalstatistics(hw, pstats);
 	}
 }
@@ -1094,14 +1099,14 @@ void rtl92c_translate_rx_signal_stuff(struct ieee80211_hw *hw,
 	praddr = hdr->addr1;
 	packet_matchbssid =
 	    ((IEEE80211_FTYPE_CTL != type) &&
-	     ether_addr_equal(mac->bssid,
-			      (cpu_fc & IEEE80211_FCTL_TODS) ? hdr->addr1 :
-			      (cpu_fc & IEEE80211_FCTL_FROMDS) ? hdr->addr2 :
-			      hdr->addr3) &&
+	     (!compare_ether_addr(mac->bssid,
+			  (cpu_fc & IEEE80211_FCTL_TODS) ?
+			  hdr->addr1 : (cpu_fc & IEEE80211_FCTL_FROMDS) ?
+			  hdr->addr2 : hdr->addr3)) &&
 	     (!pstats->hwerror) && (!pstats->crc) && (!pstats->icv));
 
 	packet_toself = packet_matchbssid &&
-	    ether_addr_equal(praddr, rtlefuse->dev_addr);
+	    (!compare_ether_addr(praddr, rtlefuse->dev_addr));
 	if (ieee80211_is_beacon(fc))
 		packet_beacon = true;
 	_rtl92c_query_rxphystatus(hw, pstats, pdesc, p_drvinfo,

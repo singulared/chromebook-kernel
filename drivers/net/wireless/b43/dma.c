@@ -409,10 +409,7 @@ static inline
 				struct b43_dmadesc_meta *meta)
 {
 	if (meta->skb) {
-		if (ring->tx)
-			ieee80211_free_txskb(ring->dev->wl->hw, meta->skb);
-		else
-			dev_kfree_skb_any(meta->skb);
+		dev_kfree_skb_any(meta->skb);
 		meta->skb = NULL;
 	}
 }
@@ -1112,7 +1109,7 @@ static bool b43_dma_translation_in_low_word(struct b43_wldev *dev,
 #ifdef CONFIG_B43_SSB
 	if (dev->dev->bus_type == B43_BUS_SSB &&
 	    dev->dev->sdev->bus->bustype == SSB_BUSTYPE_PCI &&
-	    !(pci_is_pcie(dev->dev->sdev->bus->host_pci) &&
+	    !(dev->dev->sdev->bus->host_pci->is_pcie &&
 	      ssb_read32(dev->dev->sdev, SSB_TMSHIGH) & SSB_TMSHIGH_DMA64))
 			return 1;
 #endif
@@ -1457,7 +1454,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	if (unlikely(err == -ENOKEY)) {
 		/* Drop this packet, as we don't have the encryption key
 		 * anymore and must not transmit it unencrypted. */
-		ieee80211_free_txskb(dev->wl->hw, skb);
+		dev_kfree_skb_any(skb);
 		err = 0;
 		goto out;
 	}

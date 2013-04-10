@@ -16,7 +16,6 @@
 #include <net/cfg80211.h>
 #include "sysfs.h"
 #include "core.h"
-#include "rdev-ops.h"
 
 static inline struct cfg80211_registered_device *dev_to_rdev(
 	struct device *dev)
@@ -77,11 +76,13 @@ static void wiphy_dev_release(struct device *dev)
 	cfg80211_dev_free(rdev);
 }
 
+#ifdef CONFIG_HOTPLUG
 static int wiphy_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	/* TODO, we probably need stuff here */
 	return 0;
 }
+#endif
 
 static int wiphy_suspend(struct device *dev, pm_message_t state)
 {
@@ -93,7 +94,7 @@ static int wiphy_suspend(struct device *dev, pm_message_t state)
 	if (rdev->ops->suspend) {
 		rtnl_lock();
 		if (rdev->wiphy.registered)
-			ret = rdev_suspend(rdev);
+			ret = rdev->ops->suspend(&rdev->wiphy, rdev->wowlan);
 		rtnl_unlock();
 	}
 
@@ -113,7 +114,7 @@ static int wiphy_resume(struct device *dev)
 	if (rdev->ops->resume) {
 		rtnl_lock();
 		if (rdev->wiphy.registered)
-			ret = rdev_resume(rdev);
+			ret = rdev->ops->resume(&rdev->wiphy);
 		rtnl_unlock();
 	}
 
@@ -132,7 +133,9 @@ struct class ieee80211_class = {
 	.owner = THIS_MODULE,
 	.dev_release = wiphy_dev_release,
 	.dev_attrs = ieee80211_dev_attrs,
+#ifdef CONFIG_HOTPLUG
 	.dev_uevent = wiphy_uevent,
+#endif
 	.suspend = wiphy_suspend,
 	.resume = wiphy_resume,
 	.ns_type = &net_ns_type_operations,

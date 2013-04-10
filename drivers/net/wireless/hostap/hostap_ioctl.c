@@ -6,7 +6,6 @@
 #include <linux/ethtool.h>
 #include <linux/if_arp.h>
 #include <linux/module.h>
-#include <linux/etherdevice.h>
 #include <net/lib80211.h>
 
 #include "hostap_wlan.h"
@@ -3222,7 +3221,8 @@ static int prism2_ioctl_siwencodeext(struct net_device *dev,
 		return -EINVAL;
 
 	addr = ext->addr.sa_data;
-	if (is_broadcast_ether_addr(addr)) {
+	if (addr[0] == 0xff && addr[1] == 0xff && addr[2] == 0xff &&
+	    addr[3] == 0xff && addr[4] == 0xff && addr[5] == 0xff) {
 		sta_ptr = NULL;
 		crypt = &local->crypt_info.crypt[i];
 	} else {
@@ -3394,7 +3394,8 @@ static int prism2_ioctl_giwencodeext(struct net_device *dev,
 		i--;
 
 	addr = ext->addr.sa_data;
-	if (is_broadcast_ether_addr(addr)) {
+	if (addr[0] == 0xff && addr[1] == 0xff && addr[2] == 0xff &&
+	    addr[3] == 0xff && addr[4] == 0xff && addr[5] == 0xff) {
 		sta_ptr = NULL;
 		crypt = &local->crypt_info.crypt[i];
 	} else {
@@ -3457,7 +3458,9 @@ static int prism2_ioctl_set_encryption(local_info_t *local,
 	    param->u.crypt.key_len)
 		return -EINVAL;
 
-	if (is_broadcast_ether_addr(param->sta_addr)) {
+	if (param->sta_addr[0] == 0xff && param->sta_addr[1] == 0xff &&
+	    param->sta_addr[2] == 0xff && param->sta_addr[3] == 0xff &&
+	    param->sta_addr[4] == 0xff && param->sta_addr[5] == 0xff) {
 		if (param->u.crypt.idx >= WEP_KEYS)
 			return -EINVAL;
 		sta_ptr = NULL;
@@ -3590,7 +3593,9 @@ static int prism2_ioctl_get_encryption(local_info_t *local,
 	if (max_key_len < 0)
 		return -EINVAL;
 
-	if (is_broadcast_ether_addr(param->sta_addr)) {
+	if (param->sta_addr[0] == 0xff && param->sta_addr[1] == 0xff &&
+	    param->sta_addr[2] == 0xff && param->sta_addr[3] == 0xff &&
+	    param->sta_addr[4] == 0xff && param->sta_addr[5] == 0xff) {
 		sta_ptr = NULL;
 		if (param->u.crypt.idx >= WEP_KEYS)
 			param->u.crypt.idx = local->crypt_info.tx_keyidx;

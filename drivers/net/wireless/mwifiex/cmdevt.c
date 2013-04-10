@@ -139,7 +139,6 @@ static int mwifiex_dnld_cmd_to_fw(struct mwifiex_private *priv,
 	uint16_t cmd_size;
 	struct timeval tstamp;
 	unsigned long flags;
-	__le32 tmp;
 
 	if (!adapter || !cmd_node)
 		return -1;
@@ -170,20 +169,7 @@ static int mwifiex_dnld_cmd_to_fw(struct mwifiex_private *priv,
 	cmd_code = le16_to_cpu(host_cmd->command);
 	cmd_size = le16_to_cpu(host_cmd->size);
 
-	/* Adjust skb length */
-	if (cmd_node->cmd_skb->len > cmd_size)
-		/*
-		 * cmd_size is less than sizeof(struct host_cmd_ds_command).
-		 * Trim off the unused portion.
-		 */
-		skb_trim(cmd_node->cmd_skb, cmd_size);
-	else if (cmd_node->cmd_skb->len < cmd_size)
-		/*
-		 * cmd_size is larger than sizeof(struct host_cmd_ds_command)
-		 * because we have appended custom IE TLV. Increase skb length
-		 * accordingly.
-		 */
-		skb_put(cmd_node->cmd_skb, cmd_size - cmd_node->cmd_skb->len);
+	skb_trim(cmd_node->cmd_skb, cmd_size);
 
 	do_gettimeofday(&tstamp);
 	dev_dbg(adapter->dev, "cmd: DNLD_CMD: (%lu.%lu): %#x, act %#x, len %d,"
@@ -192,28 +178,15 @@ static int mwifiex_dnld_cmd_to_fw(struct mwifiex_private *priv,
 		le16_to_cpu(*(__le16 *) ((u8 *) host_cmd + S_DS_GEN)), cmd_size,
 		le16_to_cpu(host_cmd->seq_num));
 
-	if (adapter->iface_type == MWIFIEX_USB) {
-		tmp = cpu_to_le32(MWIFIEX_USB_TYPE_CMD);
-		skb_push(cmd_node->cmd_skb, MWIFIEX_TYPE_LEN);
-		memcpy(cmd_node->cmd_skb->data, &tmp, MWIFIEX_TYPE_LEN);
-		adapter->cmd_sent = true;
-		ret = adapter->if_ops.host_to_card(adapter,
-						   MWIFIEX_USB_EP_CMD_EVENT,
-						   cmd_node->cmd_skb, NULL);
-		skb_pull(cmd_node->cmd_skb, MWIFIEX_TYPE_LEN);
-		if (ret == -EBUSY)
-			cmd_node->cmd_skb = NULL;
-	} else {
-		skb_push(cmd_node->cmd_skb, INTF_HEADER_LEN);
-		ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_CMD,
-						   cmd_node->cmd_skb, NULL);
-		skb_pull(cmd_node->cmd_skb, INTF_HEADER_LEN);
-	}
+	skb_push(cmd_node->cmd_skb, INTF_HEADER_LEN);
+
+	ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_CMD,
+					   cmd_node->cmd_skb, NULL);
+
+	skb_pull(cmd_node->cmd_skb, INTF_HEADER_LEN);
 
 	if (ret == -1) {
 		dev_err(adapter->dev, "DNLD_CMD: host to card failed\n");
-		if (adapter->iface_type == MWIFIEX_USB)
-			adapter->cmd_sent = false;
 		if (cmd_node->wait_q_enabled)
 			adapter->cmd_wait_q.status = -1;
 		mwifiex_insert_cmd_to_free_q(adapter, adapter->curr_cmd);
@@ -259,9 +232,6 @@ static int mwifiex_dnld_sleep_confirm_cmd(struct mwifiex_adapter *adapter)
 	struct mwifiex_opt_sleep_confirm *sleep_cfm_buf =
 				(struct mwifiex_opt_sleep_confirm *)
 						adapter->sleep_cfm->data;
-	struct sk_buff *sleep_cfm_tmp;
-	__le32 tmp;
-
 	priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 
 	sleep_cfm_buf->seq_num =
@@ -270,28 +240,10 @@ static int mwifiex_dnld_sleep_confirm_cmd(struct mwifiex_adapter *adapter)
 					 priv->bss_type)));
 	adapter->seq_num++;
 
-	if (adapter->iface_type == MWIFIEX_USB) {
-		sleep_cfm_tmp =
-			dev_alloc_skb(sizeof(struct mwifiex_opt_sleep_confirm)
-				      + MWIFIEX_TYPE_LEN);
-		skb_put(sleep_cfm_tmp, sizeof(struct mwifiex_opt_sleep_confirm)
-			+ MWIFIEX_TYPE_LEN);
-		tmp = cpu_to_le32(MWIFIEX_USB_TYPE_CMD);
-		memcpy(sleep_cfm_tmp->data, &tmp, MWIFIEX_TYPE_LEN);
-		memcpy(sleep_cfm_tmp->data + MWIFIEX_TYPE_LEN,
-		       adapter->sleep_cfm->data,
-		       sizeof(struct mwifiex_opt_sleep_confirm));
-		ret = adapter->if_ops.host_to_card(adapter,
-						   MWIFIEX_USB_EP_CMD_EVENT,
-						   sleep_cfm_tmp, NULL);
-		if (ret != -EBUSY)
-			dev_kfree_skb_any(sleep_cfm_tmp);
-	} else {
-		skb_push(adapter->sleep_cfm, INTF_HEADER_LEN);
-		ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_CMD,
-						   adapter->sleep_cfm, NULL);
-		skb_pull(adapter->sleep_cfm, INTF_HEADER_LEN);
-	}
+	skb_push(adapter->sleep_cfm, INTF_HEADER_LEN);
+	ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_CMD,
+					   adapter->sleep_cfm, NULL);
+	skb_pull(adapter->sleep_cfm, INTF_HEADER_LEN);
 
 	if (ret == -1) {
 		dev_err(adapter->dev, "SLEEP_CFM: failed\n");
@@ -391,12 +343,7 @@ int mwifiex_free_cmd_buffer(struct mwifiex_adapter *adapter)
 		}
 		if (!cmd_array[i].resp_skb)
 			continue;
-
-		if (adapter->iface_type == MWIFIEX_USB)
-			adapter->if_ops.cmdrsp_complete(adapter,
-							cmd_array[i].resp_skb);
-		else
-			dev_kfree_skb_any(cmd_array[i].resp_skb);
+		dev_kfree_skb_any(cmd_array[i].resp_skb);
 	}
 	/* Release struct cmd_ctrl_node */
 	if (adapter->cmd_pool) {
@@ -453,17 +400,9 @@ int mwifiex_process_event(struct mwifiex_adapter *adapter)
 		do_gettimeofday(&tstamp);
 		dev_dbg(adapter->dev, "event: %lu.%lu: cause: %#x\n",
 			tstamp.tv_sec, tstamp.tv_usec, eventcause);
-	} else {
-		/* Handle PS_SLEEP/AWAKE events on STA */
-		priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_STA);
-		if (!priv)
-			priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 	}
 
-	if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
-		ret = mwifiex_process_uap_event(priv);
-	else
-		ret = mwifiex_process_sta_event(priv);
+	ret = mwifiex_process_sta_event(priv);
 
 	adapter->event_cause = 0;
 	adapter->event_skb = NULL;
@@ -561,20 +500,8 @@ int mwifiex_send_cmd_async(struct mwifiex_private *priv, uint16_t cmd_no,
 
 	/* Prepare command */
 	if (cmd_no) {
-		switch (cmd_no) {
-		case HostCmd_CMD_UAP_SYS_CONFIG:
-		case HostCmd_CMD_UAP_BSS_START:
-		case HostCmd_CMD_UAP_BSS_STOP:
-			ret = mwifiex_uap_prepare_cmd(priv, cmd_no, cmd_action,
-						      cmd_oid, data_buf,
-						      cmd_ptr);
-			break;
-		default:
-			ret = mwifiex_sta_prepare_cmd(priv, cmd_no, cmd_action,
-						      cmd_oid, data_buf,
-						      cmd_ptr);
-			break;
-		}
+		ret = mwifiex_sta_prepare_cmd(priv, cmd_no, cmd_action,
+					      cmd_oid, data_buf, cmd_ptr);
 	} else {
 		ret = mwifiex_cmd_host_cmd(priv, cmd_ptr, data_buf);
 		cmd_node->cmd_flag |= CMD_F_HOSTCMD;
@@ -914,24 +841,21 @@ mwifiex_cmd_timeout_func(unsigned long function_context)
 
 		dev_err(adapter->dev, "last_cmd_index = %d\n",
 			adapter->dbg.last_cmd_index);
-		dev_err(adapter->dev, "last_cmd_id: %*ph\n",
-			(int)sizeof(adapter->dbg.last_cmd_id),
-			adapter->dbg.last_cmd_id);
-		dev_err(adapter->dev, "last_cmd_act: %*ph\n",
-			(int)sizeof(adapter->dbg.last_cmd_act),
-			adapter->dbg.last_cmd_act);
+		print_hex_dump_bytes("last_cmd_id: ", DUMP_PREFIX_OFFSET,
+				     adapter->dbg.last_cmd_id, DBG_CMD_NUM);
+		print_hex_dump_bytes("last_cmd_act: ", DUMP_PREFIX_OFFSET,
+				     adapter->dbg.last_cmd_act, DBG_CMD_NUM);
 
 		dev_err(adapter->dev, "last_cmd_resp_index = %d\n",
 			adapter->dbg.last_cmd_resp_index);
-		dev_err(adapter->dev, "last_cmd_resp_id: %*ph\n",
-			(int)sizeof(adapter->dbg.last_cmd_resp_id),
-			adapter->dbg.last_cmd_resp_id);
+		print_hex_dump_bytes("last_cmd_resp_id: ", DUMP_PREFIX_OFFSET,
+				     adapter->dbg.last_cmd_resp_id,
+				     DBG_CMD_NUM);
 
 		dev_err(adapter->dev, "last_event_index = %d\n",
 			adapter->dbg.last_event_index);
-		dev_err(adapter->dev, "last_event: %*ph\n",
-			(int)sizeof(adapter->dbg.last_event),
-			adapter->dbg.last_event);
+		print_hex_dump_bytes("last_event: ", DUMP_PREFIX_OFFSET,
+				     adapter->dbg.last_event, DBG_CMD_NUM);
 
 		dev_err(adapter->dev, "data_sent=%d cmd_sent=%d\n",
 			adapter->data_sent, adapter->cmd_sent);
@@ -949,6 +873,9 @@ mwifiex_cmd_timeout_func(unsigned long function_context)
 	}
 	if (adapter->hw_status == MWIFIEX_HW_STATUS_INITIALIZING)
 		mwifiex_init_fw_complete(adapter);
+
+	if (adapter->if_ops.reg_dbg)
+		adapter->if_ops.reg_dbg(adapter);
 
 	if (adapter->if_ops.card_reset)
 		adapter->if_ops.card_reset(adapter);
@@ -1099,8 +1026,6 @@ mwifiex_hs_activated_event(struct mwifiex_private *priv, u8 activated)
 	if (activated) {
 		if (priv->adapter->is_hs_configured) {
 			priv->adapter->hs_activated = true;
-			mwifiex_update_rxreor_flags(priv->adapter,
-						    RXREOR_FORCE_NO_DROP);
 			dev_dbg(priv->adapter->dev, "event: hs_activated\n");
 			priv->adapter->hs_activate_wait_q_woken = true;
 			wake_up_interruptible(
@@ -1132,8 +1057,7 @@ int mwifiex_ret_802_11_hs_cfg(struct mwifiex_private *priv,
 		&resp->params.opt_hs_cfg;
 	uint32_t conditions = le32_to_cpu(phs_cfg->params.hs_config.conditions);
 
-	if (phs_cfg->action == cpu_to_le16(HS_ACTIVATE) &&
-	    adapter->iface_type == MWIFIEX_SDIO) {
+	if (phs_cfg->action == cpu_to_le16(HS_ACTIVATE)) {
 		mwifiex_hs_activated_event(priv, true);
 		return 0;
 	} else {
@@ -1145,9 +1069,6 @@ int mwifiex_ret_802_11_hs_cfg(struct mwifiex_private *priv,
 	}
 	if (conditions != HOST_SLEEP_CFG_CANCEL) {
 		adapter->is_hs_configured = true;
-		if (adapter->iface_type == MWIFIEX_USB ||
-		    adapter->iface_type == MWIFIEX_PCIE)
-			mwifiex_hs_activated_event(priv, true);
 	} else {
 		adapter->is_hs_configured = false;
 		if (adapter->hs_activated)
@@ -1174,7 +1095,6 @@ mwifiex_process_hs_config(struct mwifiex_adapter *adapter)
 						    MWIFIEX_BSS_ROLE_ANY),
 				   false);
 }
-EXPORT_SYMBOL_GPL(mwifiex_process_hs_config);
 
 /*
  * This function handles the command response of a sleep confirm command.

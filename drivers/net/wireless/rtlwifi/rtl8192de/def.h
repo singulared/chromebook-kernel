@@ -151,6 +151,9 @@ enum version_8192d {
 
 /* for 92D */
 #define CHIP_92D_SINGLEPHY		BIT(9)
+#define C_CUT_VERSION			BIT(13)
+#define D_CUT_VERSION			((BIT(12)|BIT(13)))
+#define E_CUT_VERSION			BIT(14)
 
 /* Chip specific */
 #define CHIP_BONDING_IDENTIFIER(_value)	(((_value)>>22)&0x3)
@@ -170,10 +173,7 @@ enum version_8192d {
 #define RF_TYPE_1T2R			BIT(4)
 #define RF_TYPE_2T2R			BIT(5)
 #define CHIP_VENDOR_UMC			BIT(7)
-#define CHIP_92D_B_CUT			BIT(12)
-#define CHIP_92D_C_CUT			BIT(13)
-#define CHIP_92D_D_CUT			(BIT(13)|BIT(12))
-#define CHIP_92D_E_CUT			BIT(14)
+#define B_CUT_VERSION			BIT(12)
 
 /* MASK */
 #define IC_TYPE_MASK			(BIT(0)|BIT(1)|BIT(2))
@@ -205,13 +205,15 @@ enum version_8192d {
 					 CHIP_92D) ? true : false)
 #define IS_92D_C_CUT(version)		((IS_92D(version)) ?		\
 				 ((GET_CVID_CUT_VERSION(version) ==	\
-				 CHIP_92D_C_CUT) ? true : false) : false)
+				 0x2000) ? true : false) : false)
 #define IS_92D_D_CUT(version)			((IS_92D(version)) ?	\
 				 ((GET_CVID_CUT_VERSION(version) ==	\
-				 CHIP_92D_D_CUT) ? true : false) : false)
+				 0x3000) ? true : false) : false)
 #define IS_92D_E_CUT(version)		((IS_92D(version)) ?		\
 				 ((GET_CVID_CUT_VERSION(version) ==	\
-				 CHIP_92D_E_CUT) ? true : false) : false)
+				 0x4000) ? true : false) : false)
+#define CHIP_92D_C_CUT			BIT(10)
+#define CHIP_92D_D_CUT			BIT(11)
 
 enum rf_optype {
 	RF_OP_BY_SW_3WIRE = 0,

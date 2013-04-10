@@ -379,8 +379,11 @@ void orinoco_cache_fw(struct orinoco_private *priv, int ap)
 
 void orinoco_uncache_fw(struct orinoco_private *priv)
 {
-	release_firmware(priv->cached_pri_fw);
-	release_firmware(priv->cached_fw);
+	if (priv->cached_pri_fw)
+		release_firmware(priv->cached_pri_fw);
+	if (priv->cached_fw)
+		release_firmware(priv->cached_fw);
+
 	priv->cached_pri_fw = NULL;
 	priv->cached_fw = NULL;
 }

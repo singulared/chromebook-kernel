@@ -29,6 +29,7 @@
 
 #include "../wifi.h"
 #include "../core.h"
+#include "../pci.h"
 #include "../base.h"
 #include "../pci.h"
 #include "reg.h"
@@ -50,7 +51,8 @@ static void rtl92s_init_aspm_vars(struct ieee80211_hw *hw)
 	/*close ASPM for AMD defaultly */
 	rtlpci->const_amdpci_aspm = 0;
 
-	/* ASPM PS mode.
+	/*
+	 * ASPM PS mode.
 	 * 0 - Disable ASPM,
 	 * 1 - Enable ASPM without Clock Req,
 	 * 2 - Enable ASPM with Clock Req,
@@ -66,7 +68,8 @@ static void rtl92s_init_aspm_vars(struct ieee80211_hw *hw)
 	/*Setting for PCI-E bridge */
 	rtlpci->const_hostpci_aspm_setting = 0x02;
 
-	/* In Hw/Sw Radio Off situation.
+	/*
+	 * In Hw/Sw Radio Off situation.
 	 * 0 - Default,
 	 * 1 - From ASPM setting without low Mac Pwr,
 	 * 2 - From ASPM setting with low Mac Pwr,
@@ -75,7 +78,8 @@ static void rtl92s_init_aspm_vars(struct ieee80211_hw *hw)
 	 */
 	rtlpci->const_hwsw_rfoff_d3 = 2;
 
-	/* This setting works for those device with
+	/*
+	 * This setting works for those device with
 	 * backdoor ASPM setting such as EPHY setting.
 	 * 0 - Not support ASPM,
 	 * 1 - Support ASPM,
@@ -400,7 +404,7 @@ static struct rtl_hal_cfg rtl92se_hal_cfg = {
 	.maps[RTL_RC_HT_RATEMCS15] = DESC92_RATEMCS15,
 };
 
-static struct pci_device_id rtl92se_pci_ids[] = {
+static struct pci_device_id rtl92se_pci_ids[] __devinitdata = {
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8192, rtl92se_hal_cfg)},
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8171, rtl92se_hal_cfg)},
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8172, rtl92se_hal_cfg)},
@@ -429,7 +433,14 @@ MODULE_PARM_DESC(swlps, "Set to 1 to use SW control power save (default 0)\n");
 MODULE_PARM_DESC(fwlps, "Set to 1 to use FW control power save (default 1)\n");
 MODULE_PARM_DESC(debug, "Set debug level (0-5) (default 0)");
 
-static SIMPLE_DEV_PM_OPS(rtlwifi_pm_ops, rtl_pci_suspend, rtl_pci_resume);
+static const struct dev_pm_ops rtlwifi_pm_ops = {
+	.suspend = rtl_pci_suspend,
+	.resume = rtl_pci_resume,
+	.freeze = rtl_pci_suspend,
+	.thaw = rtl_pci_resume,
+	.poweroff = rtl_pci_suspend,
+	.restore = rtl_pci_resume,
+};
 
 static struct pci_driver rtl92se_driver = {
 	.name = KBUILD_MODNAME,
@@ -439,4 +450,21 @@ static struct pci_driver rtl92se_driver = {
 	.driver.pm = &rtlwifi_pm_ops,
 };
 
-module_pci_driver(rtl92se_driver);
+static int __init rtl92se_module_init(void)
+{
+	int ret = 0;
+
+	ret = pci_register_driver(&rtl92se_driver);
+	if (ret)
+		RT_ASSERT(false, "No device found\n");
+
+	return ret;
+}
+
+static void __exit rtl92se_module_exit(void)
+{
+	pci_unregister_driver(&rtl92se_driver);
+}
+
+module_init(rtl92se_module_init);
+module_exit(rtl92se_module_exit);

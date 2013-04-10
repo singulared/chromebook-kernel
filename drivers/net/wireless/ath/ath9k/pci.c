@@ -14,8 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/nl80211.h>
 #include <linux/pci.h>
 #include <linux/pci-aspm.h>
@@ -36,9 +34,6 @@ static DEFINE_PCI_DEVICE_TABLE(ath_pci_id_table) = {
 	{ PCI_VDEVICE(ATHEROS, 0x0030) }, /* PCI-E  AR9300 */
 	{ PCI_VDEVICE(ATHEROS, 0x0032) }, /* PCI-E  AR9485 */
 	{ PCI_VDEVICE(ATHEROS, 0x0033) }, /* PCI-E  AR9580 */
-	{ PCI_VDEVICE(ATHEROS, 0x0034) }, /* PCI-E  AR9462 */
-	{ PCI_VDEVICE(ATHEROS, 0x0037) }, /* PCI-E  AR1111/AR9485 */
-	{ PCI_VDEVICE(ATHEROS, 0x0036) }, /* PCI-E  AR9565 */
 	{ 0 }
 };
 
@@ -96,6 +91,17 @@ static bool ath_pci_eeprom_read(struct ath_common *common, u32 off, u16 *data)
 	return true;
 }
 
+static void ath_pci_extn_synch_enable(struct ath_common *common)
+{
+	struct ath_softc *sc = (struct ath_softc *) common->priv;
+	struct pci_dev *pdev = to_pci_dev(sc->dev);
+	u8 lnkctl;
+
+	pci_read_config_byte(pdev, sc->sc_ah->caps.pcie_lcr_offset, &lnkctl);
+	lnkctl |= PCI_EXP_LNKCTL_ES;
+	pci_write_config_byte(pdev, sc->sc_ah->caps.pcie_lcr_offset, lnkctl);
+}
+
 /* Need to be called after we discover btcoex capabilities */
 static void ath_pci_aspm_init(struct ath_common *common)
 {
@@ -103,34 +109,42 @@ static void ath_pci_aspm_init(struct ath_common *common)
 	struct ath_hw *ah = sc->sc_ah;
 	struct pci_dev *pdev = to_pci_dev(sc->dev);
 	struct pci_dev *parent;
-	u16 aspm;
+	int pos;
+	u8 aspm;
 
 	if (!ah->is_pciexpress)
+		return;
+
+	pos = pci_pcie_cap(pdev);
+	if (!pos)
 		return;
 
 	parent = pdev->bus->self;
 	if (!parent)
 		return;
 
-	if ((ath9k_hw_get_btcoex_scheme(ah) != ATH_BTCOEX_CFG_NONE) &&
-	    (AR_SREV_9285(ah))) {
-		/* Bluetooth coexistence requires disabling ASPM. */
-		pcie_capability_clear_word(pdev, PCI_EXP_LNKCTL,
-			PCI_EXP_LNKCTL_ASPM_L0S | PCI_EXP_LNKCTL_ASPM_L1);
+	if (ath9k_hw_get_btcoex_scheme(ah) != ATH_BTCOEX_CFG_NONE) {
+		/* Bluetooth coexistance requires disabling ASPM. */
+		pci_read_config_byte(pdev, pos + PCI_EXP_LNKCTL, &aspm);
+		aspm &= ~(PCIE_LINK_STATE_L0S | PCIE_LINK_STATE_L1);
+		pci_write_config_byte(pdev, pos + PCI_EXP_LNKCTL, aspm);
 
 		/*
 		 * Both upstream and downstream PCIe components should
 		 * have the same ASPM settings.
 		 */
-		pcie_capability_clear_word(parent, PCI_EXP_LNKCTL,
-			PCI_EXP_LNKCTL_ASPM_L0S | PCI_EXP_LNKCTL_ASPM_L1);
+		pos = pci_pcie_cap(parent);
+		pci_read_config_byte(parent, pos + PCI_EXP_LNKCTL, &aspm);
+		aspm &= ~(PCIE_LINK_STATE_L0S | PCIE_LINK_STATE_L1);
+		pci_write_config_byte(parent, pos + PCI_EXP_LNKCTL, aspm);
 
 		ath_info(common, "Disabling ASPM since BTCOEX is enabled\n");
 		return;
 	}
 
-	pcie_capability_read_word(parent, PCI_EXP_LNKCTL, &aspm);
-	if (aspm & (PCI_EXP_LNKCTL_ASPM_L0S | PCI_EXP_LNKCTL_ASPM_L1)) {
+	pos = pci_pcie_cap(parent);
+	pci_read_config_byte(parent, pos +  PCI_EXP_LNKCTL, &aspm);
+	if (aspm & (PCIE_LINK_STATE_L0S | PCIE_LINK_STATE_L1)) {
 		ah->aspm_enabled = true;
 		/* Initialize PCIe PM and SERDES registers. */
 		ath9k_hw_configpcipowersave(ah, false);
@@ -142,6 +156,7 @@ static const struct ath_bus_ops ath_pci_bus_ops = {
 	.ath_bus_type = ATH_PCI,
 	.read_cachesize = ath_pci_read_cachesize,
 	.eeprom_read = ath_pci_eeprom_read,
+	.extn_synch_en = ath_pci_extn_synch_enable,
 	.aspm_init = ath_pci_aspm_init,
 };
 
@@ -160,13 +175,14 @@ static int ath_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	ret =  pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
 	if (ret) {
-		pr_err("32-bit DMA not available\n");
+		printk(KERN_ERR "ath9k: 32-bit DMA not available\n");
 		goto err_dma;
 	}
 
 	ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
 	if (ret) {
-		pr_err("32-bit DMA consistent DMA enable failed\n");
+		printk(KERN_ERR "ath9k: 32-bit DMA consistent "
+			"DMA enable failed\n");
 		goto err_dma;
 	}
 
@@ -212,7 +228,7 @@ static int ath_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	mem = pci_iomap(pdev, 0, 0);
 	if (!mem) {
-		pr_err("PCI memory map error\n") ;
+		printk(KERN_ERR "PCI memory map error\n") ;
 		ret = -EIO;
 		goto err_iomap;
 	}
@@ -233,7 +249,7 @@ static int ath_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	sc->mem = mem;
 
 	/* Will be cleared in ath9k_start() */
-	set_bit(SC_OP_INVALID, &sc->sc_flags);
+	sc->sc_flags |= SC_OP_INVALID;
 
 	ret = request_irq(pdev->irq, ath_isr, IRQF_SHARED, "ath9k", sc);
 	if (ret) {
@@ -287,16 +303,13 @@ static void ath_pci_remove(struct pci_dev *pdev)
 	pci_release_region(pdev, 0);
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_PM
 
 static int ath_pci_suspend(struct device *device)
 {
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct ieee80211_hw *hw = pci_get_drvdata(pdev);
 	struct ath_softc *sc = hw->priv;
-
-	if (sc->wow_enabled)
-		return 0;
 
 	/* The device has to be moved to FULLSLEEP forcibly.
 	 * Otherwise the chip never moved to full sleep,
@@ -333,15 +346,22 @@ static int ath_pci_resume(struct device *device)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(ath9k_pm_ops, ath_pci_suspend, ath_pci_resume);
+static const struct dev_pm_ops ath9k_pm_ops = {
+	.suspend = ath_pci_suspend,
+	.resume = ath_pci_resume,
+	.freeze = ath_pci_suspend,
+	.thaw = ath_pci_resume,
+	.poweroff = ath_pci_suspend,
+	.restore = ath_pci_resume,
+};
 
 #define ATH9K_PM_OPS	(&ath9k_pm_ops)
 
-#else /* !CONFIG_PM_SLEEP */
+#else /* !CONFIG_PM */
 
 #define ATH9K_PM_OPS	NULL
 
-#endif /* !CONFIG_PM_SLEEP */
+#endif /* !CONFIG_PM */
 
 
 MODULE_DEVICE_TABLE(pci, ath_pci_id_table);

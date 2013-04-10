@@ -1661,9 +1661,7 @@ static void adm8211_tx_raw(struct ieee80211_hw *dev, struct sk_buff *skb,
 }
 
 /* Put adm8211_tx_hdr on skb and transmit */
-static void adm8211_tx(struct ieee80211_hw *dev,
-		       struct ieee80211_tx_control *control,
-		       struct sk_buff *skb)
+static void adm8211_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 {
 	struct adm8211_tx_hdr *txhdr;
 	size_t payload_len, hdrlen;
@@ -1740,7 +1738,8 @@ static int adm8211_alloc_rings(struct ieee80211_hw *dev)
 		return -ENOMEM;
 	}
 
-	priv->tx_ring = priv->rx_ring + priv->rx_ring_size;
+	priv->tx_ring = (struct adm8211_desc *)(priv->rx_ring +
+						priv->rx_ring_size);
 	priv->tx_ring_dma = priv->rx_ring_dma +
 			    sizeof(struct adm8211_desc) * priv->rx_ring_size;
 
@@ -1761,7 +1760,7 @@ static const struct ieee80211_ops adm8211_ops = {
 	.get_tsf		= adm8211_get_tsft
 };
 
-static int adm8211_probe(struct pci_dev *pdev,
+static int __devinit adm8211_probe(struct pci_dev *pdev,
 				   const struct pci_device_id *id)
 {
 	struct ieee80211_hw *dev;
@@ -1856,7 +1855,7 @@ static int adm8211_probe(struct pci_dev *pdev,
 	if (!is_valid_ether_addr(perm_addr)) {
 		printk(KERN_WARNING "%s (adm8211): Invalid hwaddr in EEPROM!\n",
 		       pci_name(pdev));
-		eth_random_addr(perm_addr);
+		random_ether_addr(perm_addr);
 	}
 	SET_IEEE80211_PERM_ADDR(dev, perm_addr);
 
@@ -1935,7 +1934,7 @@ static int adm8211_probe(struct pci_dev *pdev,
 }
 
 
-static void adm8211_remove(struct pci_dev *pdev)
+static void __devexit adm8211_remove(struct pci_dev *pdev)
 {
 	struct ieee80211_hw *dev = pci_get_drvdata(pdev);
 	struct adm8211_priv *priv;
@@ -1985,11 +1984,26 @@ static struct pci_driver adm8211_driver = {
 	.name		= "adm8211",
 	.id_table	= adm8211_pci_id_table,
 	.probe		= adm8211_probe,
-	.remove		= adm8211_remove,
+	.remove		= __devexit_p(adm8211_remove),
 #ifdef CONFIG_PM
 	.suspend	= adm8211_suspend,
 	.resume		= adm8211_resume,
 #endif /* CONFIG_PM */
 };
 
-module_pci_driver(adm8211_driver);
+
+
+static int __init adm8211_init(void)
+{
+	return pci_register_driver(&adm8211_driver);
+}
+
+
+static void __exit adm8211_exit(void)
+{
+	pci_unregister_driver(&adm8211_driver);
+}
+
+
+module_init(adm8211_init);
+module_exit(adm8211_exit);

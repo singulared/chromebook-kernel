@@ -73,6 +73,7 @@ static void scan_delay_timer_fn(unsigned long data)
 		list_for_each_entry_safe(cmd_node, tmp_node,
 					 &adapter->scan_pending_q, list) {
 			list_del(&cmd_node->list);
+			cmd_node->wait_q_enabled = false;
 			mwifiex_insert_cmd_to_free_q(adapter, cmd_node);
 		}
 		spin_unlock_irqrestore(&adapter->scan_pending_q_lock, flags);
@@ -145,7 +146,7 @@ done:
  * Additionally, it also initializes all the locks and sets up all the
  * lists.
  */
-int mwifiex_init_priv(struct mwifiex_private *priv)
+static int mwifiex_init_priv(struct mwifiex_private *priv)
 {
 	u32 i;
 
@@ -214,8 +215,7 @@ int mwifiex_init_priv(struct mwifiex_private *priv)
 	priv->curr_bcn_size = 0;
 	priv->wps_ie = NULL;
 	priv->wps_ie_len = 0;
-	priv->ap_11n_enabled = 0;
-	memset(&priv->roc_cfg, 0, sizeof(priv->roc_cfg));
+	priv->mgmt_rx_freq = 2437;
 
 	priv->scan_block = false;
 
@@ -274,10 +274,10 @@ static void mwifiex_init_adapter(struct mwifiex_adapter *adapter)
 
 	adapter->cmd_sent = false;
 
-	if (adapter->iface_type == MWIFIEX_SDIO)
-		adapter->data_sent = true;
-	else
+	if (adapter->iface_type == MWIFIEX_PCIE)
 		adapter->data_sent = false;
+	else
+		adapter->data_sent = true;
 
 	adapter->cmd_resp_received = false;
 	adapter->event_received = false;
@@ -364,7 +364,7 @@ static void mwifiex_init_adapter(struct mwifiex_adapter *adapter)
 	adapter->adhoc_awake_period = 0;
 	memset(&adapter->arp_filter, 0, sizeof(adapter->arp_filter));
 	adapter->arp_filter_size = 0;
-	adapter->max_mgmt_ie_index = MAX_MGMT_IE_INDEX;
+	adapter->channel_type = NL80211_CHAN_HT20;
 	adapter->empty_tx_q_cnt = 0;
 }
 
@@ -447,7 +447,6 @@ static void mwifiex_free_lock_list(struct mwifiex_adapter *adapter)
 				list_del(&priv->wmm.tid_tbl_ptr[j].ra_list);
 			list_del(&priv->tx_ba_stream_tbl_ptr);
 			list_del(&priv->rx_reorder_tbl_ptr);
-			list_del(&priv->sta_list);
 		}
 	}
 }
@@ -483,8 +482,7 @@ mwifiex_free_adapter(struct mwifiex_adapter *adapter)
 
 	dev_dbg(adapter->dev, "info: free scan table\n");
 
-	if (adapter->if_ops.cleanup_if)
-		adapter->if_ops.cleanup_if(adapter);
+	adapter->if_ops.cleanup_if(adapter);
 
 	if (adapter->sleep_cfm)
 		dev_kfree_skb_any(adapter->sleep_cfm);
@@ -510,7 +508,6 @@ int mwifiex_init_lock_list(struct mwifiex_adapter *adapter)
 			spin_lock_init(&priv->rx_pkt_lock);
 			spin_lock_init(&priv->wmm.ra_list_spinlock);
 			spin_lock_init(&priv->curr_bcn_buf_lock);
-			spin_lock_init(&priv->sta_list_spinlock);
 		}
 	}
 
@@ -524,8 +521,6 @@ int mwifiex_init_lock_list(struct mwifiex_adapter *adapter)
 	spin_lock_init(&adapter->cmd_free_q_lock);
 	spin_lock_init(&adapter->cmd_pending_q_lock);
 	spin_lock_init(&adapter->scan_pending_q_lock);
-
-	skb_queue_head_init(&adapter->usb_rx_data_q);
 
 	for (i = 0; i < adapter->priv_num; ++i) {
 		INIT_LIST_HEAD(&adapter->bss_prio_tbl[i].bss_prio_head);
@@ -543,7 +538,6 @@ int mwifiex_init_lock_list(struct mwifiex_adapter *adapter)
 		}
 		INIT_LIST_HEAD(&priv->tx_ba_stream_tbl_ptr);
 		INIT_LIST_HEAD(&priv->rx_reorder_tbl_ptr);
-		INIT_LIST_HEAD(&priv->sta_list);
 
 		spin_lock_init(&priv->tx_ba_stream_tbl_lock);
 		spin_lock_init(&priv->rx_reorder_tbl_lock);
@@ -666,17 +660,6 @@ static void mwifiex_delete_bss_prio_tbl(struct mwifiex_private *priv)
 }
 
 /*
- * This function frees the private structure, including cleans
- * up the TX and RX queues and frees the BSS priority tables.
- */
-void mwifiex_free_priv(struct mwifiex_private *priv)
-{
-	mwifiex_clean_txrx(priv);
-	mwifiex_delete_bss_prio_tbl(priv);
-	mwifiex_free_curr_bcn(priv);
-}
-
-/*
  * This function is used to shutdown the driver.
  *
  * The following operations are performed sequentially -
@@ -694,7 +677,6 @@ mwifiex_shutdown_drv(struct mwifiex_adapter *adapter)
 	struct mwifiex_private *priv;
 	s32 i;
 	unsigned long flags;
-	struct sk_buff *skb;
 
 	/* mwifiex already shutdown */
 	if (adapter->hw_status == MWIFIEX_HW_STATUS_NOT_READY)
@@ -721,18 +703,6 @@ mwifiex_shutdown_drv(struct mwifiex_adapter *adapter)
 	}
 
 	spin_lock_irqsave(&adapter->mwifiex_lock, flags);
-
-	if (adapter->if_ops.data_complete) {
-		while ((skb = skb_dequeue(&adapter->usb_rx_data_q))) {
-			struct mwifiex_rxinfo *rx_info = MWIFIEX_SKB_RXCB(skb);
-
-			priv = adapter->priv[rx_info->bss_num];
-			if (priv)
-				priv->stats.rx_dropped++;
-
-			adapter->if_ops.data_complete(adapter, skb);
-		}
-	}
 
 	/* Free adapter structure */
 	mwifiex_free_adapter(adapter);
@@ -763,28 +733,24 @@ int mwifiex_dnld_fw(struct mwifiex_adapter *adapter,
 	int ret;
 	u32 poll_num = 1;
 
-	if (adapter->if_ops.check_fw_status) {
-		adapter->winner = 0;
+	adapter->winner = 0;
 
-		/* check if firmware is already running */
-		ret = adapter->if_ops.check_fw_status(adapter, poll_num);
-		if (!ret) {
-			dev_notice(adapter->dev,
-				   "WLAN FW already running! Skip FW dnld\n");
-			goto done;
-		}
-
-		poll_num = MAX_FIRMWARE_POLL_TRIES;
-
-		/* check if we are the winner for downloading FW */
-		if (!adapter->winner) {
-			dev_notice(adapter->dev,
-				   "FW already running! Skip FW dnld\n");
-			poll_num = MAX_MULTI_INTERFACE_POLL_TRIES;
-			goto poll_fw;
-		}
+	/* Check if firmware is already running */
+	ret = adapter->if_ops.check_fw_status(adapter, poll_num);
+	if (!ret) {
+		dev_notice(adapter->dev,
+			   "WLAN FW already running! Skip FW download\n");
+		goto done;
 	}
+	poll_num = MAX_FIRMWARE_POLL_TRIES;
 
+	/* Check if we are the winner for downloading FW */
+	if (!adapter->winner) {
+		dev_notice(adapter->dev,
+			   "Other intf already running! Skip FW download\n");
+		poll_num = MAX_MULTI_INTERFACE_POLL_TRIES;
+		goto poll_fw;
+	}
 	if (pmfw) {
 		/* Download firmware with helper */
 		ret = adapter->if_ops.prog_fw(adapter, pmfw);
@@ -803,8 +769,6 @@ poll_fw:
 	}
 done:
 	/* re-enable host interrupt for mwifiex after fw dnld is successful */
-	if (adapter->if_ops.enable_int)
-		adapter->if_ops.enable_int(adapter);
-
+	adapter->if_ops.enable_int(adapter);
 	return ret;
 }

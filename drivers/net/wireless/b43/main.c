@@ -533,11 +533,11 @@ u64 b43_hf_read(struct b43_wldev *dev)
 {
 	u64 ret;
 
-	ret = b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF3);
+	ret = b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFHI);
 	ret <<= 16;
-	ret |= b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF2);
+	ret |= b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFMI);
 	ret <<= 16;
-	ret |= b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF1);
+	ret |= b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFLO);
 
 	return ret;
 }
@@ -550,9 +550,9 @@ void b43_hf_write(struct b43_wldev *dev, u64 value)
 	lo = (value & 0x00000000FFFFULL);
 	mi = (value & 0x0000FFFF0000ULL) >> 16;
 	hi = (value & 0xFFFF00000000ULL) >> 32;
-	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF1, lo);
-	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF2, mi);
-	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTF3, hi);
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFLO, lo);
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFMI, mi);
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_HOSTFHI, hi);
 }
 
 /* Read the firmware capabilities bitmask (Opensource firmware only) */
@@ -2088,18 +2088,11 @@ static void b43_print_fw_helptext(struct b43_wl *wl, bool error)
 		b43warn(wl, text);
 }
 
-static void b43_fw_cb(const struct firmware *firmware, void *context)
-{
-	struct b43_request_fw_context *ctx = context;
-
-	ctx->blob = firmware;
-	complete(&ctx->fw_load_complete);
-}
-
 int b43_do_request_fw(struct b43_request_fw_context *ctx,
 		      const char *name,
-		      struct b43_firmware_file *fw, bool async)
+		      struct b43_firmware_file *fw)
 {
+	const struct firmware *blob;
 	struct b43_fw_header *hdr;
 	u32 size;
 	int err;
@@ -2138,31 +2131,11 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 		B43_WARN_ON(1);
 		return -ENOSYS;
 	}
-	if (async) {
-		/* do this part asynchronously */
-		init_completion(&ctx->fw_load_complete);
-		err = request_firmware_nowait(THIS_MODULE, 1, ctx->fwname,
-					      ctx->dev->dev->dev, GFP_KERNEL,
-					      ctx, b43_fw_cb);
-		if (err < 0) {
-			pr_err("Unable to load firmware\n");
-			return err;
-		}
-		/* stall here until fw ready */
-		wait_for_completion(&ctx->fw_load_complete);
-		if (ctx->blob)
-			goto fw_ready;
-	/* On some ARM systems, the async request will fail, but the next sync
-	 * request works. For this reason, we dall through here
-	 */
-	}
-	err = request_firmware(&ctx->blob, ctx->fwname,
-			       ctx->dev->dev->dev);
+	err = request_firmware(&blob, ctx->fwname, ctx->dev->dev->dev);
 	if (err == -ENOENT) {
 		snprintf(ctx->errors[ctx->req_type],
 			 sizeof(ctx->errors[ctx->req_type]),
-			 "Firmware file \"%s\" not found\n",
-			 ctx->fwname);
+			 "Firmware file \"%s\" not found\n", ctx->fwname);
 		return err;
 	} else if (err) {
 		snprintf(ctx->errors[ctx->req_type],
@@ -2171,15 +2144,14 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 			 ctx->fwname, err);
 		return err;
 	}
-fw_ready:
-	if (ctx->blob->size < sizeof(struct b43_fw_header))
+	if (blob->size < sizeof(struct b43_fw_header))
 		goto err_format;
-	hdr = (struct b43_fw_header *)(ctx->blob->data);
+	hdr = (struct b43_fw_header *)(blob->data);
 	switch (hdr->type) {
 	case B43_FW_TYPE_UCODE:
 	case B43_FW_TYPE_PCM:
 		size = be32_to_cpu(hdr->size);
-		if (size != ctx->blob->size - sizeof(struct b43_fw_header))
+		if (size != blob->size - sizeof(struct b43_fw_header))
 			goto err_format;
 		/* fallthrough */
 	case B43_FW_TYPE_IV:
@@ -2190,7 +2162,7 @@ fw_ready:
 		goto err_format;
 	}
 
-	fw->data = ctx->blob;
+	fw->data = blob;
 	fw->filename = name;
 	fw->type = ctx->req_type;
 
@@ -2200,7 +2172,7 @@ err_format:
 	snprintf(ctx->errors[ctx->req_type],
 		 sizeof(ctx->errors[ctx->req_type]),
 		 "Firmware file \"%s\" format error.\n", ctx->fwname);
-	release_firmware(ctx->blob);
+	release_firmware(blob);
 
 	return -EPROTO;
 }
@@ -2251,7 +2223,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 			goto err_no_ucode;
 		}
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->ucode, true);
+	err = b43_do_request_fw(ctx, filename, &fw->ucode);
 	if (err)
 		goto err_load;
 
@@ -2263,7 +2235,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	else
 		goto err_no_pcm;
 	fw->pcm_request_failed = false;
-	err = b43_do_request_fw(ctx, filename, &fw->pcm, false);
+	err = b43_do_request_fw(ctx, filename, &fw->pcm);
 	if (err == -ENOENT) {
 		/* We did not find a PCM file? Not fatal, but
 		 * core rev <= 10 must do without hwcrypto then. */
@@ -2324,7 +2296,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	default:
 		goto err_no_initvals;
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->initvals, false);
+	err = b43_do_request_fw(ctx, filename, &fw->initvals);
 	if (err)
 		goto err_load;
 
@@ -2383,11 +2355,9 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	default:
 		goto err_no_initvals;
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->initvals_band, false);
+	err = b43_do_request_fw(ctx, filename, &fw->initvals_band);
 	if (err)
 		goto err_load;
-
-	fw->opensource = (ctx->req_type == B43_FWTYPE_OPENSOURCE);
 
 	return 0;
 
@@ -2464,14 +2434,9 @@ static void b43_request_firmware(struct work_struct *work)
 	goto out;
 
 start_ieee80211:
-	wl->hw->queues = B43_QOS_QUEUE_NUM;
-	if (!modparam_qos || dev->fw.opensource)
-		wl->hw->queues = 1;
-
 	err = ieee80211_register_hw(wl->hw);
 	if (err)
 		goto err_one_core_detach;
-	wl->hw_registred = true;
 	b43_leds_register(wl->current_dev);
 	goto out;
 
@@ -2571,9 +2536,11 @@ static int b43_upload_microcode(struct b43_wldev *dev)
 		dev->fw.hdr_format = B43_FW_HDR_410;
 	else
 		dev->fw.hdr_format = B43_FW_HDR_351;
-	WARN_ON(dev->fw.opensource != (fwdate == 0xFFFF));
+	dev->fw.opensource = (fwdate == 0xFFFF);
 
-	dev->qos_enabled = dev->wl->hw->queues > 1;
+	/* Default to use-all-queues. */
+	dev->wl->hw->queues = dev->wl->mac80211_initially_registered_queues;
+	dev->qos_enabled = !!modparam_qos;
 	/* Default to firmware/hardware crypto acceleration. */
 	dev->hwcrypto_enabled = true;
 
@@ -2591,8 +2558,14 @@ static int b43_upload_microcode(struct b43_wldev *dev)
 			/* Disable hardware crypto and fall back to software crypto. */
 			dev->hwcrypto_enabled = false;
 		}
-		/* adding QoS support should use an offline discovery mechanism */
-		WARN(fwcapa & B43_FWCAPA_QOS, "QoS in OpenFW not supported\n");
+		if (!(fwcapa & B43_FWCAPA_QOS)) {
+			b43info(dev->wl, "QoS not supported by firmware\n");
+			/* Disable QoS. Tweak hw->queues to 1. It will be restored before
+			 * ieee80211_unregister to make sure the networking core can
+			 * properly free possible resources. */
+			dev->wl->hw->queues = 1;
+			dev->qos_enabled = false;
+		}
 	} else {
 		b43info(dev->wl, "Loading firmware version %u.%u "
 			"(20%.2i-%.2i-%.2i %.2i:%.2i:%.2i)\n",
@@ -2747,37 +2720,32 @@ static int b43_gpio_init(struct b43_wldev *dev)
 	if (dev->dev->chip_id == 0x4301) {
 		mask |= 0x0060;
 		set |= 0x0060;
-	} else if (dev->dev->chip_id == 0x5354) {
-		/* Don't allow overtaking buttons GPIOs */
-		set &= 0x2; /* 0x2 is LED GPIO on BCM5354 */
 	}
-
+	if (dev->dev->chip_id == 0x5354)
+		set &= 0xff02;
 	if (0 /* FIXME: conditional unknown */ ) {
 		b43_write16(dev, B43_MMIO_GPIO_MASK,
 			    b43_read16(dev, B43_MMIO_GPIO_MASK)
 			    | 0x0100);
-		/* BT Coexistance Input */
-		mask |= 0x0080;
-		set |= 0x0080;
-		/* BT Coexistance Out */
-		mask |= 0x0100;
-		set |= 0x0100;
+		mask |= 0x0180;
+		set |= 0x0180;
 	}
 	if (dev->dev->bus_sprom->boardflags_lo & B43_BFL_PACTRL) {
-		/* PA is controlled by gpio 9, let ucode handle it */
 		b43_write16(dev, B43_MMIO_GPIO_MASK,
 			    b43_read16(dev, B43_MMIO_GPIO_MASK)
 			    | 0x0200);
 		mask |= 0x0200;
 		set |= 0x0200;
 	}
+	if (dev->dev->core_rev >= 2)
+		mask |= 0x0010;	/* FIXME: This is redundant. */
 
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
 		bcma_cc_write32(&dev->dev->bdev->bus->drv_cc, BCMA_CC_GPIOCTL,
 				(bcma_cc_read32(&dev->dev->bdev->bus->drv_cc,
-					BCMA_CC_GPIOCTL) & ~mask) | set);
+					BCMA_CC_GPIOCTL) & mask) | set);
 		break;
 #endif
 #ifdef CONFIG_B43_SSB
@@ -2786,7 +2754,7 @@ static int b43_gpio_init(struct b43_wldev *dev)
 		if (gpiodev)
 			ssb_write32(gpiodev, B43_GPIO_CONTROL,
 				    (ssb_read32(gpiodev, B43_GPIO_CONTROL)
-				    & ~mask) | set);
+				    & mask) | set);
 		break;
 #endif
 	}
@@ -3425,7 +3393,7 @@ static void b43_tx_work(struct work_struct *work)
 				break;
 			}
 			if (unlikely(err))
-				ieee80211_free_txskb(wl->hw, skb);
+				dev_kfree_skb(skb); /* Drop it */
 			err = 0;
 		}
 
@@ -3440,14 +3408,13 @@ static void b43_tx_work(struct work_struct *work)
 }
 
 static void b43_op_tx(struct ieee80211_hw *hw,
-		      struct ieee80211_tx_control *control,
-		      struct sk_buff *skb)
+		     struct sk_buff *skb)
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 
 	if (unlikely(skb->len < 2 + 2 + 6)) {
 		/* Too short, this can't be a valid frame. */
-		ieee80211_free_txskb(hw, skb);
+		dev_kfree_skb_any(skb);
 		return;
 	}
 	B43_WARN_ON(skb_shinfo(skb)->nr_frags);
@@ -3799,7 +3766,7 @@ static int b43_switch_band(struct b43_wl *wl, struct ieee80211_channel *chan)
 	if (prev_status >= B43_STAT_STARTED) {
 		err = b43_wireless_core_start(up_dev);
 		if (err) {
-			b43err(wl, "Fatal: Could not start device for "
+			b43err(wl, "Fatal: Coult not start device for "
 			       "selected %s-GHz band\n",
 			       band_to_string(chan->band));
 			b43_wireless_core_exit(up_dev);
@@ -4043,20 +4010,6 @@ static int b43_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	if (modparam_nohwcrypt)
 		return -ENOSPC; /* User disabled HW-crypto */
 
-	if ((vif->type == NL80211_IFTYPE_ADHOC ||
-	     vif->type == NL80211_IFTYPE_MESH_POINT) &&
-	    (key->cipher == WLAN_CIPHER_SUITE_TKIP ||
-	     key->cipher == WLAN_CIPHER_SUITE_CCMP) &&
-	    !(key->flags & IEEE80211_KEY_FLAG_PAIRWISE)) {
-		/*
-		 * For now, disable hw crypto for the RSN IBSS group keys. This
-		 * could be optimized in the future, but until that gets
-		 * implemented, use of software crypto for group addressed
-		 * frames is a acceptable to allow RSN IBSS to be used.
-		 */
-		return -EOPNOTSUPP;
-	}
-
 	mutex_lock(&wl->mutex);
 
 	dev = wl->current_dev;
@@ -4257,12 +4210,8 @@ redo:
 
 	/* Drain all TX queues. */
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {
-		while (skb_queue_len(&wl->tx_queue[queue_num])) {
-			struct sk_buff *skb;
-
-			skb = skb_dequeue(&wl->tx_queue[queue_num]);
-			ieee80211_free_txskb(wl->hw, skb);
-		}
+		while (skb_queue_len(&wl->tx_queue[queue_num]))
+			dev_kfree_skb(skb_dequeue(&wl->tx_queue[queue_num]));
 	}
 
 	b43_mac_suspend(dev);
@@ -4313,35 +4262,6 @@ static int b43_wireless_core_start(struct b43_wldev *dev)
 	b43dbg(dev->wl, "Wireless interface started\n");
 out:
 	return err;
-}
-
-static char *b43_phy_name(struct b43_wldev *dev, u8 phy_type)
-{
-	switch (phy_type) {
-	case B43_PHYTYPE_A:
-		return "A";
-	case B43_PHYTYPE_B:
-		return "B";
-	case B43_PHYTYPE_G:
-		return "G";
-	case B43_PHYTYPE_N:
-		return "N";
-	case B43_PHYTYPE_LP:
-		return "LP";
-	case B43_PHYTYPE_SSLPN:
-		return "SSLPN";
-	case B43_PHYTYPE_HT:
-		return "HT";
-	case B43_PHYTYPE_LCN:
-		return "LCN";
-	case B43_PHYTYPE_LCNXN:
-		return "LCNXN";
-	case B43_PHYTYPE_LCN40:
-		return "LCN40";
-	case B43_PHYTYPE_AC:
-		return "AC";
-	}
-	return "UNKNOWN";
 }
 
 /* Get PHY and RADIO versioning numbers */
@@ -4404,13 +4324,13 @@ static int b43_phy_versioning(struct b43_wldev *dev)
 		unsupported = 1;
 	}
 	if (unsupported) {
-		b43err(dev->wl, "FOUND UNSUPPORTED PHY (Analog %u, Type %d (%s), Revision %u)\n",
-		       analog_type, phy_type, b43_phy_name(dev, phy_type),
-		       phy_rev);
+		b43err(dev->wl, "FOUND UNSUPPORTED PHY "
+		       "(Analog %u, Type %u, Revision %u)\n",
+		       analog_type, phy_type, phy_rev);
 		return -EOPNOTSUPP;
 	}
-	b43info(dev->wl, "Found PHY: Analog %u, Type %d (%s), Revision %u\n",
-		analog_type, phy_type, b43_phy_name(dev, phy_type), phy_rev);
+	b43dbg(dev->wl, "Found PHY: Analog %u, Type %u, Revision %u\n",
+	       analog_type, phy_type, phy_rev);
 
 	/* Get RADIO versioning */
 	if (dev->dev->core_rev >= 24) {
@@ -4684,7 +4604,7 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
-		bcma_core_pci_irq_ctl(&dev->dev->bdev->bus->drv_pci[0],
+		bcma_core_pci_irq_ctl(&dev->dev->bdev->bus->drv_pci,
 				      dev->dev->bdev, true);
 		break;
 #endif
@@ -5309,10 +5229,10 @@ static void b43_sprom_fixup(struct ssb_bus *bus)
 
 	/* boardflags workarounds */
 	if (bus->boardinfo.vendor == SSB_BOARDVENDOR_DELL &&
-	    bus->chip_id == 0x4301 && bus->sprom.board_rev == 0x74)
+	    bus->chip_id == 0x4301 && bus->boardinfo.rev == 0x74)
 		bus->sprom.boardflags_lo |= B43_BFL_BTCOEXIST;
 	if (bus->boardinfo.vendor == PCI_VENDOR_ID_APPLE &&
-	    bus->boardinfo.type == 0x4E && bus->sprom.board_rev > 0x40)
+	    bus->boardinfo.type == 0x4E && bus->boardinfo.rev > 0x40)
 		bus->sprom.boardflags_lo |= B43_BFL_PACTRL;
 	if (bus->bustype == SSB_BUSTYPE_PCI) {
 		pdev = bus->host_pci;
@@ -5361,9 +5281,8 @@ static struct b43_wl *b43_wireless_init(struct b43_bus_dev *dev)
 		BIT(NL80211_IFTYPE_WDS) |
 		BIT(NL80211_IFTYPE_ADHOC);
 
-	hw->wiphy->flags |= WIPHY_FLAG_IBSS_RSN;
-
-	wl->hw_registred = false;
+	hw->queues = modparam_qos ? B43_QOS_QUEUE_NUM : 1;
+	wl->mac80211_initially_registered_queues = hw->queues;
 	hw->max_rates = 2;
 	SET_IEEE80211_DEV(hw, dev->dev);
 	if (is_valid_ether_addr(sprom->et1mac))
@@ -5435,13 +5354,12 @@ static void b43_bcma_remove(struct bcma_device *core)
 	 * as the ieee80211 unreg will destroy the workqueue. */
 	cancel_work_sync(&wldev->restart_work);
 
-	B43_WARN_ON(!wl);
-	if (!wldev->fw.ucode.data)
-		return;			/* NULL if firmware never loaded */
-	if (wl->current_dev == wldev && wl->hw_registred) {
-		b43_leds_stop(wldev);
-		ieee80211_unregister_hw(wl->hw);
-	}
+	/* Restore the queues count before unregistering, because firmware detect
+	 * might have modified it. Restoring is important, so the networking
+	 * stack can properly free resources. */
+	wl->hw->queues = wl->mac80211_initially_registered_queues;
+	b43_leds_stop(wldev);
+	ieee80211_unregister_hw(wl->hw);
 
 	b43_one_core_detach(wldev->dev);
 
@@ -5512,9 +5430,11 @@ static void b43_ssb_remove(struct ssb_device *sdev)
 	cancel_work_sync(&wldev->restart_work);
 
 	B43_WARN_ON(!wl);
-	if (!wldev->fw.ucode.data)
-		return;			/* NULL if firmware never loaded */
-	if (wl->current_dev == wldev && wl->hw_registred) {
+	if (wl->current_dev == wldev) {
+		/* Restore the queues count before unregistering, because firmware detect
+		 * might have modified it. Restoring is important, so the networking
+		 * stack can properly free resources. */
+		wl->hw->queues = wl->mac80211_initially_registered_queues;
 		b43_leds_stop(wldev);
 		ieee80211_unregister_hw(wl->hw);
 	}

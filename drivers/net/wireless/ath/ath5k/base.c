@@ -40,8 +40,6 @@
  *
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
@@ -73,6 +71,10 @@
 bool ath5k_modparam_nohwcrypt;
 module_param_named(nohwcrypt, ath5k_modparam_nohwcrypt, bool, S_IRUGO);
 MODULE_PARM_DESC(nohwcrypt, "Disable hardware encryption.");
+
+static bool modparam_all_channels;
+module_param_named(all_channels, modparam_all_channels, bool, S_IRUGO);
+MODULE_PARM_DESC(all_channels, "Expose all channels the device can use.");
 
 static bool modparam_fastchanswitch;
 module_param_named(fastchanswitch, modparam_fastchanswitch, bool, S_IRUGO);
@@ -254,15 +256,8 @@ static int ath5k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *re
 \********************/
 
 /*
- * Returns true for the channel numbers used.
+ * Returns true for the channel numbers used without all_channels modparam.
  */
-#ifdef CONFIG_ATH5K_TEST_CHANNELS
-static bool ath5k_is_standard_channel(short chan, enum ieee80211_band band)
-{
-	return true;
-}
-
-#else
 static bool ath5k_is_standard_channel(short chan, enum ieee80211_band band)
 {
 	if (band == IEEE80211_BAND_2GHZ && chan <= 14)
@@ -279,7 +274,6 @@ static bool ath5k_is_standard_channel(short chan, enum ieee80211_band band)
 		/* 802.11j 4.9GHz (20MHz) */
 		(chan == 184 || chan == 188 || chan == 192 || chan == 196));
 }
-#endif
 
 static unsigned int
 ath5k_setup_channels(struct ath5k_hw *ah, struct ieee80211_channel *channels,
@@ -320,7 +314,8 @@ ath5k_setup_channels(struct ath5k_hw *ah, struct ieee80211_channel *channels,
 		if (!ath5k_channel_ok(ah, &channels[count]))
 			continue;
 
-		if (!ath5k_is_standard_channel(ch, band))
+		if (!modparam_all_channels &&
+		    !ath5k_is_standard_channel(ch, band))
 			continue;
 
 		count++;
@@ -465,7 +460,7 @@ void ath5k_vif_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 	}
 
 	if (iter_data->need_set_hw_addr && iter_data->hw_macaddr)
-		if (ether_addr_equal(iter_data->hw_macaddr, mac))
+		if (compare_ether_addr(iter_data->hw_macaddr, mac) == 0)
 			iter_data->need_set_hw_addr = false;
 
 	if (!iter_data->any_assoc) {
@@ -511,9 +506,8 @@ ath5k_update_bssid_mask_and_opmode(struct ath5k_hw *ah,
 		ath5k_vif_iter(&iter_data, vif->addr, vif);
 
 	/* Get list of all active MAC addresses */
-	ieee80211_iterate_active_interfaces_atomic(
-		ah->hw, IEEE80211_IFACE_ITER_RESUME_ALL,
-		ath5k_vif_iter, &iter_data);
+	ieee80211_iterate_active_interfaces_atomic(ah->hw, ath5k_vif_iter,
+						   &iter_data);
 	memcpy(ah->bssidmask, iter_data.mask, ETH_ALEN);
 
 	ah->opmode = iter_data.opmode;
@@ -724,7 +718,7 @@ ath5k_txbuf_setup(struct ath5k_hw *ah, struct ath5k_buf *bf,
 	ret = ah->ah_setup_tx_desc(ah, ds, pktlen,
 		ieee80211_get_hdrlen_from_skb(skb), padsize,
 		get_hw_packet_type(skb),
-		(ah->ah_txpower.txp_requested * 2),
+		(ah->power_level * 2),
 		hw_rate,
 		info->control.rates[0].count, keyidx, ah->ah_tx_ant, flags,
 		cts_rate, duration);
@@ -849,7 +843,7 @@ ath5k_txbuf_free_skb(struct ath5k_hw *ah, struct ath5k_buf *bf)
 		return;
 	dma_unmap_single(ah->dev, bf->skbaddr, bf->skb->len,
 			DMA_TO_DEVICE);
-	ieee80211_free_txskb(ah->hw, bf->skb);
+	dev_kfree_skb_any(bf->skb);
 	bf->skb = NULL;
 	bf->skbaddr = 0;
 	bf->desc->ds_data = 0;
@@ -1049,11 +1043,11 @@ ath5k_drain_tx_buffs(struct ath5k_hw *ah)
 
 				ath5k_txbuf_free_skb(ah, bf);
 
-				spin_lock(&ah->txbuflock);
+				spin_lock_bh(&ah->txbuflock);
 				list_move_tail(&bf->list, &ah->txbuf);
 				ah->txbuf_len++;
 				txq->txq_len--;
-				spin_unlock(&ah->txbuflock);
+				spin_unlock_bh(&ah->txbuflock);
 			}
 			txq->link = NULL;
 			txq->txq_poll_mark = false;
@@ -1174,7 +1168,7 @@ ath5k_check_ibss_tsf(struct ath5k_hw *ah, struct sk_buff *skb,
 
 	if (ieee80211_is_beacon(mgmt->frame_control) &&
 	    le16_to_cpu(mgmt->u.beacon.capab_info) & WLAN_CAPABILITY_IBSS &&
-	    ether_addr_equal(mgmt->bssid, common->curbssid)) {
+	    memcmp(mgmt->bssid, common->curbssid, ETH_ALEN) == 0) {
 		/*
 		 * Received an IBSS beacon with the same BSSID. Hardware *must*
 		 * have updated the local TSF. We have to work around various
@@ -1238,7 +1232,7 @@ ath5k_update_beacon_rssi(struct ath5k_hw *ah, struct sk_buff *skb, int rssi)
 
 	/* only beacons from our BSSID */
 	if (!ieee80211_is_beacon(mgmt->frame_control) ||
-	    !ether_addr_equal(mgmt->bssid, common->curbssid))
+	    memcmp(mgmt->bssid, common->curbssid, ETH_ALEN) != 0)
 		return;
 
 	ewma_add(&ah->ah_beacon_rssi_avg, rssi);
@@ -1336,9 +1330,20 @@ ath5k_receive_frame(struct ath5k_hw *ah, struct sk_buff *skb,
 	 * 15bit only. that means TSF extension has to be done within
 	 * 32768usec (about 32ms). it might be necessary to move this to
 	 * the interrupt handler, like it is done in madwifi.
+	 *
+	 * Unfortunately we don't know when the hardware takes the rx
+	 * timestamp (beginning of phy frame, data frame, end of rx?).
+	 * The only thing we know is that it is hardware specific...
+	 * On AR5213 it seems the rx timestamp is at the end of the
+	 * frame, but I'm not sure.
+	 *
+	 * NOTE: mac80211 defines mactime at the beginning of the first
+	 * data symbol. Since we don't have any time references it's
+	 * impossible to comply to that. This affects IBSS merge only
+	 * right now, so it's not too bad...
 	 */
 	rxs->mactime = ath5k_extend_tsf(ah, rs->rs_tstamp);
-	rxs->flag |= RX_FLAG_MACTIME_END;
+	rxs->flag |= RX_FLAG_MACTIME_MPDU;
 
 	rxs->freq = ah->curchan->center_freq;
 	rxs->band = ah->curchan->band;
@@ -1565,7 +1570,7 @@ ath5k_tx_queue(struct ieee80211_hw *hw, struct sk_buff *skb,
 	return;
 
 drop_packet:
-	ieee80211_free_txskb(hw, skb);
+	dev_kfree_skb_any(skb);
 }
 
 static void
@@ -1768,8 +1773,7 @@ ath5k_beacon_setup(struct ath5k_hw *ah, struct ath5k_buf *bf)
 	ds->ds_data = bf->skbaddr;
 	ret = ah->ah_setup_tx_desc(ah, ds, skb->len,
 			ieee80211_get_hdrlen_from_skb(skb), padsize,
-			AR5K_PKT_TYPE_BEACON,
-			(ah->ah_txpower.txp_requested * 2),
+			AR5K_PKT_TYPE_BEACON, (ah->power_level * 2),
 			ieee80211_get_tx_rate(ah->hw, info)->hw_value,
 			1, AR5K_TXKEYIX_INVALID,
 			antenna, flags, 0, 0);
@@ -1794,7 +1798,7 @@ ath5k_beacon_update(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
 	int ret;
 	struct ath5k_hw *ah = hw->priv;
-	struct ath5k_vif *avf;
+	struct ath5k_vif *avf = (void *)vif->drv_priv;
 	struct sk_buff *skb;
 
 	if (WARN_ON(!vif)) {
@@ -1809,7 +1813,6 @@ ath5k_beacon_update(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 		goto out;
 	}
 
-	avf = (void *)vif->drv_priv;
 	ath5k_txbuf_free_skb(ah, avf->bbuf);
 	avf->bbuf->skb = skb;
 	ret = ath5k_beacon_setup(ah, avf->bbuf);
@@ -2048,7 +2051,9 @@ ath5k_beacon_update_timers(struct ath5k_hw *ah, u64 bc_tsf)
 void
 ath5k_beacon_config(struct ath5k_hw *ah)
 {
-	spin_lock_bh(&ah->block);
+	unsigned long flags;
+
+	spin_lock_irqsave(&ah->block, flags);
 	ah->bmisscount = 0;
 	ah->imask &= ~(AR5K_INT_BMISS | AR5K_INT_SWBA);
 
@@ -2075,7 +2080,7 @@ ath5k_beacon_config(struct ath5k_hw *ah)
 
 	ath5k_hw_set_imr(ah, ah->imask);
 	mmiowb();
-	spin_unlock_bh(&ah->block);
+	spin_unlock_irqrestore(&ah->block, flags);
 }
 
 static void ath5k_tasklet_beacon(unsigned long data)
@@ -2408,23 +2413,7 @@ ath5k_tx_complete_poll_work(struct work_struct *work)
 * Initialization routines *
 \*************************/
 
-static const struct ieee80211_iface_limit if_limits[] = {
-	{ .max = 2048,	.types = BIT(NL80211_IFTYPE_STATION) },
-	{ .max = 4,	.types =
-#ifdef CONFIG_MAC80211_MESH
-				 BIT(NL80211_IFTYPE_MESH_POINT) |
-#endif
-				 BIT(NL80211_IFTYPE_AP) },
-};
-
-static const struct ieee80211_iface_combination if_comb = {
-	.limits = if_limits,
-	.n_limits = ARRAY_SIZE(if_limits),
-	.max_interfaces = 2048,
-	.num_different_channels = 1,
-};
-
-int
+int __devinit
 ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 {
 	struct ieee80211_hw *hw = ah->hw;
@@ -2437,7 +2426,6 @@ ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 	hw->flags = IEEE80211_HW_RX_INCLUDES_FCS |
 			IEEE80211_HW_HOST_BROADCAST_PS_BUFFERING |
 			IEEE80211_HW_SIGNAL_DBM |
-			IEEE80211_HW_MFP_CAPABLE |
 			IEEE80211_HW_REPORTS_TX_ACK_STATUS;
 
 	hw->wiphy->interface_modes =
@@ -2445,9 +2433,6 @@ ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 		BIT(NL80211_IFTYPE_STATION) |
 		BIT(NL80211_IFTYPE_ADHOC) |
 		BIT(NL80211_IFTYPE_MESH_POINT);
-
-	hw->wiphy->iface_combinations = &if_comb;
-	hw->wiphy->n_iface_combinations = 1;
 
 	/* SW support for IBSS_RSN is provided by mac80211 */
 	hw->wiphy->flags |= WIPHY_FLAG_IBSS_RSN;
@@ -2850,7 +2835,7 @@ static void ath5k_reset_work(struct work_struct *work)
 	mutex_unlock(&ah->lock);
 }
 
-static int
+static int __devinit
 ath5k_init(struct ieee80211_hw *hw)
 {
 
@@ -3035,9 +3020,8 @@ ath5k_any_vif_assoc(struct ath5k_hw *ah)
 	iter_data.need_set_hw_addr = false;
 	iter_data.found_active = true;
 
-	ieee80211_iterate_active_interfaces_atomic(
-		ah->hw, IEEE80211_IFACE_ITER_RESUME_ALL,
-		ath5k_vif_iter, &iter_data);
+	ieee80211_iterate_active_interfaces_atomic(ah->hw, ath5k_vif_iter,
+						   &iter_data);
 	return iter_data.any_assoc;
 }
 
@@ -3053,24 +3037,4 @@ ath5k_set_beacon_filter(struct ieee80211_hw *hw, bool enable)
 		rfilt &= ~AR5K_RX_FILTER_BEACON;
 	ath5k_hw_set_rx_filter(ah, rfilt);
 	ah->filter_flags = rfilt;
-}
-
-void _ath5k_printk(const struct ath5k_hw *ah, const char *level,
-		   const char *fmt, ...)
-{
-	struct va_format vaf;
-	va_list args;
-
-	va_start(args, fmt);
-
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	if (ah && ah->hw)
-		printk("%s" pr_fmt("%s: %pV"),
-		       level, wiphy_name(ah->hw->wiphy), &vaf);
-	else
-		printk("%s" pr_fmt("%pV"), level, &vaf);
-
-	va_end(args);
 }

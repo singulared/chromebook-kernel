@@ -136,7 +136,6 @@ static bool ar9002_hw_get_isr(struct ath_hw *ah, enum ath9k_int *masked)
 	}
 
 	if (sync_cause) {
-		ath9k_debug_sync_cause(common, sync_cause);
 		fatal_int =
 			(sync_cause &
 			 (AR_INTR_SYNC_HOST1_FATAL | AR_INTR_SYNC_HOST1_PERR))

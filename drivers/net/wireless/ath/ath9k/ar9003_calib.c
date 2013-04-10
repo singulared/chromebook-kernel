@@ -276,11 +276,6 @@ static void ar9003_hw_iqcalibrate(struct ath_hw *ah, u8 numChains)
 				offset_array[i],
 				REG_READ(ah, offset_array[i]));
 
-			if (AR_SREV_9565(ah) &&
-			    (iCoff == 63 || qCoff == 63 ||
-			     iCoff == -63 || qCoff == -63))
-				return;
-
 			REG_RMW_FIELD(ah, offset_array[i],
 				      AR_PHY_RX_IQCAL_CORR_IQCORR_Q_I_COFF,
 				      iCoff);
@@ -976,14 +971,13 @@ static bool ar9003_hw_init_cal(struct ath_hw *ah,
 					  AR_PHY_CL_TAB_1,
 					  AR_PHY_CL_TAB_2 };
 
-	ar9003_hw_set_chain_masks(ah, ah->caps.rx_chainmask, ah->caps.tx_chainmask);
-
 	if (rtt) {
 		if (!ar9003_hw_rtt_restore(ah, chan))
 			run_rtt_cal = true;
 
 		if (run_rtt_cal)
-			ath_dbg(common, CALIBRATE, "RTT calibration to be done\n");
+			ath_dbg(common, CALIBRATE,
+				"RTT calibration to be done\n");
 	}
 
 	run_agc_cal = run_rtt_cal;
@@ -1041,12 +1035,10 @@ static bool ar9003_hw_init_cal(struct ath_hw *ah,
 	if (ath9k_hw_mci_is_enabled(ah) && IS_CHAN_2GHZ(chan) && run_agc_cal)
 		ar9003_mci_init_cal_req(ah, &is_reusable);
 
-	if (!(IS_CHAN_HALF_RATE(chan) || IS_CHAN_QUARTER_RATE(chan))) {
-		txiqcal_done = ar9003_hw_tx_iq_cal_run(ah);
-		REG_WRITE(ah, AR_PHY_ACTIVE, AR_PHY_ACTIVE_DIS);
-		udelay(5);
-		REG_WRITE(ah, AR_PHY_ACTIVE, AR_PHY_ACTIVE_EN);
-	}
+	txiqcal_done = ar9003_hw_tx_iq_cal_run(ah);
+	REG_WRITE(ah, AR_PHY_ACTIVE, AR_PHY_ACTIVE_DIS);
+	udelay(5);
+	REG_WRITE(ah, AR_PHY_ACTIVE, AR_PHY_ACTIVE_EN);
 
 skip_tx_iqcal:
 	if (run_agc_cal || !(ah->ah_flags & AH_FASTCC)) {
@@ -1059,7 +1051,7 @@ skip_tx_iqcal:
 		status = ath9k_hw_wait(ah, AR_PHY_AGC_CONTROL,
 				       AR_PHY_AGC_CONTROL_CAL,
 				       0, AH_WAIT_TIMEOUT);
-		if (AR_SREV_9462(ah) || AR_SREV_9565(ah)) {
+		if (AR_SREV_9462(ah)) {
 			for (i = 0; i < AR9300_MAX_CHAINS; i++) {
 				if (!(ah->rxchainmask & (1 << i)))
 					continue;

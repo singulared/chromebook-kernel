@@ -4,7 +4,6 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/export.h>
-#include <linux/etherdevice.h>
 #include "hostap_wlan.h"
 #include "hostap.h"
 #include "hostap_ap.h"
@@ -464,7 +463,8 @@ static void handle_info_queue_scanresults(local_info_t *local)
 		prism2_host_roaming(local);
 
 	if (local->host_roaming == 2 && local->iw_mode == IW_MODE_INFRA &&
-	    !is_zero_ether_addr(local->preferred_ap)) {
+	    memcmp(local->preferred_ap, "\x00\x00\x00\x00\x00\x00",
+		   ETH_ALEN) != 0) {
 		/*
 		 * Firmware seems to be getting into odd state in host_roaming
 		 * mode 2 when hostscan is used without join command, so try

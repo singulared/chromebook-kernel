@@ -290,8 +290,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		txhdr->dur_fb = wlhdr->duration_id;
 	} else {
 		txhdr->dur_fb = ieee80211_generic_frame_duration(
-			dev->wl->hw, info->control.vif, info->band,
-			fragment_len, fbrate);
+			dev->wl->hw, info->control.vif, fragment_len, fbrate);
 	}
 
 	plcp_fragment_len = fragment_len + FCS_LEN;
@@ -379,7 +378,7 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	if (info->control.rates[0].flags & IEEE80211_TX_RC_USE_SHORT_PREAMBLE)
 		phy_ctl |= B43_TXH_PHY_SHORTPRMBL;
 
-	switch (b43_ieee80211_antenna_sanitize(dev, 0)) {
+	switch (b43_ieee80211_antenna_sanitize(dev, info->antenna_sel_tx)) {
 	case 0: /* Default */
 		phy_ctl |= B43_TXH_PHY_ANT01AUTO;
 		break;
@@ -663,7 +662,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	u32 uninitialized_var(macstat);
 	u16 chanid;
 	u16 phytype;
-	int padding, rate_idx;
+	int padding;
 
 	memset(&status, 0, sizeof(status));
 
@@ -766,17 +765,16 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	}
 
 	if (phystat0 & B43_RX_PHYST0_OFDM)
-		rate_idx = b43_plcp_get_bitrate_idx_ofdm(plcp,
+		status.rate_idx = b43_plcp_get_bitrate_idx_ofdm(plcp,
 						phytype == B43_PHYTYPE_A);
 	else
-		rate_idx = b43_plcp_get_bitrate_idx_cck(plcp);
-	if (unlikely(rate_idx == -1)) {
+		status.rate_idx = b43_plcp_get_bitrate_idx_cck(plcp);
+	if (unlikely(status.rate_idx == -1)) {
 		/* PLCP seems to be corrupted.
 		 * Drop the frame, if we are not interested in corrupted frames. */
 		if (!(dev->wl->filter_flags & FIF_PLCPFAIL))
 			goto drop;
 	}
-	status.rate_idx = rate_idx;
 	status.antenna = !!(phystat0 & B43_RX_PHYST0_ANT);
 
 	/*
@@ -796,7 +794,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		status.mactime += mactime;
 		if (low_mactime_now <= mactime)
 			status.mactime -= 0x10000;
-		status.flag |= RX_FLAG_MACTIME_START;
+		status.flag |= RX_FLAG_MACTIME_MPDU;
 	}
 
 	chanid = (chanstat & B43_RX_CHAN_ID) >> B43_RX_CHAN_ID_SHIFT;

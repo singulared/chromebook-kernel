@@ -189,7 +189,7 @@ static int rt73usb_rfkill_poll(struct rt2x00_dev *rt2x00dev)
 	u32 reg;
 
 	rt2x00usb_register_read(rt2x00dev, MAC_CSR13, &reg);
-	return rt2x00_get_field32(reg, MAC_CSR13_VAL7);
+	return rt2x00_get_field32(reg, MAC_CSR13_BIT7);
 }
 
 #ifdef CONFIG_RT2X00_LIB_LEDS
@@ -1770,7 +1770,7 @@ static int rt73usb_validate_eeprom(struct rt2x00_dev *rt2x00dev)
 	 */
 	mac = rt2x00_eeprom_addr(rt2x00dev, EEPROM_MAC_ADDR_0);
 	if (!is_valid_ether_addr(mac)) {
-		eth_random_addr(mac);
+		random_ether_addr(mac);
 		EEPROM(rt2x00dev, "MAC: %pM\n", mac);
 	}
 
@@ -2177,7 +2177,6 @@ static int rt73usb_probe_hw_mode(struct rt2x00_dev *rt2x00dev)
 static int rt73usb_probe_hw(struct rt2x00_dev *rt2x00dev)
 {
 	int retval;
-	u32 reg;
 
 	/*
 	 * Allocate eeprom data.
@@ -2189,14 +2188,6 @@ static int rt73usb_probe_hw(struct rt2x00_dev *rt2x00dev)
 	retval = rt73usb_init_eeprom(rt2x00dev);
 	if (retval)
 		return retval;
-
-	/*
-	 * Enable rfkill polling by setting GPIO direction of the
-	 * rfkill switch GPIO pin correctly.
-	 */
-	rt2x00usb_register_read(rt2x00dev, MAC_CSR13, &reg);
-	rt2x00_set_field32(&reg, MAC_CSR13_DIR7, 0);
-	rt2x00usb_register_write(rt2x00dev, MAC_CSR13, reg);
 
 	/*
 	 * Initialize hw specifications.
@@ -2382,6 +2373,7 @@ static const struct data_queue_desc rt73usb_queue_bcn = {
 
 static const struct rt2x00_ops rt73usb_ops = {
 	.name			= KBUILD_MODNAME,
+	.max_sta_intf		= 1,
 	.max_ap_intf		= 4,
 	.eeprom_size		= EEPROM_SIZE,
 	.rf_size		= RF_SIZE,
@@ -2420,7 +2412,6 @@ static struct usb_device_id rt73usb_device_table[] = {
 	{ USB_DEVICE(0x0b05, 0x1723) },
 	{ USB_DEVICE(0x0b05, 0x1724) },
 	/* Belkin */
-	{ USB_DEVICE(0x050d, 0x7050) },	/* FCC ID: K7SF5D7050B ver. 3.x */
 	{ USB_DEVICE(0x050d, 0x705a) },
 	{ USB_DEVICE(0x050d, 0x905b) },
 	{ USB_DEVICE(0x050d, 0x905c) },
@@ -2535,8 +2526,6 @@ static struct usb_driver rt73usb_driver = {
 	.disconnect	= rt2x00usb_disconnect,
 	.suspend	= rt2x00usb_suspend,
 	.resume		= rt2x00usb_resume,
-	.reset_resume	= rt2x00usb_resume,
-	.disable_hub_initiated_lpm = 1,
 };
 
 module_usb_driver(rt73usb_driver);

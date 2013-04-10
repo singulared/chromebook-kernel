@@ -29,7 +29,6 @@
 
 #include "main.h"
 
-#define SD8786_DEFAULT_FW_NAME "mrvl/sd8786_uapsta.bin"
 #define SD8787_DEFAULT_FW_NAME "mrvl/sd8787_uapsta.bin"
 #define SD8797_DEFAULT_FW_NAME "mrvl/sd8797_uapsta.bin"
 
@@ -254,6 +253,15 @@
 	a->mpa_rx.start_port = 0;					\
 } while (0)
 
+#define REG_DBG_MAX_NUM 16
+struct sdio_reg_dbg {
+	char name[REG_DBG_MAX_NUM];
+	u8 fn;
+	int delay;
+	int num_regs;
+	u32 reg[REG_DBG_MAX_NUM];
+	u8 val[REG_DBG_MAX_NUM];
+};
 
 /* data structure for SDIO MPA TX */
 struct mwifiex_sdio_mpa_tx {
@@ -324,5 +332,10 @@ static inline int mwifiex_sdio_event_complete(struct mwifiex_adapter *adapter,
 	dev_kfree_skb_any(skb);
 	return 0;
 }
+
+enum mwifiex_sdio_work_flags {
+	MWIFIEX_SDIO_WORK_REGDBG,
+	MWIFIEX_SDIO_WORK_RESET,
+};
 
 #endif /* _MWIFIEX_SDIO_H */

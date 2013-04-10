@@ -139,17 +139,17 @@ static u32 _rtl92s_phy_rf_serial_read(struct ieee80211_hw *hw,
 						BIT(8));
 
 	if (rfpi_enable)
-		retvalue = rtl_get_bbreg(hw, pphyreg->rf_rbpi,
+		retvalue = rtl_get_bbreg(hw, pphyreg->rflssi_readbackpi,
 					 BLSSI_READBACK_DATA);
 	else
-		retvalue = rtl_get_bbreg(hw, pphyreg->rf_rb,
+		retvalue = rtl_get_bbreg(hw, pphyreg->rflssi_readback,
 					 BLSSI_READBACK_DATA);
 
-	retvalue = rtl_get_bbreg(hw, pphyreg->rf_rb,
+	retvalue = rtl_get_bbreg(hw, pphyreg->rflssi_readback,
 				 BLSSI_READBACK_DATA);
 
 	RT_TRACE(rtlpriv, COMP_RF, DBG_TRACE, "RFR-%d Addr[0x%x]=0x%x\n",
-		 rfpath, pphyreg->rf_rb, retvalue);
+		 rfpath, pphyreg->rflssi_readback, retvalue);
 
 	return retvalue;
 
@@ -696,7 +696,7 @@ static void _rtl92s_store_pwrindex_diffrate_offset(struct ieee80211_hw *hw,
 	else
 		return;
 
-	rtlphy->mcs_offset[rtlphy->pwrgroup_cnt][index] = data;
+	rtlphy->mcs_txpwrlevel_origoffset[rtlphy->pwrgroup_cnt][index] = data;
 	if (index == 5)
 		rtlphy->pwrgroup_cnt++;
 }
@@ -765,10 +765,14 @@ static void _rtl92s_phy_init_register_definition(struct ieee80211_hw *hw)
 	rtlphy->phyreg_def[RF90_PATH_D].rfhssi_para2 = RFPGA0_XD_HSSIPARAMETER2;
 
 	/* RF switch Control */
-	rtlphy->phyreg_def[RF90_PATH_A].rfsw_ctrl = RFPGA0_XAB_SWITCHCONTROL;
-	rtlphy->phyreg_def[RF90_PATH_B].rfsw_ctrl = RFPGA0_XAB_SWITCHCONTROL;
-	rtlphy->phyreg_def[RF90_PATH_C].rfsw_ctrl = RFPGA0_XCD_SWITCHCONTROL;
-	rtlphy->phyreg_def[RF90_PATH_D].rfsw_ctrl = RFPGA0_XCD_SWITCHCONTROL;
+	rtlphy->phyreg_def[RF90_PATH_A].rfswitch_control =
+						 RFPGA0_XAB_SWITCHCONTROL;
+	rtlphy->phyreg_def[RF90_PATH_B].rfswitch_control =
+						 RFPGA0_XAB_SWITCHCONTROL;
+	rtlphy->phyreg_def[RF90_PATH_C].rfswitch_control =
+						 RFPGA0_XCD_SWITCHCONTROL;
+	rtlphy->phyreg_def[RF90_PATH_D].rfswitch_control =
+						 RFPGA0_XCD_SWITCHCONTROL;
 
 	/* AGC control 1  */
 	rtlphy->phyreg_def[RF90_PATH_A].rfagc_control1 = ROFDM0_XAAGCCORE1;
@@ -783,10 +787,14 @@ static void _rtl92s_phy_init_register_definition(struct ieee80211_hw *hw)
 	rtlphy->phyreg_def[RF90_PATH_D].rfagc_control2 = ROFDM0_XDAGCCORE2;
 
 	/* RX AFE control 1  */
-	rtlphy->phyreg_def[RF90_PATH_A].rfrxiq_imbal = ROFDM0_XARXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_B].rfrxiq_imbal = ROFDM0_XBRXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_C].rfrxiq_imbal = ROFDM0_XCRXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_D].rfrxiq_imbal = ROFDM0_XDRXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_A].rfrxiq_imbalance =
+						 ROFDM0_XARXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_B].rfrxiq_imbalance =
+						 ROFDM0_XBRXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_C].rfrxiq_imbalance =
+						 ROFDM0_XCRXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_D].rfrxiq_imbalance =
+						 ROFDM0_XDRXIQIMBALANCE;
 
 	/* RX AFE control 1   */
 	rtlphy->phyreg_def[RF90_PATH_A].rfrx_afe = ROFDM0_XARXAFE;
@@ -795,10 +803,14 @@ static void _rtl92s_phy_init_register_definition(struct ieee80211_hw *hw)
 	rtlphy->phyreg_def[RF90_PATH_D].rfrx_afe = ROFDM0_XDRXAFE;
 
 	/* Tx AFE control 1  */
-	rtlphy->phyreg_def[RF90_PATH_A].rftxiq_imbal = ROFDM0_XATXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_B].rftxiq_imbal = ROFDM0_XBTXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_C].rftxiq_imbal = ROFDM0_XCTXIQIMBALANCE;
-	rtlphy->phyreg_def[RF90_PATH_D].rftxiq_imbal = ROFDM0_XDTXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_A].rftxiq_imbalance =
+						 ROFDM0_XATXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_B].rftxiq_imbalance =
+						 ROFDM0_XBTXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_C].rftxiq_imbalance =
+						 ROFDM0_XCTXIQIMBALANCE;
+	rtlphy->phyreg_def[RF90_PATH_D].rftxiq_imbalance =
+						 ROFDM0_XDTXIQIMBALANCE;
 
 	/* Tx AFE control 2  */
 	rtlphy->phyreg_def[RF90_PATH_A].rftx_afe = ROFDM0_XATXAFE;
@@ -807,14 +819,20 @@ static void _rtl92s_phy_init_register_definition(struct ieee80211_hw *hw)
 	rtlphy->phyreg_def[RF90_PATH_D].rftx_afe = ROFDM0_XDTXAFE;
 
 	/* Tranceiver LSSI Readback */
-	rtlphy->phyreg_def[RF90_PATH_A].rf_rb = RFPGA0_XA_LSSIREADBACK;
-	rtlphy->phyreg_def[RF90_PATH_B].rf_rb = RFPGA0_XB_LSSIREADBACK;
-	rtlphy->phyreg_def[RF90_PATH_C].rf_rb = RFPGA0_XC_LSSIREADBACK;
-	rtlphy->phyreg_def[RF90_PATH_D].rf_rb = RFPGA0_XD_LSSIREADBACK;
+	rtlphy->phyreg_def[RF90_PATH_A].rflssi_readback =
+			 RFPGA0_XA_LSSIREADBACK;
+	rtlphy->phyreg_def[RF90_PATH_B].rflssi_readback =
+			 RFPGA0_XB_LSSIREADBACK;
+	rtlphy->phyreg_def[RF90_PATH_C].rflssi_readback =
+			 RFPGA0_XC_LSSIREADBACK;
+	rtlphy->phyreg_def[RF90_PATH_D].rflssi_readback =
+			 RFPGA0_XD_LSSIREADBACK;
 
 	/* Tranceiver LSSI Readback PI mode  */
-	rtlphy->phyreg_def[RF90_PATH_A].rf_rbpi = TRANSCEIVERA_HSPI_READBACK;
-	rtlphy->phyreg_def[RF90_PATH_B].rf_rbpi = TRANSCEIVERB_HSPI_READBACK;
+	rtlphy->phyreg_def[RF90_PATH_A].rflssi_readbackpi =
+			 TRANSCEIVERA_HSPI_READBACK;
+	rtlphy->phyreg_def[RF90_PATH_B].rflssi_readbackpi =
+			 TRANSCEIVERB_HSPI_READBACK;
 }
 
 
@@ -1229,9 +1247,6 @@ static void _rtl92s_phy_get_txpower_index(struct ieee80211_hw *hw, u8 channel,
 		/* Read HT 40 OFDM TX power */
 		ofdmpowerLevel[0] = rtlefuse->txpwrlevel_ht40_2s[0][index];
 		ofdmpowerLevel[1] = rtlefuse->txpwrlevel_ht40_2s[1][index];
-	} else {
-		ofdmpowerLevel[0] = 0;
-		ofdmpowerLevel[1] = 0;
 	}
 }
 
@@ -1435,7 +1450,6 @@ static void _rtl92s_phy_set_fwcmd_io(struct ieee80211_hw *hw)
 bool rtl92s_phy_set_fw_cmd(struct ieee80211_hw *hw, enum fwcmd_iotype fw_cmdio)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
-	struct dig_t *digtable = &rtlpriv->dm_digtable;
 	struct rtl_hal *rtlhal = rtl_hal(rtl_priv(hw));
 	struct rtl_efuse *rtlefuse = rtl_efuse(rtl_priv(hw));
 	u32	fw_param = FW_CMD_IO_PARA_QUERY(rtlpriv);
@@ -1574,16 +1588,16 @@ bool rtl92s_phy_set_fw_cmd(struct ieee80211_hw *hw, enum fwcmd_iotype fw_cmdio)
 				      FW_SS_CTL);
 
 			if (rtlpriv->dm.dm_flag & HAL_DM_DIG_DISABLE ||
-				!digtable->dig_enable_flag)
+				!digtable.dig_enable_flag)
 				fw_cmdmap &= ~FW_DIG_ENABLE_CTL;
 
 			if ((rtlpriv->dm.dm_flag & HAL_DM_HIPWR_DISABLE) ||
 			    rtlpriv->dm.dynamic_txpower_enable)
 				fw_cmdmap &= ~FW_HIGH_PWR_ENABLE_CTL;
 
-			if ((digtable->dig_ext_port_stage ==
+			if ((digtable.dig_ext_port_stage ==
 			    DIG_EXT_PORT_STAGE_0) ||
-			    (digtable->dig_ext_port_stage ==
+			    (digtable.dig_ext_port_stage ==
 			    DIG_EXT_PORT_STAGE_1))
 				fw_cmdmap &= ~FW_DIG_ENABLE_CTL;
 

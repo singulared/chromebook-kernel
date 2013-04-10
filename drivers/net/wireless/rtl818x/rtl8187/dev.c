@@ -44,7 +44,7 @@ MODULE_AUTHOR("Larry Finger <Larry.Finger@lwfinger.net>");
 MODULE_DESCRIPTION("RTL8187/RTL8187B USB wireless driver");
 MODULE_LICENSE("GPL");
 
-static struct usb_device_id rtl8187_table[] = {
+static struct usb_device_id rtl8187_table[] __devinitdata = {
 	/* Asus */
 	{USB_DEVICE(0x0b05, 0x171d), .driver_info = DEVICE_RTL8187},
 	/* Belkin */
@@ -228,9 +228,7 @@ static void rtl8187_tx_cb(struct urb *urb)
 	}
 }
 
-static void rtl8187_tx(struct ieee80211_hw *dev,
-		       struct ieee80211_tx_control *control,
-		       struct sk_buff *skb)
+static void rtl8187_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 {
 	struct rtl8187_priv *priv = dev->priv;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
@@ -296,7 +294,6 @@ static void rtl8187_tx(struct ieee80211_hw *dev,
 		hdr->retry = cpu_to_le32((info->control.rates[0].count - 1) << 8);
 		hdr->tx_duration =
 			ieee80211_generic_frame_duration(dev, priv->vif,
-							 info->band,
 							 skb->len, txrate);
 		buf = hdr;
 
@@ -381,7 +378,7 @@ static void rtl8187_rx_cb(struct urb *urb)
 	rx_status.rate_idx = rate;
 	rx_status.freq = dev->conf.channel->center_freq;
 	rx_status.band = dev->conf.channel->band;
-	rx_status.flag |= RX_FLAG_MACTIME_START;
+	rx_status.flag |= RX_FLAG_MACTIME_MPDU;
 	if (flags & RTL818X_RX_DESC_FLAG_CRC32_ERR)
 		rx_status.flag |= RX_FLAG_FAILED_FCS_CRC;
 	memcpy(IEEE80211_SKB_RXCB(skb), &rx_status, sizeof(rx_status));
@@ -1078,7 +1075,7 @@ static void rtl8187_beacon_work(struct work_struct *work)
 	/* TODO: use actual beacon queue */
 	skb_set_queue_mapping(skb, 0);
 
-	rtl8187_tx(dev, NULL, skb);
+	rtl8187_tx(dev, skb);
 
 resched:
 	/*
@@ -1411,7 +1408,7 @@ static void rtl8187_eeprom_register_write(struct eeprom_93cx6 *eeprom)
 	udelay(10);
 }
 
-static int rtl8187_probe(struct usb_interface *intf,
+static int __devinit rtl8187_probe(struct usb_interface *intf,
 				   const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
@@ -1488,7 +1485,7 @@ static int rtl8187_probe(struct usb_interface *intf,
 	if (!is_valid_ether_addr(mac_addr)) {
 		printk(KERN_WARNING "rtl8187: Invalid hwaddr! Using randomly "
 		       "generated MAC address\n");
-		eth_random_addr(mac_addr);
+		random_ether_addr(mac_addr);
 	}
 	SET_IEEE80211_PERM_ADDR(dev, mac_addr);
 
@@ -1639,7 +1636,7 @@ static int rtl8187_probe(struct usb_interface *intf,
 	return err;
 }
 
-static void rtl8187_disconnect(struct usb_interface *intf)
+static void __devexit rtl8187_disconnect(struct usb_interface *intf)
 {
 	struct ieee80211_hw *dev = usb_get_intfdata(intf);
 	struct rtl8187_priv *priv;
@@ -1664,8 +1661,7 @@ static struct usb_driver rtl8187_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= rtl8187_table,
 	.probe		= rtl8187_probe,
-	.disconnect	= rtl8187_disconnect,
-	.disable_hub_initiated_lpm = 1,
+	.disconnect	= __devexit_p(rtl8187_disconnect),
 };
 
 module_usb_driver(rtl8187_driver);

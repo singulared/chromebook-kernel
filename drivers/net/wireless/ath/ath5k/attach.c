@@ -20,8 +20,6 @@
 * Attach/Detach Functions and helpers *
 \*************************************/
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include "ath5k.h"

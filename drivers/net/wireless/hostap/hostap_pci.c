@@ -457,4 +457,18 @@ static struct pci_driver prism2_pci_driver = {
 #endif /* CONFIG_PM */
 };
 
-module_pci_driver(prism2_pci_driver);
+
+static int __init init_prism2_pci(void)
+{
+	return pci_register_driver(&prism2_pci_driver);
+}
+
+
+static void __exit exit_prism2_pci(void)
+{
+	pci_unregister_driver(&prism2_pci_driver);
+}
+
+
+module_init(init_prism2_pci);
+module_exit(exit_prism2_pci);

@@ -342,7 +342,7 @@ static struct rtl_hal_cfg rtl92ce_hal_cfg = {
 	.maps[RTL_RC_HT_RATEMCS15] = DESC92_RATEMCS15,
 };
 
-static DEFINE_PCI_DEVICE_TABLE(rtl92ce_pci_ids) = {
+DEFINE_PCI_DEVICE_TABLE(rtl92ce_pci_ids) = {
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8191, rtl92ce_hal_cfg)},
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8178, rtl92ce_hal_cfg)},
 	{RTL_PCI_DEVICE(PCI_VENDOR_ID_REALTEK, 0x8177, rtl92ce_hal_cfg)},
@@ -372,7 +372,14 @@ MODULE_PARM_DESC(swlps, "Set to 1 to use SW control power save (default 0)\n");
 MODULE_PARM_DESC(fwlps, "Set to 1 to use FW control power save (default 1)\n");
 MODULE_PARM_DESC(debug, "Set debug level (0-5) (default 0)");
 
-static SIMPLE_DEV_PM_OPS(rtlwifi_pm_ops, rtl_pci_suspend, rtl_pci_resume);
+static const struct dev_pm_ops rtlwifi_pm_ops = {
+	.suspend = rtl_pci_suspend,
+	.resume = rtl_pci_resume,
+	.freeze = rtl_pci_suspend,
+	.thaw = rtl_pci_resume,
+	.poweroff = rtl_pci_suspend,
+	.restore = rtl_pci_resume,
+};
 
 static struct pci_driver rtl92ce_driver = {
 	.name = KBUILD_MODNAME,
@@ -382,4 +389,21 @@ static struct pci_driver rtl92ce_driver = {
 	.driver.pm = &rtlwifi_pm_ops,
 };
 
-module_pci_driver(rtl92ce_driver);
+static int __init rtl92ce_module_init(void)
+{
+	int ret;
+
+	ret = pci_register_driver(&rtl92ce_driver);
+	if (ret)
+		RT_ASSERT(false, "No device found\n");
+
+	return ret;
+}
+
+static void __exit rtl92ce_module_exit(void)
+{
+	pci_unregister_driver(&rtl92ce_driver);
+}
+
+module_init(rtl92ce_module_init);
+module_exit(rtl92ce_module_exit);
