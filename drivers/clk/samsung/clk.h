@@ -20,8 +20,6 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 
-#include <mach/map.h>
-
 /**
  * struct samsung_fixed_rate_clock: information about fixed-rate clock
  * @id: platform specific id of the clock.
