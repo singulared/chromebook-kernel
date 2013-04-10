@@ -26,7 +26,6 @@
 #include <linux/syscore_ops.h>
 
 #include <asm/sched_clock.h>
-#include <asm/arch_timer.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
 
