@@ -363,7 +363,7 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 			       const u8 *resp_ie, size_t resp_ie_len,
 			       u16 status, bool wextev,
 			       struct cfg80211_bss *bss);
-int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_pid,
+int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 				u16 frame_type, const u8 *match_data,
 				int match_len);
 void cfg80211_mlme_unregister_socket(struct wireless_dev *wdev, u32 nlpid);

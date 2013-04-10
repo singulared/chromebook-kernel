@@ -222,7 +222,7 @@ struct nla_policy {
 struct nl_info {
 	struct nlmsghdr		*nlh;
 	struct net		*nl_net;
-	u32			pid;
+	u32			portid;
 };
 
 extern int		netlink_rcv_skb(struct sk_buff *skb,
@@ -478,7 +478,7 @@ static inline struct nlmsghdr *nlmsg_put_answer(struct sk_buff *skb,
 						int type, int payload,
 						int flags)
 {
-	return nlmsg_put(skb, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq,
+	return nlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
 			 type, payload, flags);
 }
 

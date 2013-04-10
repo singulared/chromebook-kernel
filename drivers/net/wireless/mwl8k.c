@@ -5234,7 +5234,7 @@ enum {
 #define _MWL8K_8366_AP_FW(api) "mwl8k/fmimage_8366_ap-" #api ".fw"
 #define MWL8K_8366_AP_FW(api) _MWL8K_8366_AP_FW(api)
 
-static struct mwl8k_device_info mwl8k_info_tbl[] __devinitdata = {
+static struct mwl8k_device_info mwl8k_info_tbl[] data = {
 	[MWL8363] = {
 		.part_name	= "88w8363",
 		.helper_image	= "mwl8k/helper_8363.fw",
@@ -5715,7 +5715,7 @@ err_free_cookie:
 
 	return rc;
 }
-static int __devinit mwl8k_probe(struct pci_dev *pdev,
+static int mwl8k_probe(struct pci_dev *pdev,
 				 const struct pci_device_id *id)
 {
 	static int printed_version;
@@ -5832,12 +5832,12 @@ err_disable_device:
 	return rc;
 }
 
-static void __devexit mwl8k_shutdown(struct pci_dev *pdev)
+static void mwl8k_shutdown(struct pci_dev *pdev)
 {
 	printk(KERN_ERR "===>%s(%u)\n", __func__, __LINE__);
 }
 
-static void __devexit mwl8k_remove(struct pci_dev *pdev)
+static void mwl8k_remove(struct pci_dev *pdev)
 {
 	struct ieee80211_hw *hw = pci_get_drvdata(pdev);
 	struct mwl8k_priv *priv;
@@ -5889,8 +5889,8 @@ static struct pci_driver mwl8k_driver = {
 	.name		= MWL8K_NAME,
 	.id_table	= mwl8k_pci_id_table,
 	.probe		= mwl8k_probe,
-	.remove		= __devexit_p(mwl8k_remove),
-	.shutdown	= __devexit_p(mwl8k_shutdown),
+	.remove		= mwl8k_remove,
+	.shutdown	= mwl8k_shutdown,
 };
 
 static int __init mwl8k_init(void)

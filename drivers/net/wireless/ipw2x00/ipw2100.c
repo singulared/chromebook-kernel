@@ -6418,7 +6418,7 @@ static int ipw2100_pci_init_one(struct pci_dev *pci_dev,
 	return err;
 }
 
-static void __devexit ipw2100_pci_remove_one(struct pci_dev *pci_dev)
+static void ipw2100_pci_remove_one(struct pci_dev *pci_dev)
 {
 	struct ipw2100_priv *priv = pci_get_drvdata(pci_dev);
 	struct net_device *dev;
@@ -6619,7 +6619,7 @@ static struct pci_driver ipw2100_pci_driver = {
 	.name = DRV_NAME,
 	.id_table = ipw2100_pci_id_table,
 	.probe = ipw2100_pci_init_one,
-	.remove = __devexit_p(ipw2100_pci_remove_one),
+	.remove = ipw2100_pci_remove_one,
 #ifdef CONFIG_PM
 	.suspend = ipw2100_suspend,
 	.resume = ipw2100_resume,

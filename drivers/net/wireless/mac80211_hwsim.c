@@ -1621,10 +1621,10 @@ static int hwsim_register_received_nl(struct sk_buff *skb_2,
 	if (info == NULL)
 		goto out;
 
-	wmediumd_pid = info->snd_pid;
+	wmediumd_pid = info->snd_portid;
 
 	printk(KERN_DEBUG "mac80211_hwsim: received a REGISTER, "
-	       "switching to wmediumd mode with pid %d\n", info->snd_pid);
+	       "switching to wmediumd mode with pid %d\n", info->snd_portid);
 
 	return 0;
 out:
@@ -1661,7 +1661,7 @@ static int mac80211_hwsim_netlink_notify(struct notifier_block *nb,
 	if (state != NETLINK_URELEASE)
 		return NOTIFY_DONE;
 
-	if (notify->pid == wmediumd_pid) {
+	if (notify->portid == wmediumd_pid) {
 		printk(KERN_INFO "mac80211_hwsim: wmediumd released netlink"
 		       " socket, switching to perfect channel medium\n");
 		wmediumd_pid = 0;

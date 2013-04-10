@@ -5467,7 +5467,7 @@ static irqreturn_t wl12xx_hardirq(int irq, void *cookie)
 	return IRQ_WAKE_THREAD;
 }
 
-static int __devinit wl12xx_probe(struct platform_device *pdev)
+static int wl12xx_probe(struct platform_device *pdev)
 {
 	struct wl12xx_platform_data *pdata = pdev->dev.platform_data;
 	struct ieee80211_hw *hw;
@@ -5563,7 +5563,7 @@ out:
 	return ret;
 }
 
-static int __devexit wl12xx_remove(struct platform_device *pdev)
+static int wl12xx_remove(struct platform_device *pdev)
 {
 	struct wl1271 *wl = platform_get_drvdata(pdev);
 
@@ -5578,7 +5578,7 @@ static int __devexit wl12xx_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct platform_device_id wl12xx_id_table[] __devinitconst = {
+static const struct platform_device_id wl12xx_id_table[] = {
 	{ "wl12xx", 0 },
 	{  } /* Terminating Entry */
 };
@@ -5586,7 +5586,7 @@ MODULE_DEVICE_TABLE(platform, wl12xx_id_table);
 
 static struct platform_driver wl12xx_driver = {
 	.probe		= wl12xx_probe,
-	.remove		= __devexit_p(wl12xx_remove),
+	.remove		= wl12xx_remove,
 	.id_table	= wl12xx_id_table,
 	.driver = {
 		.name	= "wl12xx_driver",

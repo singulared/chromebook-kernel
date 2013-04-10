@@ -602,7 +602,7 @@ struct cfg80211_mgmt_registration {
 	u8 match[];
 };
 
-int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_pid,
+int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 				u16 frame_type, const u8 *match_data,
 				int match_len)
 {
@@ -650,7 +650,7 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_pid,
 
 	memcpy(nreg->match, match_data, match_len);
 	nreg->match_len = match_len;
-	nreg->nlpid = snd_pid;
+	nreg->nlpid = snd_portid;
 	nreg->frame_type = cpu_to_le16(frame_type);
 	list_add(&nreg->list, &wdev->mgmt_registrations);
 

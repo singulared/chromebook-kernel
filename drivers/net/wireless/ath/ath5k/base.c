@@ -2413,7 +2413,7 @@ ath5k_tx_complete_poll_work(struct work_struct *work)
 * Initialization routines *
 \*************************/
 
-int __devinit
+int
 ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 {
 	struct ieee80211_hw *hw = ah->hw;
@@ -2835,7 +2835,7 @@ static void ath5k_reset_work(struct work_struct *work)
 	mutex_unlock(&ah->lock);
 }
 
-static int __devinit
+static int
 ath5k_init(struct ieee80211_hw *hw)
 {
 

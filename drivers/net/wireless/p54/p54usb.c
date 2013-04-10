@@ -42,7 +42,7 @@ MODULE_FIRMWARE("isl3887usb");
  * whenever you add a new device.
  */
 
-static struct usb_device_id p54u_table[] __devinitdata = {
+static struct usb_device_id p54u_table[] = {
 	/* Version 1 devices (pci chip + net2280) */
 	{USB_DEVICE(0x0411, 0x0050)},	/* Buffalo WLI2-USB2-G54 */
 	{USB_DEVICE(0x045e, 0x00c2)},	/* Microsoft MN-710 */
@@ -902,7 +902,7 @@ static void p54u_stop(struct ieee80211_hw *dev)
 	p54u_free_urbs(dev);
 }
 
-static int __devinit p54u_probe(struct usb_interface *intf,
+static int p54u_probe(struct usb_interface *intf,
 				const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
@@ -999,7 +999,7 @@ err_free_dev:
 	return err;
 }
 
-static void __devexit p54u_disconnect(struct usb_interface *intf)
+static void p54u_disconnect(struct usb_interface *intf)
 {
 	struct ieee80211_hw *dev = usb_get_intfdata(intf);
 	struct p54u_priv *priv;
