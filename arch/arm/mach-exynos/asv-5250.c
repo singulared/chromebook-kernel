@@ -391,23 +391,28 @@ static int exynos5250_asv_store_result(struct samsung_asv *asv_info)
 
 /*
  * Non-fused chips run at a constant 800MHz/1V for DDR3. Fused chips may need
- * 1.05V for ASV group 0 in the worst case. By default, the u-boot sets the
- * MIF voltage to 1V. Running the u-boot at 1V for some time before the kernel
- * increases it to 1.05V in case of speed group 0 is acceptable and will not
- * cause any problems. This function increases the MIF voltage for DDR3 ASV
- * group 0 fused chips.
+ * 1.05V for ASV group 0 in the worst case. By default, the u-boot can set the
+ * MIF voltage to either 1.00V or 1.05V. Running the u-boot at the wrong
+ * voltage for some time before the kernel adjusts it properly is acceptable
+ * and will not cause any problems. This function sets the MIF voltage per the
+ * MIF ASV fusing.
  */
-static int exynos5250_ddr3_mif_voltage_set_sg0(void)
+static int exynos5250_ddr3_mif_voltage_set(u32 exynos_mod_sp)
 {
 	struct regulator *vdd_mif;
 	u32 ret;
+
 
 	vdd_mif = regulator_get(NULL, "vdd_mif");
 	if (IS_ERR(vdd_mif)) {
 		pr_err("Failed to get regulator resource: vdd_mif\n");
 		return -ENODEV;
 	}
-	ret = regulator_set_voltage(vdd_mif, 1050000, 1050000);
+	/* Note that exynos_mod_sp of 1 is ASV group 0, needing 1.05V */
+	if (exynos_mod_sp)
+		ret = regulator_set_voltage(vdd_mif, 1050000, 1050000);
+	else
+		ret = regulator_set_voltage(vdd_mif, 1000000, 1000000);
 	WARN_ON(ret);
 	regulator_put(vdd_mif);
 
@@ -482,13 +487,8 @@ static int exynos5250_asv_init(void)
 
 		pr_info("EXYNOS5250 MIF: RESULT: %d\n", exynos_mod_sp);
 
-		/*
-		 * If the MIF result is 1 then it is ASV group 0 (1.05V)
-		 * else ASV group 1 (1V)
-		 */
-		if (exynos_mod_sp)
-			if (exynos5250_ddr3_mif_voltage_set_sg0())
-				pr_err("Could not set DDR3 MIF ASV0 voltage\n");
+		if (exynos5250_ddr3_mif_voltage_set(exynos_mod_sp))
+			pr_err("Could not set DDR3 MIF ASV voltage\n");
 
 		exynos5250_pre_set_abb();
 
