@@ -148,46 +148,61 @@ static void exynos_wifi_bt_set_power(u32 slot_id, u32 volt)
 	/* NB: bt-reset-l is tied to wifi-rst-l so BT should be ready too */
 }
 
+static int lcd_probe(struct plat_lcd_data *pd);
+static void lcd_set_power(struct plat_lcd_data *pd, unsigned int power);
+
+static struct regulator *lcd_fet, *backlight_fet;
+
+static struct plat_lcd_data exynos5_lcd_data = {
+	.probe		= lcd_probe,
+	.set_power	= lcd_set_power,
+};
+
+static struct platform_device exynos5_lcd = {
+	.name			= "platform-lcd",
+	.dev.platform_data	= &exynos5_lcd_data,
+};
+
+static int lcd_probe(struct plat_lcd_data *pd)
+{
+	struct device *dev = &exynos5_lcd.dev;
+
+	lcd_fet = regulator_get(dev, "lcd_vdd");
+	if (IS_ERR(lcd_fet))
+		return PTR_ERR(lcd_fet);
+
+	backlight_fet = regulator_get(dev, "vcd_led");
+	if (IS_ERR(backlight_fet)) {
+		regulator_put(lcd_fet);
+		return PTR_ERR(backlight_fet);
+	}
+
+	return 0;
+}
+
 static void lcd_set_power(struct plat_lcd_data *pd,
 			unsigned int power)
 {
-	struct regulator *lcd_fet;
-	struct regulator *backlight_fet;
+	struct device *dev = &exynos5_lcd.dev;
 
-	lcd_fet = regulator_get(NULL, "lcd_vdd");
-	if (!IS_ERR(lcd_fet)) {
-		if (power)
+	if (IS_ERR_OR_NULL(lcd_fet) || IS_ERR_OR_NULL(backlight_fet)) {
+		dev_err(dev, "fet(s) not initialized\n");
+		return;
+	}
+
+	if (power) {
 			regulator_enable(lcd_fet);
-		else
-			regulator_disable(lcd_fet);
-
-		regulator_put(lcd_fet);
-	}
-
-	/* Turn on regulator for backlight */
-	backlight_fet = regulator_get(NULL, "vcd_led");
-	if (!IS_ERR(backlight_fet)) {
-		if (power)
 			regulator_enable(backlight_fet);
-		else
+	} else {
+			regulator_disable(lcd_fet);
 			regulator_disable(backlight_fet);
-
-		regulator_put(backlight_fet);
 	}
+
 	/* Wait 10 ms between regulator on and PWM start per spec */
 	mdelay(10);
 
 	exynos_wifi_bt_set_power(0, power);	/* TODO(sleffler) hack */
 }
-
-static struct plat_lcd_data smdk5250_lcd_data = {
-	.set_power	= lcd_set_power,
-};
-
-static struct platform_device smdk5250_lcd = {
-	.name			= "platform-lcd",
-	.dev.platform_data	= &smdk5250_lcd_data,
-};
 
 /*
  * The following lookup table is used to override device names when devices
@@ -377,7 +392,7 @@ static void __init exynos5_dt_machine_init(void)
 		exynos5_fimd1_gpio_setup_24bpp();
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
-		platform_device_register(&smdk5250_lcd);
+		platform_device_register(&exynos5_lcd);
 		/* MAX77686 PMIC interrupt setup code */
 		s3c_gpio_setpull(EXYNOS5_GPX3(2), S3C_GPIO_PULL_NONE);
 	}
