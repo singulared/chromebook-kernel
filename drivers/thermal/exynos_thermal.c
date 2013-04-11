@@ -123,7 +123,7 @@ struct exynos_tmu_data {
 	struct work_struct irq_work;
 	struct mutex lock;
 	struct clk *clk;
-	u32 thd_temp_rise;	/* exynos5 resume support */
+	u32 thd_temp_rise, thd_temp_fall;	/* exynos5 resume support */
 	u8 temp_error1, temp_error2;
 };
 
@@ -550,34 +550,32 @@ out:
 	return temp;
 }
 
-static int exynos5_setup_temp_rise(struct platform_device *pdev)
+static int exynos5_setup_temp(struct platform_device *pdev, int trigger_levs)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 
 	u8 hwtrig_code, hwtrig_temp;
-	u32 rising_threshold;
-	int threshold_code;
+	u32 rising_threshold = 0, falling_threshold = 0;
+	int threshold_code, i;
 	bool was_enabled;
 
-	/* Write temperature code for thresholds */
-	threshold_code = temp_to_code(data, pdata->trigger_levels[0]);
-	if (threshold_code < 0)
-		return threshold_code;
-
-	rising_threshold = threshold_code;
-
-	threshold_code = temp_to_code(data, pdata->trigger_levels[1]);
-	if (threshold_code < 0)
-		return threshold_code;
-
-	rising_threshold |= threshold_code << 8;
-
-	threshold_code = temp_to_code(data, pdata->trigger_levels[2]);
-	if (threshold_code < 0)
-		return threshold_code;
-
-	rising_threshold |= (threshold_code << 16);
+	/* Write temperature code for rising and falling threshold */
+	for (i = 0; i < trigger_levs; i++) {
+		threshold_code = temp_to_code(data,
+					      pdata->trigger_levels[i]);
+		if (threshold_code < 0)
+			return threshold_code;
+		rising_threshold |= threshold_code << 8 * i;
+		if (pdata->threshold_falling) {
+			threshold_code = temp_to_code(data,
+						      pdata->trigger_levels[i] -
+						      pdata->threshold_falling);
+			if (threshold_code > 0)
+				falling_threshold |=
+					threshold_code << 8 * i;
+		}
+	}
 
 	was_enabled = (readl(data->base + EXYNOS_TMU_REG_CONTROL) &
 		       EXYNOS_TMU_TRIP_EN) == EXYNOS_TMU_TRIP_EN;
@@ -589,6 +587,7 @@ static int exynos5_setup_temp_rise(struct platform_device *pdev)
 	 */
 	hwtrig_code = readl(data->base + EXYNOS_THD_TEMP_RISE) >> 24;
 	hwtrig_temp = code_to_temp(data, hwtrig_code);
+	threshold_code = temp_to_code(data, pdata->trigger_levels[2]);
 	if (was_enabled && hwtrig_temp >= 25 && hwtrig_temp <= 125
 			&& (hwtrig_code < threshold_code)) {
 		/* Boot FW set the HW trig value.  */
@@ -599,24 +598,22 @@ static int exynos5_setup_temp_rise(struct platform_device *pdev)
 			code_to_temp(data, hwtrig_code - 2));
 
 		/* ckear previous code */
-		rising_threshold &= ~(0xff << 16);
+		rising_threshold &= ~(0xffff << 16);
+		if (pdata->threshold_falling)
+			falling_threshold &= ~(0xffff << 16);
 
 		/* don't have to use temp. 1:1 mapping of temp:code */
 		rising_threshold |= ((hwtrig_code - 2) << 16) |
 			(hwtrig_code << 24);
-	} else {
-		/* Boot FW did NOT set HW poweroff trigger.
-		 * or trigger is set to invalid value.
-		 */
-		threshold_code = temp_to_code(data, pdata->trigger_levels[3]);
-
-		if (threshold_code < 0)
-			return threshold_code;
-
-		rising_threshold |= threshold_code << 24;
+		if (pdata->threshold_falling) {
+			hwtrig_code -= pdata->threshold_falling;
+			falling_threshold |= ((hwtrig_code - 2) << 16) |
+				(hwtrig_code << 24);
+		}
 	}
 
 	data->thd_temp_rise = rising_threshold;
+	data->thd_temp_fall = falling_threshold;
 	return 0;
 }
 
@@ -626,7 +623,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 	unsigned int status, trim_info;
-	unsigned int falling_threshold = 0;
 	int ret = 0, threshold_code, i, trigger_levs = 0;
 
 	mutex_lock(&data->lock);
@@ -673,34 +669,20 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		writel(EXYNOS4210_TMU_INTCLEAR_VAL,
 			data->base + EXYNOS_TMU_REG_INTCLEAR);
 	} else if (data->soc == SOC_ARCH_EXYNOS) {
-		/* thd_temp_rise is nonzero on resume. Don't compute again. */
-		if (!data->thd_temp_rise) {
-			ret = exynos5_setup_temp_rise(pdev);
+		/*
+		 * thd_temp_{rise,fall} are nonzero on resume. Don't compute
+		 * again.
+		 */
+		if (!data->thd_temp_rise || (pdata->threshold_falling &&
+					     !data->thd_temp_fall)) {
+			ret = exynos5_setup_temp(pdev, trigger_levs);
 			if (ret < 0)
  				goto out;
 		}
 
-		/* Write temperature code for falling threshold */
-		for (i = 0; i < trigger_levs; i++) {
-			threshold_code = temp_to_code(data,
-						pdata->trigger_levels[i]);
-			if (threshold_code < 0) {
-				ret = threshold_code;
-				goto out;
-			}
-			if (pdata->threshold_falling) {
-				threshold_code = temp_to_code(data,
-						pdata->trigger_levels[i] -
-						pdata->threshold_falling);
-				if (threshold_code > 0)
-					falling_threshold |=
-						threshold_code << 8 * i;
-			}
-		}
-
 		writel(data->thd_temp_rise,
 				data->base + EXYNOS_THD_TEMP_RISE);
-		writel(falling_threshold,
+		writel(data->thd_temp_fall,
 				data->base + EXYNOS_THD_TEMP_FALL);
 
 		/* clear all interrupt status bits regardless of which ones
