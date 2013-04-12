@@ -1221,6 +1221,9 @@
 
 #define MCHBAR_MIRROR_BASE_SNB	0x140000
 
+/* Memory controller frequency in MCHBAR for Haswell (possible SNB+) */
+#define DCLK 0x5e04
+
 /** 915-945 and GM965 MCH register controlling DRAM channel access */
 #define DCC			0x10200
 #define DCC_ADDRESSING_MODE_SINGLE_CHANNEL		(0 << 0)
@@ -4345,6 +4348,7 @@
 #define   GEN6_DECODE_RC6_VID(vids)		(((vids) * 5) + 245)
 #define GEN6_PCODE_DATA				0x138128
 #define   GEN6_PCODE_FREQ_IA_RATIO_SHIFT	8
+#define   GEN6_PCODE_FREQ_RING_RATIO_SHIFT	16
 
 #define GEN6_GT_CORE_STATUS		0x138060
 #define   GEN6_CORE_CPD_STATE_MASK	(7<<4)
