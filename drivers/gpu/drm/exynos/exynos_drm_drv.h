@@ -16,6 +16,8 @@
 #define _EXYNOS_DRM_DRV_H_
 
 #include <linux/module.h>
+#include <drm/drmP.h>
+#include <drm/drm_crtc.h>
 
 #define MAX_CRTC	3
 #define MAX_PLANE	5
@@ -316,6 +318,8 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *drm_subdrv);
 /* this function removes subdrv list from exynos drm driver */
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *drm_subdrv);
 
+void exynos_fimd_dp_attach(struct device *dev);
+
 int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file);
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file);
 
@@ -332,6 +336,7 @@ void exynos_platform_device_hdmi_unregister(void);
 
 extern struct platform_driver fimd_driver;
 extern struct platform_driver hdmi_driver;
+extern struct platform_driver dp_driver;
 extern struct platform_driver mixer_driver;
 extern struct platform_driver exynos_drm_common_hdmi_driver;
 extern struct platform_driver vidi_driver;

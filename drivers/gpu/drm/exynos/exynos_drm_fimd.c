@@ -23,6 +23,7 @@
 #include <video/samsung_fimd.h>
 #include <drm/exynos_drm.h>
 
+#include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_crtc.h"
@@ -108,6 +109,14 @@ struct fimd_context {
 
 	struct exynos_drm_panel_info *panel;
 };
+
+static struct device *dp_dev;
+
+void exynos_fimd_dp_attach(struct device *dev)
+{
+	DRM_DEBUG_KMS("%s. %s.\n", __FILE__, __func__);
+	dp_dev = dev;
+}
 
 #ifdef CONFIG_OF
 static const struct of_device_id fimd_driver_dt_match[] = {
@@ -961,7 +970,13 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 			fimd_enable_vblank(dev);
 
 		fimd_window_resume(dev);
+
+		if (dp_dev)
+			exynos_dp_resume(dp_dev);
 	} else {
+		if (dp_dev)
+			exynos_dp_suspend(dp_dev);
+
 		fimd_window_suspend(dev);
 
 		fimd_clock(ctx, false);

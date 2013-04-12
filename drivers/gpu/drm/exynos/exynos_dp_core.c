@@ -23,6 +23,7 @@
 #include <video/exynos_dp.h>
 
 #include "exynos_dp_core.h"
+#include "exynos_drm_drv.h"
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
@@ -1109,7 +1110,11 @@ static int exynos_dp_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	disable_irq(dp->irq);
+
 	platform_set_drvdata(pdev, dp);
+
+	exynos_fimd_dp_attach(dp->dev);
 
 	return 0;
 }
@@ -1136,8 +1141,7 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int exynos_dp_suspend(struct device *dev)
+int exynos_dp_suspend(struct device *dev)
 {
 	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
@@ -1160,7 +1164,7 @@ static int exynos_dp_suspend(struct device *dev)
 	return 0;
 }
 
-static int exynos_dp_resume(struct device *dev)
+int exynos_dp_resume(struct device *dev)
 {
 	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
@@ -1181,11 +1185,6 @@ static int exynos_dp_resume(struct device *dev)
 
 	return 0;
 }
-#endif
-
-static const struct dev_pm_ops exynos_dp_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(exynos_dp_suspend, exynos_dp_resume)
-};
 
 static const struct of_device_id exynos_dp_match[] = {
 	{ .compatible = "samsung,exynos5-dp" },
@@ -1193,32 +1192,13 @@ static const struct of_device_id exynos_dp_match[] = {
 };
 MODULE_DEVICE_TABLE(of, exynos_dp_match);
 
-static struct platform_driver exynos_dp_driver = {
+struct platform_driver dp_driver = {
 	.probe		= exynos_dp_probe,
 	.remove		= exynos_dp_remove,
 	.driver		= {
 		.name	= "exynos-dp",
 		.owner	= THIS_MODULE,
-		.pm	= &exynos_dp_pm_ops,
 		.of_match_table = of_match_ptr(exynos_dp_match),
 	},
 };
 
-static int __init exynos_dp_init(void)
-{
-       return platform_driver_probe(&exynos_dp_driver, exynos_dp_probe);
-}
-
-static void __exit exynos_dp_exit(void)
-{
-       platform_driver_unregister(&exynos_dp_driver);
-}
-/* TODO: Register as module_platform_driver */
-/* Currently, we make it late_initcall to make */
-/* sure that s3c-fb is probed before DP driver */
-late_initcall(exynos_dp_init);
-module_exit(exynos_dp_exit);
-
-MODULE_AUTHOR("Jingoo Han <jg1.han@samsung.com>");
-MODULE_DESCRIPTION("Samsung SoC DP Driver");
-MODULE_LICENSE("GPL");
