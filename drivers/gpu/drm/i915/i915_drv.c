@@ -459,6 +459,22 @@ int __gen6_gt_wait_for_fifo(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
+/* Repin all fbs which are currently bound to a crtc on resume */
+static void i915_repin_bound_fbs(struct drm_device *dev)
+{
+	struct drm_crtc *crtc;
+	struct drm_i915_gem_object *obj;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (!crtc || !crtc->fb)
+			continue;
+		obj = to_intel_framebuffer(crtc->fb)->obj;
+		if (!obj)
+			continue;
+		intel_pin_and_fence_fb_obj(dev, obj, NULL);
+	}
+}
+
 static int i915_drm_freeze(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -547,6 +563,7 @@ static int i915_drm_thaw(struct drm_device *dev)
 		if (HAS_PCH_SPLIT(dev))
 			ironlake_init_pch_refclk(dev);
 
+		i915_repin_bound_fbs(dev);
 		drm_mode_config_reset(dev);
 		drm_irq_install(dev);
 
