@@ -1317,6 +1317,7 @@ int s5p_mfc_init_decode_v6(struct s5p_mfc_ctx *ctx)
 	else
 		WRITEL(0x0, S5P_FIMV_PIXEL_FORMAT_V6);
 
+
 	/* sei parse */
 	WRITEL(ctx->sei_fp_parse & 0x1, S5P_FIMV_D_SEI_ENABLE_V6);
 
@@ -1387,6 +1388,12 @@ int s5p_mfc_init_encode_v6(struct s5p_mfc_ctx *ctx)
 		mfc_err("Unknown codec for encoding (%x).\n",
 			ctx->codec_mode);
 		return -EINVAL;
+	}
+
+	/* Set stride lengths */
+	if (IS_MFCV7(dev)) {
+		WRITEL(ctx->img_width, S5P_FIMV_E_SOURCE_FIRST_STRIDE_V7);
+		WRITEL(ctx->img_width, S5P_FIMV_E_SOURCE_SECOND_STRIDE_V7);
 	}
 
 	WRITEL(ctx->inst_no, S5P_FIMV_INSTANCE_ID_V6);
