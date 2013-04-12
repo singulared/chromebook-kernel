@@ -171,22 +171,11 @@ static int vidi_display_power(void *ctx, int mode)
 	return 0;
 }
 
-static void vidi_commit(void *ctx)
-{
-	struct vidi_context *vidi_ctx = ctx;
-
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
-
-	if (vidi_ctx->suspended)
-		return;
-}
-
 static struct exynos_panel_ops vidi_panel_ops = {
 	.is_connected = vidi_display_is_connected,
 	.get_edid = vidi_get_edid,
 	.check_timing = vidi_check_timing,
 	.power = vidi_display_power,
-	.commit = vidi_commit,
 };
 
 static int vidi_dpms(void *ctx, int mode)

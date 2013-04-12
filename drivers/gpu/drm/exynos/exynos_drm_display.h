@@ -23,10 +23,9 @@ struct exynos_drm_overlay;
  * @is_connected: Returns true if the panel is connected
  * @get_edid: Returns an edid with mode data from the panel
  * @check_timing: Returns 0 if the given timing is valid for the panel
- * @dpms: Sets the panel's power to mode
+ * @dpms: Sets the panel's power to mode and enables/disables video output
  * @mode_fixup: Copies and optionally alters mode to adjusted_mode
  * @mode_set: Sets the panel to output mode
- * @commit: Commits changes to the panel from mode_set
  * @get_max_res: Returns the maximum resolution in width/height
  */
 struct exynos_panel_ops {
@@ -39,7 +38,6 @@ struct exynos_panel_ops {
 				struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
-	void (*commit)(void *ctx);
 	void (*get_max_res)(void *ctx, unsigned int *width,
 				unsigned int *height);
 };

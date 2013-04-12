@@ -115,15 +115,10 @@ static void exynos_drm_encoder_prepare(struct drm_encoder *encoder)
 
 static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 {
-	struct exynos_drm_display *display = exynos_drm_get_display(encoder);
-
 	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
 			drm_get_encoder_name(encoder));
 
 	exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_ON);
-
-	if (display->panel_ops->commit)
-		display->panel_ops->commit(display->panel_ctx);
 }
 
 static struct drm_crtc *

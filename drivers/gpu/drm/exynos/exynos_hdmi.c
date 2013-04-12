@@ -1892,18 +1892,6 @@ static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 		hdmi_v14_mode_set(hdata, mode);
 }
 
-static void hdmi_commit(void *ctx)
-{
-	struct hdmi_context *hdata = ctx;
-
-	DRM_DEBUG_KMS("is_hdmi_powered_on: %u\n", hdata->is_hdmi_powered_on);
-
-	if (!hdata->is_hdmi_powered_on)
-		return;
-
-	hdmi_conf_apply(hdata);
-}
-
 static int hdmiphy_update_bits(struct i2c_client *client, u8 *reg_cache,
 			       u8 reg, u8 mask, u8 val)
 {
@@ -2012,7 +2000,7 @@ static void hdmi_resource_poweron(struct hdmi_context *hdata)
 	hdmi_conf_init(hdata);
 	if (!hdata->is_soc_exynos5)
 		hdmi_audio_init(hdata);
-	hdmi_commit(hdata);
+	hdmi_conf_apply(hdata);
 }
 
 static void hdmi_resource_poweroff(struct hdmi_context *hdata)
@@ -2090,7 +2078,6 @@ static struct exynos_panel_ops hdmi_ops = {
 	/* manager */
 	.mode_fixup	= hdmi_mode_fixup,
 	.mode_set	= hdmi_mode_set,
-	.commit		= hdmi_commit,
 };
 
 /*

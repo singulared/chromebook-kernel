@@ -977,13 +977,6 @@ static void exynos_dp_train_link(struct exynos_dp_device *dp)
 	exynos_dp_init_video(dp);
 }
 
-static void exynos_dp_commit(void *ctx)
-{
-	struct exynos_dp_device *dp = ctx;
-
-	exynos_dp_config_video(dp);
-}
-
 static int exynos_dp_power_off(struct exynos_dp_device *dp)
 {
 	if (!dp->enabled)
@@ -1023,7 +1016,7 @@ static int exynos_dp_power_on(struct exynos_dp_device *dp)
 		schedule_work(&dp->hotplug_work);
 
 	exynos_dp_train_link(dp);
-	exynos_dp_commit(dp);
+	exynos_dp_config_video(dp);
 
 	dp->enabled = true;
 	return 0;
@@ -1095,7 +1088,6 @@ static struct exynos_panel_ops dp_panel_ops = {
 	.is_connected = exynos_dp_is_connected,
 	.check_timing = exynos_dp_check_timing,
 	.dpms = exynos_dp_dpms,
-	.commit = exynos_dp_commit,
 };
 
 static int __devinit exynos_dp_probe(struct platform_device *pdev)
