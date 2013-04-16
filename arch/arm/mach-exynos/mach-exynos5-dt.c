@@ -1171,8 +1171,7 @@ static void __init exynos5250_dt_machine_init(void)
 				exynos5250_auxdata_lookup, NULL);
 
 #ifdef CONFIG_DRM_EXYNOS_FIMD
-	if ((of_machine_is_compatible("google,snow")) ||
-	    (of_machine_is_compatible("google,spring")))
+	if (of_machine_is_compatible("google,snow"))
 		exynos_dp_gpio_setup_24bpp();
 	else
 		exynos_fimd_gpio_setup_24bpp();
