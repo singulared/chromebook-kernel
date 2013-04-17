@@ -22,6 +22,8 @@
 
 #include <video/exynos_dp.h>
 
+#include "bridge/ptn3460.h"
+
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
 
@@ -862,6 +864,14 @@ static void exynos_dp_hotplug(struct work_struct *work)
 	int ret;
 
 	dp = container_of(work, struct exynos_dp_device, hotplug_work);
+
+#ifdef CONFIG_DRM_PTN3460
+	ret = ptn3460_wait_until_ready(30 * 1000);
+	if (ret) {
+		DRM_ERROR("PTN3460 is not ready, don't plug\n");
+		return;
+	}
+#endif
 
 	ret = exynos_dp_detect_hpd(dp);
 	if (ret) {
