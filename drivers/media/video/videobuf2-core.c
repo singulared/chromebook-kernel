@@ -1474,6 +1474,35 @@ int vb2_wait_for_all_buffers(struct vb2_queue *q)
 EXPORT_SYMBOL_GPL(vb2_wait_for_all_buffers);
 
 /**
+ * __vb2_dqbuf() - bring back the buffer to the DEQUEUED state
+ */
+static void __vb2_dqbuf(struct vb2_buffer *vb)
+{
+	struct vb2_queue *q = vb->vb2_queue;
+	unsigned int i;
+
+	/* nothing to do if the buffer is already dequeued */
+	if (vb->state == VB2_BUF_STATE_DEQUEUED)
+		return;
+
+	vb->state = VB2_BUF_STATE_DEQUEUED;
+
+	/* unmap DMABUF buffer
+	 * TODO: this unpins the buffer(dma_buf_unmap_attachment()).. but
+	 * really we want to do this just after DMA, not when the
+	 * buffer is dequeued..
+	 */
+	if (q->memory == V4L2_MEMORY_DMABUF) {
+		for (i = 0; i < vb->num_planes; ++i) {
+			if (!vb->planes[i].dbuf_mapped)
+				continue;
+			call_memop(q, unmap_dmabuf, vb->planes[i].mem_priv);
+			vb->planes[i].dbuf_mapped = 0;
+		}
+	}
+}
+
+/**
  * vb2_dqbuf() - Dequeue a buffer to the userspace
  * @q:		videobuf2 queue
  * @b:		buffer structure passed from userspace to vidioc_dqbuf handler
@@ -1521,19 +1550,6 @@ int vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblocking)
 		return ret;
 	}
 
-	/* TODO: this unpins the buffer(dma_buf_unmap_attachment()).. but
-	 * really we want to do this just after DMA, not when the
-	 * buffer is dequeued..
-	 */
-	if (q->memory == V4L2_MEMORY_DMABUF) {
-		unsigned int i;
-
-		for (i = 0; i < vb->num_planes; ++i) {
-			call_memop(q, unmap_dmabuf, vb->planes[i].mem_priv);
-			vb->planes[i].dbuf_mapped = 0;
-		}
-	}
-
 	switch (vb->state) {
 	case VB2_BUF_STATE_DONE:
 		dprintk(3, "dqbuf: Returning done buffer\n");
@@ -1550,11 +1566,12 @@ int vb2_dqbuf(struct vb2_queue *q, struct v4l2_buffer *b, bool nonblocking)
 	__fill_v4l2_buffer(vb, b);
 	/* Remove from videobuf queue */
 	list_del(&vb->queued_entry);
+	/* go back to dequeued state */
+	__vb2_dqbuf(vb);
 
 	dprintk(1, "dqbuf of buffer %d, with state %d\n",
 			vb->v4l2_buf.index, vb->state);
 
-	vb->state = VB2_BUF_STATE_DEQUEUED;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vb2_dqbuf);
@@ -1593,7 +1610,7 @@ static void __vb2_queue_cancel(struct vb2_queue *q)
 	 * Reinitialize all buffers for next use.
 	 */
 	for (i = 0; i < q->num_buffers; ++i)
-		q->bufs[i]->state = VB2_BUF_STATE_DEQUEUED;
+		__vb2_dqbuf(q->bufs[i]);
 }
 
 /**
