@@ -51,3 +51,4 @@ obj-$(CONFIG_DRM_AST) += ast/
 obj-$(CONFIG_DRM_SHMOBILE) +=shmobile/
 obj-$(CONFIG_DRM_TEGRA) += tegra/
 obj-y			+= i2c/
+obj-y			+= bridge/
