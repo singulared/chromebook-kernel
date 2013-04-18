@@ -29,6 +29,7 @@
 #include <linux/usb/otg.h>
 #include <linux/usb/samsung_usb_phy.h>
 #include <linux/platform_data/samsung-usbphy.h>
+#include <linux/regulator/consumer.h>
 
 #include "samsung-usbphy.h"
 
@@ -61,6 +62,7 @@ static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 	u32 phyhsic;
 	u32 ehcictrl;
 	u32 ohcictrl;
+	struct regulator *hub_reset;
 
 	/*
 	 * phy_usage helps in keeping usage count for phy
@@ -130,6 +132,20 @@ static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 			OTG_SYS_LINKSWRST_UOTG |
 			OTG_SYS_PHYLINK_SWRESET);
 	writel(phyotg, regs + EXYNOS5_PHY_OTG_SYS);
+
+	hub_reset = regulator_get(NULL, "hsichub-reset-l");
+	if (!IS_ERR(hub_reset)) {
+		/*
+		 * toggle the reset line of the HSIC hub chip.
+		 */
+		regulator_force_disable(hub_reset);
+		/* keep reset active during 100 us */
+		udelay(100);
+		regulator_enable(hub_reset);
+		regulator_put(hub_reset);
+		/* Hub init phase takes up to 4 ms */
+		usleep_range(4000, 10000);
+	}
 
 	/* HSIC phy configuration */
 	phyhsic = (HSIC_CTRL_REFCLKDIV_12 |
