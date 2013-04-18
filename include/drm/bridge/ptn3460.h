@@ -11,9 +11,26 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _DRM_I2C_PTN3460_H_
-#define _DRM_I2C_PTN3460_H_
+#ifndef _DRM_BRIDGE_PTN3460_H_
+#define _DRM_BRIDGE_PTN3460_H_
 
-int ptn3460_wait_until_ready(int timeout_ms);
+struct drm_device;
+struct i2c_client;
+struct device_node;
+
+#ifdef CONFIG_DRM_PTN3460
+
+extern int ptn3460_init(struct drm_device *dev, struct i2c_client *client,
+			struct device_node *node);
+
+#else
+
+static inline int ptn3460_init(struct drm_device *dev,
+		struct i2c_client *client, struct device_node *node)
+{
+	return 0;
+}
+
+#endif
 
 #endif
