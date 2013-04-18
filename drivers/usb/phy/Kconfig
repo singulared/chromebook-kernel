@@ -48,27 +48,8 @@ config USB_RCAR_PHY
 
 config SAMSUNG_USBPHY
 	bool "Samsung USB PHY controller Driver"
+	depends on USB_S3C_HSOTG || USB_EHCI_S5P || USB_OHCI_EXYNOS
 	select USB_OTG_UTILS
 	help
-	  Enable this to support Samsung USB phy controllers for Samsung
+	  Enable this to support Samsung USB phy controller for samsung
 	  SoCs.
-	  Further enable USB 2.0 type PHY or USB 3.0 type PHY as required
-	  for USB controllers in use.
-
-if SAMSUNG_USBPHY
-
-config SAMSUNG_USB2PHY
-	bool "Samsung USB 2.0 PHY controller Driver"
-	depends on USB_S3C_HSOTG || USB_EHCI_S5P || USB_OHCI_EXYNOS || USB_DWC3
-	help
-	  Enable this to support Samsung USB 2.0 (High Speed) phy controller
-	  for Samsung SoCs.
-
-config SAMSUNG_USB3PHY
-	bool "Samsung USB 3.0 PHY controller Driver"
-	depends on USB_DWC3
-	help
-	  Enable this to support Samsung USB 3.0 (Super Speed) phy controller
-	  for samsung SoCs.
-
-endif

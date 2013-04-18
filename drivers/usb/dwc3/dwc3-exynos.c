@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/dwc3-exynos.h>
 #include <linux/dma-mapping.h>
@@ -34,7 +33,6 @@ struct dwc3_exynos {
 	struct device		*dev;
 
 	struct clk		*clk;
-	int                     vbus_gpio;
 };
 
 static int dwc3_exynos_register_phys(struct dwc3_exynos *exynos)
@@ -97,21 +95,21 @@ static int dwc3_setup_vbus_gpio(struct platform_device *pdev)
 	int gpio;
 
 	if (!pdev->dev.of_node)
-		return -ENODEV;
+		return 0;
 
 	gpio = of_get_named_gpio(pdev->dev.of_node,
 				"samsung,vbus-gpio", 0);
 	if (!gpio_is_valid(gpio))
-		return -EINVAL;
-	dev_dbg(&pdev->dev, "vbus_gpio = %d\n", gpio);
+		return 0;
 
-	err = gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "dwc3_vbus_gpio");
+	err = gpio_request(gpio, "dwc3_vbus_gpio");
 	if (err) {
 		dev_err(&pdev->dev, "can't request dwc3 vbus gpio %d", gpio);
 		return err;
 	}
+	gpio_set_value(gpio, 1);
 
-	return gpio;
+	return err;
 }
 
 static u64 dwc3_exynos_dma_mask = DMA_BIT_MASK(32);
@@ -138,9 +136,7 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	if (!pdev->dev.dma_mask)
 		pdev->dev.dma_mask = &dwc3_exynos_dma_mask;
 
-	exynos->vbus_gpio = dwc3_setup_vbus_gpio(pdev);
-	if (!gpio_is_valid(exynos->vbus_gpio))
-		dev_warn(&pdev->dev, "Failed to setup vbus gpio\n");
+	dwc3_setup_vbus_gpio(pdev);
 
 	platform_set_drvdata(pdev, exynos);
 
@@ -187,15 +183,11 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 		goto err4;
 	}
 
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
-
 	return 0;
 
 err4:
 	clk_disable(clk);
 	clk_put(clk);
-	pm_runtime_disable(&pdev->dev);
 err3:
 	platform_device_put(dwc3);
 err1:
@@ -208,8 +200,6 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 {
 	struct dwc3_exynos	*exynos = platform_get_drvdata(pdev);
 
-	pm_runtime_disable(&pdev->dev);
-
 	platform_device_unregister(exynos->dwc3);
 	platform_device_unregister(exynos->usb2_phy);
 	platform_device_unregister(exynos->usb3_phy);
@@ -221,80 +211,6 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-#ifdef CONFIG_PM_SLEEP
-static int dwc3_exynos_suspend(struct device *dev)
-{
-	struct dwc3_exynos *exynos = dev_get_drvdata(dev);
-
-	clk_disable(exynos->clk);
-
-	if (gpio_is_valid(exynos->vbus_gpio))
-		gpio_set_value(exynos->vbus_gpio, 0);
-
-	return 0;
-}
-
-static int dwc3_exynos_resume(struct device *dev)
-{
-	struct dwc3_exynos *exynos = dev_get_drvdata(dev);
-
-	if (gpio_is_valid(exynos->vbus_gpio))
-		gpio_set_value(exynos->vbus_gpio, 1);
-
-	clk_enable(exynos->clk);
-
-	/* runtime set active to reflect active state. */
-	pm_runtime_disable(dev);
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
-
-	return 0;
-}
-#endif /* CONFIG_PM_SLEEP */
-
-#ifdef CONFIG_PM_RUNTIME
-static int dwc3_exynos_runtime_suspend(struct device *dev)
-{
-	struct dwc3_exynos	*exynos = dev_get_drvdata(dev);
-	struct platform_device	*pdev_dwc = exynos->dwc3;
-	struct dwc3		*dwc = NULL;
-
-	dwc = platform_get_drvdata(pdev_dwc);
-
-	if (!dwc)
-		return 0;
-
-	pm_runtime_put_sync(dwc->usb3_phy->dev);
-
-	clk_disable(exynos->clk);
-
-	return 0;
-}
-static int dwc3_exynos_runtime_resume(struct device *dev)
-{
-	struct dwc3_exynos	*exynos = dev_get_drvdata(dev);
-	struct platform_device	*pdev_dwc = exynos->dwc3;
-	struct dwc3		*dwc = NULL;
-
-	dwc = platform_get_drvdata(pdev_dwc);
-
-	clk_enable(exynos->clk);
-
-	if (!dwc)
-		return 0;
-
-	pm_runtime_get_sync(dwc->usb3_phy->dev);
-
-	return 0;
-}
-#endif /* CONFIG_PM_RUNTIME */
-
-static const struct dev_pm_ops dwc3_exynos_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(dwc3_exynos_suspend, dwc3_exynos_resume)
-	SET_RUNTIME_PM_OPS(dwc3_exynos_runtime_suspend,
-				dwc3_exynos_runtime_resume, NULL)
-};
 
 #ifdef CONFIG_OF
 static const struct of_device_id exynos_dwc3_match[] = {
@@ -310,7 +226,6 @@ static struct platform_driver dwc3_exynos_driver = {
 	.driver		= {
 		.name	= "exynos-dwc3",
 		.of_match_table = of_match_ptr(exynos_dwc3_match),
-		.pm	= &dwc3_exynos_pm_ops,
 	},
 };
 
