@@ -1,0 +1,25 @@
+anx7808-bridge bindings
+-----------------------
+
+The Analogix ANX7808 is a HDMI to MyDP (video over micro-USB) bridge chip.
+
+
+Required properties:
+	- compatible: "analogix,anx7808"
+	- reg: first i2c address of the bridge
+	- pd-gpio: OF device-tree gpio specification of the power down pin
+	- reset-gpio: OF device-tree gpio specification of the reset pin
+	- cable-det-gpio: OF device-tree gpio specification of the cable
+	  detect pin
+	- intp-gpio: OF device-tree gpio specification of the external
+	  interrupt pin
+
+Example:
+anx7808-bridge@38 {
+	compatible = "analogix,anx7808";
+	reg = <0x38>;
+	pd-gpio = <&gpe0 6 1 0 0>;
+	reset-gpio = <&gpe0 7 1 0 0>;
+	cable-det-gpio = <&gpx0 7 0 0 0>;
+	intp-gpio = <&gpf0 0 0 0 0>;
+};

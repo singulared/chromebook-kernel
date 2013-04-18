@@ -8,3 +8,10 @@ config DRM_PS8622
 	tristate "Parade eDP/LVDS bridge"
 	---help---
 	  Adds the driver for the Parade PS8622 eDP/LVDS bridge chip.
+
+config DRM_ANX7808
+       tristate "Analogix Slimport transmitter ANX7808 support"
+       ---help---
+	 Slimport Transmitter is a HD video transmitter chip
+	 over micro-USB connector for smartphone device.
+
