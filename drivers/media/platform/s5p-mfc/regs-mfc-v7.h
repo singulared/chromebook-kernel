@@ -22,8 +22,10 @@
 
 #define S5P_FIMV_E_SOURCE_FIRST_ADDR_V7			0xf9e0
 #define S5P_FIMV_E_SOURCE_SECOND_ADDR_V7		0xf9e4
+#define S5P_FIMV_E_SOURCE_THIRD_ADDR_V7			0xf9e8
 #define S5P_FIMV_E_SOURCE_FIRST_STRIDE_V7		0xf9ec
 #define S5P_FIMV_E_SOURCE_SECOND_STRIDE_V7		0xf9f0
+#define S5P_FIMV_E_SOURCE_THIRD_STRIDE_V7		0xf9f4
 
 #define S5P_FIMV_E_ENCODED_SOURCE_FIRST_ADDR_V7		0xfa70
 #define S5P_FIMV_E_ENCODED_SOURCE_SECOND_ADDR_V7	0xfa74
@@ -40,9 +42,15 @@
 #define MFC_H264_ENC_CTX_BUF_SIZE_V7	(100 * SZ_1K)	/* 100KB */
 #define MFC_OTHER_ENC_CTX_BUF_SIZE_V7	(10 * SZ_1K)	/*  10KB */
 
-/* Scratch buffer size defines */
+/* Buffer size defines */
+#define S5P_FIMV_TMV_BUFFER_SIZE_V7(w, h)	(((w) + 1) * ((h) + 3) * 8)
+
 #define S5P_FIMV_SCRATCH_BUF_SIZE_MPEG4_DEC_V7(w, h) \
 			(SZ_1M + ((w) * 144) + (8192 * (h)) + 49216)
+
+#define S5P_FIMV_ME_BUFFER_SIZE_V7(imw, imh, mbw, mbh) \
+	(((((imw + 127) / 64) * 16) * (((imh + 63) / 64) * 16)) + \
+	(((mbw * mbh + 31) / 32) * 16))
 
 /* MFCv7 variant defines */
 #define MAX_FW_SIZE_V7			(SZ_1M)		/* 1MB */

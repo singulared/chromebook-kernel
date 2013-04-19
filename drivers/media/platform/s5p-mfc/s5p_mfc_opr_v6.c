@@ -82,19 +82,31 @@ int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 			  ctx->luma_size, ctx->chroma_size, ctx->mv_size);
 		mfc_debug(2, "Totals bufs: %d\n", ctx->total_dpb_count);
 	} else if (ctx->type == MFCINST_ENCODER) {
-		ctx->tmv_buffer_size = S5P_FIMV_NUM_TMV_BUFFERS_V6 *
+		if (IS_MFCV7(dev))
+			ctx->tmv_buffer_size = S5P_FIMV_NUM_TMV_BUFFERS_V6 *
+			ALIGN(S5P_FIMV_TMV_BUFFER_SIZE_V7(mb_width, mb_height),
+			S5P_FIMV_TMV_BUFFER_ALIGN_V6);
+		else
+			ctx->tmv_buffer_size = S5P_FIMV_NUM_TMV_BUFFERS_V6 *
 			ALIGN(S5P_FIMV_TMV_BUFFER_SIZE_V6(mb_width, mb_height),
 			S5P_FIMV_TMV_BUFFER_ALIGN_V6);
+
 		ctx->luma_dpb_size = ALIGN((mb_width * mb_height) *
 				S5P_FIMV_LUMA_MB_TO_PIXEL_V6,
 				S5P_FIMV_LUMA_DPB_BUFFER_ALIGN_V6);
 		ctx->chroma_dpb_size = ALIGN((mb_width * mb_height) *
 				S5P_FIMV_CHROMA_MB_TO_PIXEL_V6,
 				S5P_FIMV_CHROMA_DPB_BUFFER_ALIGN_V6);
-		ctx->me_buffer_size = ALIGN(S5P_FIMV_ME_BUFFER_SIZE_V6(
-					ctx->img_width, ctx->img_height,
-					mb_width, mb_height),
-					S5P_FIMV_ME_BUFFER_ALIGN_V6);
+		if (IS_MFCV7(dev))
+			ctx->me_buffer_size = ALIGN(S5P_FIMV_ME_BUFFER_SIZE_V7(
+						ctx->img_width, ctx->img_height,
+						mb_width, mb_height),
+						S5P_FIMV_ME_BUFFER_ALIGN_V6);
+		else
+			ctx->me_buffer_size = ALIGN(S5P_FIMV_ME_BUFFER_SIZE_V6(
+						ctx->img_width, ctx->img_height,
+						mb_width, mb_height),
+						S5P_FIMV_ME_BUFFER_ALIGN_V6);
 
 		mfc_debug(2, "recon luma size: %d chroma size: %d\n",
 			  ctx->luma_dpb_size, ctx->chroma_dpb_size);
