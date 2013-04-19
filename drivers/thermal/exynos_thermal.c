@@ -653,6 +653,9 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		if (pdata->trigger_levels[i])
 			trigger_levs++;
 
+	/* Disable all interrupts */
+	writel(0, data->base + EXYNOS_TMU_REG_INTEN);
+
 	if (data->soc == SOC_ARCH_EXYNOS4210) {
 		/* Write temperature code for threshold */
 		threshold_code = temp_to_code(data, pdata->threshold);
@@ -691,6 +694,7 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		 */
 		writel(~0, data->base + EXYNOS_TMU_REG_INTCLEAR);
 	}
+
 out:
 	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
@@ -954,13 +958,6 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	ret = devm_request_irq(&pdev->dev, data->irq, exynos_tmu_irq,
-		IRQF_TRIGGER_RISING, "exynos-tmu", data);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request irq: %d\n", data->irq);
-		return ret;
-	}
-
 	data->clk = devm_clk_get(&pdev->dev, "tmu_apbif");
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev, "Failed to get clock\n");
@@ -990,8 +987,6 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		goto err_clk;
 	}
 
-	exynos_tmu_control(pdev, true);
-
 	/* Register the sensor with thermal management interface */
 	(&exynos_sensor_conf)->private_data = data;
 	exynos_sensor_conf.trip_data.trip_count = pdata->trigger_level0_en +
@@ -1013,13 +1008,25 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 					pdata->freq_tab[i].temp_level;
 	}
 
+	exynos_tmu_control(pdev, true);
+
 	ret = exynos_register_thermal(&exynos_sensor_conf);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register thermal interface\n");
 		goto err_clk;
 	}
+
+	ret = request_irq(data->irq, exynos_tmu_irq, IRQF_TRIGGER_RISING,
+			  "exynos-tmu", data);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to request irq: %d\n", data->irq);
+		goto err_irq;
+	}
+
 	return 0;
 
+err_irq:
+	exynos_unregister_thermal();
 err_clk:
 	platform_set_drvdata(pdev, NULL);
 	clk_unprepare(data->clk);
@@ -1030,6 +1037,7 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 
+	free_irq(data->irq, data);
 	exynos_tmu_control(pdev, false);
 
 	exynos_unregister_thermal();
