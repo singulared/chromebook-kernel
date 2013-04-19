@@ -3838,14 +3838,8 @@ static void haswell_init_clock_gating(struct drm_device *dev)
 	I915_WRITE(GEN6_MBCTL, I915_READ(GEN6_MBCTL) |
 		   GEN6_MBCTL_ENABLE_BOOT_FETCH);
 
-	/* XXX: This is a workaround for early silicon revisions and should be
-	 * removed later.
-	 */
-	I915_WRITE(WM_DBG,
-			I915_READ(WM_DBG) |
-			WM_DBG_DISALLOW_MULTIPLE_LP |
-			WM_DBG_DISALLOW_SPRITE |
-			WM_DBG_DISALLOW_MAXFIFO);
+	I915_WRITE(CHICKEN_PAR1_1,
+		   I915_READ(CHICKEN_PAR1_1) | FORCE_ARB_IDLE_PLANES);
 
 	lpt_init_clock_gating(dev);
 }
