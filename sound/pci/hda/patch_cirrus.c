@@ -89,6 +89,7 @@ enum {
 enum {
 	CS421X_CDB4210,
 	STUMPY_CDB4210,
+	LUMPY_CDB4210,
 	CS421X_MODELS
 };
 
@@ -1445,6 +1446,7 @@ static int patch_cs420x(struct hda_codec *codec)
 static const char *cs421x_models[CS421X_MODELS] = {
 	[CS421X_CDB4210] = "cdb4210",
 	[STUMPY_CDB4210] = "stumpy",
+	[LUMPY_CDB4210] = "lumpy",
 };
 
 static const struct snd_pci_quirk cs421x_cfg_tbl[] = {
@@ -1476,9 +1478,21 @@ static struct cs_pincfg stumpy_pincfgs[] = {
 	{} /* terminator */
 };
 
+/* Lumpy */
+static struct cs_pincfg lumpy_pincfgs[] = {
+	{ 0x05, 0x022110f0 },
+	{ 0x06, 0x901700f0 },
+	{ 0x07, 0x02a110f0 },
+	{ 0x08, 0x77a70037 },
+	{ 0x09, 0xb7a6003e },
+	{ 0x0a, 0x400000f0 },
+	{} /* terminator */
+};
+
 static const struct cs_pincfg *cs421x_pincfgs[CS421X_MODELS] = {
 	[CS421X_CDB4210] = cdb4210_pincfgs,
 	[STUMPY_CDB4210] = stumpy_pincfgs,
+	[LUMPY_CDB4210] = lumpy_pincfgs,
 };
 
 static const struct hda_verb cs421x_coef_init_verbs[] = {
