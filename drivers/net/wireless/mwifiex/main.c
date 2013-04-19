@@ -364,7 +364,6 @@ static void mwifiex_fw_dpc(const struct firmware *firmware, void *context)
 		goto err_add_intf;
 	}
 
-#if 0
 	/* Create AP interface by default */
 	if (!mwifiex_add_virtual_intf(adapter->wiphy, "uap%d",
 				      NL80211_IFTYPE_AP, NULL, NULL)) {
@@ -378,7 +377,6 @@ static void mwifiex_fw_dpc(const struct firmware *firmware, void *context)
 		dev_err(adapter->dev, "cannot create default P2P interface\n");
 		goto err_add_intf;
 	}
-#endif
 	rtnl_unlock();
 
 	mwifiex_drv_get_driver_version(adapter, fmt, sizeof(fmt) - 1);
