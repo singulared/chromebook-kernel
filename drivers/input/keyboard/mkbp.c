@@ -384,7 +384,7 @@ static void __devinit mkbp_compute_valid_keys(struct mkbp_device *mkbp_dev)
 	for (col = 0; col < MKBP_NUM_COLS; col++) {
 		for (row = 0; row < MKBP_NUM_ROWS; row++) {
 			code = mkbp_keycodes[row][col];
-			if (code)
+			if (code && (code != KEY_BATTERY))
 				mkbp_dev->valid_keys[col] |= 1 << row;
 		}
 		dev_dbg(mkbp_dev->dev, "valid_keys[%02d] = 0x%02x\n",
