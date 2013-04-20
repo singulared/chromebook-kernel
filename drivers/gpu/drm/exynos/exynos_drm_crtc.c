@@ -153,12 +153,6 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	/* when framebuffer changing is requested, crtc's dpms should be on */
-	if (exynos_crtc->dpms > DRM_MODE_DPMS_ON) {
-		DRM_ERROR("failed framebuffer changing request.\n");
-		return -EPERM;
-	}
-
 	exynos_drm_crtc_update(crtc, crtc->fb);
 
 	return 0;
@@ -203,12 +197,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	/* The event flag is optional but exynos requires it. */
 	if (!event) {
 		DRM_ERROR("called page_flip with empty event flag\n");
-		return -EINVAL;
-	}
-
-	/* when the page flip is requested, crtc's dpms should be on */
-	if (exynos_crtc->dpms > DRM_MODE_DPMS_ON) {
-		DRM_ERROR("failed page flip request.\n");
 		return -EINVAL;
 	}
 
