@@ -1984,6 +1984,12 @@ void __init_or_cpufreq exynos5_setup_clocks(void)
 	clk_set_rate(&exynos5_clk_sclk_apll.clk, 100000000);
 	clk_set_rate(&exynos5_clk_aclk_266.clk, 300000000);
 
+	/* explicitly set dw_mmc clock divisors.
+	 * Some firmware combinations might not get this right.
+	 */
+	clk_set_rate(&exynos5_clk_dout_mmc0.clk, 800000000);
+	clk_set_rate(&exynos5_clk_sclk_mmc0.clk, 400000000);
+
 	clk_set_rate(&exynos5_clk_aclk_acp.clk, 267000000);
 	clk_set_rate(&exynos5_clk_pclk_acp.clk, 134000000);
 
