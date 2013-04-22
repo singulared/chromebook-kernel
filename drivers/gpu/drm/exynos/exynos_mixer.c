@@ -101,6 +101,16 @@ struct mixer_context {
 	int			previous_dxy;
 };
 
+struct mixer_scan_range {
+	int min_res[2], max_res[2];
+	enum exynos_mixer_mode_type mode_type;
+};
+
+struct mixer_scan_adjustment {
+	int res[2], new_res[2];
+};
+
+
 /* event flags used  */
 enum mixer_status_flags {
 	MXR_EVENT_VSYNC = 1,
@@ -133,6 +143,45 @@ static const u8 filter_cr_horiz_tap4[] = {
 	-6,	-5,	-4,	-3,	-2,	-1,	-1,	0,
 	127,	126,	124,	118,	111,	102,	92,	81,
 	70,	59,	48,	37,	27,	19,	11,	5,
+};
+
+struct mixer_scan_range scan_ranges[] = {
+	{
+		.min_res = { 464, 0 },
+		.max_res = { 720, 480 },
+		.mode_type = EXYNOS_MIXER_MODE_SD_NTSC,
+	},
+	{
+		.min_res = { 464, 481 },
+		.max_res = { 720, 576 },
+		.mode_type = EXYNOS_MIXER_MODE_SD_PAL,
+	},
+	{
+		.min_res = { 1024, 0 },
+		.max_res = { 1280, 720 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_720,
+	},
+	{
+		.min_res = { 1664, 0 },
+		.max_res = { 1920, 1080 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+	},
+	{
+		.min_res = { 1440, 900 },
+		.max_res = { 1440, 900 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+	},
+};
+
+struct mixer_scan_adjustment scan_adjustments[] = {
+	{
+		.res = { 1024, 768 },
+		.new_res = { 1024, 720 },
+	},
+	{
+		.res = { 1280, 800 },
+		.new_res = { 1280, 720 },
+	},
 };
 
 static void mixer_win_reset(struct mixer_context *mctx);
@@ -179,17 +228,65 @@ static inline void mixer_reg_writemask(struct mixer_resources *res,
 
 enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height)
 {
-	if (width >= 464 && width <= 720 && height <= 480)
-		return EXYNOS_MIXER_MODE_SD_NTSC;
-	else if (width >= 464 && width <= 720 && height <= 576)
-		return EXYNOS_MIXER_MODE_SD_PAL;
-	else if (width >= 1024 && width <= 1280 && height <= 720)
-		return EXYNOS_MIXER_MODE_HD_720;
-	else if ((width == 1440 && height == 900) ||
-		(width >= 1664 && width <= 1920 && height <= 1080))
-		return EXYNOS_MIXER_MODE_HD_1080;
-	else
-		return EXYNOS_MIXER_MODE_INVALID;
+	int i;
+
+	/*
+	 * If the mode matches an adjustment, adjust it before finding the
+	 * mode type
+	 */
+	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
+		struct mixer_scan_adjustment *adj = &scan_adjustments[i];
+
+		if (width == adj->res[0] && height == adj->res[1]) {
+			width = adj->new_res[0];
+			height = adj->new_res[1];
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(scan_ranges); i++) {
+		struct mixer_scan_range *range = &scan_ranges[i];
+
+		if (width >= range->min_res[0] && width <= range->max_res[0]
+		 && height >= range->min_res[1] && height <= range->max_res[1])
+			return range->mode_type;
+	}
+	return EXYNOS_MIXER_MODE_INVALID;
+}
+
+static void mixer_adjust_modes(void *ctx, struct drm_connector *connector)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
+		struct mixer_scan_adjustment *adj = &scan_adjustments[i];
+		struct drm_display_mode *t, *mode;
+		bool native_support = false;
+
+		/*
+		 * Make sure the mode resulting from the adjustment is not
+		 * already natively supported. This might cause us to do
+		 * something stupid like choose a chopped 1280x800 resolution
+		 * over native 720p.
+		 */
+		list_for_each_entry_safe(mode, t, &connector->modes, head) {
+			if (adj->new_res[0] == mode->hdisplay &&
+			    adj->new_res[1] == mode->vdisplay) {
+				native_support = true;
+				break;
+			}
+		}
+		if (native_support)
+			continue;
+
+		list_for_each_entry_safe(mode, t, &connector->modes, head) {
+			if (adj->res[0] == mode->hdisplay &&
+			    adj->res[1] == mode->vdisplay) {
+				mode->hdisplay = adj->new_res[0];
+				mode->vdisplay = adj->new_res[1];
+				break;
+			}
+		}
+	}
 }
 
 static void mixer_regs_dump(struct mixer_context *mctx)
@@ -1089,6 +1186,7 @@ static int mixer_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 
 static struct exynos_controller_ops mixer_ops = {
 	/* manager */
+	.adjust_modes		= mixer_adjust_modes,
 	.subdrv_probe		= mixer_subdrv_probe,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,

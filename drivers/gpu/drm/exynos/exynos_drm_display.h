@@ -54,6 +54,7 @@ struct exynos_panel_ops {
  * @commit: Applies controller level settings (as opposed to window level)
  * @win_commit: Commits the changes on only one window
  * @win_disable: Disables one of the controller's windows
+ * @adjust_modes: Allows the controller to rework the connector modes
  */
 struct exynos_controller_ops {
 	int (*subdrv_probe)(void *ctx, struct drm_device *drm_dev);
@@ -65,6 +66,7 @@ struct exynos_controller_ops {
 	void (*commit)(void *ctx);
 	void (*win_commit)(void *ctx, int zpos);
 	void (*win_disable)(void *ctx, int zpos);
+	void (*adjust_modes)(void *ctx, struct drm_connector *connector);
 };
 
 /*

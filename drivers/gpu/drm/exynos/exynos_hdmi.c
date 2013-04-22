@@ -862,10 +862,10 @@ static int hdmi_v13_conf_index(struct drm_display_mode *mode)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(hdmi_v13_confs); ++i)
-		if (hdmi_v13_confs[i].width == mode->hdisplay &&
-				hdmi_v13_confs[i].height == mode->vdisplay &&
-				hdmi_v13_confs[i].vrefresh == mode->vrefresh &&
-				hdmi_v13_confs[i].interlace ==
+		if (hdmi_v13_confs[i].width == mode->crtc_hdisplay &&
+			hdmi_v13_confs[i].height == mode->crtc_vdisplay &&
+			hdmi_v13_confs[i].vrefresh == mode->vrefresh &&
+			hdmi_v13_confs[i].interlace ==
 				((mode->flags & DRM_MODE_FLAG_INTERLACE) ?
 				 true : false))
 			return i;
@@ -1716,7 +1716,7 @@ static void hdmi_mode_fixup(void *ctx, struct drm_connector *connector,
 				struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode)
 {
-	struct drm_display_mode *m;
+	struct drm_display_mode *t, *con_mode;
 	struct hdmi_context *hdata = ctx;
 	int index;
 
@@ -1725,31 +1725,34 @@ static void hdmi_mode_fixup(void *ctx, struct drm_connector *connector,
 			drm_get_connector_name(connector),
 			DRM_BASE_ID(mode), mode->name);
 
-	drm_mode_set_crtcinfo(adjusted_mode, 0);
-
-	if (hdata->is_v13)
-		index = hdmi_v13_conf_index(adjusted_mode);
-	else
-		index = find_hdmiphy_conf(adjusted_mode->clock * 1000);
-
-	/* just return if user desired mode exists. */
-	if (index >= 0)
-		return;
+	/*
+	 * Match the incoming mode to a mode in the connector list and copy it
+	 * over. This is important since this might be an adjusted mode from the
+	 * mixer and those have differing crtc_* values.
+	 */
+	list_for_each_entry_safe(con_mode, t, &connector->modes, head) {
+		if (mode->hdisplay == con_mode->hdisplay &&
+		    mode->vdisplay == con_mode->vdisplay &&
+		    mode->clock == con_mode->clock) {
+			hdmi_mode_copy(adjusted_mode, con_mode);
+			return;
+		}
+	}
 
 	/*
-	 * otherwise, find the most suitable mode among modes and change it
-	 * to adjusted_mode.
+	 * We didn't find a mode which matched the desired resolution, so just
+	 * find something with the same clock.
 	 */
-	list_for_each_entry(m, &connector->modes, head) {
+	list_for_each_entry_safe(con_mode, t, &connector->modes, head) {
 		if (hdata->is_v13)
-			index = hdmi_v13_conf_index(m);
+			index = hdmi_v13_conf_index(con_mode);
 		else
-			index = find_hdmiphy_conf(m->clock * 1000);
+			index = find_hdmiphy_conf(con_mode->clock * 1000);
 
 		if (index >= 0) {
 			DRM_INFO("desired mode doesn't exist so\n");
 			DRM_INFO("use the most suitable mode among modes.\n");
-			hdmi_mode_copy(adjusted_mode, m);
+			hdmi_mode_copy(adjusted_mode, con_mode);
 			break;
 		}
 	}
@@ -1774,9 +1777,9 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 	hdata->mode_conf.vic = drm_match_cea_mode(m);
 
 	hdata->mode_conf.pixel_clock = m->clock * 1000;
-	hdmi_set_reg(core->h_blank, 2, m->htotal - m->hdisplay);
-	hdmi_set_reg(core->v_line, 2, m->vtotal);
-	hdmi_set_reg(core->h_line, 2, m->htotal);
+	hdmi_set_reg(core->h_blank, 2, m->crtc_htotal - m->crtc_hdisplay);
+	hdmi_set_reg(core->v_line, 2, m->crtc_vtotal);
+	hdmi_set_reg(core->h_line, 2, m->crtc_htotal);
 	hdmi_set_reg(core->hsync_pol, 1,
 			(m->flags & DRM_MODE_FLAG_NHSYNC)  ? 1 : 0);
 	hdmi_set_reg(core->vsync_pol, 1,
@@ -1794,49 +1797,60 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 	if (m->flags & DRM_MODE_FLAG_INTERLACE) {
 		/* Interlaced Mode */
 		hdmi_set_reg(core->v_sync_line_bef_2, 2,
-			(m->vsync_end - m->vdisplay) / 2);
+			(m->crtc_vsync_end - m->crtc_vdisplay) / 2);
 		hdmi_set_reg(core->v_sync_line_bef_1, 2,
-			(m->vsync_start - m->vdisplay) / 2);
-		hdmi_set_reg(core->v2_blank, 2, m->vtotal / 2);
-		hdmi_set_reg(core->v1_blank, 2, (m->vtotal - m->vdisplay) / 2);
+			(m->crtc_vsync_start - m->crtc_vdisplay) / 2);
+		hdmi_set_reg(core->v2_blank, 2, m->crtc_vtotal / 2);
+		hdmi_set_reg(core->v1_blank, 2,
+				(m->crtc_vtotal - m->crtc_vdisplay) / 2);
 		hdmi_set_reg(core->v_blank_f0, 2,
-			(m->vtotal + ((m->vsync_end - m->vsync_start) * 4) + 5) / 2);
-		hdmi_set_reg(core->v_blank_f1, 2, m->vtotal);
-		hdmi_set_reg(core->v_sync_line_aft_2, 2, (m->vtotal / 2) + 7);
-		hdmi_set_reg(core->v_sync_line_aft_1, 2, (m->vtotal / 2) + 2);
+			(m->crtc_vtotal +
+			((m->crtc_vsync_end - m->crtc_vsync_start) * 4) + 5)
+			/ 2);
+		hdmi_set_reg(core->v_blank_f1, 2, m->crtc_vtotal);
+		hdmi_set_reg(core->v_sync_line_aft_2, 2,
+			(m->crtc_vtotal / 2) + 7);
+		hdmi_set_reg(core->v_sync_line_aft_1, 2,
+			(m->crtc_vtotal / 2) + 2);
 		hdmi_set_reg(core->v_sync_line_aft_pxl_2, 2,
-			(m->htotal / 2) + (m->hsync_start - m->hdisplay));
+			(m->crtc_htotal / 2) +
+			(m->crtc_hsync_start - m->crtc_hdisplay));
 		hdmi_set_reg(core->v_sync_line_aft_pxl_1, 2,
-			(m->htotal / 2) + (m->hsync_start - m->hdisplay));
-		hdmi_set_reg(tg->vact_st, 2, (m->vtotal - m->vdisplay) / 2);
-		hdmi_set_reg(tg->vact_sz, 2, m->vdisplay / 2);
+			(m->crtc_htotal / 2) +
+			(m->crtc_hsync_start - m->crtc_hdisplay));
+		hdmi_set_reg(tg->vact_st, 2,
+			(m->crtc_vtotal - m->crtc_vdisplay) / 2);
+		hdmi_set_reg(tg->vact_sz, 2, m->crtc_vdisplay / 2);
 		hdmi_set_reg(tg->vact_st2, 2, 0x249);/* Reset value + 1*/
 		hdmi_set_reg(tg->vact_st3, 2, 0x0);
 		hdmi_set_reg(tg->vact_st4, 2, 0x0);
 	} else {
 		/* Progressive Mode */
 		hdmi_set_reg(core->v_sync_line_bef_2, 2,
-			m->vsync_end - m->vdisplay);
+			m->crtc_vsync_end - m->crtc_vdisplay);
 		hdmi_set_reg(core->v_sync_line_bef_1, 2,
-			m->vsync_start - m->vdisplay);
-		hdmi_set_reg(core->v2_blank, 2, m->vtotal);
-		hdmi_set_reg(core->v1_blank, 2, m->vtotal - m->vdisplay);
+			m->crtc_vsync_start - m->crtc_vdisplay);
+		hdmi_set_reg(core->v2_blank, 2, m->crtc_vtotal);
+		hdmi_set_reg(core->v1_blank, 2,
+			m->crtc_vtotal - m->crtc_vdisplay);
 		hdmi_set_reg(core->v_blank_f0, 2, 0xffff);
 		hdmi_set_reg(core->v_blank_f1, 2, 0xffff);
 		hdmi_set_reg(core->v_sync_line_aft_2, 2, 0xffff);
 		hdmi_set_reg(core->v_sync_line_aft_1, 2, 0xffff);
 		hdmi_set_reg(core->v_sync_line_aft_pxl_2, 2, 0xffff);
 		hdmi_set_reg(core->v_sync_line_aft_pxl_1, 2, 0xffff);
-		hdmi_set_reg(tg->vact_st, 2, m->vtotal - m->vdisplay);
-		hdmi_set_reg(tg->vact_sz, 2, m->vdisplay);
+		hdmi_set_reg(tg->vact_st, 2, m->crtc_vtotal - m->crtc_vdisplay);
+		hdmi_set_reg(tg->vact_sz, 2, m->crtc_vdisplay);
 		hdmi_set_reg(tg->vact_st2, 2, 0x248); /* Reset value */
 		hdmi_set_reg(tg->vact_st3, 2, 0x47b); /* Reset value */
 		hdmi_set_reg(tg->vact_st4, 2, 0x6ae); /* Reset value */
 	}
 
 	/* Following values & calculations are same irrespective of mode type */
-	hdmi_set_reg(core->h_sync_start, 2, m->hsync_start - m->hdisplay - 2);
-	hdmi_set_reg(core->h_sync_end, 2, m->hsync_end - m->hdisplay - 2);
+	hdmi_set_reg(core->h_sync_start, 2,
+		m->crtc_hsync_start - m->crtc_hdisplay - 2);
+	hdmi_set_reg(core->h_sync_end, 2,
+		m->crtc_hsync_end - m->crtc_hdisplay - 2);
 	hdmi_set_reg(core->vact_space_1, 2, 0xffff);
 	hdmi_set_reg(core->vact_space_2, 2, 0xffff);
 	hdmi_set_reg(core->vact_space_3, 2, 0xffff);
@@ -1858,10 +1872,10 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 
 	/* Timing generator registers */
 	hdmi_set_reg(tg->cmd, 1, 0x0);
-	hdmi_set_reg(tg->h_fsz, 2, m->htotal);
-	hdmi_set_reg(tg->hact_st, 2, m->htotal - m->hdisplay);
-	hdmi_set_reg(tg->hact_sz, 2, m->hdisplay);
-	hdmi_set_reg(tg->v_fsz, 2, m->vtotal);
+	hdmi_set_reg(tg->h_fsz, 2, m->crtc_htotal);
+	hdmi_set_reg(tg->hact_st, 2, m->crtc_htotal - m->crtc_hdisplay);
+	hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay);
+	hdmi_set_reg(tg->v_fsz, 2, m->crtc_vtotal);
 	hdmi_set_reg(tg->vsync, 2, 0x1);
 	hdmi_set_reg(tg->vsync2, 2, 0x233); /* Reset value */
 	hdmi_set_reg(tg->field_chg, 2, 0x233); /* Reset value */
@@ -1873,9 +1887,11 @@ static void hdmi_v14_mode_set(struct hdmi_context *hdata,
 
 	/* Workaround 4 implementation for 1440x900 resolution support */
 	if (hdata->is_soc_exynos5) {
-		if (m->hdisplay == 1440 && m->vdisplay == 900 && m->clock == 106500) {
-			hdmi_set_reg(tg->hact_st, 2, m->htotal - m->hdisplay - 0xe0);
-			hdmi_set_reg(tg->hact_sz, 2, m->hdisplay + 0xe0);
+		if (m->crtc_hdisplay == 1440 && m->crtc_vdisplay == 900 &&
+		    m->clock == 106500) {
+			hdmi_set_reg(tg->hact_st, 2,
+				m->crtc_htotal - m->crtc_hdisplay - 0xe0);
+			hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay + 0xe0);
 		}
 	}
 }

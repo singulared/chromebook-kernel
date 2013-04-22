@@ -267,6 +267,7 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 				unsigned int max_width, unsigned int max_height)
 {
 	struct exynos_drm_display *display = display_from_connector(connector);
+	int ret;
 	unsigned int width, height;
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] %d x %d\n", DRM_BASE_ID(connector),
@@ -284,8 +285,18 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 		display->panel_ops->get_max_res(display->panel_ctx, &width,
 				&height);
 
-	return drm_helper_probe_single_connector_modes(connector, width,
+	ret = drm_helper_probe_single_connector_modes(connector, width,
 							height);
+	if (ret < 0) {
+		DRM_ERROR("Failed to probe connector modes ret=%d\n", ret);
+		return ret;
+	}
+
+	if (display->controller_ops->adjust_modes)
+		display->controller_ops->adjust_modes(display->controller_ctx,
+				connector);
+
+	return ret;
 }
 
 /* get detection status of display device. */
