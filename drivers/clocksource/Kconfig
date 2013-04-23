@@ -69,7 +69,7 @@ config CLKSRC_EXYNOS_MCT
 	  Support for Multi Core Timer controller on Exynos SoCs.
 
 config CLKSRC_SAMSUNG_PWM
-	def_bool ARCH_EXYNOS4
+	bool
 	depends on OF
 	select CLKSRC_MMIO
 	help
