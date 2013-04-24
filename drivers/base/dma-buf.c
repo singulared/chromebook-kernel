@@ -27,8 +27,10 @@
 #include <linux/dma-buf.h>
 #include <linux/anon_inodes.h>
 #include <linux/export.h>
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/poll.h>
 #include <linux/sched.h>
+#endif
 
 static inline int is_dma_buf_file(struct file *);
 
@@ -42,8 +44,10 @@ static int dma_buf_release(struct inode *inode, struct file *file)
 	dmabuf = file->private_data;
 
 	dmabuf->ops->release(dmabuf);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	kds_callback_term(&dmabuf->kds_cb);
 	kds_resource_term(&dmabuf->kds);
+#endif
 	kfree(dmabuf);
 	return 0;
 }
@@ -65,7 +69,7 @@ static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
 	return dmabuf->ops->mmap(dmabuf, vma);
 }
 
-
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 static void dma_buf_kds_cb_fn(void *param1, void *param2)
 {
 	struct kds_resource_set **rset_ptr = param1;
@@ -146,11 +150,14 @@ static unsigned int dma_buf_poll(struct file *file,
 	}
 	return ret;
 }
+#endif
 
 static const struct file_operations dma_buf_fops = {
 	.release	= dma_buf_release,
 	.mmap		= dma_buf_mmap_internal,
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	.poll		= dma_buf_poll,
+#endif
 };
 
 /*
@@ -207,10 +214,12 @@ struct dma_buf *dma_buf_export(void *priv, const struct dma_buf_ops *ops,
 	mutex_init(&dmabuf->lock);
 	INIT_LIST_HEAD(&dmabuf->attachments);
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	init_waitqueue_head(&dmabuf->wq_exclusive);
 	init_waitqueue_head(&dmabuf->wq_shared);
 	kds_resource_init(&dmabuf->kds);
 	kds_callback_init(&dmabuf->kds_cb, 1, dma_buf_kds_cb_fn);
+#endif
 
 	return dmabuf;
 }

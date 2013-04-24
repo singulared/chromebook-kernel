@@ -30,8 +30,10 @@
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
 #include <linux/wait.h>
+#endif
 
 struct device;
 struct dma_buf;
@@ -123,10 +125,12 @@ struct dma_buf {
 	const struct dma_buf_ops *ops;
 	/* mutex to serialize list manipulation and attach/detach */
 	struct mutex lock;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource kds;
 	wait_queue_head_t wq_exclusive;
 	wait_queue_head_t wq_shared;
 	struct kds_callback kds_cb;
+#endif
 	void *priv;
 };
 
@@ -162,6 +166,7 @@ static inline void get_dma_buf(struct dma_buf *dmabuf)
 	get_file(dmabuf->file);
 }
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 /**
  * get_dma_buf_kds_resource - get a KDS resource for this dma-buf
  * @dmabuf:	[in]	pointer to dma_buf
@@ -176,6 +181,7 @@ static inline struct kds_resource *
 {
 	return &dmabuf->kds;
 }
+#endif
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
 struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
