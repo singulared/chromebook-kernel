@@ -43,6 +43,7 @@ static void exynos_drm_connector_power(struct drm_encoder *encoder, int mode)
 {
 	struct drm_device *dev = encoder->dev;
 	struct drm_connector *connector;
+	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		if (exynos_drm_best_encoder(connector) == encoder) {
@@ -50,6 +51,7 @@ static void exynos_drm_connector_power(struct drm_encoder *encoder, int mode)
 					connector->base.id, mode);
 
 			exynos_drm_display_power(connector, mode);
+			exynos_encoder->dpms = mode;
 		}
 	}
 }
@@ -77,13 +79,11 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 				manager_ops->apply(manager->dev);
 
 		exynos_drm_connector_power(encoder, mode);
-		exynos_encoder->dpms = mode;
 		break;
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
 	case DRM_MODE_DPMS_OFF:
 		exynos_drm_connector_power(encoder, mode);
-		exynos_encoder->dpms = mode;
 		exynos_encoder->updated = false;
 		break;
 	default:
