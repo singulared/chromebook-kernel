@@ -95,7 +95,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = drm_create_iommu_mapping(dev);
 	if (ret < 0) {
 		DRM_ERROR("failed to create iommu mapping.\n");
-		goto err_crtc;
+		goto err_freepriv;
 	}
 
 	drm_mode_config_init(dev);
@@ -131,19 +131,19 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = find_bridge("ptn3460-bridge", &bridge);
 	if (ret) {
 		DRM_ERROR("Could not get PTN3460 bridge %d\n", ret);
-		goto err_freepriv;
+		goto err_vblank;
 	}
 	if (bridge.valid) {
 		ret = ptn3460_init(dev, bridge.client, bridge.node);
 		if (ret) {
 			DRM_ERROR("Failed to initialize the ptn bridge\n");
-			goto err_freepriv;
+			goto err_vblank;
 		}
 	} else {
 		ret = find_bridge("ps8622-bridge", &bridge);
 		if (ret) {
 			DRM_ERROR("Could not get PS8622 bridge %d\n", ret);
-			goto err_freepriv;
+			goto err_vblank;
 		}
 
 		if (bridge.valid) {
@@ -151,7 +151,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 			if (ret) {
 				DRM_ERROR("Failed to initialize the Parade "
 					  "bridge\n");
-				goto err_freepriv;
+				goto err_vblank;
 			}
 		}
 	}
@@ -187,9 +187,8 @@ err_drm_device:
 err_vblank:
 	drm_vblank_cleanup(dev);
 err_release_iommu_mapping:
-	drm_release_iommu_mapping(dev);
-err_crtc:
 	drm_mode_config_cleanup(dev);
+	drm_release_iommu_mapping(dev);
 err_freepriv:
 	kfree(private);
 
