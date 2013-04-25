@@ -32,6 +32,10 @@
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&wp_gpio>;
+
+			nonvolatile-context-storage = "disk";
+			chromeos-vbc-blk = <&dwmmc_0 0 0 16>;
+			chromeos-vbc-ec = <&ec>;
 		};
 	};
 

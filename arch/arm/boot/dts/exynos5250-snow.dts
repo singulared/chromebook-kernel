@@ -158,6 +158,10 @@
 				pinctrl-0 = <&ec_irq>;
 				wakeup-source;
 
+				nv-storage {
+					compatible = "google,cros-ec-vbc";
+				};
+
 				cros-ec-keyb {
 					compatible = "google,cros-ec-keyb";
 					keypad,num-rows = <8>;
