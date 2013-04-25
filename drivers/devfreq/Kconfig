@@ -88,4 +88,13 @@ config ARM_EXYNOS5_BUS_DEVFREQ
 	  It reads PPMU counters of memory controllers and adjusts the
 	  operating frequencies and voltages with OPP support.
 
+config ARM_EXYNOS5420_BUS_DEVFREQ
+	bool "ARM Exynos5420 Bus DEVFREQ Driver"
+	depends on SOC_EXYNOS5420
+	select ARCH_HAS_OPP
+	select PM_OPP
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	help
+	  This adds the DEVFREQ driver for Exynos5420 bus interface.
+
 endif # PM_DEVFREQ

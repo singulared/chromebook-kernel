@@ -8,3 +8,4 @@ obj-$(CONFIG_DEVFREQ_GOV_USERSPACE)	+= governor_userspace.o
 obj-$(CONFIG_ARM_EXYNOS4_BUS_DEVFREQ)	+= exynos/
 obj-$(CONFIG_ARM_EXYNOS5_BUS_DEVFREQ)	+= exynos/
 obj-$(CONFIG_ARM_EXYNOS5420_BUS_DEVFREQ)	+= exynos5420_ppmu.o
+obj-$(CONFIG_ARM_EXYNOS5420_BUS_DEVFREQ)	+= exynos5420_bus_int.o
