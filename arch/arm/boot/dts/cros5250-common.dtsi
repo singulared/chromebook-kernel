@@ -276,17 +276,6 @@
 		gpios = <&gpa2 0 3 3 0>,
 			<&gpa2 1 3 3 0>;
 
-		ec: chromeos-ec {
-			compatible = "google,chromeos-ec-i2c";
-			reg = <0x1e>;
-			interrupts = <14 0>;
-			interrupt-parent = <&wakeup_eint>;
-			wakeup-source;
-			nv-storage {
-				compatible = "google,chromeos_vbc_ec";
-			};
-		};
-
 		power-regulator {
 			compatible = "ti,tps65090";
 			reg = <0x48>;
