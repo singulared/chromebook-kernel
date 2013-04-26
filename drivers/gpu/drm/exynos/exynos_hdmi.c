@@ -46,6 +46,7 @@
 #include <linux/gpio.h>
 #include <media/s5p_hdmi.h>
 
+#define HOTPLUG_DEBOUNCE_MS	1100
 #define MAX_WIDTH		1920
 #define MAX_HEIGHT		1080
 #define get_hdmi_context(dev)	platform_get_drvdata(to_platform_device(dev))
@@ -193,6 +194,7 @@ struct hdmi_context {
 	void __iomem			*phy_pow_ctrl_reg;
 	void __iomem			*regs_hdmiphy;
 	int				irq;
+	struct delayed_work		hotplug_work;
 
 	struct i2c_client		*ddc_port;
 	struct i2c_client		*hdmiphy_port;
@@ -1925,6 +1927,8 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 
 	hdmiphy_poweroff(hdata);
 
+	cancel_delayed_work_sync(&hdata->hotplug_work);
+
 	hdmi_phy_pow_ctrl_reg_writemask(hdata, PMU_HDMI_PHY_DISABLE,
 		PMU_HDMI_PHY_CONTROL_MASK);
 	regulator_bulk_disable(res->regul_count, res->regul_bulk);
@@ -1972,14 +1976,23 @@ static struct exynos_drm_display hdmi_display = {
 	.ops = &hdmi_display_ops,
 };
 
+static void hdmi_hotplug_work_func(struct work_struct *work)
+{
+	struct hdmi_context *hdata;
+
+	hdata = container_of(work, struct hdmi_context, hotplug_work.work);
+
+	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
+	if (hdata->drm_dev)
+		drm_helper_hpd_irq_event(hdata->drm_dev);
+}
+
 static irqreturn_t hdmi_irq_thread(int irq, void *arg)
 {
 	struct hdmi_context *hdata = arg;
 
-	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
-
-	if (hdata->drm_dev)
-		drm_helper_hpd_irq_event(hdata->drm_dev);
+	mod_delayed_work(system_wq, &hdata->hotplug_work,
+				msecs_to_jiffies(HOTPLUG_DEBOUNCE_MS));
 
 	return IRQ_HANDLED;
 }
@@ -2357,6 +2370,8 @@ static int hdmi_probe(struct platform_device *pdev)
 	hdmi_display.ctx = hdata;
 	exynos_drm_display_register(&hdmi_display);
 
+	INIT_DELAYED_WORK(&hdata->hotplug_work, hdmi_hotplug_work_func);
+
 	if (of_device_is_compatible(dev->of_node,
 		"samsung,exynos5-hdmi")) {
 		ret = hdmi_register_audio_device(pdev);
@@ -2392,6 +2407,8 @@ static int hdmi_remove(struct platform_device *pdev)
 
 	clk_disable_unprepare(res->sclk_hdmi);
 	clk_disable_unprepare(res->hdmi);
+
+	cancel_delayed_work_sync(&hdata->hotplug_work);
 
 	put_device(&hdata->hdmiphy_port->dev);
 	put_device(&hdata->ddc_port->dev);
