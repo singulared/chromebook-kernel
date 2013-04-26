@@ -57,7 +57,7 @@ struct busfreq_data {
 	unsigned int sampling_rate;
 	struct kobject *busfreq_kobject;
 	struct busfreq_table *table[PPMU_TYPE_END];
-	unsigned long long time_in_state[PPMU_TYPE_END][LV_INT_END];
+	unsigned long long time_in_state[PPMU_TYPE_END][LV_MIF_END];
 	unsigned long long last_time[PPMU_TYPE_END];
 	unsigned int load_history[PPMU_END][LOAD_HISTORY_SIZE];
 	int index;
