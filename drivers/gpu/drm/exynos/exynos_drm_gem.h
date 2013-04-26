@@ -58,6 +58,8 @@ struct exynos_drm_gem_buf {
  * @size: size requested from user, in bytes and this size is aligned
  *	in page unit.
  * @vma: a pointer to vm_area.
+ * @resource_set: the KDS resource set held by the currently outstanding CPU
+ *	acquire (if any).
  * @flags: indicate memory type to allocated buffer and cache attruibute.
  *
  * P.S. this object would be transfered to user as kms_bo.handle so
@@ -68,7 +70,21 @@ struct exynos_drm_gem_obj {
 	struct exynos_drm_gem_buf	*buffer;
 	unsigned long			size;
 	struct vm_area_struct		*vma;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct kds_resource_set         *resource_set;
+#endif
 	unsigned int			flags;
+};
+
+/*
+ * exynos drm buffer linked list structure.
+ *
+ * @list: list link.
+ * @gexynos_gem_obj: struct exynos_drm_gem_obj that this entry points to.
+ */
+struct exynos_drm_gem_obj_node {
+	struct list_head		list;
+	struct exynos_drm_gem_obj	*exynos_gem_obj;
 };
 
 struct page **exynos_gem_get_pages(struct drm_gem_object *obj, gfp_t gfpmask);
@@ -129,6 +145,17 @@ int exynos_drm_gem_userptr_ioctl(struct drm_device *dev, void *data,
 /* get buffer information to memory region allocated by gem. */
 int exynos_drm_gem_get_ioctl(struct drm_device *dev, void *data,
 				      struct drm_file *file_priv);
+/*
+ * acquire gem object for CPU access.
+ */
+int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void* data,
+			       struct drm_file *file_priv);
+/*
+ * release gem object after CPU access.
+ */
+int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
+			       struct drm_file *file_priv);
+
 /*
  * acquire gem object for CPU access.
  */

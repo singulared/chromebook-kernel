@@ -230,9 +230,17 @@ struct exynos_drm_ipp_private {
 	struct list_head	event_list;
 };
 
+/*
+ * Exynos drm_file private structure.
+ *
+ * @g2d_priv: g2d private structs
+ * @ipp_priv: img processor private structs
+ * @gem_cpu_acquire_list: list of GEM objects we hold acquires on
+ */
 struct drm_exynos_file_private {
 	struct exynos_drm_g2d_private	*g2d_priv;
 	struct exynos_drm_ipp_private	*ipp_priv;
+	struct list_head		gem_cpu_acquire_list;
 };
 
 /*
