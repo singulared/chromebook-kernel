@@ -47,6 +47,8 @@
 
 #define get_hdmi_context(dev)	platform_get_drvdata(to_platform_device(dev))
 
+#define HOTPLUG_DEBOUNCE_MS		1100
+
 struct hdmi_resources {
 	struct clk			*hdmi;
 	struct clk			*sclk_hdmi;
@@ -144,8 +146,7 @@ struct hdmi_context {
 	unsigned int			external_irq;
 	unsigned int			internal_irq;
 	unsigned int			curr_irq;
-	struct workqueue_struct		*wq;
-	struct work_struct		hotplug_work;
+	struct timer_list		hotplug_timer;
 
 	struct i2c_client		*ddc_port;
 	struct i2c_client		*hdmiphy_port;
@@ -2099,10 +2100,9 @@ static struct exynos_panel_ops hdmi_ops = {
 /*
  * Handle hotplug events outside the interrupt handler proper.
  */
-static void hdmi_hotplug_func(struct work_struct *work)
+static void hdmi_hotplug_timer_func(unsigned long data)
 {
-	struct hdmi_context *hdata =
-		container_of(work, struct hdmi_context, hotplug_work);
+	struct hdmi_context *hdata = (struct hdmi_context *)data;
 
 	drm_helper_hpd_irq_event(hdata->drm_dev);
 }
@@ -2110,7 +2110,8 @@ static void hdmi_hotplug_func(struct work_struct *work)
 static irqreturn_t hdmi_irq_handler(int irq, void *arg)
 {
 	struct hdmi_context *hdata = arg;
-	u32 intc_flag;
+	u32 intc_flag, time_ms = HOTPLUG_DEBOUNCE_MS;
+
 	if (hdata->is_hdmi_powered_on) {
 		intc_flag = hdmi_reg_read(hdata, HDMI_INTC_FLAG);
 		/* clearing flags for HPD plug/unplug */
@@ -2126,10 +2127,17 @@ static irqreturn_t hdmi_irq_handler(int irq, void *arg)
 			hdmi_reg_writemask(hdata, HDMI_INTC_FLAG, ~0,
 				HDMI_INTC_FLAG_HPD_PLUG);
 		}
+
+		/*
+		 * No need to debounce if we're powered on, the hardware
+		 * has already done it for us.
+		 */
+		time_ms = 0;
 	}
 
 	if (hdata->drm_dev && hdata->hpd_handle)
-		queue_work(hdata->wq, &hdata->hotplug_work);
+		mod_timer(&hdata->hotplug_timer,
+				jiffies + msecs_to_jiffies(time_ms));
 
 	return IRQ_HANDLED;
 }
@@ -2393,21 +2401,11 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	hdata->external_irq = gpio_to_irq(hdata->hpd_gpio);
 
-	/* create workqueue and hotplug work */
-	hdata->wq = alloc_workqueue("exynos-drm-hdmi",
-			WQ_UNBOUND | WQ_NON_REENTRANT, 1);
-	if (hdata->wq == NULL) {
-		DRM_ERROR("Failed to create workqueue.\n");
-		ret = -ENOMEM;
-		goto err_hdmiphy;
-	}
-	INIT_WORK(&hdata->hotplug_work, hdmi_hotplug_func);
-
 	ret = request_irq(hdata->internal_irq, hdmi_irq_handler,
 			IRQF_SHARED, "int_hdmi", hdata);
 	if (ret) {
 		DRM_ERROR("request int interrupt failed.\n");
-		goto err_workqueue;
+		goto err_hdmiphy;
 	}
 	disable_irq(hdata->internal_irq);
 
@@ -2419,6 +2417,9 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 		goto err_int_irq;
 	}
 	disable_irq(hdata->external_irq);
+
+	setup_timer(&hdata->hotplug_timer, hdmi_hotplug_timer_func,
+			(unsigned long)hdata);
 
 	if (of_device_is_compatible(dev->of_node,
 		"samsung,exynos5-hdmi")) {
@@ -2445,8 +2446,6 @@ err_ext_irq:
 	free_irq(hdata->external_irq, hdata);
 err_int_irq:
 	free_irq(hdata->internal_irq, hdata);
- err_workqueue:
-	destroy_workqueue(hdata->wq);
 err_hdmiphy:
 	put_device(&hdata->hdmiphy_port->dev);
 err_ddc:
@@ -2478,8 +2477,7 @@ static int __devexit hdmi_remove(struct platform_device *pdev)
 	free_irq(hdata->internal_irq, hdata);
 	free_irq(hdata->external_irq, hdata);
 
-	cancel_work_sync(&hdata->hotplug_work);
-	destroy_workqueue(hdata->wq);
+	del_timer(&hdata->hotplug_timer);
 
 	clk_disable(res->hdmi);
 	clk_disable(res->sclk_hdmi);
