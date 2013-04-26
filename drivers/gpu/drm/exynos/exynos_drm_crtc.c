@@ -232,6 +232,12 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
+	/* We don't support flipping to non-RGBA buffers. */
+	if (exynos_drm_fb_get_buf_cnt(fb) != 1) {
+		DRM_ERROR("called page_flip with non-RGBA buffer\n");
+		return -EINVAL;
+	}
+
 	mutex_lock(&dev->struct_mutex);
 
 	/*
