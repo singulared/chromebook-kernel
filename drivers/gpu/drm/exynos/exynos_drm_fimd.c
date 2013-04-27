@@ -778,6 +778,7 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 	struct exynos_drm_manager *manager = subdrv->manager;
 	u32 val;
 
+	WARN_ON(ctx->suspended);
 	val = readl(ctx->regs + VIDINTCON1);
 
 	if (val & VIDINTCON1_INT_FRAME)

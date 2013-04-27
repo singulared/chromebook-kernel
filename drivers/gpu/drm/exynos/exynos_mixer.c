@@ -1073,6 +1073,8 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	u32 val, base, shadow;
 	int i;
 
+	WARN_ON(!ctx->powered);
+
 	spin_lock(&res->reg_slock);
 
 	/* read interrupt status for handling and clearing flags for VSYNC */
