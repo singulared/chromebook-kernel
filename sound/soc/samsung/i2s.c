@@ -999,6 +999,9 @@ probe_exit:
 		i2s_set_sysclk(dai, SAMSUNG_I2S_CDCLK,
 				0, SND_SOC_CLOCK_IN);
 
+	if (!is_secondary(i2s))
+		clk_disable_unprepare(i2s->clk);
+
 	return 0;
 }
 
