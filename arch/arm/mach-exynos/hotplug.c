@@ -91,13 +91,21 @@ static inline void cpu_leave_lowpower(void)
 	  : "cc");
 }
 
+/* power down each physical cpus */
+static void exynos_power_down_cpu(unsigned int cpu)
+{
+	void __iomem *power_base;
+
+	power_base = EXYNOS_ARM_CORE_CONFIGURATION(cpu);
+	__raw_writel(0, power_base);
+}
+
 static inline void platform_do_lowpower(unsigned int cpu, int *spurious)
 {
 	for (;;) {
 
-		/* make cpu1 to be turned off at next WFI command */
-		if (cpu == 1)
-			__raw_writel(0, S5P_ARM_CORE1_CONFIGURATION);
+		/* make cpu to be turned off at next WFI command */
+		exynos_power_down_cpu(cpu_logical_map(cpu));
 
 		/*
 		 * here's the WFI

@@ -40,9 +40,14 @@ static inline void __iomem *cpu_boot_reg_base(void)
 {
 	if (soc_is_exynos4210() && samsung_rev() == EXYNOS4210_REV_1_1)
 		return S5P_INFORM5;
+	else if (soc_is_exynos5420())
+		return S5P_VA_SYSRAM_NS + 0x1C;
 	return S5P_VA_SYSRAM;
 }
 
+/*
+ * Get the wake-up base address for secondary cores
+ */
 static inline void __iomem *cpu_boot_reg(int cpu)
 {
 	void __iomem *boot_reg;
@@ -95,11 +100,38 @@ static void __cpuinit exynos_secondary_init(unsigned int cpu)
 	spin_unlock(&boot_lock);
 }
 
+static int exynos_power_up_cpu(unsigned int cpu)
+{
+	unsigned long timeout = jiffies + msecs_to_jiffies(10);
+	unsigned int val;
+	void __iomem *power_base;
+
+	power_base = EXYNOS_ARM_CORE_CONFIGURATION(cpu);
+	val = __raw_readl(power_base + EXYNOS_ARM_CORE_X_STATUS_OFFSET);
+	if (!(val & EXYNOS_CORE_LOCAL_PWR_EN)) {
+		__raw_writel(EXYNOS_CORE_LOCAL_PWR_EN, power_base);
+
+		/* wait max 10 ms until cpu is on */
+		while (time_after(jiffies, timeout)) {
+			val = __raw_readl(power_base +
+					    EXYNOS_ARM_CORE_X_STATUS_OFFSET);
+
+			if ((val & EXYNOS_CORE_LOCAL_PWR_EN) ==
+			     EXYNOS_CORE_LOCAL_PWR_EN)
+				break;
+
+			mdelay(1);
+		}
+	}
+
+	return 0;
+}
+
 static int __cpuinit exynos_boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	unsigned long timeout;
 	unsigned long phys_cpu = cpu_logical_map(cpu);
-
+	int ret;
 	/*
 	 * Set synchronisation state between this boot processor
 	 * and the secondary one
@@ -116,27 +148,12 @@ static int __cpuinit exynos_boot_secondary(unsigned int cpu, struct task_struct 
 	 */
 	write_pen_release(phys_cpu);
 
-	if (!(__raw_readl(S5P_ARM_CORE1_STATUS) & S5P_CORE_LOCAL_PWR_EN)) {
-		__raw_writel(S5P_CORE_LOCAL_PWR_EN,
-			     S5P_ARM_CORE1_CONFIGURATION);
-
-		timeout = 10;
-
-		/* wait max 10 ms until cpu1 is on */
-		while ((__raw_readl(S5P_ARM_CORE1_STATUS)
-			& S5P_CORE_LOCAL_PWR_EN) != S5P_CORE_LOCAL_PWR_EN) {
-			if (timeout-- == 0)
-				break;
-
-			mdelay(1);
-		}
-
-		if (timeout == 0) {
-			printk(KERN_ERR "cpu1 power enable failed");
-			spin_unlock(&boot_lock);
-			return -ETIMEDOUT;
-		}
+	ret = exynos_power_up_cpu(cpu);
+	if (ret) {
+		spin_unlock(&boot_lock);
+		return ret;
 	}
+
 	/*
 	 * Send the secondary CPU a soft interrupt, thereby causing
 	 * the boot monitor to read the system wide flags register,
@@ -175,11 +192,17 @@ static void __init exynos_smp_init_cpus(void)
 {
 	void __iomem *scu_base = scu_base_addr();
 	unsigned int i, ncores;
+	struct device_node *cpu, *cpus;
 
-	if (soc_is_exynos5250())
-		ncores = 2;
-	else
+	cpus = of_find_node_by_path("/cpus");
+	if (cpus) {
+		ncores = 0;
+		for_each_child_of_node(cpus, cpu)
+			ncores++;
+	} else {
 		ncores = scu_base ? scu_get_core_count(scu_base) : 1;
+		pr_warn("/cpus node not defined: assuming %u cores\n", ncores);
+	}
 
 	/* sanity check */
 	if (ncores > nr_cpu_ids) {
@@ -198,7 +221,8 @@ static void __init exynos_smp_prepare_cpus(unsigned int max_cpus)
 {
 	int i;
 
-	if (!(soc_is_exynos5250() || soc_is_exynos5440()))
+	if (!(soc_is_exynos5250() || soc_is_exynos5420() ||
+						soc_is_exynos5440()))
 		scu_enable(scu_base_addr());
 
 	/*

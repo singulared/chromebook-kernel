@@ -295,6 +295,15 @@ static struct map_desc exynos5_iodesc[] __initdata = {
 	},
 };
 
+static struct map_desc exynos5420_iodesc[] __initdata = {
+	{
+		.virtual	= (unsigned long)S5P_VA_SYSRAM_NS,
+		.pfn		= __phys_to_pfn(EXYNOS5420_PA_SYSRAM_NS),
+		.length		= SZ_4K,
+		.type		= MT_DEVICE,
+	},
+};
+
 static struct map_desc exynos5440_iodesc0[] __initdata = {
 	{
 		.virtual	= (unsigned long)S3C_VA_UART,
@@ -438,6 +447,8 @@ static void __init exynos4_map_io(void)
 static void __init exynos5_map_io(void)
 {
 	iotable_init(exynos5_iodesc, ARRAY_SIZE(exynos5_iodesc));
+	if (soc_is_exynos5420())
+		iotable_init(exynos5420_iodesc, ARRAY_SIZE(exynos5420_iodesc));
 }
 
 static void __init exynos5440_map_io(void)
