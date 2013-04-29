@@ -14,6 +14,8 @@
 #ifndef _EXYNOS_DRM_FB_H_
 #define _EXYNOS_DRM_FB_H
 
+#include <linux/kref.h>
+
 #define to_exynos_fb(x)	container_of(x, struct exynos_drm_fb, fb)
 
 /*
@@ -24,6 +26,7 @@
  * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
  */
 struct exynos_drm_fb {
+	struct kref			refcount;
 	struct drm_framebuffer		fb;
 	unsigned int			buf_cnt;
 	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
@@ -59,5 +62,17 @@ unsigned int exynos_drm_fb_get_buf_cnt(struct drm_framebuffer *fb);
 void exynos_drm_fb_attach_dma_buf(struct drm_framebuffer *fb,
 				  struct dma_buf *buf);
 #endif
+
+void exynos_drm_fb_release(struct kref *kref);
+
+static inline void exynos_drm_fb_get(struct exynos_drm_fb *exynos_fb)
+{
+	kref_get(&exynos_fb->refcount);
+}
+
+static inline void exynos_drm_fb_put(struct exynos_drm_fb *exynos_fb)
+{
+	kref_put(&exynos_fb->refcount, exynos_drm_fb_release);
+}
 
 #endif

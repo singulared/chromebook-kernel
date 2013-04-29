@@ -72,14 +72,18 @@ void exynos_drm_fb_attach_dma_buf(struct drm_framebuffer *fb,
 }
 #endif
 
-static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
+void exynos_drm_fb_release(struct kref *kref)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct drm_framebuffer *fb;
+	struct exynos_drm_fb *exynos_fb;
 	unsigned int i;
 	dma_addr_t dma_addr;
 	unsigned long size;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	exynos_fb = container_of(kref, struct exynos_drm_fb, refcount);
+	fb = &exynos_fb->fb;
 
 	for (i = 0; i < ARRAY_SIZE(exynos_fb->exynos_gem_obj); i++) {
 		if (exynos_fb->exynos_gem_obj[i] == NULL)
@@ -110,6 +114,11 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 
 	kfree(exynos_fb);
 	exynos_fb = NULL;
+}
+
+static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
+{
+	exynos_drm_fb_put(to_exynos_fb(fb));
 }
 
 static int exynos_drm_fb_create_handle(struct drm_framebuffer *fb,
@@ -186,6 +195,8 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 
 	drm_helper_mode_fill_fb_struct(&exynos_fb->fb, mode_cmd);
 	exynos_fb->exynos_gem_obj[0] = exynos_gem_obj;
+
+	kref_init(&exynos_fb->refcount);
 
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
@@ -284,6 +295,8 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 
 		exynos_fb->exynos_gem_obj[i] = to_exynos_gem_obj(obj);
 	}
+
+	kref_init(&exynos_fb->refcount);
 
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
