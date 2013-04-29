@@ -5324,14 +5324,14 @@ static int i9xx_crtc_mode_set(struct drm_crtc *crtc,
 		dspcntr |= DISPPLANE_SEL_PIPE_B;
 
 	if (pipe == 0 && INTEL_INFO(dev)->gen < 4) {
-		/* Enable pixel doubling when the dot clock is > 90% of the (display)
+		/* Enable pixel doubling when the dot clock is > 85% of the (display)
 		 * core speed.
 		 *
 		 * XXX: No double-wide on 915GM pipe B. Is that the only reason for the
 		 * pipe == 0 check?
 		 */
 		if (mode->clock >
-		    dev_priv->display.get_display_clock_speed(dev) * 9 / 10)
+		    dev_priv->display.get_display_clock_speed(dev) * 17 / 20)
 			pipeconf |= PIPECONF_DOUBLE_WIDE;
 		else
 			pipeconf &= ~PIPECONF_DOUBLE_WIDE;
