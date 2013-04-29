@@ -284,6 +284,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		return ret;
 	}
 
+	exynos_drm_fb_get(exynos_fb);
+
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	flip_desc.fb = fb;
 	exynos_fb->rendered = false;
@@ -336,8 +338,9 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	return 0;
 
-fail_kds:
 fail_queue_full:
+fail_kds:
+	exynos_drm_fb_put(exynos_fb);
 	drm_vblank_put(dev, exynos_crtc->pipe);
 	return ret;
 #else
@@ -523,6 +526,8 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc_idx)
 
 	if (cur_descp->kds)
 		kds_resource_set_release(&cur_descp->kds);
+	if (cur_descp->fb)
+		exynos_drm_fb_put(to_exynos_fb(cur_descp->fb));
 	*cur_descp = next_desc;
 	kfifo_skip(&exynos_crtc->flip_fifo);
 
