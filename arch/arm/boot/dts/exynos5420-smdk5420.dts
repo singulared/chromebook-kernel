@@ -1,0 +1,53 @@
+/*
+ * SAMSUNG SMDK5420 board device tree source
+ *
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+/include/ "exynos5420.dtsi"
+
+/ {
+	model = "SAMSUNG SMDK5420 board based on EXYNOS5420";
+	compatible = "samsung,smdk5420", "samsung,exynos5420";
+
+	chosen {
+		bootargs = "console=ttySAC3,115200";
+	};
+
+	fixed-rate-clocks {
+		xxti {
+			compatible = "samsung,clock-xxti";
+			clock-frequency = <24000000>;
+		};
+	};
+
+	watchdog {
+		status = "okay";
+	};
+
+	rtc {
+		status = "okay";
+	};
+
+	serial@12C00000 {
+		status = "okay";
+	};
+
+	serial@12C10000 {
+		status = "okay";
+	};
+
+	serial@12C20000 {
+		status = "okay";
+	};
+
+	serial@12C30000 {
+		status = "okay";
+	};
+};
