@@ -44,6 +44,8 @@ struct exynos_drm_flip_desc {
 };
 #endif
 
+#define KDS_WAITALL_MAX_TRIES 15
+
 /*
  * Exynos specific crtc structure.
  *
@@ -75,6 +77,141 @@ struct exynos_drm_crtc {
 #endif
 };
 
+static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
+                                          struct drm_pending_vblank_event *e)
+{
+	struct timeval now;
+	unsigned long flags;
+
+	do_gettimeofday(&now);
+	e->event.sequence = 0;
+	e->event.tv_sec = now.tv_sec;
+	e->event.tv_usec = now.tv_usec;
+	spin_lock_irqsave(&dev->event_lock, flags);
+	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+	wake_up_interruptible(&e->base.file_priv->event_wait);
+}
+
+static void exynos_drm_crtc_update(struct drm_crtc *crtc,
+				   struct drm_framebuffer *fb)
+{
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct drm_plane *plane = exynos_crtc->plane;
+	unsigned int crtc_w;
+	unsigned int crtc_h;
+
+	crtc_w = fb->width - crtc->x;
+	crtc_h = fb->height - crtc->y;
+
+	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
+			      crtc->x, crtc->y, crtc_w, crtc_h);
+
+	exynos_plane_commit(exynos_crtc->plane);
+	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_ON);
+}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+static void exynos_drm_crtc_wait_and_release_kds(
+		struct exynos_drm_flip_desc *desc)
+{
+	struct exynos_drm_fb *exynos_fb;
+	struct exynos_drm_gem_obj *gem_ob;
+	struct dma_buf *buf;
+	unsigned long shared = 0UL;
+	struct kds_resource *resource_list;
+	struct kds_resource_set *resource_set;
+	int i;
+
+	if (!desc->fb) {
+		BUG_ON(desc->kds);
+		return;
+	}
+
+	if (desc->kds)
+		kds_resource_set_release(&desc->kds);
+
+	exynos_fb = to_exynos_fb(desc->fb);
+	gem_ob = (struct exynos_drm_gem_obj *)exynos_fb->exynos_gem_obj[0];
+	buf = gem_ob->base.export_dma_buf;
+	if (!buf)
+		return;
+
+	if (unlikely(!exynos_fb->dma_buf)) {
+		get_dma_buf(buf);
+		exynos_fb->dma_buf = buf;
+	}
+	BUG_ON(exynos_fb->dma_buf !=  buf);
+
+	/* Synchronously wait for the frame to render */
+	resource_list = get_dma_buf_kds_resource(buf);
+
+	for (i = 0; i < KDS_WAITALL_MAX_TRIES; i++) {
+		resource_set = kds_waitall(1, &shared, &resource_list,
+				msecs_to_jiffies(1000));
+		if (PTR_ERR(resource_set) != -ERESTARTSYS)
+			break;
+	}
+	if (IS_ERR(resource_set)) {
+		DRM_ERROR("kds_waitall failed with ret=%ld\n",
+				PTR_ERR(resource_set));
+		return;
+	} else if (!resource_set) {
+		DRM_ERROR("kds_waitall timed out\n");
+		return;
+	}
+
+	/* Clean up the remaining resource so we're not holding onto anything */
+	kds_resource_set_release(&resource_set);
+}
+
+static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
+{
+	struct drm_device *drm_dev = crtc->dev;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_flip_desc *cur_desc = &exynos_crtc->scanout_desc;
+	struct exynos_drm_flip_desc next_desc;
+	unsigned int ret;
+
+	if (cur_desc->kds)
+		kds_resource_set_release(&cur_desc->kds);
+
+	/* If there aren't any pending frames, be merry and exit */
+	if (!kfifo_len(&exynos_crtc->flip_fifo))
+		return;
+
+	/* Loop through the fifo and drop all frames except the last */
+	while (kfifo_len(&exynos_crtc->flip_fifo) > 1) {
+		ret = kfifo_get(&exynos_crtc->flip_fifo, &next_desc);
+		BUG_ON(!ret);
+
+		if (next_desc.fb)
+			exynos_drm_fb_put(to_exynos_fb(next_desc.fb));
+		if (next_desc.kds)
+			kds_resource_set_release(&next_desc.kds);
+	}
+
+	/* Now we'll promote the pending frame to front */
+	ret = kfifo_get(&exynos_crtc->flip_fifo, &next_desc);
+	BUG_ON(!ret);
+
+	atomic_set(&exynos_crtc->flip_pending, 0);
+
+	exynos_drm_crtc_wait_and_release_kds(&next_desc);
+
+	to_exynos_fb(next_desc.fb)->rendered = true;
+	exynos_drm_crtc_update(crtc, next_desc.fb);
+	to_exynos_fb(next_desc.fb)->prepared = true;
+
+	if (exynos_crtc->event) {
+		exynos_drm_crtc_flip_complete(drm_dev, exynos_crtc->event);
+		exynos_crtc->event = NULL;
+	}
+
+	*cur_desc = next_desc;
+}
+#endif
+
 static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
@@ -88,6 +225,10 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 
 	exynos_drm_fn_encoder(crtc, &mode, exynos_drm_encoder_crtc_dpms);
 	exynos_crtc->dpms = mode;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (mode != DRM_MODE_DPMS_ON)
+		exynos_drm_crtc_release_flips(crtc);
+#endif
 }
 
 static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
@@ -149,24 +290,6 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	return 0;
 }
 
-static void exynos_drm_crtc_update(struct drm_crtc *crtc,
-				   struct drm_framebuffer *fb)
-{
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct drm_plane *plane = exynos_crtc->plane;
-	unsigned int crtc_w;
-	unsigned int crtc_h;
-
-	crtc_w = fb->width - crtc->x;
-	crtc_h = fb->height - crtc->y;
-
-	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
-			      crtc->x, crtc->y, crtc_w, crtc_h);
-
-	exynos_plane_commit(exynos_crtc->plane);
-	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_ON);
-}
-
 static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
@@ -212,22 +335,6 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.load_lut	= exynos_drm_crtc_load_lut,
 	.disable	= exynos_drm_crtc_disable,
 };
-
-static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
-                                          struct drm_pending_vblank_event *e)
-{
-	struct timeval now;
-	unsigned long flags;
-
-	do_gettimeofday(&now);
-	e->event.sequence = 0;
-	e->event.tv_sec = now.tv_sec;
-	e->event.tv_usec = now.tv_usec;
-	spin_lock_irqsave(&dev->event_lock, flags);
-	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
-	spin_unlock_irqrestore(&dev->event_lock, flags);
-	wake_up_interruptible(&e->base.file_priv->event_wait);
-}
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 void exynos_drm_kds_callback(void *callback_parameter,
