@@ -657,4 +657,6 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc_idx)
 		exynos_drm_crtc_flip_complete(dev, exynos_crtc->event);
 		exynos_crtc->event = NULL;
 	}
+
+	drm_vblank_put(dev, exynos_crtc->pipe);
 }
