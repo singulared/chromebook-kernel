@@ -1072,10 +1072,11 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val, base, shadow;
 	int i;
+	unsigned long flags;
 
 	WARN_ON(!ctx->powered);
 
-	spin_lock(&res->reg_slock);
+	spin_lock_irqsave(&res->reg_slock, flags);
 
 	/* read interrupt status for handling and clearing flags for VSYNC */
 	val = mixer_reg_read(res, MXR_INT_STATUS);
@@ -1125,7 +1126,7 @@ out:
 	}
 	mixer_reg_write(res, MXR_INT_STATUS, val);
 
-	spin_unlock(&res->reg_slock);
+	spin_unlock_irqrestore(&res->reg_slock, flags);
 
 	return IRQ_HANDLED;
 }
