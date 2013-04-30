@@ -21,6 +21,33 @@
 #include "exynos_drm_gem.h"
 #include "exynos_drm_buf.h"
 
+#ifdef CONFIG_DRM_EXYNOS_DEBUG
+static void exynos_gem_info_add_obj(struct drm_gem_object *obj)
+{
+	struct exynos_drm_private *dev_priv = obj->dev->dev_private;
+
+	atomic_inc(&dev_priv->mm.object_count);
+	atomic_add(obj->size, &dev_priv->mm.object_memory);
+}
+
+static void exynos_gem_info_remove_obj(struct drm_gem_object *obj)
+{
+	struct exynos_drm_private *dev_priv = obj->dev->dev_private;
+
+	atomic_dec(&dev_priv->mm.object_count);
+	atomic_sub(obj->size, &dev_priv->mm.object_memory);
+}
+#else
+static void exynos_gem_info_add_obj(struct drm_gem_object *obj)
+{
+}
+
+static void exynos_gem_info_remove_obj(struct drm_gem_object *obj)
+{
+}
+#endif
+
+
 static unsigned int convert_to_vm_err_msg(int msg)
 {
 	unsigned int out_msg;
@@ -158,6 +185,7 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 
 	exynos_drm_free_buf(obj->dev, exynos_gem_obj->flags, buf);
 
+	exynos_gem_info_remove_obj(obj);
 out:
 	exynos_drm_fini_buf(obj->dev, buf);
 	exynos_gem_obj->buffer = NULL;
@@ -240,6 +268,8 @@ struct exynos_drm_gem_obj *exynos_drm_gem_create(struct drm_device *dev,
 		drm_gem_object_release(&exynos_gem_obj->base);
 		goto err_fini_buf;
 	}
+
+	exynos_gem_info_add_obj(&exynos_gem_obj->base);
 
 	return exynos_gem_obj;
 

@@ -267,6 +267,12 @@ struct exynos_drm_private {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_callback kds_cb;
 #endif
+#ifdef CONFIG_DRM_EXYNOS_DEBUG
+	struct {
+		atomic_t object_memory;
+		atomic_t object_count;
+	} mm;
+#endif
 
 	unsigned long da_start;
 	unsigned long da_space_size;

@@ -16,6 +16,14 @@ config DRM_EXYNOS_IOMMU
 	help
 	  Choose this option if you want to use IOMMU feature for DRM.
 
+config DRM_EXYNOS_DEBUG
+	bool "Build in Exynos DRM's debugfs support"
+	depends on DRM_EXYNOS && DEBUG_FS
+	default y
+	help
+	  Say Y here if you want Exynos DRM to output debugging information
+	  via debugfs.
+
 config DRM_EXYNOS_DMABUF
 	bool "EXYNOS DRM DMABUF"
 	depends on DRM_EXYNOS
