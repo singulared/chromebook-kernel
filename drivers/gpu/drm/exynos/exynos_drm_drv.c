@@ -124,6 +124,13 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	exynos_drm_mode_config_init(dev);
 
 	/*
+	 * with vblank_disable_allowed = 1, vblank interrupt will be disabled
+	 * by drm timer once a current process gives up ownership of
+	 * vblank event (after drm_vblank_put function is called).
+	 */
+	dev->vblank_disable_allowed = 1;
+
+	/*
 	 * EXYNOS4 is enough to have two CRTCs and each crtc would be used
 	 * without dependency of hardware.
 	 */
