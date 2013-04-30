@@ -99,7 +99,6 @@ struct fimd_context {
 	struct fimd_win_data		win_data[WINDOWS_NR];
 	unsigned int			clkdiv;
 	unsigned int			default_win;
-	unsigned long			irq_flags;
 	u32				vidcon0;
 	u32				vidcon1;
 	bool				suspended;
@@ -642,19 +641,17 @@ static int fimd_enable_vblank(struct device *dev)
 	if (ctx->suspended)
 		return -EPERM;
 
-	if (!test_and_set_bit(0, &ctx->irq_flags)) {
-		val = readl(ctx->regs + VIDINTCON0);
+	val = readl(ctx->regs + VIDINTCON0);
 
-		val |= VIDINTCON0_INT_ENABLE;
-		val |= VIDINTCON0_INT_FRAME;
+	val |= VIDINTCON0_INT_ENABLE;
+	val |= VIDINTCON0_INT_FRAME;
 
-		val &= ~VIDINTCON0_FRAMESEL0_MASK;
-		val |= VIDINTCON0_FRAMESEL0_VSYNC;
-		val &= ~VIDINTCON0_FRAMESEL1_MASK;
-		val |= VIDINTCON0_FRAMESEL1_NONE;
+	val &= ~VIDINTCON0_FRAMESEL0_MASK;
+	val |= VIDINTCON0_FRAMESEL0_VSYNC;
+	val &= ~VIDINTCON0_FRAMESEL1_MASK;
+	val |= VIDINTCON0_FRAMESEL1_NONE;
 
-		writel(val, ctx->regs + VIDINTCON0);
-	}
+	writel(val, ctx->regs + VIDINTCON0);
 
 	return 0;
 }
@@ -669,31 +666,28 @@ static void fimd_disable_vblank(struct device *dev)
 	if (ctx->suspended)
 		return;
 
-	if (test_and_clear_bit(0, &ctx->irq_flags)) {
-		val = readl(ctx->regs + VIDINTCON0);
+	val = readl(ctx->regs + VIDINTCON0);
 
-		val &= ~VIDINTCON0_INT_FRAME;
-		val &= ~VIDINTCON0_INT_ENABLE;
+	val &= ~VIDINTCON0_INT_FRAME;
+	val &= ~VIDINTCON0_INT_ENABLE;
 
-		writel(val, ctx->regs + VIDINTCON0);
-	}
+	writel(val, ctx->regs + VIDINTCON0);
 }
 
 static void fimd_wait_for_vblank(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
+	struct drm_device *drm_dev = subdrv->drm_dev;
+	struct exynos_drm_manager *manager = subdrv->manager;
 	u32 val;
-	bool vblank_enabled = true;
 
 	if (ctx->suspended)
 		return;
 
 	val = readl(ctx->regs + VIDINTCON0);
 
-	if (!(val & VIDINTCON0_INT_FRAME)) {
-		vblank_enabled = false;
-		fimd_enable_vblank(dev);
-	}
+	drm_vblank_get(drm_dev, manager->pipe);
 
 	atomic_set(&ctx->wait_vsync_event, 1);
 
@@ -706,8 +700,7 @@ static void fimd_wait_for_vblank(struct device *dev)
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 
-	if (!vblank_enabled)
-		fimd_disable_vblank(dev);
+	drm_vblank_put(drm_dev, manager->pipe);
 }
 
 static void fimd_complete_scanout(struct device *dev, dma_addr_t dma_addr,
@@ -959,9 +952,6 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 		ctx->suspended = false;
 
 		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
-		/* if vblank was enabled status, enable it again. */
-		if (test_and_clear_bit(0, &ctx->irq_flags))
-			fimd_enable_vblank(dev);
 
 		fimd_window_resume(dev);
 
@@ -977,8 +967,6 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 		 * a destroyed buffer later.
 		 */
 		fimd_window_suspend(dev);
-
-		fimd_disable_vblank(dev);
 
 		fimd_clock(ctx, false);
 		ctx->suspended = true;
