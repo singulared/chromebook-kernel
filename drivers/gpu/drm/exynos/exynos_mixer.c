@@ -1365,6 +1365,7 @@ static int mixer_resume(struct device *dev)
 {
 	struct exynos_drm_hdmi_context *drm_hdmi_ctx = get_mixer_context(dev);
 	struct mixer_context *ctx = drm_hdmi_ctx->ctx;
+	struct drm_device *drm_dev = drm_hdmi_ctx->drm_dev;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
@@ -1374,6 +1375,10 @@ static int mixer_resume(struct device *dev)
 	}
 
 	mixer_poweron(ctx);
+
+	/* Restore the vblank interrupts to whichever state DRM wants them. */
+	if (ctx->pipe != -1 && drm_dev->vblank_enabled[ctx->pipe])
+		mixer_enable_vblank(ctx, ctx->pipe);
 
 	return 0;
 }

@@ -1230,6 +1230,9 @@ static int fimd_suspend(struct device *dev)
 static int fimd_resume(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
+	struct drm_device *drm_dev = subdrv->drm_dev;
+	struct exynos_drm_manager *manager = subdrv->manager;
 
 	/*
 	 * if entered to sleep when lcd panel was on, the usage_count
@@ -1250,6 +1253,14 @@ static int fimd_resume(struct device *dev)
 		 * so fimd_apply function should be called at here.
 		 */
 		fimd_apply(dev);
+
+		/*
+		 * Restore the vblank interrupts to whichever state DRM
+		 * wants them.
+		 */
+		if (manager->pipe != -1 &&
+		    drm_dev->vblank_enabled[manager->pipe])
+			fimd_enable_vblank(dev);
 	}
 
 	return 0;
