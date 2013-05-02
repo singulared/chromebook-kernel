@@ -594,12 +594,20 @@ static const struct usb_device_id	products [] = {
 	.driver_info = 0,
 },
 
+/* Temporarily re-enable the support of Novatel E362 in cdc_ether, if qmi_wwan
+ * is not enabled, as Chromium OS has not yet switched to use the qmi_wwan
+ * driver (crbug.com/217324).
+ *
+ * TODO(benchan): Revert this change once crbug.com/217324 is fixed.
+ */
+#ifdef CONFIG_USB_NET_QMI_WWAN
 /* Novatel E362 - handled by qmi_wwan */
 {
 	USB_DEVICE_AND_INTERFACE_INFO(NOVATEL_VENDOR_ID, 0x9010, USB_CLASS_COMM,
 			USB_CDC_SUBCLASS_ETHERNET, USB_CDC_PROTO_NONE),
 	.driver_info = 0,
 },
+#endif
 
 /* Dell Wireless 5800 (Novatel E362) - handled by qmi_wwan */
 {
@@ -681,6 +689,10 @@ static const struct usb_device_id	products [] = {
 	.bInterfaceSubClass	= USB_CDC_SUBCLASS_ETHERNET,
 	.bInterfaceProtocol	= USB_CDC_PROTO_NONE,
 	.driver_info = (unsigned long)&wwan_info,
+}, {
+	/* Novatel Wireless E362 */
+	USB_DEVICE(NOVATEL_VENDOR_ID, 0x9010),
+	.driver_info = (unsigned long) &cdc_info,
 }, {
 	USB_INTERFACE_INFO(USB_CLASS_COMM, USB_CDC_SUBCLASS_ETHERNET,
 			USB_CDC_PROTO_NONE),

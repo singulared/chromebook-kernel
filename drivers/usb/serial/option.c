@@ -732,10 +732,20 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_HSPA_EMBEDDED_HIGHSPEED) },
 	{ USB_DEVICE(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_G1) },
 	{ USB_DEVICE(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_G1_M) },
+	/*
+	 * Temporarily take out the VID/PID 1410:a010 to ensure that the
+	 * qcserial driver is always used for the Novatel Gobi 2000 modem.
+	 * See crosbug.com/32819 for details.
+	 *
+	 * TODO(benchan): Revert this after deprecating support for Gobi 2000
+	 * modems.
+	 */
+	/*
 	{ USB_DEVICE(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_G2) },
+	*/
 	/* Novatel Ovation MC551 a.k.a. Verizon USB551L */
 	{ USB_DEVICE_AND_INTERFACE_INFO(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_MC551, 0xff, 0xff, 0xff) },
-	{ USB_DEVICE_AND_INTERFACE_INFO(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_E362, 0xff, 0xff, 0xff) },
+	{ USB_DEVICE(NOVATELWIRELESS_VENDOR_ID, NOVATELWIRELESS_PRODUCT_E362) },
 
 	{ USB_DEVICE(AMOI_VENDOR_ID, AMOI_PRODUCT_H01) },
 	{ USB_DEVICE(AMOI_VENDOR_ID, AMOI_PRODUCT_H01A) },
@@ -1445,6 +1455,17 @@ static int option_attach(struct usb_serial *serial)
 	const struct usb_device_id *id;
 	struct usb_wwan_intf_private *data;
 	struct option_private *priv;
+
+
+	/* For Novatel E362 modem, set to configuration #1 if identity morphing
+	 * is detected.
+	 */
+	if (serial->dev->descriptor.idVendor == NOVATELWIRELESS_VENDOR_ID &&
+		serial->dev->descriptor.idProduct == NOVATELWIRELESS_PRODUCT_E362 &&
+		serial->dev->actconfig->desc.bConfigurationValue != 1) {
+		if (usb_driver_set_configuration(serial->dev, 1) != 0)
+			return -ENODEV;
+	}
 
 	data = kzalloc(sizeof(struct usb_wwan_intf_private), GFP_KERNEL);
 	if (!data)
