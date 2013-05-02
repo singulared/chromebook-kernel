@@ -646,6 +646,11 @@
 #define SP_TX_AUD_INTERFACE_CTRL6 0x7A69
 
 /***************************************************************/
+/*AUX channel*/
+
+#define AUX_DPCD 0x09
+
+/***************************************************************/
 /*Definition of DPCD*/
 
 #define DPCD_REV 0x00000

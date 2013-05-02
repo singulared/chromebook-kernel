@@ -26,6 +26,8 @@
 #include "anx7808regs.h"
 
 #define ANX7808_DEVICE_ID 0x7808
+#define AUX_WAIT_MS 100
+#define AUX_BUFFER_SIZE 0x10
 
 struct anx7808_data {
 	int pd_gpio;
@@ -73,7 +75,7 @@ static int anx7808_read_reg(struct anx7808_data *anx7808, uint16_t addr,
 		return -EINVAL;
 	}
 
-	ret = i2c_smbus_read_byte_data(client, addr & 0xff);
+	ret = i2c_smbus_read_byte_data(client, addr & 0xFF);
 	if (ret < 0) {
 		DRM_ERROR("Failed to read i2c addr=%04x.\n", addr);
 		*value = 0;
@@ -81,6 +83,45 @@ static int anx7808_read_reg(struct anx7808_data *anx7808, uint16_t addr,
 	}
 	*value = ret;
 	return 0;
+}
+
+static int anx7808_write_reg(struct anx7808_data *anx7808, uint16_t addr,
+			     uint8_t value)
+{
+	int ret = 0;
+	struct i2c_client *client = anx7808_addr_to_client(anx7808, addr);
+
+	if (client == NULL)
+		return -EINVAL;
+
+	ret = i2c_smbus_write_byte_data(client, addr & 0xFF, value);
+	if (ret < 0) {
+		DRM_ERROR("Failed to write i2c addr=%04x.\n", addr);
+		return -EIO;
+	}
+	return 0;
+}
+
+static int anx7808_set_bits(struct anx7808_data *anx7808, uint16_t addr,
+			    uint8_t bits)
+{
+	uint8_t c;
+	int ret = 0;
+	ret = anx7808_read_reg(anx7808, addr, &c);
+	if (ret)
+		return ret;
+	return anx7808_write_reg(anx7808, addr, c | bits);
+}
+
+static int anx7808_clear_bits(struct anx7808_data *anx7808, uint16_t addr,
+			      uint8_t bits)
+{
+	uint8_t c;
+	int ret = 0;
+	ret = anx7808_read_reg(anx7808, addr, &c);
+	if (ret)
+		return ret;
+	return anx7808_write_reg(anx7808, addr, c & (~bits));
 }
 
 static int anx7808_power_on(struct anx7808_data *anx7808)
@@ -140,9 +181,84 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 	return 0;
 }
 
+static int anx7808_aux_wait(struct anx7808_data *anx7808)
+{
+	int err;
+	uint8_t status;
+	unsigned long start = jiffies;
+
+	while ((jiffies - start) <= msecs_to_jiffies(AUX_WAIT_MS)) {
+		err = anx7808_read_reg(anx7808, SP_TX_AUX_STATUS, &status);
+		if (err)
+			return err;
+		if (!(status & AUX_BUSY))
+			break;
+		usleep_range(100, 200);
+	}
+
+	if (status) {
+		DRM_ERROR("Failed to read AUX channel: 0x%02x\n", status);
+		return -EIO;
+	}
+	return 0;
+}
+
+static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
+			    uint8_t cmd, uint8_t count, uint8_t *pBuf)
+{
+	int i;
+	int err = 0;
+	int addrl = (addr >> 0) & 0xFF;
+	int addrm = (addr >> 8) & 0xFF;
+	int addrh = (addr >> 16) & 0x0F;
+
+	if (count > AUX_BUFFER_SIZE)
+		return -EINVAL;
+
+	err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_COUNT_REG, 0x80);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_CTRL_REG,
+				 ((count - 1) << 4) | cmd);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_15_8_REG, addrm);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_19_16_REG, addrh);
+	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
+	if (err)
+		return -EIO;
+	usleep_range(2000, 4000);
+
+	err = anx7808_aux_wait(anx7808);
+	if (err)
+		return err;
+
+	for (i = 0; i < count; i++)
+		err |= anx7808_read_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
+					pBuf + i);
+	if (err)
+		return -EIO;
+
+	return 0;
+}
+
+static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
+				 uint8_t count, uint8_t *pBuf)
+{
+	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, pBuf);
+}
+
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
+	struct anx7808_data *anx7808 = data;
+	uint8_t version;
+
 	DRM_INFO("Detected cable insertion.\n");
+
+	anx7808_power_on(anx7808);
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
+
+	anx7808_aux_dpcd_read(anx7808, US_COMM_2, 1, &version);
+	DRM_DEBUG_KMS("ANX7730 Firmware version 0x%02x.\n", (version & 0x7f));
 
 	return IRQ_HANDLED;
 }
