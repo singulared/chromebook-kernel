@@ -998,8 +998,6 @@ static struct exynos_mixer_ops mixer_ops = {
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
 	.dpms			= mixer_dpms,
-
-	/* overlay */
 	.win_mode_set		= mixer_win_mode_set,
 	.win_commit		= mixer_win_commit,
 	.win_disable		= mixer_win_disable,

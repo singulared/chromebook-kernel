@@ -522,12 +522,6 @@ static void fimd_win_disable(struct device *dev, int zpos)
 	win_data->enabled = false;
 }
 
-static struct exynos_drm_overlay_ops fimd_overlay_ops = {
-	.mode_set = fimd_win_mode_set,
-	.commit = fimd_win_commit,
-	.disable = fimd_win_disable,
-};
-
 static void fimd_dpms(struct device *subdrv_dev, int mode)
 {
 	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
@@ -566,7 +560,6 @@ static void fimd_apply(struct device *subdrv_dev)
 	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
 	struct exynos_drm_manager *mgr = ctx->subdrv.manager;
 	struct exynos_drm_manager_ops *mgr_ops = mgr->ops;
-	struct exynos_drm_overlay_ops *ovl_ops = mgr->overlay_ops;
 	struct fimd_win_data *win_data;
 	int i;
 
@@ -574,8 +567,8 @@ static void fimd_apply(struct device *subdrv_dev)
 
 	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
-		if (win_data->enabled && (ovl_ops && ovl_ops->commit))
-			ovl_ops->commit(subdrv_dev, i);
+		if (win_data->enabled && (mgr_ops && mgr_ops->win_commit))
+			mgr_ops->win_commit(subdrv_dev, i);
 	}
 
 	if (mgr_ops && mgr_ops->commit)
@@ -714,12 +707,14 @@ static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
+	.win_mode_set = fimd_win_mode_set,
+	.win_commit = fimd_win_commit,
+	.win_disable = fimd_win_disable,
 };
 
 static struct exynos_drm_manager fimd_manager = {
 	.pipe		= -1,
 	.ops		= &fimd_manager_ops,
-	.overlay_ops	= &fimd_overlay_ops,
 	.display_ops	= &fimd_display_ops,
 };
 
