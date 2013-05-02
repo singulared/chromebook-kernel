@@ -21,6 +21,7 @@
 #ifdef CONFIG_UMP
 #include <linux/ump-common.h>
 #endif				/* CONFIG_UMP */
+#include <plat/cpu.h>
 
 /* Specifies how many attributes are permitted in the config (excluding terminating attribute).
  * This is used in validation function so we can detect if configuration is properly terminated. This value can be
@@ -150,8 +151,17 @@
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 
 extern kbase_platform_config platform_config;
+extern const kbase_attribute config_attributes_exynos5250[];
+extern const kbase_attribute config_attributes_exynos5420[];
+
 kbase_platform_config *kbasep_get_platform_config(void)
 {
+	if (soc_is_exynos5250())
+		platform_config.attributes = config_attributes_exynos5250;
+	else if (soc_is_exynos5420())
+		platform_config.attributes = config_attributes_exynos5420;
+
+	platform_config.midgard_type = KBASE_MALI_T604;
 	return &platform_config;
 }
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
