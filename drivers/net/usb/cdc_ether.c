@@ -482,6 +482,7 @@ static const struct driver_info wwan_info = {
 #define NOVATEL_VENDOR_ID	0x1410
 #define ZTE_VENDOR_ID		0x19D2
 #define DELL_VENDOR_ID		0x413C
+#define REALTEK_VENDOR_ID	0x0bda
 
 static const struct usb_device_id	products [] = {
 /*
@@ -622,6 +623,15 @@ static const struct usb_device_id	products [] = {
 			USB_CDC_SUBCLASS_ETHERNET, USB_CDC_PROTO_NONE),
 	.driver_info = 0,
 },
+
+/* Realtek RTL8152 Based USB 2.0 Ethernet Adapters */
+#if defined(CONFIG_USB_RTL8152) || defined(CONFIG_USB_RTL8152_MODULE)
+{
+	USB_DEVICE_AND_INTERFACE_INFO(REALTEK_VENDOR_ID, 0x8152, USB_CLASS_COMM,
+			USB_CDC_SUBCLASS_ETHERNET, USB_CDC_PROTO_NONE),
+	.driver_info = 0,
+},
+#endif
 
 /*
  * WHITELIST!!!
