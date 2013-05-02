@@ -32,6 +32,7 @@ struct anx7808_data {
 	int reset_gpio;
 	int intp_gpio;
 	int cable_det_gpio;
+	int cable_det_irq;
 	struct regulator *vdd_mydp;
 	struct i2c_client *tx_p0;
 	struct i2c_client *tx_p1;
@@ -137,6 +138,13 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 	}
 	DRM_INFO("ANX7808 found.\n");
 	return 0;
+}
+
+static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
+{
+	DRM_INFO("Detected cable insertion.\n");
+
+	return IRQ_HANDLED;
 }
 
 static void anx7808_free_gpios(struct anx7808_data *anx7808)
@@ -272,6 +280,23 @@ static int anx7808_probe(struct i2c_client *client,
 	anx7808_power_off(anx7808);
 	if (ret)
 		goto err_i2c;
+
+	anx7808->cable_det_irq = gpio_to_irq(anx7808->cable_det_gpio);
+	if (anx7808->cable_det_irq < 0) {
+		DRM_ERROR("Failed to get irq: %d\n", anx7808->cable_det_irq);
+		goto err_i2c;
+	}
+
+	ret = devm_request_irq(&client->dev,
+			       anx7808->cable_det_irq,
+			       anx7808_cable_det_isr,
+			       IRQF_TRIGGER_RISING,
+			       "anx7808_cable_det",
+			       anx7808);
+	if (ret < 0) {
+		DRM_ERROR("Failed to request irq: %d\n", ret);
+		goto err_i2c;
+	}
 
 	DRM_INFO("ANX7808 initialization successful.\n");
 
