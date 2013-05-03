@@ -2075,12 +2075,18 @@ haswell_update_linetime_wm(struct drm_device *dev, struct drm_crtc *crtc)
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	enum pipe pipe = intel_crtc->pipe;
 	struct drm_display_mode *mode = &intel_crtc->config.adjusted_mode;
+	int target_clock;
 	u32 temp;
 
 	if (!intel_crtc_active(crtc)) {
 		I915_WRITE(PIPE_WM_LINETIME(pipe), 0);
 		return;
 	}
+
+	if (intel_crtc->config.pixel_target_clock)
+		target_clock = intel_crtc->config.pixel_target_clock;
+	else
+		target_clock = intel_crtc->config.adjusted_mode.clock;
 
 	temp = I915_READ(PIPE_WM_LINETIME(pipe));
 	temp &= ~PIPE_WM_LINETIME_MASK;
@@ -2089,7 +2095,7 @@ haswell_update_linetime_wm(struct drm_device *dev, struct drm_crtc *crtc)
 	 * row at the given clock rate, multiplied by 8.
 	 * */
 	temp |= PIPE_WM_LINETIME_TIME(
-		DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, mode->clock));
+		DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, target_clock));
 
 	/* IPS watermarks are only used by pipe A, and are ignored by
 	 * pipes B and C.  They are calculated similarly to the common
