@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/regmap.h>
 #include <linux/mfd/s5m87xx/s5m-core.h>
 
 struct s5m_irq_data {
@@ -188,8 +189,8 @@ static void s5m8767_irq_sync_unlock(struct irq_data *data)
 	for (i = 0; i < ARRAY_SIZE(s5m87xx->irq_masks_cur); i++) {
 		if (s5m87xx->irq_masks_cur[i] != s5m87xx->irq_masks_cache[i]) {
 			s5m87xx->irq_masks_cache[i] = s5m87xx->irq_masks_cur[i];
-			s5m_reg_write(s5m87xx, S5M8767_REG_INT1M + i,
-					s5m87xx->irq_masks_cur[i]);
+			regmap_write(s5m87xx->pmic, S5M8767_REG_INT1M + i,
+				     s5m87xx->irq_masks_cur[i]);
 		}
 	}
 
@@ -243,8 +244,8 @@ static void s5m8763_irq_sync_unlock(struct irq_data *data)
 	for (i = 0; i < ARRAY_SIZE(s5m87xx->irq_masks_cur); i++) {
 		if (s5m87xx->irq_masks_cur[i] != s5m87xx->irq_masks_cache[i]) {
 			s5m87xx->irq_masks_cache[i] = s5m87xx->irq_masks_cur[i];
-			s5m_reg_write(s5m87xx, S5M8763_REG_IRQM1 + i,
-					s5m87xx->irq_masks_cur[i]);
+			regmap_write(s5m87xx->pmic, S5M8763_REG_IRQM1 + i,
+				     s5m87xx->irq_masks_cur[i]);
 		}
 	}
 
@@ -286,8 +287,8 @@ static irqreturn_t s5m8767_irq_thread(int irq, void *data)
 	int i;
 
 
-	ret = s5m_bulk_read(s5m87xx, S5M8767_REG_INT1,
-				NUM_IRQ_REGS - 1, irq_reg);
+	ret = regmap_bulk_read(s5m87xx->pmic, S5M8767_REG_INT1,
+			       irq_reg, NUM_IRQ_REGS - 1);
 	if (ret < 0) {
 		dev_err(s5m87xx->dev, "Failed to read interrupt register: %d\n",
 				ret);
@@ -312,8 +313,8 @@ static irqreturn_t s5m8763_irq_thread(int irq, void *data)
 	int ret;
 	int i;
 
-	ret = s5m_bulk_read(s5m87xx, S5M8763_REG_IRQ1,
-				NUM_IRQ_REGS, irq_reg);
+	ret = regmap_bulk_read(s5m87xx->pmic, S5M8763_REG_IRQ1,
+			       irq_reg, NUM_IRQ_REGS);
 	if (ret < 0) {
 		dev_err(s5m87xx->dev, "Failed to read interrupt register: %d\n",
 				ret);
@@ -379,12 +380,12 @@ int s5m_irq_init(struct s5m87xx_dev *s5m87xx)
 		for (i = 0; i < NUM_IRQ_REGS; i++) {
 			s5m87xx->irq_masks_cur[i] = 0xff;
 			s5m87xx->irq_masks_cache[i] = 0xff;
-			s5m_reg_write(s5m87xx, S5M8763_REG_IRQM1 + i,
-						0xff);
+			regmap_write(s5m87xx->pmic, S5M8763_REG_IRQM1 + i,
+				     0xff);
 		}
 
-		s5m_reg_write(s5m87xx, S5M8763_REG_STATUSM1, 0xff);
-		s5m_reg_write(s5m87xx, S5M8763_REG_STATUSM2, 0xff);
+		regmap_write(s5m87xx->pmic, S5M8763_REG_STATUSM1, 0xff);
+		regmap_write(s5m87xx->pmic, S5M8763_REG_STATUSM2, 0xff);
 
 		for (i = 0; i < S5M8763_IRQ_NR; i++) {
 			cur_irq = i + s5m87xx->irq_base;
@@ -413,8 +414,8 @@ int s5m_irq_init(struct s5m87xx_dev *s5m87xx)
 		for (i = 0; i < NUM_IRQ_REGS - 1; i++) {
 			s5m87xx->irq_masks_cur[i] = 0xff;
 			s5m87xx->irq_masks_cache[i] = 0xff;
-			s5m_reg_write(s5m87xx, S5M8767_REG_INT1M + i,
-						0xff);
+			regmap_write(s5m87xx->pmic, S5M8767_REG_INT1M + i,
+				     0xff);
 		}
 		for (i = 0; i < S5M8767_IRQ_NR; i++) {
 			cur_irq = i + s5m87xx->irq_base;
