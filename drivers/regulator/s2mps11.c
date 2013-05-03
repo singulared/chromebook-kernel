@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
@@ -403,7 +404,8 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 			ramp_reg |= get_ramp_delay(s2mps11->ramp_delay2) << 6;
 		if (s2mps11->buck3_ramp || s2mps11->buck4_ramp)
 			ramp_reg |= get_ramp_delay(s2mps11->ramp_delay34) << 4;
-		sec_reg_write(iodev, S2MPS11_REG_RAMP, ramp_reg | ramp_enable);
+		regmap_write(iodev->pmic, S2MPS11_REG_RAMP,
+			     ramp_reg | ramp_enable);
 	}
 
 	ramp_reg &= 0x00;
@@ -411,13 +413,13 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 	ramp_reg |= get_ramp_delay(s2mps11->ramp_delay16) << 4;
 	ramp_reg |= get_ramp_delay(s2mps11->ramp_delay7810) << 2;
 	ramp_reg |= get_ramp_delay(s2mps11->ramp_delay9);
-	sec_reg_write(iodev, S2MPS11_REG_RAMP_BUCK, ramp_reg);
+	regmap_write(iodev->pmic, S2MPS11_REG_RAMP_BUCK, ramp_reg);
 
 	for (i = 0; i < pdata->num_regulators; i++) {
 
 		int id = pdata->regulators[i].id;
 		config.dev = &pdev->dev;
-		config.regmap = iodev->regmap;
+		config.regmap = iodev->pmic;
 		config.init_data = pdata->regulators[i].initdata;
 		config.driver_data = s2mps11;
 		config.of_node = pdata->regulators[i].reg_node;

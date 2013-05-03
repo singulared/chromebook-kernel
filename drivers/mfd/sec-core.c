@@ -74,36 +74,6 @@ static struct of_device_id sec_dt_match[] = {
 };
 #endif
 
-int sec_reg_read(struct sec_pmic_dev *sec_pmic, u8 reg, void *dest)
-{
-	return regmap_read(sec_pmic->regmap, reg, dest);
-}
-EXPORT_SYMBOL_GPL(sec_reg_read);
-
-int sec_bulk_read(struct sec_pmic_dev *sec_pmic, u8 reg, int count, u8 *buf)
-{
-	return regmap_bulk_read(sec_pmic->regmap, reg, buf, count);
-}
-EXPORT_SYMBOL_GPL(sec_bulk_read);
-
-int sec_reg_write(struct sec_pmic_dev *sec_pmic, u8 reg, u8 value)
-{
-	return regmap_write(sec_pmic->regmap, reg, value);
-}
-EXPORT_SYMBOL_GPL(sec_reg_write);
-
-int sec_bulk_write(struct sec_pmic_dev *sec_pmic, u8 reg, int count, u8 *buf)
-{
-	return regmap_raw_write(sec_pmic->regmap, reg, buf, count);
-}
-EXPORT_SYMBOL_GPL(sec_bulk_write);
-
-int sec_reg_update(struct sec_pmic_dev *sec_pmic, u8 reg, u8 val, u8 mask)
-{
-	return regmap_update_bits(sec_pmic->regmap, reg, mask, val);
-}
-EXPORT_SYMBOL_GPL(sec_reg_update);
-
 static struct regmap_config sec_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -173,9 +143,9 @@ static int sec_pmic_set_low_jitter(struct sec_pmic_dev *sec_pmic)
 	if (!sec_pmic->pdata->low_jitter)
 		return 0;
 
-	return sec_reg_update(sec_pmic, S5M8767_REG_CTRL1,
-			      S5M8767_LOW_JITTER_MASK,
-			      S5M8767_LOW_JITTER_MASK);
+	return regmap_update_bits(sec_pmic->pmic, S5M8767_REG_CTRL1,
+				  S5M8767_LOW_JITTER_MASK,
+				  S5M8767_LOW_JITTER_MASK);
 }
 
 static int sec_pmic_probe(struct i2c_client *i2c,
@@ -183,6 +153,7 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 {
 	struct sec_platform_data *pdata = i2c->dev.platform_data;
 	struct sec_pmic_dev *sec_pmic;
+	struct i2c_client *rtc_i2c = NULL;
 	int ret;
 
 	sec_pmic = devm_kzalloc(&i2c->dev, sizeof(struct sec_pmic_dev),
@@ -192,7 +163,6 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 
 	i2c_set_clientdata(i2c, sec_pmic);
 	sec_pmic->dev = &i2c->dev;
-	sec_pmic->i2c = i2c;
 	sec_pmic->irq = i2c->irq;
 	sec_pmic->type = sec_i2c_get_driver_data(i2c, id);
 
@@ -212,16 +182,23 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 		sec_pmic->pdata = pdata;
 	}
 
-	sec_pmic->regmap = devm_regmap_init_i2c(i2c, &sec_regmap_config);
-	if (IS_ERR(sec_pmic->regmap)) {
-		ret = PTR_ERR(sec_pmic->regmap);
+	sec_pmic->pmic = devm_regmap_init_i2c(i2c, &sec_regmap_config);
+	if (IS_ERR(sec_pmic->pmic)) {
+		ret = PTR_ERR(sec_pmic->pmic);
 		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
 			ret);
 		return ret;
 	}
 
-	sec_pmic->rtc = i2c_new_dummy(i2c->adapter, RTC_I2C_ADDR);
-	i2c_set_clientdata(sec_pmic->rtc, sec_pmic);
+	rtc_i2c = i2c_new_dummy(i2c->adapter, RTC_I2C_ADDR);
+	i2c_set_clientdata(rtc_i2c, sec_pmic);
+	sec_pmic->rtc = devm_regmap_init_i2c(rtc_i2c, &sec_regmap_config);
+	if (IS_ERR(sec_pmic->rtc)) {
+		ret = PTR_ERR(sec_pmic->rtc);
+		dev_err(&rtc_i2c->dev, "Failed to allocate register map: %d\n",
+			ret);
+		goto err;
+	}
 
 	if (pdata && pdata->cfg_pmic_irq)
 		pdata->cfg_pmic_irq();
@@ -266,7 +243,8 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 err:
 	mfd_remove_devices(sec_pmic->dev);
 	sec_irq_exit(sec_pmic);
-	i2c_unregister_device(sec_pmic->rtc);
+	if (rtc_i2c)
+		i2c_unregister_device(rtc_i2c);
 	return ret;
 }
 
@@ -276,7 +254,6 @@ static int sec_pmic_remove(struct i2c_client *i2c)
 
 	mfd_remove_devices(sec_pmic->dev);
 	sec_irq_exit(sec_pmic);
-	i2c_unregister_device(sec_pmic->rtc);
 	return 0;
 }
 

@@ -17,6 +17,7 @@
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/regmap.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
@@ -240,7 +241,7 @@ static int s5m8767_reg_is_enabled(struct regulator_dev *rdev)
 	else if (ret)
 		return ret;
 
-	ret = sec_reg_read(s5m8767->iodev, reg, &val);
+	ret = regmap_read(s5m8767->iodev->pmic, reg, &val);
 	if (ret)
 		return ret;
 
@@ -257,7 +258,7 @@ static int s5m8767_reg_enable(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	return sec_reg_update(s5m8767->iodev, reg, enable_ctrl, mask);
+	return regmap_update_bits(s5m8767->iodev->pmic, reg, mask, enable_ctrl);
 }
 
 static int s5m8767_reg_disable(struct regulator_dev *rdev)
@@ -270,7 +271,7 @@ static int s5m8767_reg_disable(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	return sec_reg_update(s5m8767->iodev, reg, ~mask, mask);
+	return regmap_update_bits(s5m8767->iodev->pmic, reg, mask, ~mask);
 }
 
 static int s5m8767_get_voltage_register(struct regulator_dev *rdev, int *_reg)
@@ -332,7 +333,7 @@ static int s5m8767_get_voltage_sel(struct regulator_dev *rdev)
 
 	mask = (reg_id < S5M8767_BUCK1) ? 0x3f : 0xff;
 
-	ret = sec_reg_read(s5m8767->iodev, reg, &val);
+	ret = regmap_read(s5m8767->iodev->pmic, reg, &val);
 	if (ret)
 		return ret;
 
@@ -434,7 +435,8 @@ static int s5m8767_set_voltage_sel(struct regulator_dev *rdev,
 		if (ret)
 			return ret;
 
-		return sec_reg_update(s5m8767->iodev, reg, selector, mask);
+		return regmap_update_bits(s5m8767->iodev->pmic, reg, mask,
+					  selector);
 	}
 }
 
@@ -789,21 +791,21 @@ static int s5m8767_pmic_probe(struct platform_device *pdev)
 						pdata->buck2_init +
 						buck_voltage_val2.step);
 
-	sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK2DVS2, buck_init);
+	regmap_write(s5m8767->iodev->pmic, S5M8767_REG_BUCK2DVS2, buck_init);
 
 	buck_init = s5m8767_convert_voltage_to_sel(&buck_voltage_val2,
 						pdata->buck3_init,
 						pdata->buck3_init +
 						buck_voltage_val2.step);
 
-	sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK3DVS2, buck_init);
+	regmap_write(s5m8767->iodev->pmic, S5M8767_REG_BUCK3DVS2, buck_init);
 
 	buck_init = s5m8767_convert_voltage_to_sel(&buck_voltage_val2,
 						pdata->buck4_init,
 						pdata->buck4_init +
 						buck_voltage_val2.step);
 
-	sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK4DVS2, buck_init);
+	regmap_write(s5m8767->iodev->pmic, S5M8767_REG_BUCK4DVS2, buck_init);
 
 	for (i = 0; i < 8; i++) {
 		if (s5m8767->buck2_gpiodvs) {
@@ -891,70 +893,76 @@ static int s5m8767_pmic_probe(struct platform_device *pdev)
 
 	if (pdata->buck2_gpiodvs || pdata->buck3_gpiodvs ||
 	   pdata->buck4_gpiodvs) {
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_BUCK2CTRL,
-				(pdata->buck2_gpiodvs) ? (1 << 1) : (0 << 1),
-				1 << 1);
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_BUCK3CTRL,
-				(pdata->buck3_gpiodvs) ? (1 << 1) : (0 << 1),
-				1 << 1);
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_BUCK4CTRL,
-				(pdata->buck4_gpiodvs) ? (1 << 1) : (0 << 1),
-				1 << 1);
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_BUCK2CTRL,
+				1 << 1,
+				(pdata->buck2_gpiodvs) ? (1 << 1) : (0 << 1));
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_BUCK3CTRL,
+				1 << 1,
+				(pdata->buck3_gpiodvs) ? (1 << 1) : (0 << 1));
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_BUCK4CTRL,
+				1 << 1,
+				(pdata->buck4_gpiodvs) ? (1 << 1) : (0 << 1));
 	}
 
 	/* Initialize GPIO DVS registers */
 	for (i = 0; i < 8; i++) {
 		if (s5m8767->buck2_gpiodvs) {
-			sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK2DVS1 + i,
-					   s5m8767->buck2_vol[i]);
+			regmap_write(s5m8767->iodev->pmic,
+				     S5M8767_REG_BUCK2DVS1 + i,
+				     s5m8767->buck2_vol[i]);
 		}
 
 		if (s5m8767->buck3_gpiodvs) {
-			sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK3DVS1 + i,
-					   s5m8767->buck3_vol[i]);
+			regmap_write(s5m8767->iodev->pmic,
+				     S5M8767_REG_BUCK3DVS1 + i,
+				     s5m8767->buck3_vol[i]);
 		}
 
 		if (s5m8767->buck4_gpiodvs) {
-			sec_reg_write(s5m8767->iodev, S5M8767_REG_BUCK4DVS1 + i,
-					   s5m8767->buck4_vol[i]);
+			regmap_write(s5m8767->iodev->pmic,
+				     S5M8767_REG_BUCK4DVS1 + i,
+				     s5m8767->buck4_vol[i]);
 		}
 	}
 
 	if (s5m8767->buck2_ramp)
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP, 0x08, 0x08);
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_DVSRAMP,
+				   0x08, 0x08);
 
 	if (s5m8767->buck3_ramp)
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP, 0x04, 0x04);
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_DVSRAMP,
+				   0x04, 0x04);
 
 	if (s5m8767->buck4_ramp)
-		sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP, 0x02, 0x02);
+		regmap_update_bits(s5m8767->iodev->pmic, S5M8767_REG_DVSRAMP,
+				   0x02, 0x02);
 
 	if (s5m8767->buck2_ramp || s5m8767->buck3_ramp
 		|| s5m8767->buck4_ramp) {
 		switch (s5m8767->ramp_delay) {
 		case 5:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0x40, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0x40);
 			break;
 		case 10:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0x90, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0x90);
 			break;
 		case 25:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0xd0, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0xd0);
 			break;
 		case 50:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0xe0, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0xe0);
 			break;
 		case 100:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0xf0, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0xf0);
 			break;
 		default:
-			sec_reg_update(s5m8767->iodev, S5M8767_REG_DVSRAMP,
-					0x90, 0xf0);
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   S5M8767_REG_DVSRAMP, 0xf0, 0x90);
 		}
 	}
 
@@ -973,7 +981,7 @@ static int s5m8767_pmic_probe(struct platform_device *pdev)
 		config.dev = s5m8767->dev;
 		config.init_data = pdata->regulators[i].initdata;
 		config.driver_data = s5m8767;
-		config.regmap = iodev->regmap;
+		config.regmap = iodev->pmic;
 		config.of_node = pdata->regulators[i].reg_node;
 
 		rdev[i] = regulator_register(&regulators[id], &config);
