@@ -54,6 +54,7 @@ struct sec_pmic_dev {
 	u8 irq_masks_cache[NUM_IRQ_REGS];
 	int type;
 	bool wakeup;
+	bool wtsr_smpl;
 };
 
 int sec_irq_init(struct sec_pmic_dev *sec_pmic);
