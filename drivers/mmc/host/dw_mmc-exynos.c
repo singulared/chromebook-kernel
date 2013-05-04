@@ -175,12 +175,12 @@ static int dw_mci_exynos_setup_bus(struct dw_mci *host,
 		}
 	}
 
-	/*
-	 * If there are no write-protect GPIOs present then we assume no write
-	 * protect.  The mci_readl() in dw_mmc.c won't work since it's not
-	 * hooked up on exynos.
-	 */
-       if (!of_find_property(slot_np, "wp-gpios", NULL)) {
+	gpio = of_get_named_gpio(slot_np, "wp-gpios", 0);
+	if (gpio_is_valid(gpio)) {
+		if (devm_gpio_request(host->dev, gpio, "dw-mci-wp"))
+			dev_info(host->dev, "gpio [%d] request failed\n",
+						gpio);
+	} else {
 		dev_info(host->dev, "wp gpio not available");
 		host->pdata->quirks |= DW_MCI_QUIRK_NO_WRITE_PROTECT;
 	}

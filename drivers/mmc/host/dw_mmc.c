@@ -34,7 +34,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 #include <linux/of.h>
-#include <linux/of_gpio.h>
 
 #include "dw_mmc.h"
 
@@ -75,7 +74,6 @@ struct idmac_desc {
  * struct dw_mci_slot - MMC slot state
  * @mmc: The mmc_host representing this slot.
  * @host: The MMC controller this slot is using.
- * @wp_gpio: If gpio_is_valid() we'll use this to read write protect.
  * @ctype: Card type for this slot.
  * @mrq: mmc_request currently being processed or waiting to be
  *	processed, or NULL when the slot is idle.
@@ -90,7 +88,6 @@ struct dw_mci_slot {
 	struct mmc_host		*mmc;
 	struct dw_mci		*host;
 
-	int			wp_gpio;
 	u32			ctype;
 
 	struct mmc_request	*mrq;
@@ -832,8 +829,6 @@ static int dw_mci_get_ro(struct mmc_host *mmc)
 		read_only = 0;
 	else if (brd->get_ro)
 		read_only = brd->get_ro(slot->id);
-	else if (gpio_is_valid(slot->wp_gpio))
-		read_only = gpio_get_value(slot->wp_gpio);
 	else
 		read_only =
 			mci_readl(slot->host, WRTPRT) & (1 << slot->id) ? 1 : 0;
@@ -1790,29 +1785,6 @@ static struct device_node *dw_mci_of_find_slot_node(struct device *dev, u8 slot)
 	return NULL;
 }
 
-/* find the write protect gpio for a given slot; or -1 if none specified */
-static int dw_mci_of_get_wp_gpio(struct device *dev, u8 slot)
-{
-	struct device_node *np = dw_mci_of_find_slot_node(dev, slot);
-	int gpio;
-
-	if (!np)
-		return -EINVAL;
-
-	gpio = of_get_named_gpio(np, "wp-gpios", 0);
-
-	/* Having a missing entry is valid; return silently */
-	if (!gpio_is_valid(gpio))
-		return -EINVAL;
-
-	if (devm_gpio_request(dev, gpio, "dw-mci-wp")) {
-		dev_warn(dev, "gpio [%d] request failed\n", gpio);
-		return -EINVAL;
-	}
-
-	return gpio;
-}
-
 /* find out bus-width for a given slot */
 static u32 dw_mci_of_get_bus_wd(struct device *dev, u8 slot)
 {
@@ -1832,12 +1804,6 @@ static u32 dw_mci_of_get_bus_wd(struct device *dev, u8 slot)
 {
 	return 1;
 }
-
-static int dw_mci_of_get_wp_gpio(struct device *dev, u8 slot)
-{
-	return -EINVAL;
-}
-
 static struct device_node *dw_mci_of_find_slot_node(struct device *dev, u8 slot)
 {
 	return NULL;
@@ -1962,8 +1928,6 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 		set_bit(DW_MMC_CARD_PRESENT, &slot->flags);
 	else
 		clear_bit(DW_MMC_CARD_PRESENT, &slot->flags);
-
-	slot->wp_gpio = dw_mci_of_get_wp_gpio(host->dev, slot->id);
 
 	mmc_add_host(mmc);
 
