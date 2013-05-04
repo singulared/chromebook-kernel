@@ -32,7 +32,6 @@
 #include <linux/fs.h>
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
-#include <linux/wait.h>
 #endif
 
 struct device;
@@ -127,9 +126,6 @@ struct dma_buf {
 	struct mutex lock;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource kds;
-	wait_queue_head_t wq_exclusive;
-	wait_queue_head_t wq_shared;
-	struct kds_callback kds_cb;
 #endif
 	void *priv;
 };
