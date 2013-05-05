@@ -29,7 +29,6 @@
 int drm_create_iommu_mapping(struct drm_device *drm_dev)
 {
 	struct dma_iommu_mapping *mapping = NULL;
-	struct exynos_drm_private *priv = drm_dev->dev_private;
 	struct device *dev = drm_dev->dev;
 	dma_addr_t da_start = EXYNOS_DEV_ADDR_START;
 	size_t da_space_size = EXYNOS_DEV_ADDR_SIZE;
