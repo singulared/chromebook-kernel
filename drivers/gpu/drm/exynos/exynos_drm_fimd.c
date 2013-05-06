@@ -91,6 +91,7 @@ struct fimd_win_data {
 
 struct fimd_context {
 	struct exynos_drm_subdrv	subdrv;
+	struct drm_device		*drm_dev;
 	int				irq;
 	struct drm_crtc			*crtc;
 	struct clk			*sclk_mout_fimd;
@@ -522,6 +523,16 @@ static void fimd_win_disable(struct device *dev, int zpos)
 	win_data->enabled = false;
 }
 
+static int fimd_mgr_initialize(struct device *subdrv_dev,
+		struct drm_device *drm_dev)
+{
+	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
+
+	ctx->drm_dev = drm_dev;
+
+	return 0;
+}
+
 static void fimd_dpms(struct device *subdrv_dev, int mode)
 {
 	struct fimd_context *ctx = get_fimd_context(subdrv_dev);
@@ -676,7 +687,6 @@ static void fimd_wait_for_vblank(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
 	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
-	struct drm_device *drm_dev = subdrv->drm_dev;
 	struct exynos_drm_manager *manager = subdrv->manager;
 	u32 val;
 
@@ -685,7 +695,7 @@ static void fimd_wait_for_vblank(struct device *dev)
 
 	val = readl(ctx->regs + VIDINTCON0);
 
-	drm_vblank_get(drm_dev, manager->pipe);
+	drm_vblank_get(ctx->drm_dev, manager->pipe);
 
 	atomic_set(&ctx->wait_vsync_event, 1);
 
@@ -698,10 +708,11 @@ static void fimd_wait_for_vblank(struct device *dev)
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 
-	drm_vblank_put(drm_dev, manager->pipe);
+	drm_vblank_put(ctx->drm_dev, manager->pipe);
 }
 
 static struct exynos_drm_manager_ops fimd_manager_ops = {
+	.initialize = fimd_mgr_initialize,
 	.dpms = fimd_dpms,
 	.apply = fimd_apply,
 	.commit = fimd_commit,
@@ -722,7 +733,6 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 {
 	struct fimd_context *ctx = (struct fimd_context *)dev_id;
 	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
-	struct drm_device *drm_dev = subdrv->drm_dev;
 	struct exynos_drm_manager *manager = subdrv->manager;
 	u32 val;
 
@@ -734,11 +744,11 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 		writel(VIDINTCON1_INT_FRAME, ctx->regs + VIDINTCON1);
 
 	/* check the crtc is detached already from encoder */
-	if (manager->pipe < 0)
+	if (manager->pipe < 0 || !ctx->drm_dev)
 		goto out;
 
-	drm_handle_vblank(drm_dev, manager->pipe);
-	exynos_drm_crtc_finish_pageflip(drm_dev, manager->pipe);
+	drm_handle_vblank(ctx->drm_dev, manager->pipe);
+	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, manager->pipe);
 
 	/* set wait vsync event to zero and wake up queue. */
 	if (atomic_read(&ctx->wait_vsync_event)) {
@@ -1165,7 +1175,6 @@ static int fimd_resume(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
 	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
-	struct drm_device *drm_dev = subdrv->drm_dev;
 	struct exynos_drm_manager *manager = subdrv->manager;
 
 	/*
@@ -1192,8 +1201,8 @@ static int fimd_resume(struct device *dev)
 		 * Restore the vblank interrupts to whichever state DRM
 		 * wants them.
 		 */
-		if (manager->pipe != -1 &&
-		    drm_dev->vblank_enabled[manager->pipe])
+		if (manager->pipe != -1 && ctx->drm_dev &&
+		    ctx->drm_dev->vblank_enabled[manager->pipe])
 			fimd_enable_vblank(dev);
 	}
 
