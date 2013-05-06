@@ -96,6 +96,7 @@ struct exynos_drm_overlay_ops {
  * @scan_flag: interlace or progressive way.
  *	(it could be DRM_MODE_FLAG_*)
  * @bpp: pixel size.(in bit)
+ * @pitch: pitch of a framebuffer.
  * @pixel_format: fourcc pixel format of this overlay
  * @dma_addr: array of bus(accessed by dma) address to the memory region
  *	      allocated for a overlay.

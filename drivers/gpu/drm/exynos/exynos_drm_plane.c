@@ -111,8 +111,8 @@ void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 	/* set drm framebuffer data. */
 	overlay->fb_x = src_x;
 	overlay->fb_y = src_y;
-	overlay->fb_width = fb->width;
-	overlay->fb_height = fb->height;
+	overlay->fb_width = min(src_w, actual_w);
+	overlay->fb_height = min(src_h, actual_h);
 	overlay->src_width = src_w;
 	overlay->src_height = src_h;
 	overlay->bpp = fb->bits_per_pixel;
