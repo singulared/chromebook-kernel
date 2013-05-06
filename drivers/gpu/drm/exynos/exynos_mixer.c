@@ -86,6 +86,7 @@ enum mixer_version_id {
 
 struct mixer_context {
 	struct device		*dev;
+	struct drm_device	*drm_dev;
 	int			pipe;
 	bool			interlace;
 	bool			powered;
@@ -683,20 +684,25 @@ static void mixer_win_reset(struct mixer_context *ctx)
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 }
 
+static int mixer_initialize(void *ctx, struct drm_device *drm_dev)
+{
+	struct mixer_context *mixer_ctx = ctx;
+
+	mixer_ctx->drm_dev = drm_dev;
+
+	return 0;
+}
+
 static int mixer_iommu_on(void *ctx, bool enable)
 {
-	struct exynos_drm_hdmi_context *drm_hdmi_ctx;
 	struct mixer_context *mdata = ctx;
-	struct drm_device *drm_dev;
 
-	drm_hdmi_ctx = mdata->parent_ctx;
-	drm_dev = drm_hdmi_ctx->drm_dev;
-
-	if (is_drm_iommu_supported(drm_dev)) {
+	if (is_drm_iommu_supported(mdata->drm_dev)) {
 		if (enable)
-			return drm_iommu_attach_device(drm_dev, mdata->dev);
+			return drm_iommu_attach_device(mdata->drm_dev,
+					mdata->dev);
 
-		drm_iommu_detach_device(drm_dev, mdata->dev);
+		drm_iommu_detach_device(mdata->drm_dev, mdata->dev);
 	}
 	return 0;
 }
@@ -852,13 +858,11 @@ static void mixer_apply(void *ctx)
 static void mixer_wait_for_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
-	struct exynos_drm_hdmi_context *drm_hdmi_ctx = mixer_ctx->parent_ctx;
-	struct drm_device *drm_dev = drm_hdmi_ctx->drm_dev;
 
 	if (!mixer_ctx->powered)
 		return;
 
-	drm_vblank_get(drm_dev, mixer_ctx->pipe);
+	drm_vblank_get(mixer_ctx->drm_dev, mixer_ctx->pipe);
 
 	atomic_set(&mixer_ctx->wait_vsync_event, 1);
 
@@ -871,7 +875,7 @@ static void mixer_wait_for_vblank(void *ctx)
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 
-	drm_vblank_put(drm_dev, mixer_ctx->pipe);
+	drm_vblank_put(mixer_ctx->drm_dev, mixer_ctx->pipe);
 }
 
 static void mixer_window_suspend(struct mixer_context *ctx)
@@ -994,6 +998,7 @@ int mixer_check_timing(void *ctx, struct fb_videomode *timing)
 
 static struct exynos_mixer_ops mixer_ops = {
 	/* manager */
+	.initialize		= mixer_initialize,
 	.iommu_on		= mixer_iommu_on,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
@@ -1009,8 +1014,7 @@ static struct exynos_mixer_ops mixer_ops = {
 
 static irqreturn_t mixer_irq_handler(int irq, void *arg)
 {
-	struct exynos_drm_hdmi_context *drm_hdmi_ctx = arg;
-	struct mixer_context *ctx = drm_hdmi_ctx->ctx;
+	struct mixer_context *ctx = arg;
 	struct mixer_resources *res = &ctx->mixer_res;
 	u32 val, base, shadow;
 	int i;
@@ -1023,6 +1027,9 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 
 	/* read interrupt status for handling and clearing flags for VSYNC */
 	val = mixer_reg_read(res, MXR_INT_STATUS);
+
+	if (!ctx->drm_dev)
+		goto out;
 
 	/* handling VSYNC */
 	if (val & MXR_INT_STATUS_VSYNC) {
@@ -1039,7 +1046,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 				goto out;
 		}
 
-		drm_handle_vblank(drm_hdmi_ctx->drm_dev, ctx->pipe);
+		drm_handle_vblank(ctx->drm_dev, ctx->pipe);
 
 		if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
 			/* Bail out if a layer update is pending */
@@ -1071,8 +1078,7 @@ out:
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 
 	if (finish_pageflip)
-		exynos_drm_crtc_finish_pageflip(drm_hdmi_ctx->drm_dev,
-				ctx->pipe);
+		exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
 	return IRQ_HANDLED;
 }
@@ -1119,7 +1125,7 @@ static int mixer_resources_init(struct exynos_drm_hdmi_context *ctx,
 	}
 
 	ret = devm_request_irq(&pdev->dev, res->start, mixer_irq_handler,
-							0, "drm_mixer", ctx);
+						0, "drm_mixer", mixer_ctx);
 	if (ret) {
 		dev_err(dev, "request interrupt failed.\n");
 		return ret;
@@ -1310,7 +1316,6 @@ static int mixer_resume(struct device *dev)
 {
 	struct exynos_drm_hdmi_context *drm_hdmi_ctx = get_mixer_context(dev);
 	struct mixer_context *ctx = drm_hdmi_ctx->ctx;
-	struct drm_device *drm_dev = drm_hdmi_ctx->drm_dev;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
@@ -1324,7 +1329,8 @@ static int mixer_resume(struct device *dev)
 	mixer_poweron(ctx);
 
 	/* Restore the vblank interrupts to whichever state DRM wants them. */
-	if (ctx->pipe != -1 && drm_dev->vblank_enabled[ctx->pipe])
+	if (ctx->pipe != -1 && ctx->drm_dev &&
+			ctx->drm_dev->vblank_enabled[ctx->pipe])
 		mixer_enable_vblank(ctx, ctx->pipe);
 
 	/*

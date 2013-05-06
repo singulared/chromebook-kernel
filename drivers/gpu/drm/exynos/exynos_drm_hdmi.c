@@ -94,6 +94,18 @@ void exynos_mixer_ops_register(struct exynos_mixer_ops *ops)
 		mixer_ops = ops;
 }
 
+static int drm_hdmi_display_initialize(struct device *dev,
+		struct drm_device *drm_dev)
+{
+	struct drm_hdmi_context *ctx = to_context(dev);
+
+	if (hdmi_ops && hdmi_ops->initialize)
+		return hdmi_ops->initialize(ctx->hdmi_ctx->ctx, drm_dev);
+
+	return 0;
+}
+
+
 static bool drm_hdmi_is_connected(struct device *dev)
 {
 	struct drm_hdmi_context *ctx = to_context(dev);
@@ -157,6 +169,7 @@ static int drm_hdmi_power_on(struct device *dev, int mode)
 
 static struct exynos_drm_display_ops drm_hdmi_display_ops = {
 	.type = EXYNOS_DISPLAY_TYPE_HDMI,
+	.initialize = drm_hdmi_display_initialize,
 	.is_connected = drm_hdmi_is_connected,
 	.get_edid = drm_hdmi_get_edid,
 	.check_timing = drm_hdmi_check_timing,
@@ -233,6 +246,21 @@ static void drm_hdmi_commit(struct device *subdrv_dev)
 		hdmi_ops->commit(ctx->hdmi_ctx->ctx);
 }
 
+static int drm_hdmi_mgr_initialize(struct device *subdrv_dev,
+		struct drm_device *drm_dev)
+{
+	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	int ret = 0;
+
+	if (mixer_ops && mixer_ops->initialize)
+		ret = mixer_ops->initialize(ctx->mixer_ctx->ctx, drm_dev);
+
+	if (mixer_ops->iommu_on)
+		mixer_ops->iommu_on(ctx->mixer_ctx->ctx, true);
+
+	return ret;
+}
+
 static void drm_hdmi_dpms(struct device *subdrv_dev, int mode)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
@@ -291,6 +319,7 @@ static void drm_mixer_win_disable(struct device *subdrv_dev, int zpos)
 }
 
 static struct exynos_drm_manager_ops drm_hdmi_manager_ops = {
+	.initialize = drm_hdmi_mgr_initialize,
 	.dpms = drm_hdmi_dpms,
 	.apply = drm_hdmi_apply,
 	.enable_vblank = drm_hdmi_enable_vblank,
@@ -337,12 +366,6 @@ static int hdmi_subdrv_probe(struct drm_device *drm_dev,
 
 	ctx->hdmi_ctx = hdmi_ctx;
 	ctx->mixer_ctx = mixer_ctx;
-
-	ctx->hdmi_ctx->drm_dev = drm_dev;
-	ctx->mixer_ctx->drm_dev = drm_dev;
-
-	if (mixer_ops->iommu_on)
-		mixer_ops->iommu_on(ctx->mixer_ctx->ctx, true);
 
 	return 0;
 }
