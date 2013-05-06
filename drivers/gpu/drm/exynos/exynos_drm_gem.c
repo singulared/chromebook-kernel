@@ -859,6 +859,8 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 	 */
 
 	args->pitch = args->width * ((args->bpp + 7) / 8);
+	args->pitch = round_up(args->pitch, 64);
+
 	args->size = args->pitch * args->height;
 
 	exynos_gem_obj = exynos_drm_gem_create(dev, args->flags, args->size);
