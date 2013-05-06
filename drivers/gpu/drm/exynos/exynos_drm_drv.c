@@ -150,19 +150,19 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = find_bridge("ptn3460-bridge", &bridge);
 	if (ret) {
 		DRM_ERROR("Could not get PTN3460 bridge %d\n", ret);
-		goto err_kds;
+		goto err_vblank;
 	}
 	if (bridge.valid) {
 		ret = ptn3460_init(dev, bridge.client, bridge.node);
 		if (ret) {
 			DRM_ERROR("Failed to initialize the ptn bridge\n");
-			goto err_kds;
+			goto err_vblank;
 		}
 	} else {
 		ret = find_bridge("ps8622-bridge", &bridge);
 		if (ret) {
 			DRM_ERROR("Could not get PS8622 bridge %d\n", ret);
-			goto err_kds;
+			goto err_vblank;
 		}
 
 		if (bridge.valid) {
@@ -170,7 +170,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 			if (ret) {
 				DRM_ERROR("Failed to initialize the Parade "
 					  "bridge\n");
-				goto err_kds;
+				goto err_vblank;
 			}
 		}
 	}
