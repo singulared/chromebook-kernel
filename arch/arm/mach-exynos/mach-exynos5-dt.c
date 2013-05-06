@@ -27,6 +27,7 @@
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
 #include <mach/regs-pmu.h>
+#include <mach/devfreq.h>
 
 #include <plat/cpu.h>
 #include <plat/mfc.h>
@@ -34,6 +35,7 @@
 #include <plat/adc.h>	/* for s3c_adc_register and friends */
 #include <plat/gpio-cfg.h>
 #include <plat/fb.h>
+#include <plat/devs.h>
 
 #include "common.h"
 #include <video/platform_lcd.h>
@@ -225,6 +227,30 @@ static void __init enable_xclkout(void)
        writel(tmp, S5P_PMU_DEBUG);
 }
 
+#ifdef CONFIG_PM_DEVFREQ
+static struct platform_device exynos5_int_devfreq = {
+	.name	= "exynos5420-devfreq-int",
+	.id	= -1,
+};
+
+static struct exynos_devfreq_platdata smdk5420_qos_int_pd __initdata = {
+	.default_qos = 111000,
+};
+
+static struct platform_device *smdk5420_power_devices[] __initdata = {
+	&exynos5_int_devfreq,
+};
+
+static void __init exynos5_smdk5420_power_init(void)
+{
+	s3c_set_platdata(&smdk5420_qos_int_pd,
+			sizeof(struct exynos_devfreq_platdata),
+			&exynos5_int_devfreq);
+	platform_add_devices(smdk5420_power_devices,
+			ARRAY_SIZE(smdk5420_power_devices));
+}
+#endif
+
 static void __init exynos5_dt_machine_init(void)
 {
 	struct device_node *i2c_np;
@@ -268,6 +294,9 @@ static void __init exynos5_dt_machine_init(void)
 	} else if (of_machine_is_compatible("samsung,exynos5420")) {
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
+#ifdef CONFIG_PM_DEVFREQ
+		exynos5_smdk5420_power_init();
+#endif
 	} else if (of_machine_is_compatible("samsung,exynos5440"))
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
