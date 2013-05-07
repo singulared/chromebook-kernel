@@ -210,10 +210,14 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 	ret = drm_framebuffer_init(dev, &exynos_fb->fb, &exynos_drm_fb_funcs);
 	if (ret) {
 		DRM_ERROR("failed to initialize framebuffer\n");
-		return ERR_PTR(ret);
+		goto err_free_fb;
 	}
 
 	return &exynos_fb->fb;
+
+err_free_fb:
+	kfree(exynos_fb);
+	return ERR_PTR(ret);
 }
 
 static u32 exynos_drm_format_num_buffers(struct drm_mode_fb_cmd2 *mode_cmd)
