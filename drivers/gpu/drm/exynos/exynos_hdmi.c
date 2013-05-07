@@ -2111,7 +2111,7 @@ static struct platform_device_id hdmi_driver_types[] = {
 #ifdef CONFIG_OF
 static struct of_device_id hdmi_match_types[] = {
 	{
-		.compatible = "samsung,exynos5-hdmi",
+		.compatible = "samsung,exynos4212-hdmi",
 		.data	= (void	*)HDMI_VER_EXYNOS4212,
 	}, {
 		.compatible = "samsung,exynos5420-hdmi",
