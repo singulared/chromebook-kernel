@@ -76,6 +76,7 @@ enum HDMI_PACKET_TYPE {
 enum hdmi_version {
 	HDMI_VER_EXYNOS4210,
 	HDMI_VER_EXYNOS4212,
+	HDMI_VER_EXYNOS5420,
 };
 
 struct hdmi_resources {
@@ -1944,6 +1945,9 @@ static struct of_device_id hdmi_match_types[] = {
 	{
 		.compatible = "samsung,exynos5-hdmi",
 		.data	= (void	*)HDMI_VER_EXYNOS4212,
+	}, {
+		.compatible = "samsung,exynos5420-hdmi",
+		.data	= (void	*)HDMI_VER_EXYNOS5420,
 	}, {
 		/* end node */
 	}
