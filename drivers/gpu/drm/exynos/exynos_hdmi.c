@@ -73,9 +73,9 @@ enum HDMI_PACKET_TYPE {
 	HDMI_PACKET_TYPE_AUI = HDMI_PACKET_TYPE_INFOFRAME + 4
 };
 
-enum hdmi_type {
-	HDMI_TYPE13,
-	HDMI_TYPE14,
+enum hdmi_version {
+	HDMI_VER_EXYNOS4210,
+	HDMI_VER_EXYNOS4212,
 };
 
 struct hdmi_resources {
@@ -109,7 +109,7 @@ struct hdmi_tg_regs {
 	u8 tg_3d[1];
 };
 
-struct hdmi_v13_core_regs {
+struct hdmi_4210_core_regs {
 	u8 h_blank[2];
 	u8 v_blank[3];
 	u8 h_v_line[3];
@@ -122,7 +122,7 @@ struct hdmi_v13_core_regs {
 	u8 v_sync_gen3[3];
 };
 
-struct hdmi_v14_core_regs {
+struct hdmi_4212_core_regs {
 	u8 h_blank[2];
 	u8 v2_blank[2];
 	u8 v1_blank[2];
@@ -161,13 +161,13 @@ struct hdmi_v14_core_regs {
 	u8 vact_space_6[2];
 };
 
-struct hdmi_v13_conf {
-	struct hdmi_v13_core_regs core;
+struct hdmi_4210_conf {
+	struct hdmi_4210_core_regs core;
 	struct hdmi_tg_regs tg;
 };
 
-struct hdmi_v14_conf {
-	struct hdmi_v14_core_regs core;
+struct hdmi_4212_conf {
+	struct hdmi_4212_core_regs core;
 	struct hdmi_tg_regs tg;
 };
 
@@ -175,8 +175,8 @@ struct hdmi_conf_regs {
 	int pixel_clock;
 	int cea_video_id;
 	union {
-		struct hdmi_v13_conf v13_conf;
-		struct hdmi_v14_conf v14_conf;
+		struct hdmi_4210_conf v4210_conf;
+		struct hdmi_4212_conf v4212_conf;
 	} conf;
 };
 
@@ -203,7 +203,7 @@ struct hdmi_context {
 
 	int				hpd_gpio;
 
-	enum hdmi_type			type;
+	enum hdmi_version		version;
 };
 
 struct hdmiphy_config {
@@ -212,7 +212,7 @@ struct hdmiphy_config {
 };
 
 /* list of phy config settings */
-static const struct hdmiphy_config hdmiphy_v13_configs[] = {
+static const struct hdmiphy_config hdmiphy_4210_configs[] = {
 	{
 		.pixel_clock = 27000000,
 		.conf = {
@@ -260,7 +260,7 @@ static const struct hdmiphy_config hdmiphy_v13_configs[] = {
 	},
 };
 
-static const struct hdmiphy_config hdmiphy_v14_configs[] = {
+static const struct hdmiphy_config hdmiphy_4212_configs[] = {
 	{
 		.pixel_clock = 25200000,
 		.conf = {
@@ -413,7 +413,7 @@ static inline void hdmi_phy_pow_ctrl_reg_writemask(struct hdmi_context *hdata,
 	writel(value, hdata->phy_pow_ctrl_reg);
 }
 
-static void hdmi_v13_regs_dump(struct hdmi_context *hdata, char *prefix)
+static void hdmi_4210_regs_dump(struct hdmi_context *hdata, char *prefix)
 {
 #define DUMPREG(reg_id) \
 	DRM_DEBUG_KMS("%s:" #reg_id " = %08x\n", prefix, \
@@ -422,50 +422,50 @@ static void hdmi_v13_regs_dump(struct hdmi_context *hdata, char *prefix)
 	DUMPREG(HDMI_INTC_FLAG);
 	DUMPREG(HDMI_INTC_CON);
 	DUMPREG(HDMI_HPD_STATUS);
-	DUMPREG(HDMI_V13_PHY_RSTOUT);
-	DUMPREG(HDMI_V13_PHY_VPLL);
-	DUMPREG(HDMI_V13_PHY_CMU);
-	DUMPREG(HDMI_V13_CORE_RSTOUT);
+	DUMPREG(HDMI_4210_PHY_RSTOUT);
+	DUMPREG(HDMI_4210_PHY_VPLL);
+	DUMPREG(HDMI_4210_PHY_CMU);
+	DUMPREG(HDMI_4210_CORE_RSTOUT);
 
 	DRM_DEBUG_KMS("%s: ---- CORE REGISTERS ----\n", prefix);
 	DUMPREG(HDMI_CON_0);
 	DUMPREG(HDMI_CON_1);
 	DUMPREG(HDMI_CON_2);
 	DUMPREG(HDMI_SYS_STATUS);
-	DUMPREG(HDMI_V13_PHY_STATUS);
+	DUMPREG(HDMI_4210_PHY_STATUS);
 	DUMPREG(HDMI_STATUS_EN);
 	DUMPREG(HDMI_HPD);
 	DUMPREG(HDMI_MODE_SEL);
-	DUMPREG(HDMI_V13_HPD_GEN);
-	DUMPREG(HDMI_V13_DC_CONTROL);
-	DUMPREG(HDMI_V13_VIDEO_PATTERN_GEN);
+	DUMPREG(HDMI_4210_HPD_GEN);
+	DUMPREG(HDMI_4210_DC_CONTROL);
+	DUMPREG(HDMI_4210_VIDEO_PATTERN_GEN);
 
 	DRM_DEBUG_KMS("%s: ---- CORE SYNC REGISTERS ----\n", prefix);
 	DUMPREG(HDMI_H_BLANK_0);
 	DUMPREG(HDMI_H_BLANK_1);
-	DUMPREG(HDMI_V13_V_BLANK_0);
-	DUMPREG(HDMI_V13_V_BLANK_1);
-	DUMPREG(HDMI_V13_V_BLANK_2);
-	DUMPREG(HDMI_V13_H_V_LINE_0);
-	DUMPREG(HDMI_V13_H_V_LINE_1);
-	DUMPREG(HDMI_V13_H_V_LINE_2);
+	DUMPREG(HDMI_4210_V_BLANK_0);
+	DUMPREG(HDMI_4210_V_BLANK_1);
+	DUMPREG(HDMI_4210_V_BLANK_2);
+	DUMPREG(HDMI_4210_H_V_LINE_0);
+	DUMPREG(HDMI_4210_H_V_LINE_1);
+	DUMPREG(HDMI_4210_H_V_LINE_2);
 	DUMPREG(HDMI_VSYNC_POL);
 	DUMPREG(HDMI_INT_PRO_MODE);
-	DUMPREG(HDMI_V13_V_BLANK_F_0);
-	DUMPREG(HDMI_V13_V_BLANK_F_1);
-	DUMPREG(HDMI_V13_V_BLANK_F_2);
-	DUMPREG(HDMI_V13_H_SYNC_GEN_0);
-	DUMPREG(HDMI_V13_H_SYNC_GEN_1);
-	DUMPREG(HDMI_V13_H_SYNC_GEN_2);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_1_0);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_1_1);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_1_2);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_2_0);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_2_1);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_2_2);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_3_0);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_3_1);
-	DUMPREG(HDMI_V13_V_SYNC_GEN_3_2);
+	DUMPREG(HDMI_4210_V_BLANK_F_0);
+	DUMPREG(HDMI_4210_V_BLANK_F_1);
+	DUMPREG(HDMI_4210_V_BLANK_F_2);
+	DUMPREG(HDMI_4210_H_SYNC_GEN_0);
+	DUMPREG(HDMI_4210_H_SYNC_GEN_1);
+	DUMPREG(HDMI_4210_H_SYNC_GEN_2);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_1_0);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_1_1);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_1_2);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_2_0);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_2_1);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_2_2);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_3_0);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_3_1);
+	DUMPREG(HDMI_4210_V_SYNC_GEN_3_2);
 
 	DRM_DEBUG_KMS("%s: ---- TG REGISTERS ----\n", prefix);
 	DUMPREG(HDMI_TG_CMD);
@@ -500,7 +500,7 @@ static void hdmi_v13_regs_dump(struct hdmi_context *hdata, char *prefix)
 #undef DUMPREG
 }
 
-static void hdmi_v14_regs_dump(struct hdmi_context *hdata, char *prefix)
+static void hdmi_4212_regs_dump(struct hdmi_context *hdata, char *prefix)
 {
 	int i;
 
@@ -669,10 +669,10 @@ static void hdmi_v14_regs_dump(struct hdmi_context *hdata, char *prefix)
 
 static void hdmi_regs_dump(struct hdmi_context *hdata, char *prefix)
 {
-	if (hdata->type == HDMI_TYPE13)
-		hdmi_v13_regs_dump(hdata, prefix);
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		hdmi_4210_regs_dump(hdata, prefix);
 	else
-		hdmi_v14_regs_dump(hdata, prefix);
+		hdmi_4212_regs_dump(hdata, prefix);
 }
 
 static u8 hdmi_chksum(struct hdmi_context *hdata,
@@ -798,12 +798,12 @@ static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (hdata->type == HDMI_TYPE13) {
-		confs = hdmiphy_v13_configs;
-		count = ARRAY_SIZE(hdmiphy_v13_configs);
-	} else if (hdata->type == HDMI_TYPE14) {
-		confs = hdmiphy_v14_configs;
-		count = ARRAY_SIZE(hdmiphy_v14_configs);
+	if (hdata->version == HDMI_VER_EXYNOS4210) {
+		confs = hdmiphy_4210_configs;
+		count = ARRAY_SIZE(hdmiphy_4210_configs);
+	} else if (hdata->version == HDMI_VER_EXYNOS4212) {
+		confs = hdmiphy_4212_configs;
+		count = ARRAY_SIZE(hdmiphy_4212_configs);
 	} else
 		return -EINVAL;
 
@@ -891,8 +891,8 @@ static void hdmi_reg_acr(struct hdmi_context *hdata, u8 *acr)
 	hdmi_reg_writeb(hdata, HDMI_ACR_CTS1, acr[2]);
 	hdmi_reg_writeb(hdata, HDMI_ACR_CTS2, acr[1]);
 
-	if (hdata->type == HDMI_TYPE13)
-		hdmi_reg_writeb(hdata, HDMI_V13_ACR_CON, 4);
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		hdmi_reg_writeb(hdata, HDMI_4210_ACR_CON, 4);
 	else
 		hdmi_reg_writeb(hdata, HDMI_ACR_CON, 4);
 }
@@ -995,8 +995,8 @@ static void hdmi_conf_reset(struct hdmi_context *hdata)
 {
 	u32 reg;
 
-	if (hdata->type == HDMI_TYPE13)
-		reg = HDMI_V13_CORE_RSTOUT;
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		reg = HDMI_4210_CORE_RSTOUT;
 	else
 		reg = HDMI_CORE_RSTOUT;
 
@@ -1029,21 +1029,21 @@ static void hdmi_conf_init(struct hdmi_context *hdata)
 				HDMI_VID_PREAMBLE_DIS | HDMI_GUARD_BAND_DIS);
 	}
 
-	if (hdata->type == HDMI_TYPE13) {
+	if (hdata->version == HDMI_VER_EXYNOS4210) {
 		/* choose bluescreen (fecal) color */
-		hdmi_reg_writeb(hdata, HDMI_V13_BLUE_SCREEN_0, 0x12);
-		hdmi_reg_writeb(hdata, HDMI_V13_BLUE_SCREEN_1, 0x34);
-		hdmi_reg_writeb(hdata, HDMI_V13_BLUE_SCREEN_2, 0x56);
+		hdmi_reg_writeb(hdata, HDMI_4210_BLUE_SCREEN_0, 0x12);
+		hdmi_reg_writeb(hdata, HDMI_4210_BLUE_SCREEN_1, 0x34);
+		hdmi_reg_writeb(hdata, HDMI_4210_BLUE_SCREEN_2, 0x56);
 
 		/* enable AVI packet every vsync, fixes purple line problem */
-		hdmi_reg_writeb(hdata, HDMI_V13_AVI_CON, 0x02);
+		hdmi_reg_writeb(hdata, HDMI_4210_AVI_CON, 0x02);
 		/* force RGB, look to CEA-861-D, table 7 for more detail */
-		hdmi_reg_writeb(hdata, HDMI_V13_AVI_BYTE(0), 0 << 5);
+		hdmi_reg_writeb(hdata, HDMI_4210_AVI_BYTE(0), 0 << 5);
 		hdmi_reg_writemask(hdata, HDMI_CON_1, 0x10 << 5, 0x11 << 5);
 
-		hdmi_reg_writeb(hdata, HDMI_V13_SPD_CON, 0x02);
-		hdmi_reg_writeb(hdata, HDMI_V13_AUI_CON, 0x02);
-		hdmi_reg_writeb(hdata, HDMI_V13_ACR_CON, 0x04);
+		hdmi_reg_writeb(hdata, HDMI_4210_SPD_CON, 0x02);
+		hdmi_reg_writeb(hdata, HDMI_4210_AUI_CON, 0x02);
+		hdmi_reg_writeb(hdata, HDMI_4210_ACR_CON, 0x04);
 	} else {
 		infoframe.type = HDMI_PACKET_TYPE_AVI;
 		infoframe.ver = HDMI_AVI_VERSION;
@@ -1060,39 +1060,39 @@ static void hdmi_conf_init(struct hdmi_context *hdata)
 	}
 }
 
-static void hdmi_v13_mode_apply(struct hdmi_context *hdata)
+static void hdmi_4210_mode_apply(struct hdmi_context *hdata)
 {
-	const struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v13_conf.tg;
-	const struct hdmi_v13_core_regs *core =
-		&hdata->mode_conf.conf.v13_conf.core;
+	const struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4210_conf.tg;
+	const struct hdmi_4210_core_regs *core =
+		&hdata->mode_conf.conf.v4210_conf.core;
 	int tries;
 
 	/* setting core registers */
 	hdmi_reg_writeb(hdata, HDMI_H_BLANK_0, core->h_blank[0]);
 	hdmi_reg_writeb(hdata, HDMI_H_BLANK_1, core->h_blank[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_0, core->v_blank[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_1, core->v_blank[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_2, core->v_blank[2]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_V_LINE_0, core->h_v_line[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_V_LINE_1, core->h_v_line[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_V_LINE_2, core->h_v_line[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_0, core->v_blank[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_1, core->v_blank[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_2, core->v_blank[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_V_LINE_0, core->h_v_line[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_V_LINE_1, core->h_v_line[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_V_LINE_2, core->h_v_line[2]);
 	hdmi_reg_writeb(hdata, HDMI_VSYNC_POL, core->vsync_pol[0]);
 	hdmi_reg_writeb(hdata, HDMI_INT_PRO_MODE, core->int_pro_mode[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_F_0, core->v_blank_f[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_F_1, core->v_blank_f[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_BLANK_F_2, core->v_blank_f[2]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_SYNC_GEN_0, core->h_sync_gen[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_SYNC_GEN_1, core->h_sync_gen[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_H_SYNC_GEN_2, core->h_sync_gen[2]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_1_0, core->v_sync_gen1[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_1_1, core->v_sync_gen1[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_1_2, core->v_sync_gen1[2]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_2_0, core->v_sync_gen2[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_2_1, core->v_sync_gen2[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_2_2, core->v_sync_gen2[2]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_3_0, core->v_sync_gen3[0]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_3_1, core->v_sync_gen3[1]);
-	hdmi_reg_writeb(hdata, HDMI_V13_V_SYNC_GEN_3_2, core->v_sync_gen3[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_F_0, core->v_blank_f[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_F_1, core->v_blank_f[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_BLANK_F_2, core->v_blank_f[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_SYNC_GEN_0, core->h_sync_gen[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_SYNC_GEN_1, core->h_sync_gen[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_H_SYNC_GEN_2, core->h_sync_gen[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_1_0, core->v_sync_gen1[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_1_1, core->v_sync_gen1[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_1_2, core->v_sync_gen1[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_2_0, core->v_sync_gen2[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_2_1, core->v_sync_gen2[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_2_2, core->v_sync_gen2[2]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_3_0, core->v_sync_gen3[0]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_3_1, core->v_sync_gen3[1]);
+	hdmi_reg_writeb(hdata, HDMI_4210_V_SYNC_GEN_3_2, core->v_sync_gen3[2]);
 	/* Timing generator registers */
 	hdmi_reg_writeb(hdata, HDMI_TG_H_FSZ_L, tg->h_fsz[0]);
 	hdmi_reg_writeb(hdata, HDMI_TG_H_FSZ_H, tg->h_fsz[1]);
@@ -1125,7 +1125,7 @@ static void hdmi_v13_mode_apply(struct hdmi_context *hdata)
 
 	/* waiting for HDMIPHY's PLL to get to steady state */
 	for (tries = 100; tries; --tries) {
-		u32 val = hdmi_reg_read(hdata, HDMI_V13_PHY_STATUS);
+		u32 val = hdmi_reg_read(hdata, HDMI_4210_PHY_STATUS);
 		if (val & HDMI_PHY_STATUS_READY)
 			break;
 		usleep_range(1000, 2000);
@@ -1149,11 +1149,11 @@ static void hdmi_v13_mode_apply(struct hdmi_context *hdata)
 		hdmi_reg_writemask(hdata, HDMI_TG_CMD, ~0, HDMI_TG_EN);
 }
 
-static void hdmi_v14_mode_apply(struct hdmi_context *hdata)
+static void hdmi_4212_mode_apply(struct hdmi_context *hdata)
 {
-	const struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v14_conf.tg;
-	const struct hdmi_v14_core_regs *core =
-		&hdata->mode_conf.conf.v14_conf.core;
+	const struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4212_conf.tg;
+	const struct hdmi_4212_core_regs *core =
+		&hdata->mode_conf.conf.v4212_conf.core;
 	int tries;
 
 	/* setting core registers */
@@ -1318,10 +1318,10 @@ static void hdmi_v14_mode_apply(struct hdmi_context *hdata)
 
 static void hdmi_mode_apply(struct hdmi_context *hdata)
 {
-	if (hdata->type == HDMI_TYPE13)
-		hdmi_v13_mode_apply(hdata);
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		hdmi_4210_mode_apply(hdata);
 	else
-		hdmi_v14_mode_apply(hdata);
+		hdmi_4212_mode_apply(hdata);
 }
 
 static void hdmiphy_conf_reset(struct hdmi_context *hdata)
@@ -1340,8 +1340,8 @@ static void hdmiphy_conf_reset(struct hdmi_context *hdata)
 	if (hdata->hdmiphy_port)
 		i2c_master_send(hdata->hdmiphy_port, buffer, 2);
 
-	if (hdata->type == HDMI_TYPE13)
-		reg = HDMI_V13_PHY_RSTOUT;
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		reg = HDMI_4210_PHY_RSTOUT;
 	else
 		reg = HDMI_PHY_RSTOUT;
 
@@ -1356,7 +1356,7 @@ static void hdmiphy_poweron(struct hdmi_context *hdata)
 {
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (hdata->type == HDMI_TYPE14)
+	if (hdata->version != HDMI_VER_EXYNOS4210)
 		hdmi_reg_writemask(hdata, HDMI_PHY_CON_0, 0,
 			HDMI_PHY_POWER_OFF_EN);
 }
@@ -1365,7 +1365,7 @@ static void hdmiphy_poweroff(struct hdmi_context *hdata)
 {
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (hdata->type == HDMI_TYPE14)
+	if (hdata->version != HDMI_VER_EXYNOS4210)
 		hdmi_reg_writemask(hdata, HDMI_PHY_CON_0, ~0,
 			HDMI_PHY_POWER_OFF_EN);
 }
@@ -1389,11 +1389,10 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 		return;
 	}
 
-	if (hdata->type == HDMI_TYPE13) {
-		hdmiphy_data = hdmiphy_v13_configs[i].conf;
-	} else {
-		hdmiphy_data = hdmiphy_v14_configs[i].conf;
-	}
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		hdmiphy_data = hdmiphy_4210_configs[i].conf;
+	else
+		hdmiphy_data = hdmiphy_4212_configs[i].conf;
 
 	ret = i2c_master_send(hdata->hdmiphy_port, hdmiphy_data, 32);
 	if (ret != 32) {
@@ -1442,11 +1441,12 @@ static void hdmi_set_reg(u8 *reg_pair, int num_bytes, u32 value)
 		reg_pair[i] = (value >> (8 * i)) & 0xff;
 }
 
-static void hdmi_v13_mode_set(struct hdmi_context *hdata,
+static void hdmi_4210_mode_set(struct hdmi_context *hdata,
 			struct drm_display_mode *m)
 {
-	struct hdmi_v13_core_regs *core = &hdata->mode_conf.conf.v13_conf.core;
-	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v13_conf.tg;
+	struct hdmi_4210_core_regs *core =
+		&hdata->mode_conf.conf.v4210_conf.core;
+	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4210_conf.tg;
 	unsigned int val;
 
 	hdata->mode_conf.cea_video_id =
@@ -1538,12 +1538,12 @@ static void hdmi_v13_mode_set(struct hdmi_context *hdata,
 	hdmi_set_reg(tg->tg_3d, 1, 0x0); /* Not used */
 }
 
-static void hdmi_v14_mode_set(struct hdmi_context *hdata,
+static void hdmi_4212_mode_set(struct hdmi_context *hdata,
 			struct drm_display_mode *m)
 {
-	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v14_conf.tg;
-	struct hdmi_v14_core_regs *core =
-		&hdata->mode_conf.conf.v14_conf.core;
+	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4212_conf.tg;
+	struct hdmi_4212_core_regs *core =
+		&hdata->mode_conf.conf.v4212_conf.core;
 
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
@@ -1657,11 +1657,10 @@ static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 		m->vrefresh, (m->flags & DRM_MODE_FLAG_INTERLACE) ?
 		"INTERLACED" : "PROGERESSIVE");
 
-	if (hdata->type == HDMI_TYPE13) {
-		hdmi_v13_mode_set(hdata, mode);
-	} else {
-		hdmi_v14_mode_set(hdata, mode);
-	}
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		hdmi_4210_mode_set(hdata, mode);
+	else
+		hdmi_4212_mode_set(hdata, mode);
 }
 
 static void hdmi_get_max_resol(void *ctx, unsigned int *width,
@@ -1925,16 +1924,16 @@ static int drm_hdmi_dt_parse_phy_pow_control(struct hdmi_context *hdata)
 static struct platform_device_id hdmi_driver_types[] = {
 	{
 		.name		= "s5pv210-hdmi",
-		.driver_data    = HDMI_TYPE13,
+		.driver_data    = HDMI_VER_EXYNOS4210,
 	}, {
 		.name		= "exynos4-hdmi",
-		.driver_data    = HDMI_TYPE13,
+		.driver_data    = HDMI_VER_EXYNOS4210,
 	}, {
 		.name		= "exynos4-hdmi14",
-		.driver_data	= HDMI_TYPE14,
+		.driver_data	= HDMI_VER_EXYNOS4212,
 	}, {
 		.name		= "exynos5-hdmi",
-		.driver_data	= HDMI_TYPE14,
+		.driver_data	= HDMI_VER_EXYNOS4212,
 	}, {
 		/* end node */
 	}
@@ -1944,7 +1943,7 @@ static struct platform_device_id hdmi_driver_types[] = {
 static struct of_device_id hdmi_match_types[] = {
 	{
 		.compatible = "samsung,exynos5-hdmi",
-		.data	= (void	*)HDMI_TYPE14,
+		.data	= (void	*)HDMI_VER_EXYNOS4212,
 	}, {
 		/* end node */
 	}
@@ -2051,9 +2050,9 @@ static int hdmi_probe(struct platform_device *pdev)
 					pdev->dev.of_node);
 		if (match == NULL)
 			return -ENODEV;
-		hdata->type = (enum hdmi_type)match->data;
+		hdata->version = (enum hdmi_version)match->data;
 	} else {
-		hdata->type = (enum hdmi_type)platform_get_device_id
+		hdata->version = (enum hdmi_version)platform_get_device_id
 					(pdev)->driver_data;
 	}
 
