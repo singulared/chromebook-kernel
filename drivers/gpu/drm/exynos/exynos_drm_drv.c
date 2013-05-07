@@ -168,6 +168,13 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		if (ret) {
 			DRM_ERROR("Could not get PS8622 bridge %d\n", ret);
 			goto err_vblank;
+		} else if (!bridge.valid) {
+			ret = find_bridge("ps8625-bridge", &bridge);
+			if (ret) {
+				DRM_ERROR("Could not get PS8625 bridge %d\n",
+					  ret);
+				goto err_vblank;
+			}
 		}
 
 		if (bridge.valid) {
