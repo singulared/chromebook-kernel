@@ -139,13 +139,12 @@ struct exynos_drm_overlay {
  */
 struct exynos_drm_display_ops {
 	enum exynos_drm_output_type type;
-	int (*initialize)(struct device *dev, struct drm_device *drm_dev);
-	bool (*is_connected)(struct device *dev);
-	struct edid *(*get_edid)(struct device *dev,
-			struct drm_connector *connector);
-	void *(*get_panel)(struct device *dev);
-	int (*check_timing)(struct device *dev, void *timing);
-	int (*power_on)(struct device *dev, int mode);
+	int (*initialize)(void *ctx, struct drm_device *drm_dev);
+	bool (*is_connected)(void *ctx);
+	struct edid *(*get_edid)(void *ctx, struct drm_connector *connector);
+	void *(*get_panel)(void *ctx);
+	int (*check_timing)(void *ctx, void *timing);
+	int (*power_on)(void *ctx, int mode);
 };
 
 /*

@@ -115,7 +115,7 @@ static int exynos_drm_connector_get_modes(struct drm_connector *connector)
 	 * because lcd panel has only one mode.
 	 */
 	if (display_ops->get_edid) {
-		edid = display_ops->get_edid(manager->dev, connector);
+		edid = display_ops->get_edid(manager->ctx, connector);
 		if (IS_ERR_OR_NULL(edid)) {
 			ret = PTR_ERR(edid);
 			edid = NULL;
@@ -139,7 +139,7 @@ static int exynos_drm_connector_get_modes(struct drm_connector *connector)
 		}
 
 		if (display_ops->get_panel)
-			panel = display_ops->get_panel(manager->dev);
+			panel = display_ops->get_panel(manager->ctx);
 		else {
 			drm_mode_destroy(connector->dev, mode);
 			return 0;
@@ -176,7 +176,7 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 	convert_to_video_timing(&timing, mode);
 
 	if (display_ops && display_ops->check_timing)
-		if (!display_ops->check_timing(manager->dev, (void *)&timing))
+		if (!display_ops->check_timing(manager->ctx, (void *)&timing))
 			ret = MODE_OK;
 
 	return ret;
@@ -239,7 +239,7 @@ void exynos_drm_display_power(struct drm_connector *connector, int mode)
 	}
 
 	if (display_ops && display_ops->power_on)
-		display_ops->power_on(manager->dev, mode);
+		display_ops->power_on(manager->ctx, mode);
 
 	exynos_connector->dpms = mode;
 }
@@ -298,7 +298,7 @@ exynos_drm_connector_detect(struct drm_connector *connector, bool force)
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	if (display_ops && display_ops->is_connected) {
-		if (display_ops->is_connected(manager->dev))
+		if (display_ops->is_connected(manager->ctx))
 			status = connector_status_connected;
 		else
 			status = connector_status_disconnected;

@@ -340,7 +340,7 @@ exynos_drm_encoder_create(struct drm_device *dev,
 	}
 
 	if (manager->display_ops && manager->display_ops->initialize) {
-		ret = manager->display_ops->initialize(manager->dev, dev);
+		ret = manager->display_ops->initialize(manager->ctx, dev);
 		if (ret) {
 			DRM_ERROR("Display initialize failed %d\n", ret);
 			goto error;

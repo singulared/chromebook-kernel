@@ -85,9 +85,9 @@ static const char fake_edid_info[] = {
 	0x00, 0x00, 0x00, 0x06
 };
 
-static bool vidi_display_is_connected(struct device *dev)
+static bool vidi_display_is_connected(void *in_ctx)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -98,10 +98,9 @@ static bool vidi_display_is_connected(struct device *dev)
 	return ctx->connected ? true : false;
 }
 
-static struct edid *vidi_get_edid(struct device *dev,
-			struct drm_connector *connector)
+static struct edid *vidi_get_edid(void *in_ctx, struct drm_connector *connector)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 	struct edid *edid;
 	int edid_len;
 
@@ -127,7 +126,7 @@ static struct edid *vidi_get_edid(struct device *dev,
 	return edid;
 }
 
-static void *vidi_get_panel(struct device *dev)
+static void *vidi_get_panel(void *in_ctx)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -136,7 +135,7 @@ static void *vidi_get_panel(struct device *dev)
 	return NULL;
 }
 
-static int vidi_check_timing(struct device *dev, void *timing)
+static int vidi_check_timing(void *in_ctx, void *timing)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -145,7 +144,7 @@ static int vidi_check_timing(struct device *dev, void *timing)
 	return 0;
 }
 
-static int vidi_display_power_on(struct device *dev, int mode)
+static int vidi_display_power_on(void *in_ctx, int mode)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 

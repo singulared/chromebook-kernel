@@ -94,10 +94,9 @@ void exynos_mixer_ops_register(struct exynos_mixer_ops *ops)
 		mixer_ops = ops;
 }
 
-static int drm_hdmi_display_initialize(struct device *dev,
-		struct drm_device *drm_dev)
+static int drm_hdmi_display_initialize(void *in_ctx, struct drm_device *drm_dev)
 {
-	struct drm_hdmi_context *ctx = to_context(dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	if (hdmi_ops && hdmi_ops->initialize)
 		return hdmi_ops->initialize(ctx->hdmi_ctx->ctx, drm_dev);
@@ -106,9 +105,9 @@ static int drm_hdmi_display_initialize(struct device *dev,
 }
 
 
-static bool drm_hdmi_is_connected(struct device *dev)
+static bool drm_hdmi_is_connected(void *in_ctx)
 {
-	struct drm_hdmi_context *ctx = to_context(dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -118,10 +117,10 @@ static bool drm_hdmi_is_connected(struct device *dev)
 	return false;
 }
 
-static struct edid *drm_hdmi_get_edid(struct device *dev,
+static struct edid *drm_hdmi_get_edid(void *in_ctx,
 			struct drm_connector *connector)
 {
-	struct drm_hdmi_context *ctx = to_context(dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -131,9 +130,9 @@ static struct edid *drm_hdmi_get_edid(struct device *dev,
 	return NULL;
 }
 
-static int drm_hdmi_check_timing(struct device *dev, void *timing)
+static int drm_hdmi_check_timing(void *in_ctx, void *timing)
 {
-	struct drm_hdmi_context *ctx = to_context(dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 	int ret = 0;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -155,9 +154,9 @@ static int drm_hdmi_check_timing(struct device *dev, void *timing)
 	return 0;
 }
 
-static int drm_hdmi_power_on(struct device *dev, int mode)
+static int drm_hdmi_power_on(void *in_ctx, int mode)
 {
-	struct drm_hdmi_context *ctx = to_context(dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 

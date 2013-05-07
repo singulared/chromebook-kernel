@@ -148,7 +148,7 @@ static inline struct fimd_driver_data *drm_fimd_get_driver_data(
 		platform_get_device_id(pdev)->driver_data;
 }
 
-static bool fimd_display_is_connected(struct device *dev)
+static bool fimd_display_is_connected(void *in_ctx)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -157,16 +157,16 @@ static bool fimd_display_is_connected(struct device *dev)
 	return true;
 }
 
-static void *fimd_get_panel(struct device *dev)
+static void *fimd_get_panel(void *in_ctx)
 {
-	struct fimd_context *ctx = get_fimd_context(dev);
+	struct fimd_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	return ctx->panel;
 }
 
-static int fimd_check_timing(struct device *dev, void *timing)
+static int fimd_check_timing(void *in_ctx, void *timing)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -175,7 +175,7 @@ static int fimd_check_timing(struct device *dev, void *timing)
 	return 0;
 }
 
-static int fimd_display_power_on(struct device *dev, int mode)
+static int fimd_display_power_on(void *in_ctx, int mode)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
