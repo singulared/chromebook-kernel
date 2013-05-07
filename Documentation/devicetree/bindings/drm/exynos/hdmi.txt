@@ -4,8 +4,9 @@ Required properties:
 - compatible: value should be one among the following:
 	1) "samsung,exynos4210-hdmi"
 	2) "samsung,exynos4212-hdmi"
-- reg: physical base address of the hdmi and length of memory mapped
-	region.
+	3) "samsung,exynos5420-hdmi"
+- reg: physical base address of hdmi block and length
+	of memory mapped region.
 - interrupts: interrupt number to the cpu.
 - hpd-gpio: following information about the hotplug gpio pin.
 	a) phandle of the gpio controller node.
