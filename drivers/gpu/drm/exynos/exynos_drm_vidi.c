@@ -163,9 +163,9 @@ static struct exynos_drm_display_ops vidi_display_ops = {
 	.power_on = vidi_display_power_on,
 };
 
-static void vidi_dpms(struct device *subdrv_dev, int mode)
+static void vidi_dpms(void *in_ctx, int mode)
 {
-	struct vidi_context *ctx = get_vidi_context(subdrv_dev);
+	struct vidi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
 
@@ -188,9 +188,9 @@ static void vidi_dpms(struct device *subdrv_dev, int mode)
 	mutex_unlock(&ctx->lock);
 }
 
-static void vidi_apply(struct device *subdrv_dev)
+static void vidi_apply(void *in_ctx)
 {
-	struct vidi_context *ctx = get_vidi_context(subdrv_dev);
+	struct vidi_context *ctx = in_ctx;
 	struct exynos_drm_manager *mgr = ctx->subdrv.manager;
 	struct exynos_drm_manager_ops *mgr_ops = mgr->ops;
 	struct vidi_win_data *win_data;
@@ -201,16 +201,16 @@ static void vidi_apply(struct device *subdrv_dev)
 	for (i = 0; i < WINDOWS_NR; i++) {
 		win_data = &ctx->win_data[i];
 		if (win_data->enabled && (mgr_ops && mgr_ops->win_commit))
-			mgr_ops->win_commit(subdrv_dev, i);
+			mgr_ops->win_commit(ctx, i);
 	}
 
 	if (mgr_ops && mgr_ops->commit)
-		mgr_ops->commit(subdrv_dev);
+		mgr_ops->commit(ctx);
 }
 
-static void vidi_commit(struct device *dev)
+static void vidi_commit(void *in_ctx)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -218,9 +218,9 @@ static void vidi_commit(struct device *dev)
 		return;
 }
 
-static int vidi_enable_vblank(struct device *dev)
+static int vidi_enable_vblank(void *in_ctx)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -242,9 +242,9 @@ static int vidi_enable_vblank(struct device *dev)
 	return 0;
 }
 
-static void vidi_disable_vblank(struct device *dev)
+static void vidi_disable_vblank(void *in_ctx)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -255,10 +255,9 @@ static void vidi_disable_vblank(struct device *dev)
 		ctx->vblank_on = false;
 }
 
-static void vidi_win_mode_set(struct device *dev,
-			      struct exynos_drm_overlay *overlay)
+static void vidi_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 	struct vidi_win_data *win_data;
 	int win;
 	unsigned long offset;
@@ -266,7 +265,7 @@ static void vidi_win_mode_set(struct device *dev,
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	if (!overlay) {
-		dev_err(dev, "overlay is NULL\n");
+		DRM_ERROR("overlay is NULL\n");
 		return;
 	}
 
@@ -310,9 +309,9 @@ static void vidi_win_mode_set(struct device *dev,
 			overlay->fb_width, overlay->crtc_width);
 }
 
-static void vidi_win_commit(struct device *dev, int zpos)
+static void vidi_win_commit(void *in_ctx, int zpos)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
@@ -337,9 +336,9 @@ static void vidi_win_commit(struct device *dev, int zpos)
 		schedule_work(&ctx->work);
 }
 
-static void vidi_win_disable(struct device *dev, int zpos)
+static void vidi_win_disable(void *in_ctx, int zpos)
 {
-	struct vidi_context *ctx = get_vidi_context(dev);
+	struct vidi_context *ctx = in_ctx;
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
@@ -427,9 +426,6 @@ static void vidi_subdrv_remove(struct drm_device *drm_dev, struct device *dev)
 
 static int vidi_power_on(struct vidi_context *ctx, bool enable)
 {
-	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
-	struct device *dev = subdrv->dev;
-
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	if (enable != false && enable != true)
@@ -440,9 +436,9 @@ static int vidi_power_on(struct vidi_context *ctx, bool enable)
 
 		/* if vblank was enabled status, enable it again. */
 		if (test_and_clear_bit(0, &ctx->irq_flags))
-			vidi_enable_vblank(dev);
+			vidi_enable_vblank(ctx);
 
-		vidi_apply(dev);
+		vidi_apply(ctx);
 	} else {
 		ctx->suspended = true;
 	}

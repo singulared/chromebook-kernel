@@ -176,9 +176,9 @@ static struct exynos_drm_display_ops drm_hdmi_display_ops = {
 	.power_on = drm_hdmi_power_on,
 };
 
-static int drm_hdmi_enable_vblank(struct device *subdrv_dev)
+static int drm_hdmi_enable_vblank(void *in_ctx)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 	struct exynos_drm_subdrv *subdrv = &ctx->subdrv;
 	struct exynos_drm_manager *manager = subdrv->manager;
 
@@ -191,9 +191,9 @@ static int drm_hdmi_enable_vblank(struct device *subdrv_dev)
 	return 0;
 }
 
-static void drm_hdmi_disable_vblank(struct device *subdrv_dev)
+static void drm_hdmi_disable_vblank(void *in_ctx)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -201,12 +201,11 @@ static void drm_hdmi_disable_vblank(struct device *subdrv_dev)
 		return mixer_ops->disable_vblank(ctx->mixer_ctx->ctx);
 }
 
-static void drm_hdmi_mode_fixup(struct device *subdrv_dev,
-				struct drm_connector *connector,
+static void drm_hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 				const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -215,9 +214,9 @@ static void drm_hdmi_mode_fixup(struct device *subdrv_dev,
 				     adjusted_mode);
 }
 
-static void drm_hdmi_mode_set(struct device *subdrv_dev, void *mode)
+static void drm_hdmi_mode_set(void *in_ctx, void *mode)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -225,10 +224,10 @@ static void drm_hdmi_mode_set(struct device *subdrv_dev, void *mode)
 		hdmi_ops->mode_set(ctx->hdmi_ctx->ctx, mode);
 }
 
-static void drm_hdmi_get_max_resol(struct device *subdrv_dev,
-				unsigned int *width, unsigned int *height)
+static void drm_hdmi_get_max_resol(void *in_ctx, unsigned int *width,
+				unsigned int *height)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -236,9 +235,9 @@ static void drm_hdmi_get_max_resol(struct device *subdrv_dev,
 		hdmi_ops->get_max_resol(ctx->hdmi_ctx->ctx, width, height);
 }
 
-static void drm_hdmi_commit(struct device *subdrv_dev)
+static void drm_hdmi_commit(void *in_ctx)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -246,10 +245,9 @@ static void drm_hdmi_commit(struct device *subdrv_dev)
 		hdmi_ops->commit(ctx->hdmi_ctx->ctx);
 }
 
-static int drm_hdmi_mgr_initialize(struct device *subdrv_dev,
-		struct drm_device *drm_dev)
+static int drm_hdmi_mgr_initialize(void *in_ctx, struct drm_device *drm_dev)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 	int ret = 0;
 
 	if (mixer_ops && mixer_ops->initialize)
@@ -261,9 +259,9 @@ static int drm_hdmi_mgr_initialize(struct device *subdrv_dev,
 	return ret;
 }
 
-static void drm_hdmi_dpms(struct device *subdrv_dev, int mode)
+static void drm_hdmi_dpms(void *in_ctx, int mode)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -274,9 +272,9 @@ static void drm_hdmi_dpms(struct device *subdrv_dev, int mode)
 		hdmi_ops->dpms(ctx->hdmi_ctx->ctx, mode);
 }
 
-static void drm_hdmi_apply(struct device *subdrv_dev)
+static void drm_hdmi_apply(void *in_ctx)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -287,10 +285,10 @@ static void drm_hdmi_apply(struct device *subdrv_dev)
 		hdmi_ops->commit(ctx->hdmi_ctx->ctx);
 }
 
-static void drm_mixer_win_mode_set(struct device *subdrv_dev,
-		struct exynos_drm_overlay *overlay)
+static void drm_mixer_win_mode_set(void *in_ctx,
+				struct exynos_drm_overlay *overlay)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -298,9 +296,9 @@ static void drm_mixer_win_mode_set(struct device *subdrv_dev,
 		mixer_ops->win_mode_set(ctx->mixer_ctx->ctx, overlay);
 }
 
-static void drm_mixer_win_commit(struct device *subdrv_dev, int zpos)
+static void drm_mixer_win_commit(void *in_ctx, int zpos)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("zpos: %d\n", zpos);
 
@@ -308,9 +306,9 @@ static void drm_mixer_win_commit(struct device *subdrv_dev, int zpos)
 		mixer_ops->win_commit(ctx->mixer_ctx->ctx, zpos);
 }
 
-static void drm_mixer_win_disable(struct device *subdrv_dev, int zpos)
+static void drm_mixer_win_disable(void *in_ctx, int zpos)
 {
-	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
+	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("zpos: %d\n", zpos);
 
@@ -394,6 +392,8 @@ static int exynos_drm_hdmi_probe(struct platform_device *pdev)
 		DRM_LOG_KMS("failed to alloc common hdmi context.\n");
 		return -ENOMEM;
 	}
+
+	hdmi_manager.ctx = ctx;
 
 	subdrv = &ctx->subdrv;
 
