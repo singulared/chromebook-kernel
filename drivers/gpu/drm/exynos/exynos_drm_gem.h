@@ -45,7 +45,7 @@ struct exynos_drm_gem_buf {
 };
 
 /*
- * exynos drm buffer structure.
+ * exynos drm object structure.
  *
  * @base: a gem object.
  *	- a new handle to this gem object would be created
@@ -60,7 +60,7 @@ struct exynos_drm_gem_buf {
  * @vma: a pointer to vm_area.
  * @resource_set: the KDS resource set held by the currently outstanding CPU
  *	acquire (if any).
- * @flags: indicate memory type to allocated buffer and cache attruibute.
+ * @flags: indicate memory type to allocated buffer and cache attribute.
  *
  * P.S. this object would be transfered to user as kms_bo.handle so
  *	user can access the buffer through kms_bo.handle.
