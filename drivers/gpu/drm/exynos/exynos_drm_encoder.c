@@ -29,39 +29,21 @@
  * @manager: specific encoder has its own manager to control a hardware
  *	appropriately and we can access a hardware drawing on this manager.
  * @dpms: store the encoder dpms value.
- * @updated: indicate whether overlay data updating is needed or not.
  */
 struct exynos_drm_encoder {
 	struct drm_crtc			*old_crtc;
 	struct drm_encoder		drm_encoder;
 	struct exynos_drm_manager	*manager;
 	int				dpms;
-	bool				updated;
 };
 
-static void exynos_drm_connector_power(struct drm_encoder *encoder, int mode)
-{
-	struct drm_device *dev = encoder->dev;
-	struct drm_connector *connector;
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		if (exynos_drm_best_encoder(connector) == encoder) {
-			DRM_DEBUG_KMS("connector[%d] dpms[%d]\n",
-					connector->base.id, mode);
-
-			exynos_drm_display_power(connector, mode);
-			exynos_encoder->dpms = mode;
-		}
-	}
-}
 
 static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
 	struct drm_device *dev = encoder->dev;
 	struct exynos_drm_manager *manager = exynos_drm_get_manager(encoder);
-	struct exynos_drm_manager_ops *manager_ops = manager->ops;
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
+	struct exynos_drm_display_ops *display_ops = manager->display_ops;
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
 
@@ -73,24 +55,10 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 		return;
 	}
 
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		if (manager_ops && manager_ops->apply)
-			if (!exynos_encoder->updated)
-				manager_ops->apply(manager->ctx);
+	if (display_ops && display_ops->power_on)
+		display_ops->power_on(manager->ctx, mode);
 
-		exynos_drm_connector_power(encoder, mode);
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		exynos_drm_connector_power(encoder, mode);
-		exynos_encoder->updated = false;
-		break;
-	default:
-		DRM_ERROR("unspecified mode %d\n", mode);
-		break;
-	}
+	exynos_encoder->dpms = mode;
 
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -205,14 +173,6 @@ static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 
 	if (manager_ops && manager_ops->commit)
 		manager_ops->commit(manager->ctx);
-
-	/*
-	 * this will avoid one issue that overlay data is updated to
-	 * real hardware two times.
-	 * And this variable will be used to check if the data was
-	 * already updated or not by exynos_drm_encoder_dpms function.
-	 */
-	exynos_encoder->updated = true;
 
 	/*
 	 * In case of setcrtc, there is no way to update encoder's dpms
