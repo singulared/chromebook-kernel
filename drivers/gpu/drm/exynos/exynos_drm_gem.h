@@ -55,8 +55,6 @@ struct exynos_drm_gem_buf {
  *	by user request or at framebuffer creation.
  *	continuous memory region allocated by user request
  *	or at framebuffer creation.
- * @size: size requested from user, in bytes and this size is aligned
- *	in page unit.
  * @vma: a pointer to vm_area.
  * @resource_set: the KDS resource set held by the currently outstanding CPU
  *	acquire (if any).
@@ -68,7 +66,6 @@ struct exynos_drm_gem_buf {
 struct exynos_drm_gem_obj {
 	struct drm_gem_object		base;
 	struct exynos_drm_gem_buf	*buffer;
-	unsigned long			size;
 	struct vm_area_struct		*vma;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource_set         *resource_set;

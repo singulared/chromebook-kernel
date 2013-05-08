@@ -213,7 +213,6 @@ struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
 		return NULL;
 	}
 
-	exynos_gem_obj->size = size;
 	obj = &exynos_gem_obj->base;
 
 	ret = drm_gem_object_init(dev, obj, size);
@@ -518,7 +517,7 @@ int exynos_drm_gem_get_ioctl(struct drm_device *dev, void *data,
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
 	args->flags = exynos_gem_obj->flags;
-	args->size = exynos_gem_obj->size;
+	args->size = obj->size;
 
 	drm_gem_object_unreference(obj);
 	mutex_unlock(&dev->struct_mutex);
