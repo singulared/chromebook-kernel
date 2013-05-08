@@ -28,13 +28,11 @@
  * @drm_encoder: encoder object.
  * @manager: specific encoder has its own manager to control a hardware
  *	appropriately and we can access a hardware drawing on this manager.
- * @dpms: store the encoder dpms value.
  */
 struct exynos_drm_encoder {
 	struct drm_crtc			*old_crtc;
 	struct drm_encoder		drm_encoder;
 	struct exynos_drm_manager	*manager;
-	int				dpms;
 };
 
 
@@ -42,23 +40,14 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 {
 	struct drm_device *dev = encoder->dev;
 	struct exynos_drm_manager *manager = exynos_drm_get_manager(encoder);
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display_ops *display_ops = manager->display_ops;
 
 	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
 
 	mutex_lock(&dev->struct_mutex);
 
-	if (exynos_encoder->dpms == mode) {
-		DRM_DEBUG_KMS("desired dpms mode is same as previous one.\n");
-		mutex_unlock(&dev->struct_mutex);
-		return;
-	}
-
 	if (display_ops && display_ops->dpms)
 		display_ops->dpms(manager->ctx, mode);
-
-	exynos_encoder->dpms = mode;
 
 	mutex_unlock(&dev->struct_mutex);
 }
@@ -173,12 +162,6 @@ static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 
 	if (manager_ops && manager_ops->commit)
 		manager_ops->commit(manager->ctx);
-
-	/*
-	 * In case of setcrtc, there is no way to update encoder's dpms
-	 * so update it here.
-	 */
-	exynos_encoder->dpms = DRM_MODE_DPMS_ON;
 }
 
 static void exynos_drm_encoder_disable(struct drm_encoder *encoder)
@@ -279,7 +262,6 @@ exynos_drm_encoder_create(struct drm_device *dev,
 		return NULL;
 	}
 
-	exynos_encoder->dpms = DRM_MODE_DPMS_OFF;
 	exynos_encoder->manager = manager;
 	encoder = &exynos_encoder->drm_encoder;
 	encoder->possible_crtcs = possible_crtcs;
