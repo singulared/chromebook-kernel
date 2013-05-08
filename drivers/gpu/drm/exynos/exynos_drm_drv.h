@@ -135,7 +135,7 @@ struct exynos_drm_overlay {
  * @get_edid: get edid modes from display driver.
  * @get_panel: get panel object from display driver.
  * @check_mode: check if mode is valid or not.
- * @power_on: display device on or off.
+ * @dpms: display device on or off.
  */
 struct exynos_drm_display_ops {
 	enum exynos_drm_output_type type;
@@ -144,7 +144,7 @@ struct exynos_drm_display_ops {
 	struct edid *(*get_edid)(void *ctx, struct drm_connector *connector);
 	void *(*get_panel)(void *ctx);
 	int (*check_mode)(void *ctx, struct drm_display_mode *mode);
-	int (*power_on)(void *ctx, int mode);
+	void (*dpms)(void *ctx, int mode);
 };
 
 /*

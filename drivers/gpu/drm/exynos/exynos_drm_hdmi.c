@@ -154,16 +154,14 @@ static int drm_hdmi_check_mode(void *in_ctx, struct drm_display_mode *mode)
 	return 0;
 }
 
-static int drm_hdmi_power_on(void *in_ctx, int mode)
+static void drm_hdmi_display_dpms(void *in_ctx, int mode)
 {
 	struct drm_hdmi_context *ctx = in_ctx;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	if (hdmi_ops && hdmi_ops->power_on)
-		return hdmi_ops->power_on(ctx->hdmi_ctx->ctx, mode);
-
-	return 0;
+	if (hdmi_ops && hdmi_ops->dpms)
+		hdmi_ops->dpms(ctx->hdmi_ctx->ctx, mode);
 }
 
 static struct exynos_drm_display_ops drm_hdmi_display_ops = {
@@ -172,7 +170,7 @@ static struct exynos_drm_display_ops drm_hdmi_display_ops = {
 	.is_connected = drm_hdmi_is_connected,
 	.get_edid = drm_hdmi_get_edid,
 	.check_mode = drm_hdmi_check_mode,
-	.power_on = drm_hdmi_power_on,
+	.dpms = drm_hdmi_display_dpms,
 };
 
 static int drm_hdmi_enable_vblank(void *in_ctx)

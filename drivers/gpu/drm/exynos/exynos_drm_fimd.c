@@ -175,21 +175,11 @@ static int fimd_check_mode(void *in_ctx, struct drm_display_mode *mode)
 	return 0;
 }
 
-static int fimd_display_power_on(void *in_ctx, int mode)
-{
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/* TODO */
-
-	return 0;
-}
-
 static struct exynos_drm_display_ops fimd_display_ops = {
 	.type = EXYNOS_DISPLAY_TYPE_LCD,
 	.is_connected = fimd_display_is_connected,
 	.get_panel = fimd_get_panel,
 	.check_mode = fimd_check_mode,
-	.power_on = fimd_display_power_on,
 };
 
 static void fimd_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
