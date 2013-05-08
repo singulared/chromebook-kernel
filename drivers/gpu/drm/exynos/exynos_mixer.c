@@ -1022,6 +1022,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 	u32 val, base, shadow;
 	int i;
 	unsigned long flags;
+	bool finish_pageflip = false;
 
 	WARN_ON(!ctx->powered);
 
@@ -1056,8 +1057,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 				ctx->win_data[i].updated = false;
 		}
 
-		exynos_drm_crtc_finish_pageflip(drm_hdmi_ctx->drm_dev,
-				ctx->pipe);
+		finish_pageflip = true;
 
 		/* set wait vsync event to zero and wake up queue. */
 		if (atomic_read(&ctx->wait_vsync_event)) {
@@ -1076,6 +1076,10 @@ out:
 	mixer_reg_write(res, MXR_INT_STATUS, val);
 
 	spin_unlock_irqrestore(&res->reg_slock, flags);
+
+	if (finish_pageflip)
+		exynos_drm_crtc_finish_pageflip(drm_hdmi_ctx->drm_dev,
+				ctx->pipe);
 
 	return IRQ_HANDLED;
 }
