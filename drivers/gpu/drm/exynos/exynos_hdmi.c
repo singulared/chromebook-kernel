@@ -1612,7 +1612,6 @@ static void hdmiphy_poweroff(struct hdmi_context *hdata)
 static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 {
 	const u8 *hdmiphy_data;
-	u8 buffer[32];
 	u8 operation[2];
 	int ret;
 	int i;
@@ -1635,8 +1634,7 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 		hdmiphy_data = hdmiphy_v14_configs[i].conf;
 	}
 
-	memcpy(buffer, hdmiphy_data, 32);
-	ret = i2c_master_send(hdata->hdmiphy_port, buffer, 32);
+	ret = i2c_master_send(hdata->hdmiphy_port, hdmiphy_data, 32);
 	if (ret != 32) {
 		DRM_ERROR("failed to configure HDMIPHY via I2C\n");
 		return;
