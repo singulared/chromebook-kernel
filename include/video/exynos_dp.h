@@ -124,6 +124,8 @@ struct video_info {
 struct exynos_dp_platdata {
 	struct video_info *video_info;
 
+	int hpd_gpio;
+
 	void (*phy_init)(void);
 	void (*phy_exit)(void);
 };

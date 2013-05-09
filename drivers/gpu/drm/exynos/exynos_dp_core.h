@@ -37,6 +37,14 @@ struct exynos_dp_device {
 	struct device		*dev;
 	struct clk		*clock;
 	unsigned int		irq;
+	unsigned int		irq_flags;
+	/*
+	 * If valid, indicates the GPIO to use for hotplug IRQs/status.
+	 * Otherwise, hotplug IRQs are configured as specified in the
+	 * device-tree and hotplug status is read from the DP controller
+	 * registers.
+	 */
+	int			hpd_gpio;
 	void __iomem		*reg_base;
 	void __iomem		*phy_addr;
 	unsigned int		enable_mask;
