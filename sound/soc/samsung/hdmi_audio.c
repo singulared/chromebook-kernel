@@ -438,6 +438,21 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 			__LINE__, __func__, atomic_read(&ctx->plugged));
 
 	plugged = atomic_read(&ctx->plugged);
+
+	if (hdmi_reg_read(ctx, HDMI_MODE_SEL) & HDMI_DVI_MODE_EN) {
+		/* If HDMI operates in DVI mode,
+		 * for audio purposes it is the same as nothing plugged.
+		 * Unfortunately, hotplug interrupt is received multiple times,
+		 * and HDMI_DVI_MODE_EN is set only in the last one.
+		 * So, we have already reported that HDMI audio was plugged.
+		 * So, update ctx, report now that it was unplugged and return.
+		 */
+		atomic_set(&ctx->plugged, 0);
+		if (plugged && ctx->plugin.jack_cb)
+			ctx->plugin.jack_cb(false);
+		return;
+	}
+
 	if (plugged) {
 		hdmi_audio_control(ctx, false);
 		hdmi_conf_init(ctx);
