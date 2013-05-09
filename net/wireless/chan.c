@@ -84,9 +84,12 @@ int cfg80211_set_freq(struct cfg80211_registered_device *rdev,
 {
 	struct ieee80211_channel *chan;
 	int result;
+	struct wireless_dev *mon_dev = NULL;
 
-	if (wdev && wdev->iftype == NL80211_IFTYPE_MONITOR)
+	if (wdev && wdev->iftype == NL80211_IFTYPE_MONITOR) {
+		mon_dev = wdev;
 		wdev = NULL;
+	}
 
 	if (wdev) {
 		ASSERT_WDEV_LOCK(wdev);
@@ -132,6 +135,9 @@ int cfg80211_set_freq(struct cfg80211_registered_device *rdev,
 
 	if (wdev)
 		wdev->channel = chan;
+
+	if (mon_dev)
+		mon_dev->channel = chan;
 
 	return 0;
 }
