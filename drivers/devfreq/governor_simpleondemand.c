@@ -13,7 +13,43 @@
 #include <linux/module.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
+#include <linux/pm_qos.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
+
+#include <plat/cpu.h>
+
 #include "governor.h"
+
+struct devfreq_simple_ondemand_notifier_block {
+	struct list_head node;
+	struct notifier_block nb;
+	struct devfreq *df;
+};
+
+static LIST_HEAD(devfreq_simple_ondemand_list);
+static DEFINE_MUTEX(devfreq_simple_ondemand_mutex);
+
+static int devfreq_simple_ondemand_notifier(struct notifier_block *nb,
+						unsigned long val,
+						void *v)
+{
+	struct devfreq_simple_ondemand_notifier_block *pq_nb;
+	struct devfreq_simple_ondemand_data *simple_ondemand_data;
+
+	pq_nb = container_of(nb,
+			struct devfreq_simple_ondemand_notifier_block, nb);
+
+	simple_ondemand_data = pq_nb->df->data;
+	simple_ondemand_data->pm_qos_min = val;
+
+	mutex_lock(&pq_nb->df->lock);
+	update_devfreq(pq_nb->df);
+	mutex_unlock(&pq_nb->df->lock);
+
+	return NOTIFY_OK;
+}
 
 /* Default constants for DevFreq-Simple-Ondemand (DFSO) */
 #define DFSO_UPTHRESHOLD	(90)
@@ -48,12 +84,15 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 		return 0;
 	}
 
-	/* Prevent overflow */
-	if (stat.busy_time >= (1 << 24) || stat.total_time >= (1 << 24)) {
-		stat.busy_time >>= 7;
-		stat.total_time >>= 7;
+	/* Prevent overflow, but skip in case of
+	 * 5420 as we are handling in the PPMU driver itself */
+	if (!(soc_is_exynos5420())) {
+		if (stat.busy_time >= (1 << 24) ||
+			stat.total_time >= (1 << 24)) {
+			stat.busy_time >>= 7;
+			stat.total_time >>= 7;
+		}
 	}
-
 	/* Set MAX if it's busy enough */
 	if (stat.busy_time * 100 >
 	    stat.total_time * dfso_upthreshold) {
@@ -81,6 +120,10 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	b *= 100;
 	b = div_u64(b, (dfso_upthreshold - dfso_downdifferential / 2));
 	*freq = (unsigned long) b;
+
+	/* compare calculated freq and pm_qos_min */
+	if (data->pm_qos_min)
+		*freq = max(data->pm_qos_min, (unsigned int)*freq);
 
 	if (df->min_freq && *freq < df->min_freq)
 		*freq = df->min_freq;
@@ -121,10 +164,45 @@ static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 	return 0;
 }
 
-static struct devfreq_governor devfreq_simple_ondemand = {
+static int devfreq_simple_ondemand_register(struct devfreq *df)
+{
+	int ret;
+	struct devfreq_simple_ondemand_notifier_block *pq_nb;
+	struct devfreq_simple_ondemand_data *data = df->data;
+
+	pr_debug("Devfreq: Register qos_class for ondemand governor\n");
+	if (!data)
+		return -EINVAL;
+
+	pq_nb = kzalloc(sizeof(*pq_nb), GFP_KERNEL);
+	if (!pq_nb)
+		return -ENOMEM;
+
+	pq_nb->df = df;
+	pq_nb->nb.notifier_call = devfreq_simple_ondemand_notifier;
+	INIT_LIST_HEAD(&pq_nb->node);
+
+	ret = pm_qos_add_notifier(data->pm_qos_class, &pq_nb->nb);
+	if (ret < 0)
+		goto err;
+
+	mutex_lock(&devfreq_simple_ondemand_mutex);
+	list_add_tail(&pq_nb->node, &devfreq_simple_ondemand_list);
+	mutex_unlock(&devfreq_simple_ondemand_mutex);
+
+	return 0;
+err:
+	pr_err("Devfreq: Error registering qos_class for ondemand governor\n");
+	kfree(pq_nb);
+
+	return ret;
+}
+
+struct devfreq_governor devfreq_simple_ondemand = {
 	.name = "simple_ondemand",
 	.get_target_freq = devfreq_simple_ondemand_func,
 	.event_handler = devfreq_simple_ondemand_handler,
+	.reg = devfreq_simple_ondemand_register,
 };
 
 static int __init devfreq_simple_ondemand_init(void)

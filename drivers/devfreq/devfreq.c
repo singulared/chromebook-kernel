@@ -27,6 +27,8 @@
 #include <linux/hrtimer.h>
 #include "governor.h"
 
+#include <plat/cpu.h>
+
 static struct class *devfreq_class;
 
 /*
@@ -433,7 +435,7 @@ struct devfreq *devfreq_add_device(struct device *dev,
 {
 	struct devfreq *devfreq;
 	struct devfreq_governor *governor;
-	int err = 0;
+	int err = 0, err1 = 0;
 
 	if (!dev || !profile || !governor_name) {
 		dev_err(dev, "%s: Invalid parameters.\n", __func__);
@@ -493,11 +495,14 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	governor = find_devfreq_governor(devfreq->governor_name);
 	if (!IS_ERR(governor))
 		devfreq->governor = governor;
-	if (devfreq->governor)
+	if (devfreq->governor) {
+		if (soc_is_exynos5420())
+			err1 = devfreq->governor->reg(devfreq);
 		err = devfreq->governor->event_handler(devfreq,
 					DEVFREQ_GOV_START, NULL);
+	}
 	mutex_unlock(&devfreq_list_lock);
-	if (err) {
+	if (err || err1) {
 		dev_err(dev, "%s: Unable to start governor for the device\n",
 			__func__);
 		goto err_init;

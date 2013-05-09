@@ -104,7 +104,8 @@ struct devfreq_dev_profile {
  *                      to governors. Events include per device governor
  *                      init and exit, opp changes out of devfreq, suspend
  *                      and resume of per device devfreq during device idle.
- *
+ * @reg:		Callback for registering the qos_class for devfreq
+ *			based on the choice provided by the driver.
  * Note that the callbacks are called with devfreq->lock locked by devfreq.
  */
 struct devfreq_governor {
@@ -114,6 +115,7 @@ struct devfreq_governor {
 	int (*get_target_freq)(struct devfreq *this, unsigned long *freq);
 	int (*event_handler)(struct devfreq *devfreq,
 				unsigned int event, void *data);
+	int (*reg)(struct devfreq *this);
 };
 
 /**
@@ -202,13 +204,21 @@ extern int devfreq_unregister_opp_notifier(struct device *dev,
  *			the governor may consider slowing the frequency down.
  *			Specify 0 to use the default. Valid value = 0 to 100.
  *			downdifferential < upthreshold must hold.
- *
+ * @pm_qos_min:		Mimimum frequency level supported by the devfreq
+ *			device driver.
+ * @pm_qos_class:	This is same as the pm_qos_class defined in
+ *			linux/pm_qos. It can be any one of the qos throughput
+ *			classes and should be passed on by the device driver.
  * If the fed devfreq_simple_ondemand_data pointer is NULL to the governor,
  * the governor uses the default values.
  */
+extern struct devfreq_governor devfreq_simple_ondemand;
+
 struct devfreq_simple_ondemand_data {
 	unsigned int upthreshold;
 	unsigned int downdifferential;
+	unsigned int pm_qos_min;
+	int pm_qos_class;
 };
 #endif
 
