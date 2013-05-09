@@ -83,7 +83,6 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_buf *buffer;
 	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
-	unsigned long offset;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -120,14 +119,11 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	/* buffer count to framebuffer always is 1 at booting time. */
 	exynos_drm_fb_set_buf_cnt(exynos_fb, 1);
 
-	offset = fbi->var.xoffset * (fb->bits_per_pixel >> 3);
-	offset += fbi->var.yoffset * fb->pitches[0];
-
 	dev->mode_config.fb_base = (resource_size_t)buffer->dma_addr;
-	fbi->screen_base = buffer->kvaddr + offset;
+	fbi->screen_base = buffer->kvaddr;
 	if (is_drm_iommu_supported(dev))
 		fbi->fix.smem_start = (unsigned long)
-			(page_to_phys(sg_page(buffer->sgt->sgl)) + offset);
+			(page_to_phys(sg_page(buffer->sgt->sgl)));
 	else
 		fbi->fix.smem_start = (unsigned long)buffer->dma_addr;
 
