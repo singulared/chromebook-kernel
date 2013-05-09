@@ -153,10 +153,9 @@ unsigned int exynos_drm_fb_get_buf_cnt(struct exynos_drm_fb *exynos_fb)
 	return exynos_fb->buf_cnt;
 }
 
-struct drm_framebuffer *
-exynos_drm_framebuffer_init(struct drm_device *dev,
-			    struct drm_mode_fb_cmd2 *mode_cmd,
-			    struct drm_gem_object *obj)
+struct exynos_drm_fb *exynos_drm_fb_init(struct drm_device *dev,
+					 struct drm_mode_fb_cmd2 *mode_cmd,
+					 struct drm_gem_object *obj)
 {
 	struct exynos_drm_fb *exynos_fb;
 	struct exynos_drm_gem_obj *exynos_gem_obj;
@@ -188,7 +187,7 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 		goto err_free_fb;
 	}
 
-	return &exynos_fb->fb;
+	return exynos_fb;
 
 err_free_fb:
 	kfree(exynos_fb);

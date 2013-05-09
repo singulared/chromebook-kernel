@@ -39,10 +39,9 @@ struct exynos_drm_fb {
 #endif
 };
 
-struct drm_framebuffer *
-exynos_drm_framebuffer_init(struct drm_device *dev,
-			    struct drm_mode_fb_cmd2 *mode_cmd,
-			    struct drm_gem_object *obj);
+struct exynos_drm_fb *exynos_drm_fb_init(struct drm_device *dev,
+					 struct drm_mode_fb_cmd2 *mode_cmd,
+					 struct drm_gem_object *obj);
 
 /* get memory information of a drm framebuffer */
 struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb,
