@@ -76,6 +76,7 @@ void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 {
 	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	unsigned int actual_w;
 	unsigned int actual_h;
 	int nr;
@@ -83,9 +84,10 @@ void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	nr = exynos_drm_fb_get_buf_cnt(fb);
+	nr = exynos_drm_fb_get_buf_cnt(exynos_fb);
 	for (i = 0; i < nr; i++) {
-		struct exynos_drm_gem_buf *buffer = exynos_drm_fb_buffer(fb, i);
+		struct exynos_drm_gem_buf *buffer = exynos_drm_fb_buffer(
+				exynos_fb, i);
 
 		overlay->dma_addr[i] = buffer->dma_addr;
 

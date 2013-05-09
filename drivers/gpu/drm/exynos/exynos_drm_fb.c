@@ -55,11 +55,9 @@ static int check_fb_gem_memory_type(struct drm_device *drm_dev,
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-void exynos_drm_fb_attach_dma_buf(struct drm_framebuffer *fb,
+void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 				  struct dma_buf *buf)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-
 	/*
 	 * If we don't already have a reference to the dma_buf,
 	 * grab one now. We'll release it in exynos_drm_fb_destroy().
@@ -144,22 +142,14 @@ static struct drm_framebuffer_funcs exynos_drm_fb_funcs = {
 	.dirty		= exynos_drm_fb_dirty,
 };
 
-void exynos_drm_fb_set_buf_cnt(struct drm_framebuffer *fb,
-						unsigned int cnt)
+void exynos_drm_fb_set_buf_cnt(struct exynos_drm_fb *exynos_fb,
+			       unsigned int cnt)
 {
-	struct exynos_drm_fb *exynos_fb;
-
-	exynos_fb = to_exynos_fb(fb);
-
 	exynos_fb->buf_cnt = cnt;
 }
 
-unsigned int exynos_drm_fb_get_buf_cnt(struct drm_framebuffer *fb)
+unsigned int exynos_drm_fb_get_buf_cnt(struct exynos_drm_fb *exynos_fb)
 {
-	struct exynos_drm_fb *exynos_fb;
-
-	exynos_fb = to_exynos_fb(fb);
-
 	return exynos_fb->buf_cnt;
 }
 
@@ -313,10 +303,9 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 	return &exynos_fb->fb;
 }
 
-struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
-						int index)
+struct exynos_drm_gem_buf *
+exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb, int index)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_buf *buffer;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -330,11 +319,9 @@ struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
 	return buffer;
 }
 
-struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct drm_framebuffer *fb,
+struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct exynos_drm_fb *exynos_fb,
 					     int index)
 {
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-
 	DRM_DEBUG_KMS("%s\n", __func__);
 
 	BUG_ON(index >= MAX_FB_BUFFER);

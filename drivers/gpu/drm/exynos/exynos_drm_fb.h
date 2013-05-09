@@ -45,23 +45,23 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 			    struct drm_gem_object *obj);
 
 /* get memory information of a drm framebuffer */
-struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct drm_framebuffer *fb,
-						 int index);
-struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct drm_framebuffer *fb,
+struct exynos_drm_gem_buf *exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb,
+						int index);
+struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct exynos_drm_fb *exynos_fb,
 					     int index);
 
 void exynos_drm_mode_config_init(struct drm_device *dev);
 
 /* set a buffer count to drm framebuffer. */
-void exynos_drm_fb_set_buf_cnt(struct drm_framebuffer *fb,
-						unsigned int cnt);
+void exynos_drm_fb_set_buf_cnt(struct exynos_drm_fb *exynos_fb,
+			       unsigned int cnt);
 
 /* get a buffer count to drm framebuffer. */
-unsigned int exynos_drm_fb_get_buf_cnt(struct drm_framebuffer *fb);
+unsigned int exynos_drm_fb_get_buf_cnt(struct exynos_drm_fb *exynos_fb);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 /* store a reference to the dma_buf for this fb */
-void exynos_drm_fb_attach_dma_buf(struct drm_framebuffer *fb,
+void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 				  struct dma_buf *buf);
 #endif
 

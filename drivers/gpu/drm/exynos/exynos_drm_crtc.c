@@ -363,7 +363,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_drm_fb_obj(fb, 0);
+	struct exynos_drm_gem_obj *exynos_gem_obj;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_flip_desc flip_desc;
 	bool send_event = false;
@@ -373,7 +373,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	/* We don't support flipping to non-RGBA buffers. */
-	if (exynos_drm_fb_get_buf_cnt(fb) != 1) {
+	if (exynos_drm_fb_get_buf_cnt(exynos_fb) != 1) {
 		DRM_ERROR("called page_flip with non-RGBA buffer\n");
 		return -EINVAL;
 	}
@@ -410,13 +410,14 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	if (event && kfifo_is_empty(&exynos_crtc->flip_fifo))
 		send_event = true;
 
+	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
 	if (exynos_gem_obj->base.export_dma_buf) {
 		struct dma_buf *buf = exynos_gem_obj->base.export_dma_buf;
 		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
 		struct exynos_drm_private *dev_priv = dev->dev_private;
 		unsigned long shared = 0UL;
 
-		exynos_drm_fb_attach_dma_buf(fb, buf);
+		exynos_drm_fb_attach_dma_buf(exynos_fb, buf);
 
 		/* Waiting for the KDS resource*/
 		ret = kds_async_waitall(&flip_desc.kds, KDS_FLAG_LOCKED_WAIT,
