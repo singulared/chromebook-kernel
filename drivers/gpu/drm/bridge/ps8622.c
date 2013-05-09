@@ -41,11 +41,21 @@ struct ps8622_bridge {
 	int gpio_slp_n;
 	int gpio_rst_n;
 
+	u8 max_lane_count;
+	u8 lane_count;
+
 	bool enabled;
 };
 
 /* Brightness scale on the Parade chip */
 #define PS8622_MAX_BRIGHTNESS 0xff
+
+/*
+ * According to the parts specs, this seems to be about the only difference
+ * between the PS8622 and the PS8625.
+ */
+#define PS8625_MAX_LANE_COUNT 2
+#define PS8622_MAX_LANE_COUNT 1
 
 static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 {
@@ -111,11 +121,12 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 	/* EQ Training State Machine Setting */
 	err |= ps8622_set(cl, 0x04, 0x54, 0x10); /* RCO calibration start */
 	/* Logic, needs more than 10 I2C command */
-	err |= ps8622_set(cl, 0x01, 0x02, 0x81); /* [4:0] MAX_LANE_COUNT set to
-						  * one lane */
-	err |= ps8622_set(cl, 0x01, 0x21, 0x81); /* [4:0] LANE_COUNT_SET set to
-						  * one lane (in case no-link
-						  * traing conflict) */
+	err |= ps8622_set(cl, 0x01, 0x02, 0x80 | bridge->max_lane_count);
+						 /* [4:0] MAX_LANE_COUNT set to
+						  * max supported lanes */
+	err |= ps8622_set(cl, 0x01, 0x21, 0x80 | bridge->lane_count);
+						 /* [4:0] LANE_COUNT_SET set to
+						  * chosen lane count */
 	err |= ps8622_set(cl, 0x00, 0x52, 0x20);
 	err |= ps8622_set(cl, 0x00, 0xf1, 0x03); /* HPD CP toggle enable */
 	err |= ps8622_set(cl, 0x00, 0x62, 0x41);
@@ -320,6 +331,18 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 					    "PS8622_RST_N");
 		if (ret)
 			goto err;
+	}
+
+	if (of_device_is_compatible(node, "parade,ps8625"))
+		bridge->max_lane_count = PS8625_MAX_LANE_COUNT;
+	else
+		bridge->max_lane_count = PS8622_MAX_LANE_COUNT;
+
+	if (of_property_read_u8(node, "lane-count", &bridge->lane_count))
+		bridge->lane_count = bridge->max_lane_count;
+	else if (bridge->lane_count > bridge->max_lane_count) {
+		DRM_ERROR("lane-count property is too high for DP bridge\n");
+		bridge->lane_count = bridge->max_lane_count;
 	}
 
 	bridge->bl = backlight_device_register("ps8622-backlight", dev->dev,
