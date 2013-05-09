@@ -499,6 +499,18 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 		return;
 	}
 
+	if (hdmi_reg_read(ctx, HDMI_MODE_SEL) & HDMI_DVI_MODE_EN) {
+		/* If HDMI operates in DVI mode,
+		 * for audio purposes it is the same as nothing plugged.
+		 * So, change the "ctx->plugged" state to unplugged.
+		 * Also, simulate unplugging for jack_cb, as this
+		 * takes care of swapping HDMI with DVI when suspended.
+		 */
+		atomic_set(&ctx->plugged, 0);
+		plugged = false;
+		goto report_event;
+	}
+
 	snd_printdd("[%d] %s hdmi powered on after %d tries\n",
 		__LINE__, __func__, HDMI_POWERON_WAIT_COUNT - tries);
 
