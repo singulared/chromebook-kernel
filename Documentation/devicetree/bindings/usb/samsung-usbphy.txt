@@ -42,6 +42,12 @@ Optional properties:
 - ranges: allows valid translation between child's address space and parent's
 	  address space.
 
+- samsung,hsic-reset-gpio: an active low GPIO pin that resets a device
+			   connected to the HSIC port. Useful for things like
+			   an on-board SMSC3503 hub.
+- pinctrl-0: Pin control group containing the HSIC reset GPIO pin.
+- pinctrl-names: Should contain only one value - "default".
+
 - The child node 'usbphy-sys' to the node 'usbphy' is for the system controller
   interface for usb-phy. It should provide the following information required by
   usb-phy controller to control phy.
@@ -66,6 +72,10 @@ Example:
 
 		clocks = <&clock 2>, <&clock 305>;
 		clock-names = "xusbxti", "otg";
+
+		samsung,hsic-reset-gpio = <&gpx2 4 1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hsic_reset>;
 
 		usbphy-sys {
 			/* USB device and host PHY_CONTROL registers */

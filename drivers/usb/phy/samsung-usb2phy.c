@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
+#include <linux/gpio.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/usb/otg.h>
@@ -43,15 +44,6 @@ int samsung_usb2phy_set_host(struct usb_otg *otg, struct usb_bus *host)
 	return 0;
 }
 
-static bool exynos5_phyhost_is_on(void *regs)
-{
-	u32 reg;
-
-	reg = readl(regs + EXYNOS5_PHY_HOST_CTRL0);
-
-	return !(reg & HOST_CTRL0_SIDDQ);
-}
-
 static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 {
 	void __iomem *regs = sphy->regs;
@@ -68,10 +60,8 @@ static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 	 * the last consumer to disable it.
 	 */
 
-	atomic_inc(&sphy->phy_usage);
-
-	if (exynos5_phyhost_is_on(regs)) {
-		dev_info(sphy->dev, "Already power on PHY\n");
+	if (atomic_inc_return(&sphy->phy_usage) != 1) {
+		dev_info(sphy->dev, "USB PHY already initialized\n");
 		return;
 	}
 
@@ -132,6 +122,13 @@ static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 	writel(phyotg, regs + EXYNOS5_PHY_OTG_SYS);
 
 	/* HSIC phy configuration */
+	if (gpio_is_valid(sphy->hsic_reset_gpio)) {
+		gpio_set_value(sphy->hsic_reset_gpio, 0);
+		udelay(100);  /* Keep reset as active/low for 100us */
+		gpio_set_value(sphy->hsic_reset_gpio, 1);
+		usleep_range(4000, 10000);  /* wait for device init */
+	}
+
 	phyhsic = (HSIC_CTRL_REFCLKDIV_12 |
 			HSIC_CTRL_REFCLKSEL |
 			HSIC_CTRL_PHYSWRST);
@@ -212,6 +209,9 @@ static void samsung_exynos5_usb2phy_disable(struct samsung_usbphy *sphy)
 			HSIC_CTRL_FORCESUSPEND);
 	writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
 	writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
+
+	if (gpio_is_valid(sphy->hsic_reset_gpio))
+		gpio_set_value(sphy->hsic_reset_gpio, 0);
 
 	phyhost = readl(regs + EXYNOS5_PHY_HOST_CTRL0);
 	phyhost |= (HOST_CTRL0_SIDDQ |

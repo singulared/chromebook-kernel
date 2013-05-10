@@ -293,6 +293,7 @@ struct samsung_usbphy_drvdata {
  *						#DEVICE
  * @phy_usage: usage count for phy
  * @lock: lock for phy operations
+ * @hsic_reset_gpio: Active low GPIO that resets connected HSIC device
  * @channel: Channel number of controller in multi controller scenerio.
  */
 struct samsung_usbphy {
@@ -308,6 +309,7 @@ struct samsung_usbphy {
 	enum samsung_usb_phy_type phy_type;
 	atomic_t	phy_usage;
 	spinlock_t	lock;
+	int		hsic_reset_gpio;
 	int		channel;
 };
 

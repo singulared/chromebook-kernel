@@ -27,6 +27,7 @@
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_gpio.h>
 #include <linux/usb/samsung_usb_phy.h>
 
 #include "samsung-usbphy.h"
@@ -63,6 +64,22 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 	 */
 	if (sphy->sysreg == NULL)
 		dev_warn(sphy->dev, "Can't get usb-phy sysreg cfg register\n");
+
+	/*
+	 * Some boards have a separate active-low reset GPIO for their HSIC USB
+	 * devices. If they don't, this will just stay at an invalid value and
+	 * the init code will ignore it.
+	 */
+	sphy->hsic_reset_gpio = of_get_named_gpio(sphy->dev->of_node,
+						"samsung,hsic-reset-gpio", 0);
+	if (gpio_is_valid(sphy->hsic_reset_gpio)) {
+		if (devm_gpio_request_one(sphy->dev, sphy->hsic_reset_gpio,
+				GPIOF_OUT_INIT_LOW, "samsung_hsic_reset")) {
+			dev_err(sphy->dev, "can't request hsic reset gpio %d\n",
+				sphy->hsic_reset_gpio);
+			sphy->hsic_reset_gpio = -EINVAL;
+		}
+	}
 
 	of_node_put(usbphy_sys);
 
