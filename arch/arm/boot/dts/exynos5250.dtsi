@@ -714,9 +714,14 @@
 				<&clock 157>, <&clock 1024>;
 		clock-names = "hdmi", "sclk_hdmi", "sclk_pixel",
 				"sclk_hdmiphy", "mout_hdmi";
+		#address-cells = <1>;
+		#size-cells = <1>;
 
 		hdmi-audio {
 			compatible = "samsung,exynos5-hdmi-audio";
+		};
+		phy-power-control {
+			reg = <0x10040700 0x04>;
 		};
 	};
 
