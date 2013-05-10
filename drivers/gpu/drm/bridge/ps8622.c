@@ -171,10 +171,8 @@ static void ps8622_power_up(struct ps8622_bridge *bridge)
 
 	if (bridge->v12)
 		regulator_enable(bridge->v12);
-	if (bridge->bck_fet)
-		regulator_enable(bridge->bck_fet);
-	if (bridge->lcd_fet)
-		regulator_enable(bridge->lcd_fet);
+	regulator_enable(bridge->bck_fet);
+	regulator_enable(bridge->lcd_fet);
 
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 1);
@@ -205,10 +203,8 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 0);
 
-	if (bridge->lcd_fet)
-		regulator_disable(bridge->lcd_fet);
-	if (bridge->bck_fet)
-		regulator_disable(bridge->bck_fet);
+	regulator_disable(bridge->lcd_fet);
+	regulator_disable(bridge->bck_fet);
 	if (bridge->v12)
 		regulator_disable(bridge->v12);
 }
@@ -264,10 +260,8 @@ void ps8622_destroy(struct drm_bridge *dbridge)
 	drm_bridge_cleanup(dbridge);
 	if (bridge->bl)
 		backlight_device_unregister(bridge->bl);
-	if (bridge->lcd_fet)
-		regulator_put(bridge->lcd_fet);
-	if (bridge->bck_fet)
-		regulator_put(bridge->bck_fet);
+	regulator_put(bridge->lcd_fet);
+	regulator_put(bridge->bck_fet);
 	if (bridge->v12)
 		regulator_put(bridge->v12);
 	if (gpio_is_valid(bridge->gpio_slp_n))
@@ -295,18 +289,22 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 	bridge->client = client;
 	bridge->v12 = regulator_get(&client->dev, "vdd_bridge");
 	if (IS_ERR(bridge->v12)) {
-		DRM_ERROR("no 1.2v regulator found for PS8622\n");
+		DRM_INFO("no 1.2v regulator found for PS8622\n");
 		bridge->v12 = NULL;
 	}
 	bridge->bck_fet = regulator_get(&client->dev, "vcd_led");
 	if (IS_ERR(bridge->bck_fet)) {
 		DRM_ERROR("no regulator found for backlight FET\n");
+		ret = PTR_ERR(bridge->bck_fet);
 		bridge->bck_fet = NULL;
+		goto err_reg;
 	}
 	bridge->lcd_fet = regulator_get(&client->dev, "lcd_vdd");
 	if (IS_ERR(bridge->lcd_fet)) {
 		DRM_ERROR("no regulator found for LCD FET\n");
+		ret = PTR_ERR(bridge->lcd_fet);
 		bridge->lcd_fet = NULL;
+		goto err_reg;
 	}
 
 	bridge->gpio_slp_n = of_get_named_gpio(node, "sleep-gpio", 0);
