@@ -137,8 +137,8 @@ static notrace u32 exynos4_read_sched_clock(void)
 
 static cycle_t exynos4_frc_read(struct clocksource *cs)
 {
-	u32 lo, hi;
-	static u32 hi2;
+	unsigned int lo, hi;
+	u32 hi2 = __raw_readl(EXYNOS4_MCT_G_CNT_U);
 
 	do {
 		hi = hi2;
