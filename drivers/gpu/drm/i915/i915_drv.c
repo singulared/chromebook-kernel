@@ -483,8 +483,6 @@ static int i915_drm_freeze(struct drm_device *dev)
 
 		cancel_delayed_work_sync(&dev_priv->rps.delayed_resume_work);
 
-		intel_modeset_disable(dev);
-
 		drm_irq_uninstall(dev);
 	}
 
@@ -563,7 +561,8 @@ static int __i915_drm_thaw(struct drm_device *dev)
 		mutex_unlock(&dev->struct_mutex);
 
 		intel_modeset_init_hw(dev);
-		intel_modeset_setup_hw_state(dev, false);
+		intel_modeset_setup_hw_state(dev, true);
+
 		drm_irq_install(dev);
 	}
 
