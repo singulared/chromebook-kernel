@@ -946,6 +946,177 @@ static int samsung_pinctrl_probe(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+
+/**
+ * samsung_pinctrl_resume_noirq - save pinctrl state for suspend
+ *
+ * Save data for all banks handled by this device.
+ */
+static int samsung_pinctrl_suspend_noirq(struct device *dev)
+{
+	struct samsung_pinctrl_drv_data *drvdata = dev_get_drvdata(dev);
+	struct samsung_pin_ctrl *ctrl = drvdata->ctrl;
+	void __iomem * const virt_base = drvdata->virt_base;
+	int i;
+
+	for (i = 0; i < ctrl->nr_banks; i++) {
+		struct samsung_pin_bank *bank = &ctrl->pin_banks[i];
+		void __iomem * const reg = virt_base + bank->pctl_offset;
+
+		bank->pm_save.con = readl(reg);
+		bank->pm_save.dat = readl(reg + DAT_REG);
+		bank->pm_save.pud = readl(reg + PUD_REG);
+		bank->pm_save.drv = readl(reg + DRV_REG);
+
+		if (bank->conpdn_width) {
+			bank->pm_save.conpdn = readl(reg + CONPDN_REG);
+			bank->pm_save.pudpdn = readl(reg + PUDPDN_REG);
+		}
+
+		dev_dbg(dev, "Save %s @ %p (con %#010x)\n",
+			bank->name, reg, bank->pm_save.con);
+	}
+
+	return 0;
+}
+
+/**
+ * is_sfn - test whether a pin config represents special function.
+ *
+ * Test whether the given masked+shifted bits of an GPIO configuration
+ * are one of the SFN (special function) modes.
+ */
+static inline int is_sfn(u32 con)
+{
+	return con >= 2;
+}
+
+/**
+ * is_in - test if the given masked+shifted GPIO configuration is an input.
+ */
+static inline int is_in(u32 con)
+{
+	return con == 0;
+}
+
+/**
+ * is_out - test if the given masked+shifted GPIO configuration is an output.
+ */
+static inline int is_out(u32 con)
+{
+	return con == 1;
+}
+
+/**
+ * samsung_pinctrl_resume_noirq - restore pinctrl state from suspend
+ *
+ * Restore one of the GPIO banks that was saved during suspend. This is
+ * not as simple as once thought, due to the possibility of glitches
+ * from the order that the CON and DAT registers are set in.
+ *
+ * The three states the pin can be are {IN,OUT,SFN} which gives us 9
+ * combinations of changes to check. Three of these, if the pin stays
+ * in the same configuration can be discounted. This leaves us with
+ * the following:
+ *
+ * { IN => OUT }  Change DAT first
+ * { IN => SFN }  Change CON first
+ * { OUT => SFN } Change CON first, so new data will not glitch
+ * { OUT => IN }  Change CON first, so new data will not glitch
+ * { SFN => IN }  Change CON first
+ * { SFN => OUT } Change DAT first, so new data will not glitch [1]
+ *
+ * We do not currently deal with the UP registers as these control
+ * weak resistors, so a small delay in change should not need to bring
+ * these into the calculations.
+ *
+ * [1] this assumes that writing to a pin DAT whilst in SFN will set the
+ *     state for when it is next output.
+ */
+static int samsung_pinctrl_resume_noirq(struct device *dev)
+{
+	struct samsung_pinctrl_drv_data *drvdata = dev_get_drvdata(dev);
+	struct samsung_pin_ctrl *ctrl = drvdata->ctrl;
+	void __iomem * const virt_base = drvdata->virt_base;
+	int i;
+
+	for (i = 0; i < ctrl->nr_banks; i++) {
+		const struct samsung_pin_bank *bank = &ctrl->pin_banks[i];
+		void __iomem * const reg = virt_base + bank->pctl_offset;
+		const u32 from_con = readl(reg);
+		const u32 to_con = bank->pm_save.con;
+		const u32 func_width = bank->func_width;
+		const u32 func_mask = (1 << func_width) - 1;
+		u32 change_mask = 0;
+		int pin;
+
+		/* Easy--the PUD and DRV can go first */
+		writel(bank->pm_save.pud, reg + PUD_REG);
+		writel(bank->pm_save.drv, reg + DRV_REG);
+
+		/*
+		 * Create a change_mask of all the items that need to have
+		 * their CON value changed before their DAT value, so that
+		 * we minimise the work between the two settings.
+		 */
+		for (pin = 0; pin < bank->nr_pins; pin++) {
+			u32 shift = pin * func_width;
+			u32 from_func = (from_con >> shift) & func_mask;
+			u32 to_func = (to_con >> shift) & func_mask;
+
+			/* If there is no change, then skip */
+			if (from_func == to_func)
+				continue;
+
+			/* If both are special function, then skip */
+			if (is_sfn(from_func) && is_sfn(to_func))
+				continue;
+
+			/* Change is IN => OUT, do not change now */
+			if (is_in(from_func) && is_out(to_func))
+				continue;
+
+			/* Change is SFN => OUT, do not change now */
+			if (is_sfn(from_func) && is_out(to_func))
+				continue;
+
+			/*
+			 * We should now be at the case of:
+			 *   IN=>SFN, OUT=>SFN, OUT=>IN, SFN=>IN.
+			 */
+			change_mask |= (func_mask << shift);
+		}
+
+		/* Write the new CON settings */
+		writel((from_con & ~change_mask) | (to_con & change_mask), reg);
+
+		/* Now change any items that require DAT,CON */
+		writel(bank->pm_save.dat, reg + DAT_REG);
+		writel(to_con, reg);
+
+		if (bank->conpdn_width) {
+			writel(bank->pm_save.conpdn, reg + CONPDN_REG);
+			writel(bank->pm_save.pudpdn, reg + PUDPDN_REG);
+		}
+
+		dev_dbg(dev, "Restore %s@%p (con %#010x=>%#010x, chg %#010x)\n",
+			bank->name, reg, from_con, to_con, change_mask);
+	}
+
+	return 0;
+}
+
+#else
+#define samsung_pinctrl_suspend_noirq	NULL
+#define samsung_pinctrl_resume_noirq	NULL
+#endif
+
+static const struct dev_pm_ops samsung_pinctrl_dev_pm_ops = {
+	.suspend_noirq = samsung_pinctrl_suspend_noirq,
+	.resume_noirq = samsung_pinctrl_resume_noirq,
+};
+
 static const struct of_device_id samsung_pinctrl_dt_match[] = {
 	{ .compatible = "samsung,exynos4210-pinctrl",
 		.data = (void *)exynos4210_pin_ctrl },
@@ -963,6 +1134,7 @@ static struct platform_driver samsung_pinctrl_driver = {
 		.name	= "samsung-pinctrl",
 		.owner	= THIS_MODULE,
 		.of_match_table = of_match_ptr(samsung_pinctrl_dt_match),
+		.pm = &samsung_pinctrl_dev_pm_ops,
 	},
 };
 
