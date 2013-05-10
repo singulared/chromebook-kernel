@@ -394,7 +394,6 @@ struct ieee80211_if_managed {
 	int probe_send_count;
 	bool nullfunc_failed;
 
-	struct mutex mtx;
 	struct cfg80211_bss *associated;
 	struct ieee80211_mgd_auth_data *auth_data;
 	struct ieee80211_mgd_assoc_data *assoc_data;
@@ -482,8 +481,6 @@ struct ieee80211_if_managed {
 
 struct ieee80211_if_ibss {
 	struct timer_list timer;
-
-	struct mutex mtx;
 
 	unsigned long last_scan_completed;
 
@@ -761,6 +758,26 @@ static inline
 struct ieee80211_sub_if_data *vif_to_sdata(struct ieee80211_vif *p)
 {
 	return container_of(p, struct ieee80211_sub_if_data, vif);
+}
+
+static inline void sdata_lock(struct ieee80211_sub_if_data *sdata)
+	__acquires(&sdata->wdev.mtx)
+{
+	mutex_lock(&sdata->wdev.mtx);
+	__acquire(&sdata->wdev.mtx);
+}
+
+static inline void sdata_unlock(struct ieee80211_sub_if_data *sdata)
+	__releases(&sdata->wdev.mtx)
+{
+	mutex_unlock(&sdata->wdev.mtx);
+	__release(&sdata->wdev.mtx);
+}
+
+static inline void
+sdata_assert_lock(struct ieee80211_sub_if_data *sdata)
+{
+	lockdep_assert_held(&sdata->wdev.mtx);
 }
 
 static inline enum ieee80211_band

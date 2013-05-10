@@ -53,7 +53,7 @@ static void __ieee80211_sta_join_ibss(struct ieee80211_sub_if_data *sdata,
 	u8 supp_rates[IEEE80211_MAX_SUPP_RATES];
 	struct cfg80211_chan_def chandef;
 
-	lockdep_assert_held(&ifibss->mtx);
+	sdata_assert_lock(sdata);
 
 	/* Reset own TSF to allow time synchronization work. */
 	drv_reset_tsf(local, sdata);
@@ -244,7 +244,7 @@ static void ieee80211_sta_join_ibss(struct ieee80211_sub_if_data *sdata,
 	const struct cfg80211_bss_ies *ies;
 	u64 tsf;
 
-	lockdep_assert_held(&sdata->u.ibss.mtx);
+	sdata_assert_lock(sdata);
 
 	if (beacon_int < 10)
 		beacon_int = 10;
@@ -389,7 +389,7 @@ static void ieee80211_rx_mgmt_auth_ibss(struct ieee80211_sub_if_data *sdata,
 	struct sta_info *sta;
 	u8 deauth_frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
 
-	lockdep_assert_held(&sdata->u.ibss.mtx);
+	sdata_assert_lock(sdata);
 
 	if (len < 24 + 6)
 		return;
@@ -663,7 +663,7 @@ static int ieee80211_sta_active_ibss(struct ieee80211_sub_if_data *sdata)
 	int active = 0;
 	struct sta_info *sta;
 
-	lockdep_assert_held(&sdata->u.ibss.mtx);
+	sdata_assert_lock(sdata);
 
 	rcu_read_lock();
 
@@ -689,7 +689,7 @@ static void ieee80211_sta_merge_ibss(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
-	lockdep_assert_held(&ifibss->mtx);
+	sdata_assert_lock(sdata);
 
 	mod_timer(&ifibss->timer,
 		  round_jiffies(jiffies + IEEE80211_IBSS_MERGE_INTERVAL));
@@ -720,7 +720,7 @@ static void ieee80211_sta_create_ibss(struct ieee80211_sub_if_data *sdata)
 	u16 capability;
 	int i;
 
-	lockdep_assert_held(&ifibss->mtx);
+	sdata_assert_lock(sdata);
 
 	if (ifibss->fixed_bssid) {
 		memcpy(bssid, ifibss->bssid, ETH_ALEN);
@@ -763,7 +763,7 @@ static void ieee80211_sta_find_ibss(struct ieee80211_sub_if_data *sdata)
 	int active_ibss;
 	u16 capability;
 
-	lockdep_assert_held(&ifibss->mtx);
+	sdata_assert_lock(sdata);
 
 	active_ibss = ieee80211_sta_active_ibss(sdata);
 	ibss_dbg(sdata, "sta_find_ibss (active_ibss=%d)\n", active_ibss);
@@ -834,10 +834,10 @@ static void ieee80211_rx_mgmt_probe_req(struct ieee80211_sub_if_data *sdata,
 	struct sk_buff *presp;
 	u8 *pos, *end;
 
-	lockdep_assert_held(&ifibss->mtx);
+	sdata_assert_lock(sdata);
 
 	presp = rcu_dereference_protected(ifibss->presp,
-					  lockdep_is_held(&ifibss->mtx));
+					  lockdep_is_held(&sdata->wdev.mtx));
 
 	if (ifibss->state != IEEE80211_IBSS_MLME_JOINED ||
 	    len < 24 + 2 || !presp)
@@ -930,7 +930,7 @@ void ieee80211_ibss_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 	mgmt = (struct ieee80211_mgmt *) skb->data;
 	fc = le16_to_cpu(mgmt->frame_control);
 
-	mutex_lock(&sdata->u.ibss.mtx);
+	sdata_lock(sdata);
 
 	if (!sdata->u.ibss.ssid_len)
 		goto mgmt_out; /* not ready to merge yet */
@@ -956,7 +956,7 @@ void ieee80211_ibss_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 	}
 
  mgmt_out:
-	mutex_unlock(&sdata->u.ibss.mtx);
+	sdata_unlock(sdata);
 }
 
 void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
@@ -964,7 +964,7 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 	struct sta_info *sta;
 
-	mutex_lock(&ifibss->mtx);
+	sdata_lock(sdata);
 
 	/*
 	 * Work could be scheduled after scan or similar
@@ -1000,7 +1000,7 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 	}
 
  out:
-	mutex_unlock(&ifibss->mtx);
+	sdata_unlock(sdata);
 }
 
 static void ieee80211_ibss_timer(unsigned long data)
@@ -1044,7 +1044,6 @@ void ieee80211_ibss_setup_sdata(struct ieee80211_sub_if_data *sdata)
 
 	setup_timer(&ifibss->timer, ieee80211_ibss_timer,
 		    (unsigned long) sdata);
-	mutex_init(&ifibss->mtx);
 	INIT_LIST_HEAD(&ifibss->incomplete_stations);
 	spin_lock_init(&ifibss->incomplete_lock);
 }
@@ -1086,8 +1085,6 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 	if (!skb)
 		return -ENOMEM;
 
-	mutex_lock(&sdata->u.ibss.mtx);
-
 	if (params->bssid) {
 		memcpy(sdata->u.ibss.bssid, params->bssid, ETH_ALEN);
 		sdata->u.ibss.fixed_bssid = true;
@@ -1120,8 +1117,6 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 
 	memcpy(sdata->u.ibss.ssid, params->ssid, params->ssid_len);
 	sdata->u.ibss.ssid_len = params->ssid_len;
-
-	mutex_unlock(&sdata->u.ibss.mtx);
 
 	mutex_lock(&sdata->local->mtx);
 	ieee80211_recalc_idle(sdata->local);
@@ -1161,8 +1156,6 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 	u16 capability;
 	int active_ibss;
 	struct sta_info *sta;
-
-	mutex_lock(&sdata->u.ibss.mtx);
 
 	active_ibss = ieee80211_sta_active_ibss(sdata);
 
@@ -1207,7 +1200,7 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 	/* remove beacon */
 	kfree(sdata->u.ibss.ie);
 	skb = rcu_dereference_protected(sdata->u.ibss.presp,
-					lockdep_is_held(&sdata->u.ibss.mtx));
+					lockdep_is_held(&sdata->wdev.mtx));
 	RCU_INIT_POINTER(sdata->u.ibss.presp, NULL);
 	sdata->vif.bss_conf.ibss_joined = false;
 	sdata->vif.bss_conf.ibss_creator = false;
@@ -1219,8 +1212,6 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 	skb_queue_purge(&sdata->skb_queue);
 
 	del_timer_sync(&sdata->u.ibss.timer);
-
-	mutex_unlock(&sdata->u.ibss.mtx);
 
 	mutex_lock(&local->mtx);
 	ieee80211_recalc_idle(sdata->local);
