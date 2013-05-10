@@ -150,9 +150,9 @@
 
 #define DW_MCI_DEF_SDR_TIMING		0x03030002
 #define DW_MCI_DEF_DDR_TIMING		0x03020001
-#define SDMMC_CLKSEL_CCLK_SAMPLE(x)	(((x) & 3) << 0)
-#define SDMMC_CLKSEL_CCLK_DRIVE(x)	(((x) & 3) << 16)
-#define SDMMC_CLKSEL_CCLK_DIVIDER(x)	(((x) & 3) << 24)
+#define SDMMC_CLKSEL_CCLK_SAMPLE(x)	(((x) & 7) << 0)
+#define SDMMC_CLKSEL_CCLK_DRIVE(x)	(((x) & 7) << 16)
+#define SDMMC_CLKSEL_CCLK_DIVIDER(x)	(((x) & 7) << 24)
 #define SDMMC_CLKSEL_TIMING(x, y, z)	(SDMMC_CLKSEL_CCLK_SAMPLE(x) |	\
 					SDMMC_CLKSEL_CCLK_DRIVE(y) |	\
 					SDMMC_CLKSEL_CCLK_DIVIDER(z))
