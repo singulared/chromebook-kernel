@@ -158,6 +158,14 @@ clock which they consume.
   g3d			345
   aclk_400_g3d		346
 
+
+   [Clock Muxes]
+
+  Clock			ID
+  ----------------------------
+  mout_hdmi		1024
+
+
 Example 1: An example of a clock controller node is listed below.
 
 	clock: clock-controller@0x10010000 {
