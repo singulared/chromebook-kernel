@@ -263,14 +263,6 @@ void ps8622_destroy(struct drm_bridge *dbridge)
 	drm_bridge_cleanup(dbridge);
 	if (bridge->bl)
 		backlight_device_unregister(bridge->bl);
-	regulator_put(bridge->lcd_fet);
-	regulator_put(bridge->bck_fet);
-	if (bridge->v12)
-		regulator_put(bridge->v12);
-	if (gpio_is_valid(bridge->gpio_slp_n))
-		gpio_free(bridge->gpio_slp_n);
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_free(bridge->gpio_rst_n);
 }
 
 struct drm_bridge_funcs ps8622_bridge_funcs = {
@@ -290,32 +282,31 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 	}
 
 	bridge->client = client;
-	bridge->v12 = regulator_get(&client->dev, "vdd_bridge");
+	bridge->v12 = devm_regulator_get(&client->dev, "vdd_bridge");
 	if (IS_ERR(bridge->v12)) {
 		DRM_INFO("no 1.2v regulator found for PS8622\n");
 		bridge->v12 = NULL;
 	}
-	bridge->bck_fet = regulator_get(&client->dev, "vcd_led");
+	bridge->bck_fet = devm_regulator_get(&client->dev, "vcd_led");
 	if (IS_ERR(bridge->bck_fet)) {
 		DRM_ERROR("no regulator found for backlight FET\n");
 		ret = PTR_ERR(bridge->bck_fet);
-		bridge->bck_fet = NULL;
-		goto err_reg;
+		goto err;
 	}
-	bridge->lcd_fet = regulator_get(&client->dev, "lcd_vdd");
+	bridge->lcd_fet = devm_regulator_get(&client->dev, "lcd_vdd");
 	if (IS_ERR(bridge->lcd_fet)) {
 		DRM_ERROR("no regulator found for LCD FET\n");
 		ret = PTR_ERR(bridge->lcd_fet);
-		bridge->lcd_fet = NULL;
-		goto err_reg;
+		goto err;
 	}
 
 	bridge->gpio_slp_n = of_get_named_gpio(node, "sleep-gpio", 0);
 	if (gpio_is_valid(bridge->gpio_slp_n)) {
-		ret = gpio_request_one(bridge->gpio_slp_n, GPIOF_OUT_INIT_HIGH,
-					"PS8622_SLP_N");
+		ret = devm_gpio_request_one(&client->dev, bridge->gpio_slp_n,
+					    GPIOF_OUT_INIT_HIGH,
+					    "PS8622_SLP_N");
 		if (ret)
-			goto err_reg;
+			goto err;
 	}
 
 	bridge->gpio_rst_n = of_get_named_gpio(node, "reset-gpio", 0);
@@ -324,10 +315,11 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 		 * Request the reset pin low to avoid the bridge being
 		 * initialized prematurely
 		 */
-		ret = gpio_request_one(bridge->gpio_rst_n, GPIOF_OUT_INIT_LOW,
-					"PS8622_RST_N");
+		ret = devm_gpio_request_one(&client->dev, bridge->gpio_rst_n,
+					    GPIOF_OUT_INIT_LOW,
+					    "PS8622_RST_N");
 		if (ret)
-			goto err_gpio;
+			goto err;
 	}
 
 	bridge->bl = backlight_device_register("ps8622-backlight", dev->dev,
@@ -357,18 +349,6 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 err:
 	if (bridge->bl)
 		backlight_device_unregister(bridge->bl);
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_free(bridge->gpio_rst_n);
-err_gpio:
-	if (gpio_is_valid(bridge->gpio_slp_n))
-		gpio_free(bridge->gpio_slp_n);
-err_reg:
-	if (bridge->bck_fet)
-		regulator_put(bridge->bck_fet);
-	if (bridge->lcd_fet)
-		regulator_put(bridge->lcd_fet);
-	if (bridge->v12)
-		regulator_put(bridge->v12);
 	DRM_ERROR("device probe failed : %d\n", ret);
 	return ret;
 }
