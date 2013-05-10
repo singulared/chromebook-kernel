@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 #include <linux/of.h>
-#include <linux/syscore_ops.h>
 
 #include <asm/sched_clock.h>
 #include <asm/arch_timer.h>
@@ -149,7 +148,7 @@ static cycle_t exynos4_frc_read(struct clocksource *cs)
 	return ((cycle_t)hi << 32) | lo;
 }
 
-static void exynos4_frc_resume(void)
+static void exynos4_frc_resume(struct clocksource *cs)
 {
 	exynos4_mct_frc_start(0, 0);
 }
@@ -160,9 +159,6 @@ struct clocksource mct_frc = {
 	.read		= exynos4_frc_read,
 	.mask		= CLOCKSOURCE_MASK(64),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
-};
-
-struct syscore_ops mct_frc_core = {
 	.resume		= exynos4_frc_resume,
 };
 
@@ -179,10 +175,6 @@ static void __init exynos4_clocksource_init(void)
 		panic("%s: can't register clocksource\n", mct_frc.name);
 
 	setup_sched_clock(exynos4_read_sched_clock, 32, clk_rate);
-
-	/* FRC resume must happen prior to sched_clock_resume, so we
-	   register it via syscore_ops instead of via clocksource. */
-	register_syscore_ops(&mct_frc_core);
 }
 
 static void exynos4_mct_comp0_stop(void)
