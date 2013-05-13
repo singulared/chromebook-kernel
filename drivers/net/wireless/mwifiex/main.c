@@ -411,6 +411,7 @@ mwifiex_close(struct net_device *dev)
 		dev_dbg(priv->adapter->dev, "aborting scan on ndo_stop\n");
 		cfg80211_scan_done(priv->scan_request, 1);
 		priv->scan_request = NULL;
+		priv->scan_aborting = true;
 	}
 
 	return 0;
@@ -633,6 +634,7 @@ void mwifiex_init_priv_params(struct mwifiex_private *priv,
 						struct net_device *dev)
 {
 	dev->netdev_ops = &mwifiex_netdev_ops;
+	dev->destructor = free_netdev;
 	/* Initialize private structure */
 	priv->current_key_index = 0;
 	priv->media_connected = false;

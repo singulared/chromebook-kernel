@@ -61,36 +61,6 @@ static struct mfd_cell s5m8767_devs[] = {
 	},
 };
 
-int s5m_reg_read(struct s5m87xx_dev *s5m87xx, u8 reg, void *dest)
-{
-	return regmap_read(s5m87xx->regmap, reg, dest);
-}
-EXPORT_SYMBOL_GPL(s5m_reg_read);
-
-int s5m_bulk_read(struct s5m87xx_dev *s5m87xx, u8 reg, int count, u8 *buf)
-{
-	return regmap_bulk_read(s5m87xx->regmap, reg, buf, count);
-}
-EXPORT_SYMBOL_GPL(s5m_bulk_read);
-
-int s5m_reg_write(struct s5m87xx_dev *s5m87xx, u8 reg, u8 value)
-{
-	return regmap_write(s5m87xx->regmap, reg, value);
-}
-EXPORT_SYMBOL_GPL(s5m_reg_write);
-
-int s5m_bulk_write(struct s5m87xx_dev *s5m87xx, u8 reg, int count, u8 *buf)
-{
-	return regmap_raw_write(s5m87xx->regmap, reg, buf, count);
-}
-EXPORT_SYMBOL_GPL(s5m_bulk_write);
-
-int s5m_reg_update(struct s5m87xx_dev *s5m87xx, u8 reg, u8 val, u8 mask)
-{
-	return regmap_update_bits(s5m87xx->regmap, reg, mask, val);
-}
-EXPORT_SYMBOL_GPL(s5m_reg_update);
-
 static struct regmap_config s5m_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -148,9 +118,9 @@ static int s5m87xx_set_low_jitter(struct s5m87xx_dev *s5m87xx)
 	if (!s5m87xx->pdata->low_jitter)
 		return 0;
 
-	return s5m_reg_update(s5m87xx, S5M8767_REG_CTRL1,
-			      S5M8767_LOW_JITTER_MASK,
-			      S5M8767_LOW_JITTER_MASK);
+	return regmap_update_bits(s5m87xx->pmic, S5M8767_REG_CTRL1,
+				  S5M8767_LOW_JITTER_MASK,
+				  S5M8767_LOW_JITTER_MASK);
 }
 
 static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
@@ -158,6 +128,7 @@ static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
 {
 	struct s5m_platform_data *pdata = i2c->dev.platform_data;
 	struct s5m87xx_dev *s5m87xx;
+	struct i2c_client *rtc_i2c = NULL;
 	int ret;
 
 	s5m87xx = devm_kzalloc(&i2c->dev, sizeof(struct s5m87xx_dev),
@@ -167,7 +138,6 @@ static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
 
 	i2c_set_clientdata(i2c, s5m87xx);
 	s5m87xx->dev = &i2c->dev;
-	s5m87xx->i2c = i2c;
 	s5m87xx->irq = i2c->irq;
 	s5m87xx->type = s5m87xx_i2c_get_driver_data(i2c, id);
 
@@ -199,16 +169,23 @@ static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
 	s5m87xx->wakeup = pdata->wakeup;
 #endif
 
-	s5m87xx->regmap = regmap_init_i2c(i2c, &s5m_regmap_config);
-	if (IS_ERR(s5m87xx->regmap)) {
-		ret = PTR_ERR(s5m87xx->regmap);
+	s5m87xx->pmic = regmap_init_i2c(i2c, &s5m_regmap_config);
+	if (IS_ERR(s5m87xx->pmic)) {
+		ret = PTR_ERR(s5m87xx->pmic);
 		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
 			ret);
 		goto err;
 	}
 
-	s5m87xx->rtc = i2c_new_dummy(i2c->adapter, RTC_I2C_ADDR);
-	i2c_set_clientdata(s5m87xx->rtc, s5m87xx);
+	rtc_i2c = i2c_new_dummy(i2c->adapter, RTC_I2C_ADDR);
+	i2c_set_clientdata(rtc_i2c, s5m87xx);
+	s5m87xx->rtc = regmap_init_i2c(rtc_i2c, &s5m_regmap_config);
+	if (IS_ERR(s5m87xx->rtc)) {
+		ret = PTR_ERR(s5m87xx->rtc);
+		dev_err(&rtc_i2c->dev, "Failed to allocate register map: %d\n",
+			ret);
+		goto err;
+	}
 
 	if (pdata && pdata->cfg_pmic_irq)
 		pdata->cfg_pmic_irq();
@@ -249,8 +226,10 @@ static int __devinit s5m87xx_i2c_probe(struct i2c_client *i2c,
 err:
 	mfd_remove_devices(s5m87xx->dev);
 	s5m_irq_exit(s5m87xx);
-	i2c_unregister_device(s5m87xx->rtc);
-	regmap_exit(s5m87xx->regmap);
+	if (rtc_i2c)
+		i2c_unregister_device(rtc_i2c);
+	regmap_exit(s5m87xx->pmic);
+	regmap_exit(s5m87xx->rtc);
 	return ret;
 }
 
@@ -260,8 +239,8 @@ static int s5m87xx_i2c_remove(struct i2c_client *i2c)
 
 	mfd_remove_devices(s5m87xx->dev);
 	s5m_irq_exit(s5m87xx);
-	i2c_unregister_device(s5m87xx->rtc);
-	regmap_exit(s5m87xx->regmap);
+	regmap_exit(s5m87xx->pmic);
+	regmap_exit(s5m87xx->rtc);
 	return 0;
 }
 

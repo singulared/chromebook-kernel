@@ -296,9 +296,8 @@ enum s5m8763_irq {
 /**
  * struct s5m87xx_dev - s5m87xx master device for sub-drivers
  * @dev: master device of the chip (can be used to access platform data)
- * @i2c: i2c client private data for regulator
- * @rtc: i2c client private data for rtc
- * @iolock: mutex for serializing io access
+ * @pmic: regmap private data for pmic regulators
+ * @rtc: regmap private data for rtc
  * @irqlock: mutex for buslock
  * @irq_base: base IRQ number for s5m87xx, required for IRQs
  * @irq: generic IRQ number for s5m87xx
@@ -310,10 +309,8 @@ enum s5m8763_irq {
  */
 struct s5m87xx_dev {
 	struct device *dev;
-	struct regmap *regmap;
-	struct i2c_client *i2c;
-	struct i2c_client *rtc;
-	struct mutex iolock;
+	struct regmap *pmic;
+	struct regmap *rtc;
 	struct mutex irqlock;
 
 	int device_type;
@@ -324,18 +321,13 @@ struct s5m87xx_dev {
 	u8 irq_masks_cache[NUM_IRQ_REGS];
 	int type;
 	bool wakeup;
+	bool wtsr_smpl;
 	struct s5m_platform_data *pdata;
 };
 
 int s5m_irq_init(struct s5m87xx_dev *s5m87xx);
 void s5m_irq_exit(struct s5m87xx_dev *s5m87xx);
 int s5m_irq_resume(struct s5m87xx_dev *s5m87xx);
-
-extern int s5m_reg_read(struct s5m87xx_dev *s5m87xx, u8 reg, void *dest);
-extern int s5m_bulk_read(struct s5m87xx_dev *s5m87xx, u8 reg, int count, u8 *buf);
-extern int s5m_reg_write(struct s5m87xx_dev *s5m87xx, u8 reg, u8 value);
-extern int s5m_bulk_write(struct s5m87xx_dev *s5m87xx, u8 reg, int count, u8 *buf);
-extern int s5m_reg_update(struct s5m87xx_dev *s5m87xx, u8 reg, u8 val, u8 mask);
 
 struct s5m_platform_data {
 	struct s5m_regulator_data	*regulators;
