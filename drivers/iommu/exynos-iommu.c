@@ -934,6 +934,8 @@ static int __init __sysmmu_init_clock(struct device *sysmmu,
 		return 0;
 	}
 
+	clk_prepare(drvdata->clk);
+
 	if (!master)
 		return 0;
 
@@ -947,6 +949,7 @@ static int __init __sysmmu_init_clock(struct device *sysmmu,
 	if (IS_ERR(parent_clk)) {
 		parent_clk = clk_get(NULL, conid);
 		if (IS_ERR(parent_clk)) {
+			clk_unprepare(drvdata->clk);
 			clk_put(drvdata->clk);
 			dev_err(sysmmu, "No parent clock '%s,%s' found\n",
 				dev_name(master), conid);
@@ -956,6 +959,7 @@ static int __init __sysmmu_init_clock(struct device *sysmmu,
 
 	ret = clk_set_parent(drvdata->clk, parent_clk);
 	if (ret) {
+		clk_unprepare(drvdata->clk);
 		clk_put(drvdata->clk);
 		dev_err(sysmmu, "Failed to set parent clock '%s,%s'\n",
 				dev_name(master), conid);
