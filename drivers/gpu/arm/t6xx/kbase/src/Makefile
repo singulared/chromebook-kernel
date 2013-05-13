@@ -1,11 +1,14 @@
 #
 # (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
 #
-# This program is free software and is provided to you under the terms of the GNU General Public License version 2
-# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
 #
-# A copy of the licence is included with the program, and can also be obtained from Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
 #
 #
 
@@ -15,7 +18,6 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 UMP_PATH_RELATIVE = $(CURDIR)/../../../../../base/ump
 KBASE_PATH_RELATIVE = $(CURDIR)/../../kbase
 KDS_PATH_RELATIVE = $(CURDIR)/../../../../../..
-OSK_PATH = $(ROOT)/kernel/drivers/gpu/arm/t6xx/kbase/osk
 EXTRA_SYMBOLS = $(UMP_PATH_RELATIVE)/src/Module.symvers
 
 ifeq ($(MALI_UNIT_TEST), 1)

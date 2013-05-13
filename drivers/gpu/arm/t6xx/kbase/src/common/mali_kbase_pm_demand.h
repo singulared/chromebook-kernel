@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -63,22 +66,20 @@
  * }
  * @enddot
  */
-typedef enum kbasep_pm_demand_state
-{
-	KBASEP_PM_DEMAND_STATE_POWERING_UP,          /**< The GPU is powering up */
-	KBASEP_PM_DEMAND_STATE_POWERED_UP,           /**< The GPU is powered up and jobs can execute */
-	KBASEP_PM_DEMAND_STATE_POWERING_DOWN,        /**< The GPU is powering down */
-	KBASEP_PM_DEMAND_STATE_POWERED_DOWN,         /**< The GPU is powered down */
-	KBASEP_PM_DEMAND_STATE_CHANGING_POLICY       /**< The power policy is about to change */
+typedef enum kbasep_pm_demand_state {
+	KBASEP_PM_DEMAND_STATE_POWERING_UP,	     /**< The GPU is powering up */
+	KBASEP_PM_DEMAND_STATE_POWERED_UP,	     /**< The GPU is powered up and jobs can execute */
+	KBASEP_PM_DEMAND_STATE_POWERING_DOWN,	     /**< The GPU is powering down */
+	KBASEP_PM_DEMAND_STATE_POWERED_DOWN,	     /**< The GPU is powered down */
+	KBASEP_PM_DEMAND_STATE_CHANGING_POLICY	     /**< The power policy is about to change */
 } kbasep_pm_demand_state;
 
 /** Private structure for policy instance data.
  *
  * This contains data that is private to the particular power policy that is active.
  */
-typedef struct kbasep_pm_policy_demand
-{
-	kbasep_pm_demand_state state;     /**< The current state of the policy */
+typedef struct kbasep_pm_policy_demand {
+	kbasep_pm_demand_state state;	  /**< The current state of the policy */
 } kbasep_pm_policy_demand;
 
 #endif

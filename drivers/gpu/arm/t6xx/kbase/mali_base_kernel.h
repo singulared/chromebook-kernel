@@ -1,12 +1,15 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -22,6 +25,8 @@
 
 /* For now we support the legacy API as well as the new API */
 #define BASE_LEGACY_JD_API 1
+
+typedef mali_addr64 base_mem_handle;
 
 #include <kbase/src/mali_base_mem_priv.h>
 
@@ -41,7 +46,7 @@
 #if BASE_LEGACY_JD_API
 /* Size of the ring buffer */
 #define BASEP_JCTX_RB_NRPAGES           4
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 #define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
 
@@ -49,30 +54,29 @@
 
 #if defined CDBG_ASSERT
 #define LOCAL_ASSERT CDBG_ASSERT
-#elif defined OSK_ASSERT
-#define LOCAL_ASSERT OSK_ASSERT
+#elif defined KBASE_DEBUG_ASSERT
+#define LOCAL_ASSERT KBASE_DEBUG_ASSERT
 #else
 #error assert macro not defined!
 #endif
 
-#if defined OSK_PAGE_MASK
-	#define LOCAL_PAGE_LSB ~OSK_PAGE_MASK
+#if defined PAGE_MASK
+#define LOCAL_PAGE_LSB ~PAGE_MASK
 #else
-	#include <osu/mali_osu.h>
+#include <osu/mali_osu.h>
 
-	#if defined CONFIG_CPU_PAGE_SIZE_LOG2
-		#define LOCAL_PAGE_LSB ((1ul << CONFIG_CPU_PAGE_SIZE_LOG2) - 1)
-	#else
-		#error Failed to find page size
-	#endif
+#if defined OSU_CONFIG_CPU_PAGE_SIZE_LOG2
+#define LOCAL_PAGE_LSB ((1ul << OSU_CONFIG_CPU_PAGE_SIZE_LOG2) - 1)
+#else
+#error Failed to find page size
+#endif
 #endif
 
 /** 32/64-bit neutral way to represent pointers */
-typedef union kbase_pointer
-{
-	void * value;     /**< client should store their pointers here */
+typedef union kbase_pointer {
+	void *value;	  /**< client should store their pointers here */
 	u32 compat_value; /**< 64-bit kernels should fetch value here when handling 32-bit clients */
-	u64 sizer;        /**< Force 64-bit storage for all clients regardless */
+	u64 sizer;	  /**< Force 64-bit storage for all clients regardless */
 } kbase_pointer;
 
 /**
@@ -99,28 +103,33 @@ typedef union kbase_pointer
  */
 typedef u32 base_mem_alloc_flags;
 
-
 /**
  * @brief Memory allocation, access/hint flags
  *
  * See ::base_mem_alloc_flags.
  *
  */
-enum
-{
-	BASE_MEM_PROT_CPU_RD =      (1U << 0), /**< Read access CPU side */
-	BASE_MEM_PROT_CPU_WR =      (1U << 1), /**< Write access CPU side */
-	BASE_MEM_PROT_GPU_RD =      (1U << 2), /**< Read access GPU side */
-	BASE_MEM_PROT_GPU_WR =      (1U << 3), /**< Write access GPU side */
-	BASE_MEM_PROT_GPU_EX =      (1U << 4), /**< Execute allowed on the GPU side */
-	BASE_MEM_CACHED_CPU  =      (1U << 5), /**< Should be cached on the CPU */
+enum {
+	BASE_MEM_PROT_CPU_RD = (1U << 0),      /**< Read access CPU side */
+	BASE_MEM_PROT_CPU_WR = (1U << 1),      /**< Write access CPU side */
+	BASE_MEM_PROT_GPU_RD = (1U << 2),      /**< Read access GPU side */
+	BASE_MEM_PROT_GPU_WR = (1U << 3),      /**< Write access GPU side */
+	BASE_MEM_PROT_GPU_EX = (1U << 4),      /**< Execute allowed on the GPU side */
 
-	BASEP_MEM_GROWABLE   =      (1U << 6), /**< Growable memory. This is a private flag that is set automatically. Not valid for PMEM. */
-	BASE_MEM_GROW_ON_GPF =      (1U << 7), /**< Grow backing store on GPU Page Fault */
+	/* Note that the HINT flags are obsolete now. If you want the memory
+	 * to be cached on the CPU please use the BASE_MEM_CACHED_CPU flag
+	 */
+	BASE_MEM_HINT_CPU_RD = (1U << 5),      /**< Heavily read CPU side - OBSOLETE */
+	BASE_MEM_HINT_CPU_WR = (1U << 6),      /**< Heavily written CPU side - OBSOLETE */
+	BASE_MEM_HINT_GPU_RD = (1U << 7),      /**< Heavily read GPU side  - OBSOLETE */
+	BASE_MEM_HINT_GPU_WR = (1U << 8),      /**< Heavily written GPU side - OBSOLETE */
 
-	BASE_MEM_COHERENT_SYSTEM =  (1U << 8), /**< Page coherence Outer shareable */
-	BASE_MEM_COHERENT_LOCAL =   (1U << 9), /**< Page coherence Inner shareable */
-	BASE_MEM_DONT_ZERO_INIT =   (1U << 10) /**< Optimization: No need to zero initialize */
+	BASEP_MEM_GROWABLE = (1U << 9),	       /**< Growable memory. This is a private flag that is set automatically. Not valid for PMEM. */
+	BASE_MEM_GROW_ON_GPF = (1U << 10),	/**< Grow backing store on GPU Page Fault */
+
+	BASE_MEM_COHERENT_SYSTEM = (1U << 11), /**< Page coherence Outer shareable */
+	BASE_MEM_COHERENT_LOCAL = (1U << 12),  /**< Page coherence Inner shareable */
+	BASE_MEM_CACHED_CPU = (1U << 13)       /**< Should be cached on the CPU */
 };
 
 /**
@@ -134,8 +143,7 @@ enum
  * as future releases from ARM might include other new types
  * which could clash with your custom types.
  */
-typedef enum base_tmem_import_type
-{
+typedef enum base_tmem_import_type {
 	BASE_TMEM_IMPORT_TYPE_INVALID = 0,
 	/** UMP import. Handle type is ump_secure_id. */
 	BASE_TMEM_IMPORT_TYPE_UMP = 1,
@@ -144,33 +152,20 @@ typedef enum base_tmem_import_type
 } base_tmem_import_type;
 
 /**
- * Bits we can tag into a memory handle.
- * We use the lower 12 bits as our handles are page-multiples, thus not using the 12 LSBs
- */
-enum
-{
-	BASE_MEM_TAGS_MASK      = ((1U << 12) - 1),   /**< Mask to get hold of the tag bits/see if there are tag bits */
-	BASE_MEM_TAG_IMPORTED  =   (1U << 0)          /**< Tagged as imported */
-	/* max 1u << 11 supported */
-};
-
-
-/**
  * @brief Number of bits used as flags for base memory management
  *
  * Must be kept in sync with the ::base_mem_alloc_flags flags
  */
-#define BASE_MEM_FLAGS_NR_BITS  11
+#define BASE_MEM_FLAGS_NR_BITS  14
 
 /**
  * @brief Result codes of changing the size of the backing store allocated to a tmem region
  */
-typedef enum base_backing_threshold_status
-{
-	BASE_BACKING_THRESHOLD_OK = 0,                      /**< Resize successful */
-	BASE_BACKING_THRESHOLD_ERROR_NOT_GROWABLE = -1,     /**< Not a growable tmem object */
-	BASE_BACKING_THRESHOLD_ERROR_OOM = -2,              /**< Increase failed due to an out-of-memory condition */
-	BASE_BACKING_THRESHOLD_ERROR_MAPPED = -3,           /**< Resize attempted on buffer while it was mapped, which is not permitted */
+typedef enum base_backing_threshold_status {
+	BASE_BACKING_THRESHOLD_OK = 0,			    /**< Resize successful */
+	BASE_BACKING_THRESHOLD_ERROR_NOT_GROWABLE = -1,	    /**< Not a growable tmem object */
+	BASE_BACKING_THRESHOLD_ERROR_OOM = -2,		    /**< Increase failed due to an out-of-memory condition */
+	BASE_BACKING_THRESHOLD_ERROR_MAPPED = -3,	    /**< Resize attempted on buffer while it was mapped, which is not permitted */
 	BASE_BACKING_THRESHOLD_ERROR_INVALID_ARGUMENTS = -4 /**< Invalid arguments (not tmem, illegal size request, etc.) */
 } base_backing_threshold_status;
 
@@ -185,8 +180,7 @@ typedef enum base_backing_threshold_status
  * The content of this structure is private, and should only be used
  * by the accessors.
  */
-typedef struct base_syncset
-{
+typedef struct base_syncset {
 	basep_syncset basep_sset;
 } base_syncset;
 
@@ -197,14 +191,11 @@ typedef struct base_syncset
  * Simple opague handle to imported memory, can't be used
  * with anything but base_external_resource_init to bind to an atom.
  */
-typedef struct base_import_handle
-{
-	struct
-	{
+typedef struct base_import_handle {
+	struct {
 		mali_addr64 handle;
 	} basep;
 } base_import_handle;
-
 
 /** @} end group base_user_api_memory */
 
@@ -221,13 +212,10 @@ typedef int platform_fence_type;
  *
  * References an underlying base stream object.
  */
-typedef struct base_stream
-{
-	struct
-	{
+typedef struct base_stream {
+	struct {
 		int fd;
-	}
-	basep;
+	} basep;
 } base_stream;
 
 /**
@@ -235,14 +223,11 @@ typedef struct base_stream
  *
  * References an underlying base fence object.
  */
-typedef struct base_fence
-{
-	struct
-	{
+typedef struct base_fence {
+	struct {
 		int fd;
 		int stream_fd;
-	}
-	basep;
+	} basep;
 } base_fence;
 
 #if BASE_LEGACY_JD_API
@@ -260,9 +245,9 @@ typedef struct base_fence
  * dependencies set to 0.
  */
 typedef struct base_jd_dep {
-	u8      dep[2]; /**< pre/post dependencies */
+	u8 dep[2];	/**< pre/post dependencies */
 } base_jd_dep;
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 /**
  * @brief Per-job data
@@ -272,9 +257,8 @@ typedef struct base_jd_dep {
  * function pointer, data to handle job completion. It is guaranteed to be
  * untouched by the Base driver.
  */
-typedef struct base_jd_udata
-{
-	u64     blob[2]; /**< per-job data array */
+typedef struct base_jd_udata {
+	u64 blob[2];	 /**< per-job data array */
 } base_jd_udata;
 
 /**
@@ -290,7 +274,7 @@ typedef struct base_jd_udata
 typedef u16 base_jd_core_req;
 
 /* Requirements that come from the HW */
-#define BASE_JD_REQ_DEP 0           /**< No requirement, dependency only */
+#define BASE_JD_REQ_DEP 0	    /**< No requirement, dependency only */
 #define BASE_JD_REQ_FS  (1U << 0)   /**< Requires fragment shaders */
 /**
  * Requires compute shaders
@@ -356,7 +340,6 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_SOFT_FENCE_TRIGGER          (BASE_JD_REQ_SOFT_JOB | 0x2)
 #define BASE_JD_REQ_SOFT_FENCE_WAIT             (BASE_JD_REQ_SOFT_JOB | 0x3)
 
-
 /**
  * HW Requirement: Requires Compute shaders (but not Vertex or Geometry Shaders)
  *
@@ -378,36 +361,36 @@ typedef u16 base_jd_core_req;
  *
  * This is only guaranteed to work for BASE_JD_REQ_ONLY_COMPUTE atoms.
  */
-#define BASE_JD_REQ_SPECIFIC_COHERENT_GROUP ( 1U << 11 )
+#define BASE_JD_REQ_SPECIFIC_COHERENT_GROUP (1U << 11)
 
 /**
  * SW Flag: If this bit is set then the successful completion of this atom
  * will not cause an event to be sent to userspace
  */
-#define BASE_JD_REQ_EVENT_ONLY_ON_FAILURE   ( 1U << 12 )
+#define BASE_JD_REQ_EVENT_ONLY_ON_FAILURE   (1U << 12)
 
 /**
 * These requirement bits are currently unused in base_jd_core_req (currently a u16)
 */
 
-#define BASEP_JD_REQ_RESERVED_BIT13 ( 1U << 13 )
-#define BASEP_JD_REQ_RESERVED_BIT14 ( 1U << 14 )
-#define BASEP_JD_REQ_RESERVED_BIT15 ( 1U << 15 )
+#define BASEP_JD_REQ_RESERVED_BIT13 (1U << 13)
+#define BASEP_JD_REQ_RESERVED_BIT14 (1U << 14)
+#define BASEP_JD_REQ_RESERVED_BIT15 (1U << 15)
 
 /**
 * Mask of all the currently unused requirement bits in base_jd_core_req.
 */
 
-#define BASEP_JD_REQ_RESERVED ( BASEP_JD_REQ_RESERVED_BIT13 |\
-                                BASEP_JD_REQ_RESERVED_BIT14 | BASEP_JD_REQ_RESERVED_BIT15 )
+#define BASEP_JD_REQ_RESERVED (BASEP_JD_REQ_RESERVED_BIT13 |\
+				BASEP_JD_REQ_RESERVED_BIT14 | BASEP_JD_REQ_RESERVED_BIT15)
 
 /**
  * Mask of all bits in base_jd_core_req that control the type of the atom.
  *
  * This allows dependency only atoms to have flags set
  */
-#define BASEP_JD_REQ_ATOM_TYPE ( ~(BASEP_JD_REQ_RESERVED | BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
-                                   BASE_JD_REQ_EXTERNAL_RESOURCES ) )
+#define BASEP_JD_REQ_ATOM_TYPE (~(BASEP_JD_REQ_RESERVED | BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
+				BASE_JD_REQ_EXTERNAL_RESOURCES))
 
 #if BASE_LEGACY_JD_API
 /**
@@ -419,15 +402,14 @@ typedef u16 base_jd_core_req;
  * job-chain, including core requirements, priority, syncsets and
  * dependencies.
  */
-typedef struct base_jd_atom
-{
-	mali_addr64         jc;             /**< job-chain GPU address */
-	base_jd_udata       udata;          /**< user data */
-	base_jd_dep         pre_dep;        /**< pre-dependencies */
-	base_jd_dep         post_dep;       /**< post-dependencies */
-	base_jd_core_req    core_req;       /**< core requirements */
-	u16                 nr_syncsets;    /**< nr of syncsets following the atom */
-	u16                 nr_extres;      /**< nr of external resources following the atom */
+typedef struct base_jd_atom {
+	mali_addr64 jc;			    /**< job-chain GPU address */
+	base_jd_udata udata;		    /**< user data */
+	base_jd_dep pre_dep;		    /**< pre-dependencies */
+	base_jd_dep post_dep;		    /**< post-dependencies */
+	base_jd_core_req core_req;	    /**< core requirements */
+	u16 nr_syncsets;		    /**< nr of syncsets following the atom */
+	u16 nr_extres;			    /**< nr of external resources following the atom */
 
 	/** @brief Relative priority.
 	 *
@@ -436,7 +418,7 @@ typedef struct base_jd_atom
 	 * higher priority. For unprivileged processes, a negative priority will
 	 * be interpreted as zero.
 	 */
-	s8                  prio;
+	s8 prio;
 
 	/**
 	 * @brief Device number to use, depending on @ref base_jd_core_req flags set.
@@ -470,50 +452,45 @@ typedef struct base_jd_atom
 	 * Note that the 'device' number for a coherent coregroup cannot exceed
 	 * (BASE_MAX_COHERENT_GROUPS - 1).
 	 */
-	u8                  device_nr;
+	u8 device_nr;
 } base_jd_atom;
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 typedef u8 base_atom_id; /**< Type big enough to store an atom number in */
 
-typedef struct base_jd_atom_v2
-{
-	mali_addr64         jc;             /**< job-chain GPU address */
-	base_jd_core_req    core_req;       /**< core requirements */
-	base_jd_udata       udata;          /**< user data */
-	kbase_pointer       extres_list;    /**< list of external resources */
-	u16                 nr_extres;      /**< nr of external resources */
-	base_atom_id        pre_dep[2];     /**< pre-dependencies */
-	base_atom_id        atom_number;    /**< unique number to identify the atom */
-	s8                  prio;           /**< priority - smaller is higher priority */
-	u8                  device_nr;      /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
+typedef struct base_jd_atom_v2 {
+	mali_addr64 jc;			    /**< job-chain GPU address */
+	base_jd_core_req core_req;	    /**< core requirements */
+	base_jd_udata udata;		    /**< user data */
+	kbase_pointer extres_list;	    /**< list of external resources */
+	u16 nr_extres;			    /**< nr of external resources */
+	base_atom_id pre_dep[2];	    /**< pre-dependencies */
+	base_atom_id atom_number;	    /**< unique number to identify the atom */
+	s8 prio;			    /**< priority - smaller is higher priority */
+	u8 device_nr;			    /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
 } base_jd_atom_v2;
 
 #if BASE_LEGACY_JD_API
 /* Structure definition works around the fact that C89 doesn't allow arrays of size 0 */
-typedef struct basep_jd_atom_ss
-{
-	base_jd_atom    atom;
-	base_syncset    syncsets[1];
+typedef struct basep_jd_atom_ss {
+	base_jd_atom atom;
+	base_syncset syncsets[1];
 } basep_jd_atom_ss;
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
-typedef enum base_external_resource_access
-{
+typedef enum base_external_resource_access {
 	BASE_EXT_RES_ACCESS_SHARED,
 	BASE_EXT_RES_ACCESS_EXCLUSIVE
 } base_external_resource_access;
 
-typedef struct base_external_resource
-{
-	u64  ext_resource;
+typedef struct base_external_resource {
+	u64 ext_resource;
 } base_external_resource;
 
 #if BASE_LEGACY_JD_API
 /* Structure definition works around the fact that C89 doesn't allow arrays of size 0 */
-typedef struct basep_jd_atom_ext_res
-{
-	base_jd_atom  atom;
+typedef struct basep_jd_atom_ext_res {
+	base_jd_atom atom;
 	base_external_resource resources[1];
 } basep_jd_atom_ext_res;
 
@@ -521,11 +498,9 @@ static INLINE size_t base_jd_atom_size_ex(u32 syncset_count, u32 external_res_co
 {
 	int size;
 
-	LOCAL_ASSERT( 0 == syncset_count || 0 == external_res_count );
+	LOCAL_ASSERT(0 == syncset_count || 0 == external_res_count);
 
-	size = syncset_count      ? offsetof(basep_jd_atom_ss, syncsets[0]) + (sizeof(base_syncset) * syncset_count) :
-	       external_res_count ? offsetof(basep_jd_atom_ext_res, resources[0]) + (sizeof(base_external_resource) * external_res_count) :
-	                            sizeof(base_jd_atom);
+	size = syncset_count ? offsetof(basep_jd_atom_ss, syncsets[0]) + (sizeof(base_syncset) * syncset_count) : external_res_count ? offsetof(basep_jd_atom_ext_res, resources[0]) + (sizeof(base_external_resource) * external_res_count) : sizeof(base_jd_atom);
 
 	/* Atom minimum size set to 64 bytes to ensure that the maximum
 	 * number of atoms in the ring buffer is limited to 256 */
@@ -562,9 +537,9 @@ static INLINE base_syncset *base_jd_get_atom_syncset(base_jd_atom *atom, u16 n)
 	LOCAL_ASSERT(atom != NULL);
 	LOCAL_ASSERT(0 == (atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES));
 	LOCAL_ASSERT(n <= atom->nr_syncsets);
-	return &((basep_jd_atom_ss *)atom)->syncsets[n];
+	return &((basep_jd_atom_ss *) atom)->syncsets[n];
 }
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 /**
  * @brief Soft-atom fence trigger setup.
@@ -584,23 +559,23 @@ static INLINE base_syncset *base_jd_get_atom_syncset(base_jd_atom *atom, u16 n)
  * @param[out] atom A pre-allocated atom to configure as a fence trigger SW atom
  * @param[in] fence The base fence object to trigger.
  */
-static INLINE void base_jd_fence_trigger_setup(base_jd_atom * atom, base_fence * fence)
+static INLINE void base_jd_fence_trigger_setup(base_jd_atom * const atom, base_fence *fence)
 {
 	LOCAL_ASSERT(atom);
 	LOCAL_ASSERT(fence);
 	LOCAL_ASSERT(fence->basep.fd == INVALID_PLATFORM_FENCE);
 	LOCAL_ASSERT(fence->basep.stream_fd >= 0);
-	atom->jc = (uintptr_t)fence;
+	atom->jc = (uintptr_t) fence;
 	atom->core_req = BASE_JD_REQ_SOFT_FENCE_TRIGGER;
 }
 
-static INLINE void base_jd_fence_trigger_setup_v2(base_jd_atom_v2 * atom, base_fence * fence)
+static INLINE void base_jd_fence_trigger_setup_v2(base_jd_atom_v2 *atom, base_fence *fence)
 {
 	LOCAL_ASSERT(atom);
 	LOCAL_ASSERT(fence);
 	LOCAL_ASSERT(fence->basep.fd == INVALID_PLATFORM_FENCE);
 	LOCAL_ASSERT(fence->basep.stream_fd >= 0);
-	atom->jc = (uintptr_t)fence;
+	atom->jc = (uintptr_t) fence;
 	atom->core_req = BASE_JD_REQ_SOFT_FENCE_TRIGGER;
 }
 
@@ -623,21 +598,21 @@ static INLINE void base_jd_fence_trigger_setup_v2(base_jd_atom_v2 * atom, base_f
  * @param[out] atom A pre-allocated atom to configure as a fence wait SW atom
  * @param[in] fence The base fence object to wait on
  */
-static INLINE void base_jd_fence_wait_setup(base_jd_atom * atom, base_fence * fence)
+static INLINE void base_jd_fence_wait_setup(base_jd_atom * const atom, base_fence *fence)
 {
 	LOCAL_ASSERT(atom);
 	LOCAL_ASSERT(fence);
 	LOCAL_ASSERT(fence->basep.fd >= 0);
-	atom->jc = (uintptr_t)fence;
+	atom->jc = (uintptr_t) fence;
 	atom->core_req = BASE_JD_REQ_SOFT_FENCE_WAIT;
 }
 
-static INLINE void base_jd_fence_wait_setup_v2(base_jd_atom_v2 * atom, base_fence * fence)
+static INLINE void base_jd_fence_wait_setup_v2(base_jd_atom_v2 *atom, base_fence *fence)
 {
 	LOCAL_ASSERT(atom);
 	LOCAL_ASSERT(fence);
 	LOCAL_ASSERT(fence->basep.fd >= 0);
-	atom->jc = (uintptr_t)fence;
+	atom->jc = (uintptr_t) fence;
 	atom->core_req = BASE_JD_REQ_SOFT_FENCE_WAIT;
 }
 
@@ -651,14 +626,14 @@ static INLINE void base_jd_fence_wait_setup_v2(base_jd_atom_v2 * atom, base_fenc
  * @param     n    The number of the external resource to return a pointer to
  * @return a pointer to the nth external resource
  */
-static INLINE base_external_resource *base_jd_get_external_resource(base_jd_atom *atom, u16 n)
+static INLINE base_external_resource * base_jd_get_external_resource(base_jd_atom *atom, u16 n)
 {
 	LOCAL_ASSERT(atom != NULL);
 	LOCAL_ASSERT(BASE_JD_REQ_EXTERNAL_RESOURCES == (atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES));
 	LOCAL_ASSERT(n <= atom->nr_extres);
-	return &((basep_jd_atom_ext_res*)atom)->resources[n];
+	return &((basep_jd_atom_ext_res *) atom)->resources[n];
 }
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 /**
  * @brief External resource info initialization.
@@ -696,25 +671,23 @@ static INLINE void base_external_resource_init(base_external_resource * res, bas
 static INLINE base_jd_atom *base_jd_get_next_atom(base_jd_atom *atom)
 {
 	LOCAL_ASSERT(atom != NULL);
-	return (atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES) ? (base_jd_atom *)base_jd_get_external_resource(atom, atom->nr_extres) :
-	                                                           (base_jd_atom *)base_jd_get_atom_syncset(atom, atom->nr_syncsets);
+	return (atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES) ? (base_jd_atom *) base_jd_get_external_resource(atom, atom->nr_extres) : (base_jd_atom *) base_jd_get_atom_syncset(atom, atom->nr_syncsets);
 }
-#endif /* BASE_LEGACY_JD_API */
+#endif				/* BASE_LEGACY_JD_API */
 
 /**
  * @brief Job chain event code bits
  * Defines the bits used to create ::base_jd_event_code
  */
-enum
-{
+enum {
 	BASE_JD_SW_EVENT_KERNEL = (1u << 15), /**< Kernel side event */
 	BASE_JD_SW_EVENT = (1u << 14), /**< SW defined event */
 	BASE_JD_SW_EVENT_SUCCESS = (1u << 13), /**< Event idicates success (SW events only) */
 	BASE_JD_SW_EVENT_JOB = (0u << 11), /**< Job related event */
 	BASE_JD_SW_EVENT_BAG = (1u << 11), /**< Bag related event */
 	BASE_JD_SW_EVENT_INFO = (2u << 11), /**< Misc/info event */
-	BASE_JD_SW_EVENT_RESERVED = (3u << 11), /**< Reserved event type */
-	BASE_JD_SW_EVENT_TYPE_MASK = (3u << 11) /**< Mask to extract the type from an event code */
+	BASE_JD_SW_EVENT_RESERVED = (3u << 11),	/**< Reserved event type */
+	BASE_JD_SW_EVENT_TYPE_MASK = (3u << 11)	    /**< Mask to extract the type from an event code */
 };
 
 /**
@@ -748,8 +721,7 @@ enum
  * variables of this type. Otherwise, the compiler warns that we have not
  * handled that enum value.
  */
-typedef enum base_jd_event_code
-{
+typedef enum base_jd_event_code {
 	/* HW defined exceptions */
 
 	/** Start of HW Non-fault status codes
@@ -762,9 +734,9 @@ typedef enum base_jd_event_code
 	/* non-fatal exceptions */
 	BASE_JD_EVENT_NOT_STARTED = 0x00, /**< Can't be seen by userspace, treated as 'previous job done' */
 	BASE_JD_EVENT_DONE = 0x01,
-	BASE_JD_EVENT_STOPPED = 0x03,     /**< Can't be seen by userspace, becomes TERMINATED, DONE or JOB_CANCELLED */
+	BASE_JD_EVENT_STOPPED = 0x03,	  /**< Can't be seen by userspace, becomes TERMINATED, DONE or JOB_CANCELLED */
 	BASE_JD_EVENT_TERMINATED = 0x04,  /**< This is actually a fault status code - the job was hard stopped */
-	BASE_JD_EVENT_ACTIVE = 0x08,      /**< Can't be seen by userspace, jobs only returned on complete/fail/cancel */
+	BASE_JD_EVENT_ACTIVE = 0x08,	  /**< Can't be seen by userspace, jobs only returned on complete/fail/cancel */
 
 	/** End of HW Non-fault status codes
 	 *
@@ -801,24 +773,24 @@ typedef enum base_jd_event_code
 	BASE_JD_EVENT_SHAREABILITY_FAULT = 0x88,
 
 	/* MMU exceptions */
-	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL1  = 0xC1,
-	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL2  = 0xC2,
-	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL3  = 0xC3,
-	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL4  = 0xC4,
-	BASE_JD_EVENT_PERMISSION_FAULT          = 0xC8,
+	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL1 = 0xC1,
+	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL2 = 0xC2,
+	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL3 = 0xC3,
+	BASE_JD_EVENT_TRANSLATION_FAULT_LEVEL4 = 0xC4,
+	BASE_JD_EVENT_PERMISSION_FAULT = 0xC8,
 	BASE_JD_EVENT_TRANSTAB_BUS_FAULT_LEVEL1 = 0xD1,
 	BASE_JD_EVENT_TRANSTAB_BUS_FAULT_LEVEL2 = 0xD2,
 	BASE_JD_EVENT_TRANSTAB_BUS_FAULT_LEVEL3 = 0xD3,
 	BASE_JD_EVENT_TRANSTAB_BUS_FAULT_LEVEL4 = 0xD4,
-	BASE_JD_EVENT_ACCESS_FLAG               = 0xD8,
+	BASE_JD_EVENT_ACCESS_FLAG = 0xD8,
 
 	/* SW defined exceptions */
 	BASE_JD_EVENT_MEM_GROWTH_FAILED = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x000,
-	BASE_JD_EVENT_TIMED_OUT         = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x001,
-	BASE_JD_EVENT_JOB_CANCELLED     = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x002,
-	BASE_JD_EVENT_JOB_INVALID       = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x003,
+	BASE_JD_EVENT_TIMED_OUT = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x001,
+	BASE_JD_EVENT_JOB_CANCELLED = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x002,
+	BASE_JD_EVENT_JOB_INVALID = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x003,
 
-	BASE_JD_EVENT_BAG_INVALID       = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_BAG | 0x003,
+	BASE_JD_EVENT_BAG_INVALID = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_BAG | 0x003,
 
 	/** End of HW fault and SW Error status codes */
 	BASE_JD_EVENT_RANGE_HW_FAULT_OR_SW_ERROR_END = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_RESERVED | 0x3FF,
@@ -826,9 +798,9 @@ typedef enum base_jd_event_code
 	/** Start of SW Success status codes */
 	BASE_JD_EVENT_RANGE_SW_SUCCESS_START = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | 0x000,
 
-	BASE_JD_EVENT_PROGRESS_REPORT   = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_JOB  | 0x000,
-	BASE_JD_EVENT_BAG_DONE          = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_BAG  | 0x000,
-	BASE_JD_EVENT_DRV_TERMINATED    = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_INFO | 0x000,
+	BASE_JD_EVENT_PROGRESS_REPORT = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_JOB | 0x000,
+	BASE_JD_EVENT_BAG_DONE = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_BAG | 0x000,
+	BASE_JD_EVENT_DRV_TERMINATED = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_INFO | 0x000,
 
 	/** End of SW Success status codes */
 	BASE_JD_EVENT_RANGE_SW_SUCCESS_END = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_SUCCESS | BASE_JD_SW_EVENT_RESERVED | 0x3FF,
@@ -859,34 +831,48 @@ typedef enum base_jd_event_code
  * @li ::BASE_JD_SW_EVENT_INFO : base_jd_event::data not used
  */
 #if BASE_LEGACY_JD_API
-typedef struct base_jd_event
-{
-	base_jd_event_code      event_code; /**< event code */
-	void                  * data;       /**< event specific data */
+typedef struct base_jd_event {
+	base_jd_event_code event_code;	    /**< event code */
+	void *data;			    /**< event specific data */
 } base_jd_event;
 #endif
 
-typedef struct base_jd_event_v2
-{
-	base_jd_event_code      event_code; /**< event code */
-	base_atom_id            atom_number;/**< the atom number that has completed */
-	base_jd_udata           udata;      /**< user data */
+typedef struct base_jd_event_v2 {
+	base_jd_event_code event_code;	    /**< event code */
+	base_atom_id atom_number;	    /**< the atom number that has completed */
+	base_jd_udata udata;		    /**< user data */
 } base_jd_event_v2;
+
+/**
+ * Padding required to ensure that the @ref basep_dump_cpu_gpu_counters structure fills
+ * a full cache line.
+ */
+
+#define BASE_CPU_GPU_CACHE_LINE_PADDING (36)
+
 
 /**
  * @brief Structure for BASE_JD_REQ_SOFT_DUMP_CPU_GPU_COUNTERS jobs.
  *
  * This structure is stored into the memory pointed to by the @c jc field of @ref base_jd_atom.
+ *
+ * This structure must be padded to ensure that it will occupy whole cache lines. This is to avoid
+ * cases where access to pages containing the structure is shared between cached and un-cached
+ * memory regions, which would cause memory corruption.  Here we set the structure size to be 64 bytes
+ * which is the cache line for ARM A15 processors.
  */
+
 typedef struct base_dump_cpu_gpu_counters {
 	u64 system_time;
 	u64 cycle_counter;
 	u64 sec;
 	u32 usec;
+	u8 padding[BASE_CPU_GPU_CACHE_LINE_PADDING];
 } base_dump_cpu_gpu_counters;
 
-/** @} end group base_user_api_job_dispatch */
 
+
+/** @} end group base_user_api_job_dispatch */
 
 #ifdef __KERNEL__
 /*
@@ -1072,8 +1058,6 @@ typedef u32 midg_js_present;
 	   { rank = same; "plat/plat_config.h"; }
 	   { rank = same; "mali_base.h"; }
 
-
-
 	   "mali_base.h" -> "midg/midg.h" -> "midg/midg_gpu_props.h";
 	   "mali_base.h" -> "plat/plat_config.h" ;
 	   "mali_base.h" -> select_gpu ;
@@ -1115,25 +1099,21 @@ typedef u32 midg_js_present;
  * 16 coherent groups, since core groups are typically 4 cores.
  */
 
-
 /**
  * @addtogroup base_user_api_gpuprops User-side Base GPU Property Query APIs
  * @{
  */
-
 
 /**
  * @addtogroup base_user_api_gpuprops_dyn Dynamic HW Properties
  * @{
  */
 
-
 #define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
-struct mali_base_gpu_core_props
-{
+struct mali_base_gpu_core_props {
 	/**
 	 * Product specific value.
 	 */
@@ -1158,6 +1138,8 @@ struct mali_base_gpu_core_props
      * 4 bit values (0-15).
 	 */
 	u16 major_revision;
+
+	u16 padding;
 
 	/**
 	 * @usecase GPU clock speed is not specified in the Midgard Architecture, but is
@@ -1198,30 +1180,41 @@ struct mali_base_gpu_core_props
 	 * client will not be expecting to allocate anywhere near this value.
 	 */
 	u64 gpu_available_memory_size;
-
-	/**
-	 * @usecase Version string: For use by glGetString( GL_RENDERER ); (and similar
-	 * for other APIs)
-	 */
-	const char * version_string;
 };
 
 /**
  *
  * More information is possible - but associativity and bus width are not
  * required by upper-level apis.
-
  */
-struct mali_base_gpu_cache_props
-{
-	u32 log2_line_size;
-	u32 log2_cache_size;
+struct mali_base_gpu_l2_cache_props {
+	u8 log2_line_size;
+	u8 log2_cache_size;
+	u8 num_l2_slices; /* Number of L2C slices. 1 or higher */
+	u8 padding[5];
 };
 
-struct mali_base_gpu_tiler_props
-{
-	u32 bin_size_bytes; /* Max is 4*2^15 */
-	u32 max_active_levels; /* Max is 2^15 */
+struct mali_base_gpu_l3_cache_props {
+	u8 log2_line_size;
+	u8 log2_cache_size;
+	u8 padding[6];
+};
+
+struct mali_base_gpu_tiler_props {
+	u32 bin_size_bytes;	/* Max is 4*2^15 */
+	u32 max_active_levels;	/* Max is 2^15 */
+};
+
+/**
+ * GPU threading system details. If a value is 0 the information is not available on
+ * the implementation of the GPU.
+ */
+struct mali_base_gpu_thread_props {
+	u16 max_registers;			/* Total size [1..65535] of the register file available per core. */
+	u8 max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
+	u8 max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
+	u8 impl_tech;		    	/* 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
+	u8 padding[3];
 };
 
 /**
@@ -1242,10 +1235,10 @@ struct mali_base_gpu_tiler_props
  *
  * @note if u64s must be 8-byte aligned, then this structure has 32-bits of wastage.
  */
-struct mali_base_gpu_coherent_group
-{
-	u64 core_mask;         /**< Core restriction mask required for the group */
-	u16 num_cores;         /**< Number of cores in the group */
+struct mali_base_gpu_coherent_group {
+	u64 core_mask;	       /**< Core restriction mask required for the group */
+	u16 num_cores;	       /**< Number of cores in the group */
+	u16 padding[3];
 };
 
 /**
@@ -1258,8 +1251,7 @@ struct mali_base_gpu_coherent_group
  * The groups are sorted by core mask. The core masks are non-repeating and do
  * not intersect.
  */
-struct mali_base_gpu_coherent_group_info
-{
+struct mali_base_gpu_coherent_group_info {
 	u32 num_groups;
 
 	/**
@@ -1280,12 +1272,13 @@ struct mali_base_gpu_coherent_group_info
 	 */
 	midg_mem_features coherency;
 
+	u32 padding;
+
 	/**
 	 * Descriptors of coherent groups
 	 */
 	struct mali_base_gpu_coherent_group group[BASE_MAX_COHERENT_GROUPS];
 };
-
 
 /**
  * A complete description of the GPU's Hardware Configuration Discovery
@@ -1303,8 +1296,7 @@ struct mali_base_gpu_coherent_group_info
  * Tools software on the host PC.
  *
  */
-struct midg_raw_gpu_props
-{
+struct midg_raw_gpu_props {
 	u64 shader_present;
 	u64 tiler_present;
 	u64 l2_present;
@@ -1320,29 +1312,35 @@ struct midg_raw_gpu_props
 	u32 js_present;
 	midg_js_features js_features[MIDG_MAX_JOB_SLOTS];
 	midg_tiler_features tiler_features;
+	u32 texture_features[3];
 
 	u32 gpu_id;
+
+	u32 thread_max_threads;
+	u32 thread_max_workgroup_size;
+	u32 thread_max_barrier_size;
+	u32 thread_features;
+
+	u32 padding;
 };
-
-
 
 /**
  * Return structure for _mali_base_get_gpu_props().
  *
  */
-typedef struct mali_base_gpu_props
-{
+typedef struct mali_base_gpu_props {
 	struct mali_base_gpu_core_props core_props;
-	struct mali_base_gpu_cache_props l2_props;
-	struct mali_base_gpu_cache_props l3_props;
+	struct mali_base_gpu_l2_cache_props l2_props;
+	struct mali_base_gpu_l3_cache_props l3_props;
 	struct mali_base_gpu_tiler_props tiler_props;
+	struct mali_base_gpu_thread_props thread_props;
 
 	/** This member is large, likely to be 128 bytes */
 	struct midg_raw_gpu_props raw_props;
 
 	/** This must be last member of the structure */
 	struct mali_base_gpu_coherent_group_info coherency_info;
-}base_gpu_props;
+} base_gpu_props;
 
 /** @} end group base_user_api_gpuprops_dyn */
 
@@ -1362,13 +1360,12 @@ typedef struct mali_base_gpu_props
  * These share the same space as @ref basep_context_private_flags, and so must
  * not collide with them.
  */
-enum base_context_create_flags
-{
+enum base_context_create_flags {
 	/** No flags set */
-	BASE_CONTEXT_CREATE_FLAG_NONE               = 0,
+	BASE_CONTEXT_CREATE_FLAG_NONE = 0,
 
 	/** Base context is embedded in a cctx object (flag used for CINSTR software counter macros) */
-	BASE_CONTEXT_CCTX_EMBEDDED                  = (1u << 0),
+	BASE_CONTEXT_CCTX_EMBEDDED = (1u << 0),
 
 	/** Base context is a 'System Monitor' context for Hardware counters.
 	 *
@@ -1394,24 +1391,23 @@ enum base_context_create_flags
 	 * @note An alternative to using this is to specify the BASE_JD_REQ_ONLY_COMPUTE
 	 * requirement in atoms.
 	 */
-	BASE_CONTEXT_HINT_ONLY_COMPUTE              = (1u << 2)
+	BASE_CONTEXT_HINT_ONLY_COMPUTE = (1u << 2)
 };
 
 /**
  * Bitpattern describing the ::base_context_create_flags that can be passed to base_context_init()
  */
 #define BASE_CONTEXT_CREATE_ALLOWED_FLAGS \
-	( ((u32)BASE_CONTEXT_CCTX_EMBEDDED) | \
+	(((u32)BASE_CONTEXT_CCTX_EMBEDDED) | \
 	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE) )
+	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
 
 /**
  * Bitpattern describing the ::base_context_create_flags that can be passed to the kernel
  */
 #define BASE_CONTEXT_CREATE_KERNEL_FLAGS \
-	( ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE) )
-
+	(((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
+	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
 
 /**
  * Private flags used on the base context
@@ -1421,8 +1417,7 @@ enum base_context_create_flags
  * They share the same space as @ref base_context_create_flags, and so must
  * not collide with them.
  */
-enum basep_context_private_flags
-{
+enum basep_context_private_flags {
 	/** Private flag tracking whether job descriptor dumping is disabled */
 	BASEP_CONTEXT_FLAG_JOB_DUMP_DISABLED = (1 << 31)
 };
@@ -1461,35 +1456,75 @@ enum basep_context_private_flags
  * Little Endian System. If not set in base_cpu_props::cpu_flags, then the
  * system is Big Endian.
  *
- * The compile-time equivalent is @ref CONFIG_CPU_LITTLE_ENDIAN.
+ * The compile-time equivalent is @ref OSU_CONFIG_CPU_LITTLE_ENDIAN.
  */
 #define BASE_CPU_PROPERTY_FLAG_LITTLE_ENDIAN F_BIT_0
 
+
+/**
+ * @brief Platform dynamic CPU ID properties structure
+ */
+typedef struct base_cpu_id_props
+{
+	/**
+	 * CPU ID
+	 */
+	u32 id;
+
+	/**
+	 * CPU Part number
+	 */
+	u16 part;
+
+	/**
+	 * ASCII code of implementer trademark
+	 */
+	u8 implementer;
+
+	/**
+	 * CPU Variant
+	 */
+	u8 variant;
+
+	/**
+	 * CPU Architecture
+	 */
+	u8 arch;
+
+	/**
+	 * CPU revision
+	 */
+	u8 rev;
+
+	u16 padding;
+}base_cpu_id_props;
+
+
 /** @brief Platform Dynamic CPU properties structure */
 typedef struct base_cpu_props {
-    u32 nr_cores;            /**< Number of CPU cores */
+	u32 nr_cores;	     /**< Number of CPU cores */
 
     /**
      * CPU page size as a Logarithm to Base 2. The compile-time
-     * equivalent is @ref CONFIG_CPU_PAGE_SIZE_LOG2
+     * equivalent is @ref OSU_CONFIG_CPU_PAGE_SIZE_LOG2
      */
-    u32 cpu_page_size_log2;
+	u32 cpu_page_size_log2;
 
     /**
      * CPU L1 Data cache line size as a Logarithm to Base 2. The compile-time
-     * equivalent is @ref CONFIG_CPU_L1_DCACHE_LINE_SIZE_LOG2.
+     * equivalent is @ref OSU_CONFIG_CPU_L1_DCACHE_LINE_SIZE_LOG2.
      */
-    u32 cpu_l1_dcache_line_size_log2;
+	u32 cpu_l1_dcache_line_size_log2;
 
     /**
      * CPU L1 Data cache size, in bytes. The compile-time equivalient is
-     * @ref CONFIG_CPU_L1_DCACHE_SIZE.
+     * @ref OSU_CONFIG_CPU_L1_DCACHE_SIZE.
      *
      * This CPU Property is mainly provided to implement OpenCL's
      * clGetDeviceInfo(), which allows the CL_DEVICE_GLOBAL_MEM_CACHE_SIZE
      * hint to be queried.
      */
-    u32 cpu_l1_dcache_size;
+	u32 cpu_l1_dcache_size;
 
     /**
      * CPU Property Flags bitpattern.
@@ -1497,14 +1532,14 @@ typedef struct base_cpu_props {
      * This is a combination of bits as specified by the macros prefixed with
      * 'BASE_CPU_PROPERTY_FLAG_'.
      */
-    u32 cpu_flags;
+	u32 cpu_flags;
 
     /**
      * Maximum clock speed in MHz.
      * @usecase 'Maximum' CPU Clock Speed information is required by OpenCL's
      * clGetDeviceInfo() function for the CL_DEVICE_MAX_CLOCK_FREQUENCY hint.
      */
-    u32 max_cpu_clock_speed_mhz;
+	u32 max_cpu_clock_speed_mhz;
 
     /**
      * @brief Total memory, in bytes.
@@ -1517,10 +1552,17 @@ typedef struct base_cpu_props {
      * This is required for OpenCL's clGetDeviceInfo() call when
      * CL_DEVICE_GLOBAL_MEM_SIZE is requested, for OpenCL CPU devices.
      */
-    u64 available_memory_size;
+	u64 available_memory_size;
+
+	/**
+	 * CPU ID detailed info
+	 */
+	base_cpu_id_props cpu_id;
+
+	u32 padding;
 } base_cpu_props;
 /** @} end group basecpuprops */
 
 /** @} end group base_api */
 
-#endif /* _BASE_KERNEL_H_ */
+#endif				/* _BASE_KERNEL_H_ */

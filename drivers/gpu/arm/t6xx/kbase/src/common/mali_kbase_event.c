@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -20,11 +23,13 @@ STATIC base_jd_udata kbase_event_process(kbase_context *kctx, kbase_jd_atom *kat
 {
 	base_jd_udata data;
 
-	OSK_ASSERT(kctx != NULL);
-	OSK_ASSERT(katom != NULL);
-	OSK_ASSERT(katom->status == KBASE_JD_ATOM_STATE_COMPLETED);
+	KBASE_DEBUG_ASSERT(kctx != NULL);
+	KBASE_DEBUG_ASSERT(katom != NULL);
+	KBASE_DEBUG_ASSERT(katom->status == KBASE_JD_ATOM_STATE_COMPLETED);
 
 	data = katom->udata;
+
+	KBASE_TIMELINE_ATOMS_IN_FLIGHT(kctx, atomic_sub_return(1, &kctx->timeline.jd_atoms_in_flight));
 
 	katom->status = KBASE_JD_ATOM_STATE_UNUSED;
 
@@ -37,70 +42,65 @@ int kbase_event_pending(kbase_context *ctx)
 {
 	int ret;
 
-	OSK_ASSERT(ctx);
+	KBASE_DEBUG_ASSERT(ctx);
 
 	mutex_lock(&ctx->event_mutex);
-	ret  = (MALI_FALSE == OSK_DLIST_IS_EMPTY(&ctx->event_list)) || (MALI_TRUE == ctx->event_closed);
+	ret = (!list_empty(&ctx->event_list)) || (MALI_TRUE == ctx->event_closed);
 	mutex_unlock(&ctx->event_mutex);
 
 	return ret;
 }
+
 KBASE_EXPORT_TEST_API(kbase_event_pending)
 
 int kbase_event_dequeue(kbase_context *ctx, base_jd_event_v2 *uevent)
 {
 	kbase_jd_atom *atom;
 
-	OSK_ASSERT(ctx);
+	KBASE_DEBUG_ASSERT(ctx);
 
 	mutex_lock(&ctx->event_mutex);
 
-	if (OSK_DLIST_IS_EMPTY(&ctx->event_list))
-	{
-		if (ctx->event_closed)
-		{
+	if (list_empty(&ctx->event_list)) {
+		if (ctx->event_closed) {
 			/* generate the BASE_JD_EVENT_DRV_TERMINATED message on the fly */
 			mutex_unlock(&ctx->event_mutex);
 			uevent->event_code = BASE_JD_EVENT_DRV_TERMINATED;
 			memset(&uevent->udata, 0, sizeof(uevent->udata));
 			beenthere("event system closed, returning BASE_JD_EVENT_DRV_TERMINATED(0x%X)\n", BASE_JD_EVENT_DRV_TERMINATED);
 			return 0;
-		}
-		else
-		{
+		} else {
 			mutex_unlock(&ctx->event_mutex);
 			return -1;
 		}
 	}
 
 	/* normal event processing */
-	atom = OSK_DLIST_POP_FRONT(&ctx->event_list, kbase_jd_atom, dep_item[0]);
+	atom = list_entry(ctx->event_list.next, kbase_jd_atom, dep_item[0]);
+	list_del(ctx->event_list.next);
 
 	mutex_unlock(&ctx->event_mutex);
 
-	beenthere("event dequeuing %p\n", (void*)atom);
+	beenthere("event dequeuing %p\n", (void *)atom);
 	uevent->event_code = atom->event_code;
 	uevent->atom_number = (atom - ctx->jctx.atoms);
 	uevent->udata = kbase_event_process(ctx, atom);
 
 	return 0;
 }
+
 KBASE_EXPORT_TEST_API(kbase_event_dequeue)
 
-static void kbase_event_post_worker(osk_workq_work *data)
+static void kbase_event_post_worker(struct work_struct *data)
 {
 	kbase_jd_atom *atom = CONTAINER_OF(data, kbase_jd_atom, work);
 	kbase_context *ctx = atom->kctx;
 
 	if (atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES)
-	{
 		kbase_jd_free_external_resources(atom);
-	}
 
-	if (atom->core_req & BASE_JD_REQ_EVENT_ONLY_ON_FAILURE)
-	{
-		if (atom->event_code == BASE_JD_EVENT_DONE)
-		{
+	if (atom->core_req & BASE_JD_REQ_EVENT_ONLY_ON_FAILURE) {
+		if (atom->event_code == BASE_JD_EVENT_DONE) {
 			/* Don't report the event */
 			kbase_event_process(ctx, atom);
 			return;
@@ -108,7 +108,7 @@ static void kbase_event_post_worker(osk_workq_work *data)
 	}
 
 	mutex_lock(&ctx->event_mutex);
-	OSK_DLIST_PUSH_BACK(&ctx->event_list, atom, kbase_jd_atom, dep_item[0]);
+	list_add_tail(&atom->dep_item[0], &ctx->event_list);
 	mutex_unlock(&ctx->event_mutex);
 
 	kbase_event_wakeup(ctx);
@@ -116,15 +116,17 @@ static void kbase_event_post_worker(osk_workq_work *data)
 
 void kbase_event_post(kbase_context *ctx, kbase_jd_atom *atom)
 {
-	OSK_ASSERT(ctx);
-	OSK_ASSERT(atom);
+	KBASE_DEBUG_ASSERT(ctx);
+	KBASE_DEBUG_ASSERT(ctx->event_workq);
+	KBASE_DEBUG_ASSERT(atom);
 
-	osk_workq_work_init(&atom->work, kbase_event_post_worker);
-	osk_workq_submit(&ctx->event_workq, &atom->work);
+	INIT_WORK(&atom->work, kbase_event_post_worker);
+	queue_work(ctx->event_workq, &atom->work);
 }
+
 KBASE_EXPORT_TEST_API(kbase_event_post)
 
-void kbase_event_close(kbase_context * kctx)
+void kbase_event_close(kbase_context *kctx)
 {
 	mutex_lock(&kctx->event_mutex);
 	kctx->event_closed = MALI_TRUE;
@@ -134,29 +136,28 @@ void kbase_event_close(kbase_context * kctx)
 
 mali_error kbase_event_init(kbase_context *kctx)
 {
-	osk_error osk_err;
+	KBASE_DEBUG_ASSERT(kctx);
 
-	OSK_ASSERT(kctx);
-	OSK_DLIST_INIT(&kctx->event_list);
+	INIT_LIST_HEAD(&kctx->event_list);
 	mutex_init(&kctx->event_mutex);
 	kctx->event_closed = MALI_FALSE;
+	kctx->event_workq = alloc_workqueue("kbase_event", WQ_RESCUER, 1);
 
-	osk_err = osk_workq_init(&kctx->event_workq, "kbase_event", OSK_WORKQ_RESCUER);
-	if (OSK_ERR_NONE != osk_err)
-	{
+	if (NULL == kctx->event_workq)
 		return MALI_ERROR_FUNCTION_FAILED;
-	}
 
 	return MALI_ERROR_NONE;
 }
+
 KBASE_EXPORT_TEST_API(kbase_event_init)
 
 void kbase_event_cleanup(kbase_context *kctx)
 {
-	OSK_ASSERT(kctx);
+	KBASE_DEBUG_ASSERT(kctx);
+	KBASE_DEBUG_ASSERT(kctx->event_workq);
 
-	osk_workq_flush(&kctx->event_workq);
-	osk_workq_term(&kctx->event_workq);
+	flush_workqueue(kctx->event_workq);
+	destroy_workqueue(kctx->event_workq);
 
 	/* We use kbase_event_dequeue to remove the remaining events as that
 	 * deals with all the cleanup needed for the atoms.
@@ -164,11 +165,10 @@ void kbase_event_cleanup(kbase_context *kctx)
 	 * Note: use of kctx->event_list without a lock is safe because this must be the last
 	 * thread using it (because we're about to terminate the lock)
 	 */
-	while (!OSK_DLIST_IS_EMPTY(&kctx->event_list))
-	{
+	while (!list_empty(&kctx->event_list)) {
 		base_jd_event_v2 event;
 		kbase_event_dequeue(kctx, &event);
 	}
 }
-KBASE_EXPORT_TEST_API(kbase_event_cleanup)
 
+KBASE_EXPORT_TEST_API(kbase_event_cleanup)

@@ -1,23 +1,25 @@
 #
 # (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
 #
-# This program is free software and is provided to you under the terms of the GNU General Public License version 2
-# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
 #
-# A copy of the licence is included with the program, and can also be obtained from Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
 #
 #
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r1p2-06bet0"
+MALI_RELEASE_NAME ?= "r3p0-01bet0"
 
 # Paths required for build
 KBASE_PATH = $(src)/../..
 KBASE_SRC_PATH = $(src)/..
 KBASE_PLATFORM_PATH = $(KBASE_SRC_PATH)/platform_dummy
-OSK_PATH = $(src)/../osk/src/linux/include
 UMP_PATH = $(src)/../../../../../base
 
 ifeq ($(CONFIG_MALI_ERROR_INJECTION),y)
@@ -25,7 +27,7 @@ MALI_ERROR_INJECT_ON = 1
 endif
 
 # Set up defaults if not defined by build system
-MALI_CUSTOMER_RELEASE ?= 0
+MALI_CUSTOMER_RELEASE ?= 1
 MALI_UNIT_TEST ?= 0
 MALI_KERNEL_TEST_API ?= 0
 MALI_ERROR_INJECT_ON ?= 0
@@ -42,12 +44,21 @@ DEFINES = \
 	-DMALI_ERROR_INJECT_ON=$(MALI_ERROR_INJECT_ON) \
 	-DMALI_MOCK_TEST=$(MALI_MOCK_TEST) \
 	-DMALI_COVERAGE=$(MALI_COVERAGE) \
-	-DMALI_KBASE_SRC_LINUX_PATH=../../$(src)/linux \
+	-DMALI_KBASE_SRC_LINUX_PATH=$(src)/linux \
 	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\"
 
+ifeq ($(KBUILD_EXTMOD),)
+# in-tree
+DEFINES +=-DMALI_KBASE_THIRDPARTY_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
+else
+# out-of-tree
+DEFINES +=-DMALI_KBASE_THIRDPARTY_PATH=platform/$(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME)
+endif
+
 # Use our defines when compiling
-ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(OSK_PATH) -I$(UMP_PATH)
+ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(UMP_PATH)
+subdir-ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(OSK_PATH) -I$(UMP_PATH)
 
 SRC := \
 	common/mali_kbase_device.c \
@@ -75,21 +86,26 @@ SRC := \
 	common/mali_kbase_instr.c \
 	common/mali_kbase_softjobs.c \
 	common/mali_kbase_8401_workaround.c \
-	common/mali_kbase_ukk.c \
+	common/mali_kbase_10969_workaround.c \
 	common/mali_kbase_hw.c \
-	linux/mali_kbase_ukk_os.c \
+	common/mali_kbase_utility.c \
+	common/mali_kbase_mem_lowlevel.c \
+	common/mali_kbase_debug.c \
+	common/mali_kbase_trace_timeline.c \
 	linux/mali_kbase_mem_linux.c \
 	linux/mali_kbase_core_linux.c \
 	linux/mali_kbase_config_linux.c \
 	linux/mali_kbase_sync.c \
 	linux/mali_kbase_sync_user.c \
-	../osk/src/linux/mali_osk_timers.c \
-	../osk/src/linux/mali_osk_debug.c \
-	../osk/src/common/mali_osk_bitops_cmn.c \
-	../osk/src/common/mali_osk_debug_cmn.c
 
 # Job Scheduler Policy: Completely Fair Scheduler
 SRC += common/mali_kbase_js_policy_cfs.c
+
+ifeq ($(CONFIG_MACH_MANTA),y)
+	SRC += common/mali_kbase_mem_alloc_carveout.c
+else
+	SRC += common/mali_kbase_mem_alloc.c
+endif
 
 # ensure GPL version of malisw gets pulled in
 ccflags-y += -I$(KBASE_PATH)
@@ -105,23 +121,6 @@ endif
 ifeq ($(MALI_MOCK_TEST),1)
 	# Test functionality
 	SRC += ../tests/internal/src/mock/mali_kbase_pm_driver_mock.c
-endif
-
-need_mem_track_file = 0
-ifeq ($(CONFIG_MALI_QA_LEAK),y)
-	# Memory leak tracking
-	need_mem_track_file = 1
-	SRC += ../osk/src/common/mali_osk_mem_track.c
-endif
-
-ifeq ($(CONFIG_MALI_QA_RESFAIL),y)
-	# Simulated resource failure
-	need_mem_track_file = 1
-	SRC += ../osk/src/common/mali_osk_failure.c
-endif
-
-ifeq ($(need_mem_track_file),1)
-	SRC += common/mali_kbase_mem_track.c
 endif
 
 # in-tree/out-of-tree logic needs to be slightly different to determine if a file is present
@@ -141,34 +140,35 @@ else
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
-	SRC += linux/config/mali_kbase_config_vexpress.c \
-	       linux/config/mali_kbase_cpu_vexpress.c
+	SRC += platform/vexpress/mali_kbase_config_vexpress.c \
+	       platform/vexpress/mali_kbase_cpu_vexpress.c
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
-	SRC += linux/config/mali_kbase_config_goldfish.c
+	SRC += platform/goldfish/mali_kbase_config_goldfish.c
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
-	SRC += linux/config/mali_kbase_config_pbx.c
+	SRC += platform/pbx/mali_kbase_config_pbx.c
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
-	SRC += linux/config/mali_kbase_config_panda.c
+	SRC += platform/panda/mali_kbase_config_panda.c
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
+ifeq ($(CONFIG_MALI_T6XX),m)
 # remove begin and end quotes from the Kconfig string type
-platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-	SRC += linux/config/tpip/mali_kbase_config_$(platform_name).c
+    platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+    MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
+    include  $(src)/platform/$(platform_name)/Kbuild
+else ifeq ($(CONFIG_MALI_T6XX),y)
+    obj-$(CONFIG_MALI_T6XX) += platform/
+endif
 endif
 
 # Tell the Linux build system from which .o file to create the kernel module
 obj-$(CONFIG_MALI_T6XX) += mali_kbase.o
-ifeq ($(CONFIG_MACH_MANTA),y)
-obj-$(CONFIG_MALI_T6XX) += platform/mali_kbase_platform.o
-obj-$(CONFIG_MALI_T6XX) += platform/mali_kbase_dvfs.o
-endif
 
 # Tell the Linux build system to enable building of our .c files
 mali_kbase-y := $(SRC:.c=.o)

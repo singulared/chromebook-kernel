@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -20,67 +23,53 @@
 #include <kbase/src/common/mali_kbase.h>
 #include "mali_kbase_js_affinity.h"
 
-#if defined(CONFIG_MALI_DEBUG) && 0 /* disabled to avoid compilation warnings */
+#if defined(CONFIG_MALI_DEBUG) && 0	/* disabled to avoid compilation warnings */
 
 STATIC void debug_get_binary_string(const u64 n, char *buff, const int size)
 {
 	unsigned int i;
 	for (i = 0; i < size; i++)
-	{
 		buff[i] = ((n >> i) & 1) ? '*' : '-';
-	}
+
 	buff[size] = '\0';
 }
 
 #define N_CORES 8
 STATIC void debug_print_affinity_info(const kbase_device *kbdev, const kbase_jd_atom *katom, int js, u64 affinity)
 {
-	char buff[N_CORES +1];
-	char buff2[N_CORES +1];
+	char buff[N_CORES + 1];
+	char buff2[N_CORES + 1];
 	base_jd_core_req core_req = katom->atom->core_req;
-	u8 nr_nss_ctxs_running =  kbdev->js_data.runpool_irq.ctx_attr_ref_count[KBASEP_JS_CTX_ATTR_NSS];
+	u8 nr_nss_ctxs_running = kbdev->js_data.runpool_irq.ctx_attr_ref_count[KBASEP_JS_CTX_ATTR_NSS];
 	u64 shader_present_bitmap = kbdev->shader_present_bitmap;
 
 	debug_get_binary_string(shader_present_bitmap, buff, N_CORES);
 	debug_get_binary_string(affinity, buff2, N_CORES);
 
-	OSK_PRINT_INFO(OSK_BASE_JM, "Job: NSS COH FS  CS   T  CF   V  JS | NSS_ctx | GPU:12345678 | AFF:12345678");
-	OSK_PRINT_INFO(OSK_BASE_JM, "      %s   %s   %s   %s   %s   %s   %s   %u |    %u    |     %s |     %s",
-				   core_req & BASE_JD_REQ_NSS            ? "*" : "-",
-				   core_req & BASE_JD_REQ_COHERENT_GROUP ? "*" : "-",
-				   core_req & BASE_JD_REQ_FS             ? "*" : "-",
-				   core_req & BASE_JD_REQ_CS             ? "*" : "-",
-				   core_req & BASE_JD_REQ_T              ? "*" : "-",
-				   core_req & BASE_JD_REQ_CF             ? "*" : "-",
-				   core_req & BASE_JD_REQ_V              ? "*" : "-",
-				   js, nr_nss_ctxs_running, buff, buff2);
+	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Job: NSS COH FS  CS   T  CF   V  JS | NSS_ctx | GPU:12345678 | AFF:12345678");
+	KBASE_DEBUG_PRINT_INFO(KBASE_JM, "      %s   %s   %s   %s   %s   %s   %s   %u |    %u    |     %s |     %s", core_req & BASE_JD_REQ_NSS ? "*" : "-", core_req & BASE_JD_REQ_COHERENT_GROUP ? "*" : "-", core_req & BASE_JD_REQ_FS ? "*" : "-", core_req & BASE_JD_REQ_CS ? "*" : "-", core_req & BASE_JD_REQ_T ? "*" : "-", core_req & BASE_JD_REQ_CF ? "*" : "-", core_req & BASE_JD_REQ_V ? "*" : "-", js, nr_nss_ctxs_running, buff, buff2);
 }
 
-#endif /* CONFIG_MALI_DEBUG */
+#endif				/* CONFIG_MALI_DEBUG */
 
-OSK_STATIC_INLINE mali_bool affinity_job_uses_high_cores( kbase_device *kbdev, kbase_jd_atom *katom )
+STATIC INLINE mali_bool affinity_job_uses_high_cores(kbase_device *kbdev, kbase_jd_atom *katom)
 {
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987))
-	{
-			kbase_context *kctx;
-			kbase_context_flags ctx_flags;
+	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987)) {
+		kbase_context *kctx;
+		kbase_context_flags ctx_flags;
 
-			kctx = katom->kctx;
-			ctx_flags = kctx->jctx.sched_info.ctx.flags;
+		kctx = katom->kctx;
+		ctx_flags = kctx->jctx.sched_info.ctx.flags;
 
-			/* In this HW Workaround, compute-only jobs/contexts use the high cores
-			 * during a core-split, all other contexts use the low cores. */
-			return (mali_bool)((katom->core_req & BASE_JD_REQ_ONLY_COMPUTE) != 0
-							   || (ctx_flags & KBASE_CTX_FLAG_HINT_ONLY_COMPUTE) != 0);
-	}
-	else
-	{
-			base_jd_core_req core_req = katom->core_req;
-			/* NSS-ness determines whether the high cores in a core split are used */
-			return (mali_bool)(core_req & BASE_JD_REQ_NSS);
+		/* In this HW Workaround, compute-only jobs/contexts use the high cores
+		 * during a core-split, all other contexts use the low cores. */
+		return (mali_bool) ((katom->core_req & BASE_JD_REQ_ONLY_COMPUTE) != 0 || (ctx_flags & KBASE_CTX_FLAG_HINT_ONLY_COMPUTE) != 0);
+	} else {
+		base_jd_core_req core_req = katom->core_req;
+		/* NSS-ness determines whether the high cores in a core split are used */
+		return (mali_bool) (core_req & BASE_JD_REQ_NSS);
 	}
 }
-
 
 /**
  * @brief Decide whether a split in core affinity is required across job slots
@@ -92,15 +81,14 @@ OSK_STATIC_INLINE mali_bool affinity_job_uses_high_cores( kbase_device *kbdev, k
  * @return MALI_FALSE if a core split is not required
  * @return != MALI_FALSE if a core split is required.
  */
-OSK_STATIC_INLINE mali_bool kbase_affinity_requires_split(kbase_device *kbdev)
+STATIC INLINE mali_bool kbase_affinity_requires_split(kbase_device *kbdev)
 {
-	OSK_ASSERT( kbdev != NULL );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
 
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987))
-	{
-		s8 nr_compute_ctxs = kbasep_js_ctx_attr_count_on_runpool( kbdev, KBASEP_JS_CTX_ATTR_COMPUTE );
-		s8 nr_noncompute_ctxs = kbasep_js_ctx_attr_count_on_runpool( kbdev, KBASEP_JS_CTX_ATTR_NON_COMPUTE );
+	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987)) {
+		s8 nr_compute_ctxs = kbasep_js_ctx_attr_count_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_COMPUTE);
+		s8 nr_noncompute_ctxs = kbasep_js_ctx_attr_count_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NON_COMPUTE);
 
 		/* In this case, a mix of Compute+Non-Compute determines whether a
 		 * core-split is required, to ensure jobs with different numbers of RMUs
@@ -112,19 +100,14 @@ OSK_STATIC_INLINE mali_bool kbase_affinity_requires_split(kbase_device *kbdev)
 		 * A context can be both Compute and Non-compute, in which case this will
 		 * correctly decide that a core-split is required. */
 
-		return (mali_bool)( nr_compute_ctxs > 0 && nr_noncompute_ctxs > 0 );
-	}
-	else
-	{
+		return (mali_bool) (nr_compute_ctxs > 0 && nr_noncompute_ctxs > 0);
+	} else {
 		/* NSS/SS state determines whether a core-split is required */
-		return kbasep_js_ctx_attr_is_attr_on_runpool( kbdev, KBASEP_JS_CTX_ATTR_NSS );
+		return kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS);
 	}
 }
 
-
-
-
-mali_bool kbase_js_can_run_job_on_slot_no_lock( kbase_device *kbdev, int js )
+mali_bool kbase_js_can_run_job_on_slot_no_lock(kbase_device *kbdev, int js)
 {
 	/*
 	 * Here are the reasons for using job slot 2:
@@ -143,27 +126,20 @@ mali_bool kbase_js_can_run_job_on_slot_no_lock( kbase_device *kbdev, int js )
 	 *  (tiler jobs)
 	 */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987))
-	{
 		return MALI_TRUE;
-	}
 
-	if ( js != 2 )
-	{
+	if (js != 2)
 		return MALI_TRUE;
-	}
 
 	/* Only deal with js==2 now: */
-	if ( kbasep_js_ctx_attr_is_attr_on_runpool( kbdev, KBASEP_JS_CTX_ATTR_NSS ) != MALI_FALSE )
-	{
+	if (kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS) != MALI_FALSE) {
 		/* In NSS state, slot 2 is used, and exclusively for NSS jobs (which cause a coresplit) */
 		return MALI_TRUE;
 	}
 
-	if ( kbdev->gpu_props.num_core_groups > 1 )
-	{
+	if (kbdev->gpu_props.num_core_groups > 1) {
 		/* Otherwise, only use slot 2 in the 2+ coregroup case */
-		if ( kbasep_js_ctx_attr_is_attr_on_runpool( kbdev, KBASEP_JS_CTX_ATTR_COMPUTE_ALL_CORES ) == MALI_FALSE )
-		{
+		if (kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_COMPUTE_ALL_CORES) == MALI_FALSE) {
 			/* ...But only when we *don't* have atoms that run on all cores */
 
 			/* No specific check for BASE_JD_REQ_COHERENT_GROUP atoms - the policy will sort that out */
@@ -191,103 +167,82 @@ mali_bool kbase_js_can_run_job_on_slot_no_lock( kbase_device *kbdev, int js )
  *   (see notes in loops), but as the functionallity will likely
  *   be modified, optimization has not been addressed.
 */
-void kbase_js_choose_affinity(u64 *affinity, kbase_device *kbdev, kbase_jd_atom *katom, int js)
+void kbase_js_choose_affinity(u64 * const affinity, kbase_device *kbdev, kbase_jd_atom *katom, int js)
 {
 	base_jd_core_req core_req = katom->core_req;
 	u64 shader_present_bitmap = kbdev->shader_present_bitmap;
 	unsigned int num_core_groups = kbdev->gpu_props.num_core_groups;
 
-	OSK_ASSERT(0 != shader_present_bitmap);
-	OSK_ASSERT( js >= 0 );
+	KBASE_DEBUG_ASSERT(0 != shader_present_bitmap);
+	KBASE_DEBUG_ASSERT(js >= 0);
 
-	if (1 == kbdev->gpu_props.num_cores)
-	{
+	if (1 == kbdev->gpu_props.num_cores) {
 		/* trivial case only one core, nothing to do */
 		*affinity = shader_present_bitmap;
-	}
-	else if ( kbase_affinity_requires_split( kbdev ) == MALI_FALSE )
-	{
-		if ( (core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP)) )
-		{
-			if ( js == 0 || num_core_groups == 1 )
-			{
+	} else if (kbase_affinity_requires_split(kbdev) == MALI_FALSE) {
+		if ((core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP))) {
+			if (js == 0 || num_core_groups == 1) {
 				/* js[0] and single-core-group systems just get the first core group */
 				*affinity = kbdev->gpu_props.props.coherency_info.group[0].core_mask;
-			}
-			else
-			{
+			} else {
 				/* js[1], js[2] use core groups 0, 1 for dual-core-group systems */
-				u32 core_group_idx = ((u32)js) - 1;
-				OSK_ASSERT( core_group_idx < num_core_groups );
+				u32 core_group_idx = ((u32) js) - 1;
+				KBASE_DEBUG_ASSERT(core_group_idx < num_core_groups);
 				*affinity = kbdev->gpu_props.props.coherency_info.group[core_group_idx].core_mask;
 			}
-		}
-		else
-		{
+		} else {
 			/* All cores are available when no core split is required */
 			*affinity = shader_present_bitmap;
 		}
-	}
-	else
-	{
+	} else {
 		/* Core split required - divide cores in two non-overlapping groups */
 		u64 low_bitmap, high_bitmap;
 		int n_high_cores = kbdev->gpu_props.num_cores >> 1;
-		OSK_ASSERT(0 != n_high_cores);
+		KBASE_DEBUG_ASSERT(0 != n_high_cores);
 
 		/* compute the reserved high cores bitmap */
 		high_bitmap = ~0;
 		/* note: this can take a while, optimization desirable */
-		while (n_high_cores != osk_count_set_bits(high_bitmap & shader_present_bitmap))
-		{
+		while (n_high_cores != hweight32(high_bitmap & shader_present_bitmap))
 			high_bitmap = high_bitmap << 1;
-		}
+
 		high_bitmap &= shader_present_bitmap;
 
 		/* now decide 4 different situations depending on the low or high
 		 * set of cores and requiring coherent group or not */
-		if (affinity_job_uses_high_cores( kbdev, katom ))
-		{
-			OSK_ASSERT(0 != num_core_groups);
+		if (affinity_job_uses_high_cores(kbdev, katom)) {
+			KBASE_DEBUG_ASSERT(0 != num_core_groups);
 
-			if ( (core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP))
-				 && (1 != num_core_groups))
-			{
+			if ((core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP))
+			    && (1 != num_core_groups)) {
 				/* high set of cores requiring coherency and coherency matters
 				 * because we got more than one core group */
 				u64 group1_mask = kbdev->gpu_props.props.coherency_info.group[1].core_mask;
 				*affinity = high_bitmap & group1_mask;
-			}
-			else
-			{
+			} else {
 				/* high set of cores not requiring coherency or coherency is
 				   assured as we only have one core_group */
 				*affinity = high_bitmap;
 			}
-		}
-		else
-		{
+		} else {
 			low_bitmap = shader_present_bitmap ^ high_bitmap;
-		
-			if ( core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP))
-			{
+
+			if (core_req & (BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP)) {
 				/* low set of cores and req coherent group */
 				u64 group0_mask = kbdev->gpu_props.props.coherency_info.group[0].core_mask;
 				u64 low_coh_bitmap = low_bitmap & group0_mask;
 				*affinity = low_coh_bitmap;
-			}
-			else
-			{
+			} else {
 				/* low set of cores and does not req coherent group */
 				*affinity = low_bitmap;
 			}
 		}
 	}
 
-	OSK_ASSERT(*affinity != 0);
+	KBASE_DEBUG_ASSERT(*affinity != 0);
 }
 
-OSK_STATIC_INLINE mali_bool kbase_js_affinity_is_violating( kbase_device *kbdev, u64 *affinities )
+STATIC INLINE mali_bool kbase_js_affinity_is_violating(kbase_device *kbdev, u64 *affinities)
 {
 	/* This implementation checks whether:
 	 * - the two slots involved in Generic thread creation have intersecting affinity
@@ -306,13 +261,12 @@ OSK_STATIC_INLINE mali_bool kbase_js_affinity_is_violating( kbase_device *kbdev,
 	u64 affinity_set_left;
 	u64 affinity_set_right;
 	u64 intersection;
-	OSK_ASSERT( affinities != NULL );
+	KBASE_DEBUG_ASSERT(affinities != NULL);
 
 	affinity_set_left = affinities[1];
 
-	if ( kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987)
-		 || kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS) != MALI_FALSE )
-	{
+	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987)
+	    || kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS) != MALI_FALSE) {
 		/* The left set also includes those on the Fragment slot when:
 		 * - We are using the HW workaround for BASE_HW_ISSUE_8987
 		 * - We're in NSS state - to prevent NSS atoms using the same cores as Fragment atoms */
@@ -324,140 +278,131 @@ OSK_STATIC_INLINE mali_bool kbase_js_affinity_is_violating( kbase_device *kbdev,
 	/* A violation occurs when any bit in the left_set is also in the right_set */
 	intersection = affinity_set_left & affinity_set_right;
 
-	return (mali_bool)( intersection != (u64)0u );
+	return (mali_bool) (intersection != (u64) 0u);
 }
 
-mali_bool kbase_js_affinity_would_violate( kbase_device *kbdev, int js, u64 affinity )
+mali_bool kbase_js_affinity_would_violate(kbase_device *kbdev, int js, u64 affinity)
 {
 	kbasep_js_device_data *js_devdata;
 	u64 new_affinities[BASE_JM_MAX_NR_SLOTS];
 
-	OSK_ASSERT( kbdev != NULL );
-	OSK_ASSERT( js <  BASE_JM_MAX_NR_SLOTS );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(js < BASE_JM_MAX_NR_SLOTS);
 	js_devdata = &kbdev->js_data;
 
-	memcpy( new_affinities, js_devdata->runpool_irq.slot_affinities, sizeof(js_devdata->runpool_irq.slot_affinities) );
+	memcpy(new_affinities, js_devdata->runpool_irq.slot_affinities, sizeof(js_devdata->runpool_irq.slot_affinities));
 
-	new_affinities[ js ] |= affinity;
+	new_affinities[js] |= affinity;
 
-	return kbase_js_affinity_is_violating( kbdev, new_affinities );
+	return kbase_js_affinity_is_violating(kbdev, new_affinities);
 }
 
-void kbase_js_affinity_retain_slot_cores( kbase_device *kbdev, int js, u64 affinity )
+void kbase_js_affinity_retain_slot_cores(kbase_device *kbdev, int js, u64 affinity)
 {
 	kbasep_js_device_data *js_devdata;
 	u64 cores;
 
-	OSK_ASSERT( kbdev != NULL );
-	OSK_ASSERT( js <  BASE_JM_MAX_NR_SLOTS );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(js < BASE_JM_MAX_NR_SLOTS);
 	js_devdata = &kbdev->js_data;
 
-	OSK_ASSERT( kbase_js_affinity_would_violate( kbdev, js, affinity ) == MALI_FALSE );
+	KBASE_DEBUG_ASSERT(kbase_js_affinity_would_violate(kbdev, js, affinity) == MALI_FALSE);
 
 	cores = affinity;
-	while (cores)
-	{
-		int bitnum = 63 - osk_clz_64(cores);
+	while (cores) {
+		int bitnum = fls64(cores) - 1;
 		u64 bit = 1ULL << bitnum;
 		s8 cnt;
 
-		OSK_ASSERT( js_devdata->runpool_irq.slot_affinity_refcount[ js ][bitnum] < BASE_JM_SUBMIT_SLOTS );
+		KBASE_DEBUG_ASSERT(js_devdata->runpool_irq.slot_affinity_refcount[js][bitnum] < BASE_JM_SUBMIT_SLOTS);
 
-		cnt = ++(js_devdata->runpool_irq.slot_affinity_refcount[ js ][bitnum]);
+		cnt = ++(js_devdata->runpool_irq.slot_affinity_refcount[js][bitnum]);
 
-		if ( cnt == 1 )
-		{
+		if (cnt == 1)
 			js_devdata->runpool_irq.slot_affinities[js] |= bit;
-		}
 
 		cores &= ~bit;
 	}
 
 }
 
-void kbase_js_affinity_release_slot_cores( kbase_device *kbdev, int js, u64 affinity )
+void kbase_js_affinity_release_slot_cores(kbase_device *kbdev, int js, u64 affinity)
 {
 	kbasep_js_device_data *js_devdata;
 	u64 cores;
 
-	OSK_ASSERT( kbdev != NULL );
-	OSK_ASSERT( js < BASE_JM_MAX_NR_SLOTS );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(js < BASE_JM_MAX_NR_SLOTS);
 	js_devdata = &kbdev->js_data;
 
 	cores = affinity;
-	while (cores)
-	{
-		int bitnum = 63 - osk_clz_64(cores);
+	while (cores) {
+		int bitnum = fls64(cores) - 1;
 		u64 bit = 1ULL << bitnum;
 		s8 cnt;
 
-		OSK_ASSERT( js_devdata->runpool_irq.slot_affinity_refcount[ js ][bitnum] > 0 );
+		KBASE_DEBUG_ASSERT(js_devdata->runpool_irq.slot_affinity_refcount[js][bitnum] > 0);
 
-		cnt = --(js_devdata->runpool_irq.slot_affinity_refcount[ js ][bitnum]);
+		cnt = --(js_devdata->runpool_irq.slot_affinity_refcount[js][bitnum]);
 
 		if (0 == cnt)
-		{
 			js_devdata->runpool_irq.slot_affinities[js] &= ~bit;
-		}
 
 		cores &= ~bit;
 	}
 
 }
 
-void kbase_js_affinity_slot_blocked_an_atom( kbase_device *kbdev, int js )
+void kbase_js_affinity_slot_blocked_an_atom(kbase_device *kbdev, int js)
 {
 	kbasep_js_device_data *js_devdata;
 
-	OSK_ASSERT( kbdev != NULL );
-	OSK_ASSERT( js < BASE_JM_MAX_NR_SLOTS );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(js < BASE_JM_MAX_NR_SLOTS);
 	js_devdata = &kbdev->js_data;
 
 	js_devdata->runpool_irq.slots_blocked_on_affinity |= 1u << js;
 }
 
-void kbase_js_affinity_submit_to_blocked_slots( kbase_device *kbdev )
+void kbase_js_affinity_submit_to_blocked_slots(kbase_device *kbdev)
 {
 	kbasep_js_device_data *js_devdata;
 	u16 slots;
 
-	OSK_ASSERT( kbdev != NULL );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	js_devdata = &kbdev->js_data;
 
-	OSK_ASSERT( js_devdata->nr_user_contexts_running != 0 );
+	KBASE_DEBUG_ASSERT(js_devdata->nr_user_contexts_running != 0);
 
 	/* Must take a copy because submitting jobs will update this member. */
 	slots = js_devdata->runpool_irq.slots_blocked_on_affinity;
 
-	while (slots)
-	{
-		int bitnum = 31 - osk_clz(slots);
+	while (slots) {
+		int bitnum = fls(slots) - 1;
 		u16 bit = 1u << bitnum;
 		slots &= ~bit;
 
-		KBASE_TRACE_ADD_SLOT( kbdev, JS_AFFINITY_SUBMIT_TO_BLOCKED, NULL, NULL, 0u, bitnum);
+		KBASE_TRACE_ADD_SLOT(kbdev, JS_AFFINITY_SUBMIT_TO_BLOCKED, NULL, NULL, 0u, bitnum);
 
 		/* must update this before we submit, incase it's set again */
 		js_devdata->runpool_irq.slots_blocked_on_affinity &= ~bit;
 
-		kbasep_js_try_run_next_job_on_slot_nolock( kbdev, bitnum );
+		kbasep_js_try_run_next_job_on_slot_nolock(kbdev, bitnum);
 
 		/* Don't re-read slots_blocked_on_affinity after this - it could loop for a long time */
 	}
 }
 
 #if KBASE_TRACE_ENABLE != 0
-void kbase_js_debug_log_current_affinities( kbase_device *kbdev )
+void kbase_js_debug_log_current_affinities(kbase_device *kbdev)
 {
 	kbasep_js_device_data *js_devdata;
 	int slot_nr;
 
-	OSK_ASSERT( kbdev != NULL );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	js_devdata = &kbdev->js_data;
 
-	for ( slot_nr = 0; slot_nr < 3 ; ++slot_nr )
-	{
-		KBASE_TRACE_ADD_SLOT_INFO( kbdev, JS_AFFINITY_CURRENT, NULL, NULL, 0u, slot_nr, (u32)js_devdata->runpool_irq.slot_affinities[slot_nr] );
-	}
+	for (slot_nr = 0; slot_nr < 3; ++slot_nr)
+		KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_AFFINITY_CURRENT, NULL, NULL, 0u, slot_nr, (u32) js_devdata->runpool_irq.slot_affinities[slot_nr]);
 }
-#endif /* KBASE_TRACE_ENABLE != 0 */
+#endif				/* KBASE_TRACE_ENABLE != 0 */
