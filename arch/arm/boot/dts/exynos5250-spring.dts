@@ -42,6 +42,10 @@
 		};
 	};
 
+	dwmmc0@12200000 {
+		supports-hs200-mode;
+	};
+
 	dwmmc1@12210000 {
 		/*
 		 * MMC1 port is used for external Wifi card SDIO connection.
