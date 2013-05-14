@@ -22,12 +22,22 @@
 #include <linux/module.h>
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 #include "drmP.h"
 #include "anx7808regs.h"
 
 #define ANX7808_DEVICE_ID 0x7808
 #define AUX_WAIT_MS 100
 #define AUX_BUFFER_SIZE 0x10
+#define CABLE_DET_TIME_MS 1000
+
+enum anx7808_state {
+	STATE_INIT,
+	STATE_CABLE_DETECTED,
+	STATE_HDMI_OK,
+	STATE_DP_OK,
+	STATE_PLAY,
+};
 
 struct anx7808_data {
 	int pd_gpio;
@@ -35,14 +45,15 @@ struct anx7808_data {
 	int intp_gpio;
 	int cable_det_gpio;
 	int cable_det_irq;
+	struct timer_list cable_det_timer;
 	struct regulator *vdd_mydp;
 	struct i2c_client *tx_p0;
 	struct i2c_client *tx_p1;
 	struct i2c_client *tx_p2;
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
-
-	struct work_struct work;
+	struct delayed_work play_video;
+	struct workqueue_struct *wq;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -369,15 +380,8 @@ static void anx7808_tx_initialization(struct anx7808_data *anx7808)
 	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG3, 0x3F);
 }
 
-static int anx7808_cable_plug(struct anx7808_data *anx7808)
+static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 {
-	int err;
-	uint8_t status = 0;
-
-	anx7808_power_on(anx7808);
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
-
 	anx7808_rx_initialization(anx7808);
 	anx7808_tx_initialization(anx7808);
 
@@ -387,31 +391,170 @@ static int anx7808_cable_plug(struct anx7808_data *anx7808)
 	DRM_DEBUG_KMS("Issuing HPD high.\n");
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
 	anx7808_clear_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+}
 
-	err = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status);
-	if (err)
-		return err;
-	if (((~status) & (DOWN_R_TERM_DET | DOWN_STRM_HPD))) {
-		DRM_INFO("HDMI connection not found: 0x%02x\n", status);
-		return -EFAULT;
+static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
+{
+	uint8_t sys_status;
+
+	anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &sys_status);
+	if (!(sys_status & TMDS_CLOCK_DET)) {
+		DRM_INFO("Waiting for HDMI clock.\n");
+		return -EAGAIN;
 	}
+	if (!(sys_status & TMDS_DE_DET)) {
+		DRM_INFO("Waiting for HDMI signal.\n");
+		return -EAGAIN;
+	}
+
+	anx7808_write_reg(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG, 0x00);
 
 	return 0;
 }
 
-void anx7808_work(struct work_struct *work)
+static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 {
+	uint8_t dp_bw, status;
+	int err;
+
+	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
+	if (err)
+		return err;
+	DRM_DEBUG_KMS("DP link bandwidth: 0x%02x\n", dp_bw);
+
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, VIDEO_PD);
+	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN | VIDEO_MUTE);
+
+	msleep(20);
+
+	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
+	anx7808_write_reg(anx7808, SP_TX_SYS_CTRL2_REG, status);
+	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
+	if (status & CHA_STA) {
+		DRM_INFO("Waiting for DP clock: 0x%02x\n", status);
+		return -EAGAIN;
+	}
+
+	anx7808_set_bits(anx7808, SP_TX_SYS_CTRL3_REG, STRM_VALID);
+	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL3_REG, &status);
+	if (!(status & STRM_VALID)) {
+		DRM_INFO("Waiting for DP signal: 0x%02x\n", status);
+		return -EAGAIN;
+	}
+
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
+
+	anx7808_set_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
+	usleep_range(1000, 2000);
+	anx7808_clear_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
+
+	anx7808_set_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
+	usleep_range(1000, 2000);
+	anx7808_clear_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
+
+	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, 0x14);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG, SP_TX_LT_EN);
+
+	anx7808_read_reg(anx7808, SP_TX_LT_CTRL_REG, &status);
+	if (status & 0x70) {
+		DRM_INFO("Waiting for DP link training: 0x%02x\n", status);
+		return -EAGAIN;
+	}
+
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
+
+	return 0;
+}
+
+static void anx7808_config_dp_output(struct anx7808_data *anx7808)
+{
+	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
+}
+
+static int anx7808_check_polling_err(struct anx7808_data *anx7808)
+{
+	uint8_t tx_int_status;
+	anx7808_read_reg(anx7808, SP_TX_INT_STATUS1, &tx_int_status);
+	anx7808_write_reg(anx7808, SP_TX_INT_STATUS1, tx_int_status);
+	if (tx_int_status & POLLING_ERR)
+		return -EFAULT;
+	return 0;
+}
+
+static void anx7808_play_video(struct work_struct *work)
+{
+	struct delayed_work *dw =
+		container_of(work, struct delayed_work, work);
 	struct anx7808_data *anx7808 =
-		container_of(work, struct anx7808_data, work);
-	anx7808_cable_plug(anx7808);
+		container_of(dw, struct anx7808_data, play_video);
+	int ret;
+	enum anx7808_state state = STATE_CABLE_DETECTED;
+
+	ret = anx7808_power_on(anx7808);
+	if (ret)
+		return;
+
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
+	anx7808_init_pipeline(anx7808);
+
+	while (state != STATE_INIT) {
+		DRM_DEBUG_KMS("State: %d\n", state);
+
+		/* Make progress towards playback state. */
+		switch (state) {
+		case STATE_CABLE_DETECTED:
+			ret = anx7808_detect_hdmi_input(anx7808);
+			if (ret)
+				break;
+			state = STATE_HDMI_OK;
+
+		case STATE_HDMI_OK:
+			ret = anx7808_dp_link_training(anx7808);
+			if (ret)
+				break;
+			state = STATE_DP_OK;
+
+		case STATE_DP_OK:
+			anx7808_config_dp_output(anx7808);
+			state = STATE_PLAY;
+		default:
+			break;
+		}
+
+		/* Check for failures */
+		if (state == STATE_PLAY) {
+			ret = anx7808_check_polling_err(anx7808);
+			if (ret) {
+				DRM_INFO("Polling error: %02x", ret);
+				state = STATE_INIT;
+			}
+		}
+
+		msleep(300);
+	}
+
+	anx7808_power_off(anx7808);
+}
+
+static void anx7808_cable_det_timer(unsigned long data)
+{
+	struct anx7808_data *anx7808 = (struct anx7808_data *)data;
+	DRM_INFO("anx7808_cable_det_timer");
+	queue_delayed_work(anx7808->wq, &anx7808->play_video, 0);
 }
 
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
 	struct anx7808_data *anx7808 = data;
-	DRM_INFO("Detected cable insertion.\n");
-	schedule_work(&anx7808->work);
-
+	if (gpio_get_value(anx7808->cable_det_gpio)) {
+		DRM_INFO("Cable detected; Setting cable_det_timer.\n");
+		mod_timer(&anx7808->cable_det_timer,
+			  jiffies + msecs_to_jiffies(CABLE_DET_TIME_MS));
+	} else {
+		DRM_INFO("Cable unplugged; Deleting cable_det_timer.\n");
+		del_timer(&anx7808->cable_det_timer);
+	}
 	return IRQ_HANDLED;
 }
 
@@ -449,6 +592,11 @@ static int anx7808_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 	i2c_set_clientdata(client, anx7808);
+
+	INIT_DELAYED_WORK(&anx7808->play_video, anx7808_play_video);
+
+	setup_timer(&anx7808->cable_det_timer, anx7808_cable_det_timer,
+		    (unsigned long)anx7808);
 
 	anx7808->vdd_mydp = regulator_get(&client->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
@@ -555,22 +703,29 @@ static int anx7808_probe(struct i2c_client *client,
 		goto err_i2c;
 	}
 
-	INIT_WORK(&anx7808->work, anx7808_work);
+	anx7808->wq = create_singlethread_workqueue("anx7808_work");
+	if (anx7808->wq == NULL) {
+		DRM_ERROR("Failed to create work queue.\n");
+		ret = -ENOMEM;
+		goto err_i2c;
+	}
 
 	ret = devm_request_irq(&client->dev,
 			       anx7808->cable_det_irq,
 			       anx7808_cable_det_isr,
-			       IRQF_TRIGGER_RISING,
+			       IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 			       "anx7808_cable_det",
 			       anx7808);
 	if (ret < 0) {
 		DRM_ERROR("Failed to request irq: %d\n", ret);
-		goto err_i2c;
+		goto err_wq;
 	}
 
 	DRM_INFO("ANX7808 initialization successful.\n");
 
 	return 0;
+err_wq:
+	destroy_workqueue(anx7808->wq);
 err_i2c:
 	unregister_i2c_clients(anx7808);
 err_gpio:
@@ -583,6 +738,7 @@ err_reg:
 static int anx7808_remove(struct i2c_client *client)
 {
 	struct anx7808_data *anx7808 = i2c_get_clientdata(client);
+	destroy_workqueue(anx7808->wq);
 	unregister_i2c_clients(anx7808);
 	anx7808_free_gpios(anx7808);
 	regulator_put(anx7808->vdd_mydp);
