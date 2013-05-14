@@ -474,9 +474,9 @@ static irqreturn_t hdmi_audio_irq_handler(int irq, void *arg)
 	snd_printdd("%s %s\n", __func__,
 			atomic_read(&ctx->plugged) ? "plugged" : "unplugged");
 
-	/* should set audio regs after ip, phy got stable. 5ms suff */
+	/* Set audio regs after ip & phy get stable, 3s should suffice. */
 	queue_delayed_work(ctx->hpd_wq, &ctx->hotplug_work,
-			msecs_to_jiffies(5));
+			msecs_to_jiffies(3000));
 	return IRQ_HANDLED;
 }
 
