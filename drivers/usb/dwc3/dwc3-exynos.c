@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/dwc3-exynos.h>
 #include <linux/dma-mapping.h>
@@ -24,11 +23,9 @@
 #include <linux/usb/nop-usb-xceiv.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-
-#include "core.h"
+#include <linux/of_platform.h>
 
 struct dwc3_exynos {
-	struct platform_device	*dwc3;
 	struct platform_device	*usb2_phy;
 	struct platform_device	*usb3_phy;
 	struct device		*dev;
@@ -114,20 +111,30 @@ static int dwc3_setup_vbus_gpio(struct platform_device *pdev)
 	return gpio;
 }
 
+static int dwc3_exynos_remove_child(struct device *dev, void *unused)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+
+	platform_device_unregister(pdev);
+
+	return 0;
+}
+
 static u64 dwc3_exynos_dma_mask = DMA_BIT_MASK(32);
 
 static int dwc3_exynos_probe(struct platform_device *pdev)
 {
-	struct platform_device	*dwc3;
 	struct dwc3_exynos	*exynos;
 	struct clk		*clk;
+	struct device		*dev = &pdev->dev;
+	struct device_node	*node = dev->of_node;
 
 	int			ret = -ENOMEM;
 
-	exynos = kzalloc(sizeof(*exynos), GFP_KERNEL);
+	exynos = devm_kzalloc(dev, sizeof(*exynos), GFP_KERNEL);
 	if (!exynos) {
-		dev_err(&pdev->dev, "not enough memory\n");
-		goto err0;
+		dev_err(dev, "not enough memory\n");
+		goto err1;
 	}
 
 	/*
@@ -135,8 +142,8 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	 * Since shared usb code relies on it, set it here for now.
 	 * Once we move to full device tree support this will vanish off.
 	 */
-	if (!pdev->dev.dma_mask)
-		pdev->dev.dma_mask = &dwc3_exynos_dma_mask;
+	if (!dev->dma_mask)
+		dev->dma_mask = &dwc3_exynos_dma_mask;
 
 	exynos->vbus_gpio = dwc3_setup_vbus_gpio(pdev);
 	if (!gpio_is_valid(exynos->vbus_gpio))
@@ -146,61 +153,39 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 
 	ret = dwc3_exynos_register_phys(exynos);
 	if (ret) {
-		dev_err(&pdev->dev, "couldn't register PHYs\n");
+		dev_err(dev, "couldn't register PHYs\n");
 		goto err1;
 	}
 
-	dwc3 = platform_device_alloc("dwc3", PLATFORM_DEVID_AUTO);
-	if (!dwc3) {
-		dev_err(&pdev->dev, "couldn't allocate dwc3 device\n");
-		goto err1;
-	}
-
-	clk = clk_get(&pdev->dev, "usbdrd30");
+	clk = devm_clk_get(dev, "usbdrd30");
 	if (IS_ERR(clk)) {
-		dev_err(&pdev->dev, "couldn't get clock\n");
+		dev_err(dev, "couldn't get clock\n");
 		ret = -EINVAL;
-		goto err3;
+		goto err1;
 	}
 
-	dma_set_coherent_mask(&dwc3->dev, pdev->dev.coherent_dma_mask);
-
-	dwc3->dev.parent = &pdev->dev;
-	dwc3->dev.dma_mask = pdev->dev.dma_mask;
-	dwc3->dev.dma_parms = pdev->dev.dma_parms;
-	exynos->dwc3	= dwc3;
-	exynos->dev	= &pdev->dev;
+	exynos->dev	= dev;
 	exynos->clk	= clk;
 
 	clk_enable(exynos->clk);
 
-	ret = platform_device_add_resources(dwc3, pdev->resource,
-			pdev->num_resources);
-	if (ret) {
-		dev_err(&pdev->dev, "couldn't add resources to dwc3 device\n");
-		goto err4;
+	if (node) {
+		ret = of_platform_populate(node, NULL, NULL, dev);
+		if (ret) {
+			dev_err(dev, "failed to add dwc3 core\n");
+			goto err2;
+		}
+	} else {
+		dev_err(dev, "no device node, failed to add dwc3 core\n");
+		ret = -ENODEV;
+		goto err2;
 	}
-
-	ret = platform_device_add(dwc3);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to register dwc3 device\n");
-		goto err4;
-	}
-
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
 
 	return 0;
 
-err4:
+err2:
 	clk_disable(clk);
-	clk_put(clk);
-	pm_runtime_disable(&pdev->dev);
-err3:
-	platform_device_put(dwc3);
 err1:
-	kfree(exynos);
-err0:
 	return ret;
 }
 
@@ -208,21 +193,24 @@ static int dwc3_exynos_remove(struct platform_device *pdev)
 {
 	struct dwc3_exynos	*exynos = platform_get_drvdata(pdev);
 
-	pm_runtime_disable(&pdev->dev);
-
-	platform_device_unregister(exynos->dwc3);
 	platform_device_unregister(exynos->usb2_phy);
 	platform_device_unregister(exynos->usb3_phy);
+	device_for_each_child(&pdev->dev, NULL, dwc3_exynos_remove_child);
 
 	clk_disable(exynos->clk);
-	clk_put(exynos->clk);
-
-	kfree(exynos);
 
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_OF
+static const struct of_device_id exynos_dwc3_match[] = {
+	{ .compatible = "samsung,exynos5250-dwusb3" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, exynos_dwc3_match);
+#endif
+
+#ifdef CONFIG_PM
 static int dwc3_exynos_suspend(struct device *dev)
 {
 	struct dwc3_exynos *exynos = dev_get_drvdata(dev);
@@ -251,58 +239,15 @@ static int dwc3_exynos_resume(struct device *dev)
 
 	return 0;
 }
-#endif /* CONFIG_PM_SLEEP */
 
-#ifdef CONFIG_PM_RUNTIME
-static int dwc3_exynos_runtime_suspend(struct device *dev)
-{
-	struct dwc3_exynos	*exynos = dev_get_drvdata(dev);
-	struct platform_device	*pdev_dwc = exynos->dwc3;
-	struct dwc3		*dwc = NULL;
-
-	dwc = platform_get_drvdata(pdev_dwc);
-
-	if (!dwc)
-		return 0;
-
-	pm_runtime_put_sync(dwc->usb3_phy->dev);
-
-	clk_disable(exynos->clk);
-
-	return 0;
-}
-static int dwc3_exynos_runtime_resume(struct device *dev)
-{
-	struct dwc3_exynos	*exynos = dev_get_drvdata(dev);
-	struct platform_device	*pdev_dwc = exynos->dwc3;
-	struct dwc3		*dwc = NULL;
-
-	dwc = platform_get_drvdata(pdev_dwc);
-
-	clk_enable(exynos->clk);
-
-	if (!dwc)
-		return 0;
-
-	pm_runtime_get_sync(dwc->usb3_phy->dev);
-
-	return 0;
-}
-#endif /* CONFIG_PM_RUNTIME */
-
-static const struct dev_pm_ops dwc3_exynos_pm_ops = {
+static const struct dev_pm_ops dwc3_exynos_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_exynos_suspend, dwc3_exynos_resume)
-	SET_RUNTIME_PM_OPS(dwc3_exynos_runtime_suspend,
-				dwc3_exynos_runtime_resume, NULL)
 };
 
-#ifdef CONFIG_OF
-static const struct of_device_id exynos_dwc3_match[] = {
-	{ .compatible = "samsung,exynos5250-dwusb3" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, exynos_dwc3_match);
-#endif
+#define DEV_PM_OPS	(&dwc3_exynos_dev_pm_ops)
+#else
+#define DEV_PM_OPS	NULL
+#endif /* CONFIG_PM */
 
 static struct platform_driver dwc3_exynos_driver = {
 	.probe		= dwc3_exynos_probe,
@@ -310,7 +255,7 @@ static struct platform_driver dwc3_exynos_driver = {
 	.driver		= {
 		.name	= "exynos-dwc3",
 		.of_match_table = of_match_ptr(exynos_dwc3_match),
-		.pm	= &dwc3_exynos_pm_ops,
+		.pm	= DEV_PM_OPS,
 	},
 };
 

@@ -5,8 +5,9 @@
  *
  * Author: Praveen Paneri <p.paneri@samsung.com>
  *
- * Samsung USB-PHY transceiver; talks to S3C HS OTG controller, EHCI-S5P and
- * OHCI-EXYNOS controllers.
+ * Samsung USB-PHY helper driver with common function calls;
+ * interacts with Samsung USB 2.0 PHY controller driver and later
+ * with Samsung USB 3.0 PHY driver.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -26,7 +27,6 @@
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_gpio.h>
 #include <linux/usb/samsung_usb_phy.h>
 
 #include "samsung-usbphy.h"
@@ -34,7 +34,6 @@
 int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 {
 	struct device_node *usbphy_sys;
-	int ret;
 
 	/* Getting node for system controller interface for usb-phy */
 	usbphy_sys = of_get_child_by_name(sphy->dev->of_node, "usbphy-sys");
@@ -59,30 +58,6 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 	if (sphy->sysreg == NULL)
 		dev_warn(sphy->dev, "Can't get usb-phy sysreg cfg register\n");
 
-	/* Getting PHY clk gpio here to enable/disable PHY clock PLL, if any */
-	sphy->phyclk_gpio = of_get_named_gpio(sphy->dev->of_node,
-						"samsung,phyclk-gpio", 0);
-	/*
-	 * We don't want to return error code here in case we don't get the
-	 * PHY clock gpio, some PHYs may not have it.
-	 */
-	if (gpio_is_valid(sphy->phyclk_gpio)) {
-		ret = gpio_request_one(sphy->phyclk_gpio, GPIOF_INIT_HIGH,
-						"samsung_usb_phy_clock_en");
-		if (ret) {
-			/*
-			 * We don't want to return error code here,
-			 * sometimes either of usb2 phy or usb3 phy may not
-			 * have the PHY clock gpio.
-			 */
-			dev_err(sphy->dev, "can't request phyclk gpio %d\n",
-						sphy->phyclk_gpio);
-			sphy->phyclk_gpio = -EINVAL;
-		}
-	} else {
-		dev_warn(sphy->dev, "Can't get usb-phy clock gpio\n");
-	}
-
 	of_node_put(usbphy_sys);
 
 	return 0;
@@ -91,6 +66,7 @@ err0:
 	of_node_put(usbphy_sys);
 	return -ENXIO;
 }
+EXPORT_SYMBOL_GPL(samsung_usbphy_parse_dt);
 
 /*
  * Set isolation here for phy.
@@ -145,6 +121,7 @@ void samsung_usbphy_set_isolation(struct samsung_usbphy *sphy, bool on)
 
 	writel(reg_val, reg);
 }
+EXPORT_SYMBOL_GPL(samsung_usbphy_set_isolation);
 
 /*
  * Configure the mode of working of usb-phy here: HOST/DEVICE.
@@ -167,6 +144,7 @@ void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy)
 
 	writel(reg, sphy->sysreg);
 }
+EXPORT_SYMBOL_GPL(samsung_usbphy_cfg_sel);
 
 /*
  * PHYs are different for USB Device and USB Host.
@@ -182,6 +160,7 @@ int samsung_usbphy_set_type(struct usb_phy *phy,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(samsung_usbphy_set_type);
 
 /*
  * Returns reference clock frequency selection value
@@ -254,3 +233,4 @@ int samsung_usbphy_get_refclk_freq(struct samsung_usbphy *sphy)
 
 	return refclk_freq;
 }
+EXPORT_SYMBOL_GPL(samsung_usbphy_get_refclk_freq);
