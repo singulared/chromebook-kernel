@@ -31,6 +31,8 @@
 
 #include <asm/mach/irq.h>
 
+#include <plat/pm.h>
+
 #include "pinctrl-samsung.h"
 #include "pinctrl-exynos.h"
 
@@ -327,6 +329,24 @@ static int exynos_wkup_irq_set_type(struct irq_data *irqd, unsigned int type)
 	return 0;
 }
 
+static int exynos_wkup_irq_set_wake(struct irq_data *irqd, unsigned int state)
+{
+	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
+	const int eint_num = bank->eint_base + irqd->hwirq;
+	unsigned long bit = 1L << eint_num;
+
+	pr_info("wake %s for eint %d / %s[%ld]\n",
+		state ? "enabled" : "disabled",
+		eint_num, bank->name, irqd->hwirq);
+
+	if (!state)
+		s3c_irqwake_eintmask |= bit;
+	else
+		s3c_irqwake_eintmask &= ~bit;
+
+	return 0;
+}
+
 /*
  * irq_chip for wakeup interrupts
  */
@@ -336,6 +356,7 @@ static struct irq_chip exynos_wkup_irq_chip = {
 	.irq_mask	= exynos_wkup_irq_mask,
 	.irq_ack	= exynos_wkup_irq_ack,
 	.irq_set_type	= exynos_wkup_irq_set_type,
+	.irq_set_wake	= exynos_wkup_irq_set_wake,
 };
 
 /* interrupt handler for wakeup interrupts 0..15 */
@@ -544,10 +565,10 @@ static struct samsung_pin_bank exynos4210_pin_banks1[] = {
 	EXYNOS_PIN_BANK_EINTN(8, 0x1A0, "gpy4"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x1C0, "gpy5"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x1E0, "gpy6"),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00, 0),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04, 8),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08, 16),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c, 24),
 };
 
 /* pin banks of exynos4210 pin-controller 2 */
@@ -630,10 +651,10 @@ static struct samsung_pin_bank exynos4x12_pin_banks1[] = {
 	EXYNOS_PIN_BANK_EINTN(8, 0x1A0, "gpy4"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x1C0, "gpy5"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x1E0, "gpy6"),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00, 0),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04, 8),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08, 16),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c, 24),
 };
 
 /* pin banks of exynos4x12 pin-controller 2 */
@@ -725,10 +746,10 @@ static struct samsung_pin_bank exynos5250_pin_banks0[] = {
 	EXYNOS_PIN_BANK_EINTN(8, 0x220, "gpy4"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x240, "gpy5"),
 	EXYNOS_PIN_BANK_EINTN(8, 0x260, "gpy6"),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08),
-	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC00, "gpx0", 0x00, 0),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC20, "gpx1", 0x04, 8),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC40, "gpx2", 0x08, 16),
+	EXYNOS_PIN_BANK_EINTW(8, 0xC60, "gpx3", 0x0c, 24),
 };
 
 /* pin banks of exynos5250 pin-controller 1 */

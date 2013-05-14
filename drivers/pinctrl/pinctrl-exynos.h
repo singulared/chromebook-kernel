@@ -65,13 +65,14 @@
 		.name		= id			\
 	}
 
-#define EXYNOS_PIN_BANK_EINTW(pins, reg, id, offs)	\
+#define EXYNOS_PIN_BANK_EINTW(pins, reg, id, offs, base)\
 	{						\
 		.type		= &bank_type_alive,	\
 		.pctl_offset	= reg,			\
 		.nr_pins	= pins,			\
 		.eint_type	= EINT_TYPE_WKUP,	\
 		.eint_offset	= offs,			\
+		.eint_base	= base,			\
 		.name		= id			\
 	}
 
