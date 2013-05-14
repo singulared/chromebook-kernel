@@ -16,6 +16,8 @@
 struct samsung_clk_pll {
 	struct clk_hw		hw;
 	const void __iomem	*base;
+	const struct samsung_pll_rate_table *rate_table;
+	unsigned int rate_count;
 };
 
 #define to_clk_pll(_hw) container_of(_hw, struct samsung_clk_pll, hw)
@@ -137,7 +139,9 @@ static const struct clk_ops samsung_pll35xx_clk_ops = {
 };
 
 struct clk * __init samsung_clk_register_pll35xx(const char *name,
-			const char *pname, const void __iomem *base)
+			const char *pname, const void __iomem *base,
+			const struct samsung_pll_rate_table *rate_table,
+			const unsigned int rate_count)
 {
 	struct samsung_clk_pll *pll;
 	struct clk *clk;
@@ -157,6 +161,8 @@ struct clk * __init samsung_clk_register_pll35xx(const char *name,
 
 	pll->hw.init = &init;
 	pll->base = base;
+	pll->rate_table = rate_table;
+	pll->rate_count = rate_count;
 
 	clk = clk_register(NULL, &pll->hw);
 	if (IS_ERR(clk)) {
@@ -212,7 +218,9 @@ static const struct clk_ops samsung_pll36xx_clk_ops = {
 };
 
 struct clk * __init samsung_clk_register_pll36xx(const char *name,
-			const char *pname, const void __iomem *base)
+			const char *pname, const void __iomem *base,
+			const struct samsung_pll_rate_table *rate_table,
+			const unsigned int rate_count)
 {
 	struct samsung_clk_pll *pll;
 	struct clk *clk;
@@ -232,6 +240,8 @@ struct clk * __init samsung_clk_register_pll36xx(const char *name,
 
 	pll->hw.init = &init;
 	pll->base = base;
+	pll->rate_table = rate_table;
+	pll->rate_count = rate_count;
 
 	clk = clk_register(NULL, &pll->hw);
 	if (IS_ERR(clk)) {
