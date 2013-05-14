@@ -23,8 +23,6 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/of_gpio.h>
-#include <linux/of.h>
-#include <linux/of_device.h>
 
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
@@ -39,7 +37,6 @@
 #include "i2s.h"
 #include "s3c-i2s-v2.h"
 #include "../codecs/max98095.h"
-#include "codec_plugin.h"
 
 #define DRV_NAME "daisy-snd-max98095"
 
@@ -313,64 +310,12 @@ static const struct snd_soc_dapm_widget daisy_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
 };
 
-static struct snd_soc_jack daisy_hdmi_jack;
-
-static int get_hdmi(struct snd_kcontrol *kcontrol,
-				 struct snd_ctl_elem_value *ucontrol)
-{
-	struct audio_codec_plugin *plugin;
-	int ret = 0, state = 0;
-
-	plugin = (struct audio_codec_plugin *)kcontrol->private_value;
-
-	if (!plugin)
-		return 0;
-
-	if (!plugin->ops.hw_params)
-		return 0;
-
-	ret = plugin->ops.get_state(plugin->dev, &state);
-	if (ret < 0)
-		return 0;
-
-	ucontrol->value.integer.value[0] = (long int)state;
-	return 1;
-}
-
-static int put_hdmi(struct snd_kcontrol *kcontrol,
-				  struct snd_ctl_elem_value *ucontrol)
-{
-	struct audio_codec_plugin *plugin;
-	int ret = 0, state;
-
-	plugin = (struct audio_codec_plugin *)kcontrol->private_value;
-
-	if (!plugin)
-		return 0;
-
-	if (!plugin->ops.hw_params)
-		return 0;
-
-	state = (int)ucontrol->value.integer.value[0];
-	ret = plugin->ops.set_state(plugin->dev,
-		ucontrol->value.integer.value[0]);
-
-	if (ret < 0)
-		return 0;
-	return 1;
-}
-
-static struct snd_kcontrol_new daisy_dapm_controls[] = {
-	SOC_SINGLE_BOOL_EXT("HDMI Playback Switch", 0, get_hdmi, put_hdmi),
-};
-
 static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_card *card = codec->card;
 	struct device_node *dn = card->dev->of_node;
-	struct audio_codec_plugin *plugin;
 
 	if (dn) {
 		enum of_gpio_flags flags;
@@ -404,11 +349,6 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 				       &daisy_hp_jack_gpio);
 	}
 
-	plugin = (void *)daisy_dapm_controls[0].private_value;
-	if (plugin)
-		snd_soc_jack_new(codec, "HDMI Jack",
-				 SND_JACK_AVOUT, &daisy_hdmi_jack);
-
 	/* Microphone BIAS is needed to power the analog mic.
 	 * MICBIAS2 is connected to analog mic (MIC3, which is in turn
 	 * connected to MIC2 via 'External MIC') on Daisy.
@@ -436,14 +376,6 @@ static int daisy_resume_post(struct snd_soc_card *card)
 		snd_soc_jack_gpio_detect(&daisy_hp_jack_gpio);
 }
 
-static int daisy_hdmi_jack_report(int plugged)
-{
-	snd_soc_jack_report(&daisy_hdmi_jack,
-			    plugged ? SND_JACK_AVOUT : 0,
-			    SND_JACK_AVOUT);
-	return 0;
-}
-
 static struct snd_soc_dai_link daisy_dai[] = {
 	{ /* Primary DAI i/f */
 		.name = "MAX98095 RX",
@@ -467,8 +399,6 @@ static struct snd_soc_card daisy_snd = {
 	.name = "DAISY-I2S",
 	.dai_link = daisy_dai,
 	.num_links = ARRAY_SIZE(daisy_dai),
-	.controls = daisy_dapm_controls,
-	.num_controls = ARRAY_SIZE(daisy_dapm_controls),
 	.dapm_widgets = daisy_dapm_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(daisy_dapm_widgets),
 	.dapm_routes = daisy_audio_map,
@@ -476,37 +406,11 @@ static struct snd_soc_card daisy_snd = {
 	.resume_post = daisy_resume_post,
 };
 
-static int plugin_init(struct audio_codec_plugin **pplugin)
-{
-	struct device_node *plugin_node = NULL;
-	struct platform_device *plugin_pdev;
-	struct audio_codec_plugin *plugin;
-
-	plugin_node = of_find_node_by_name(NULL, "hdmi-audio");
-	if (!plugin_node)
-		return -EFAULT;
-
-	plugin_pdev = of_find_device_by_node(plugin_node);
-	if (!plugin_pdev)
-		return -EFAULT;
-
-	plugin = dev_get_drvdata(&plugin_pdev->dev);
-	if (!plugin)
-		return -EFAULT;
-	else
-		*pplugin = plugin;
-
-	plugin->jack_cb = daisy_hdmi_jack_report;
-
-	return 0;
-}
-
 static int daisy_max98095_driver_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &daisy_snd;
 	struct device_node *dn;
 	struct daisy_max98095 *machine;
-	struct audio_codec_plugin *plugin = NULL;
 	int i, ret;
 
 	if (!pdev->dev.platform_data && !pdev->dev.of_node) {
@@ -539,9 +443,6 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Can't allocate daisy_max98095 struct\n");
 		return -ENOMEM;
 	}
-
-	plugin_init(&plugin);
-	daisy_dapm_controls[0].private_value = (unsigned long)plugin;
 
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);

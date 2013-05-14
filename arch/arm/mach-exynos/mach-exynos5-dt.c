@@ -285,12 +285,6 @@ static const struct of_dev_auxdata exynos5250_auxdata_lookup[] __initconst = {
 	OF_DEV_AUXDATA("samsung,mfc-v6", 0x11000000, "s5p-mfc-v6", NULL),
 	OF_DEV_AUXDATA("samsung,exynos5250-tmu", 0x10060000,
 				"exynos-tmu", NULL),
-	OF_DEV_AUXDATA("samsung,samsung-i2s", 0x03830000,
-				"samsung-i2s.0", NULL),
-	OF_DEV_AUXDATA("samsung,samsung-i2s", 0x12D60000,
-				"samsung-i2s.1", NULL),
-	OF_DEV_AUXDATA("samsung,samsung-i2s", 0x12D70000,
-				"samsung-i2s.2", NULL),
 	OF_DEV_AUXDATA("samsung,exynos-sysmmu", 0x11210000,
 			"exynos-sysmmu.0", "mfc"), /* MFC_L */
 	OF_DEV_AUXDATA("samsung,exynos-sysmmu", 0x11200000,

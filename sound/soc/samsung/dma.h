@@ -19,7 +19,6 @@ struct s3c_dma_params {
 	int dma_size;			/* Size of the DMA transfer */
 	unsigned ch;
 	struct samsung_dma_ops *ops;
-	struct property *dma_prop;
 };
 
 int asoc_dma_platform_register(struct device *dev);
