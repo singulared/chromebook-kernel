@@ -119,14 +119,26 @@ static int set_audio_clock_heirachy(struct platform_device *pdev)
 	}
 
 	/* Set audio clock hierarchy for S/PDIF */
-	if (clk_set_parent(sclk_epll, fout_epll))
+	ret = clk_set_parent(sclk_epll, fout_epll);
+	if (ret < 0) {
 		printk(KERN_WARNING "Failed to set parent of epll.\n");
-	if (clk_set_parent(mout_audio0, sclk_epll))
+		goto out6;
+	}
+	ret = clk_set_parent(mout_audio0, sclk_epll);
+	if (ret < 0) {
 		printk(KERN_WARNING "Failed to set parent of mout audio0.\n");
-	if (clk_set_parent(mout_audss, fout_epll))
+		goto out6;
+	}
+	ret = clk_set_parent(mout_audss, fout_epll);
+	if (ret < 0) {
 		printk(KERN_WARNING "Failed to set parent of audss.\n");
-	if (clk_set_parent(mout_i2s, sclk_audio0))
+		goto out6;
+	}
+	ret = clk_set_parent(mout_i2s, sclk_audio0);
+	if (ret < 0) {
 		printk(KERN_WARNING "Failed to set parent of mout i2s.\n");
+		goto out6;
+	}
 
 	/* Ensure that the divider between mout_audio0 and sclk_audio0 is 1. */
 	ret = clk_set_rate(sclk_audio0, clk_get_rate(mout_audio0));
