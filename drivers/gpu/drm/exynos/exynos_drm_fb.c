@@ -121,7 +121,6 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 #endif
 
 	kfree(exynos_fb);
-	exynos_fb = NULL;
 }
 
 static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
