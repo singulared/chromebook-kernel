@@ -55,6 +55,8 @@ Optional properties:
 
 * broken-cd: as documented in mmc core bindings.
 
+* bypass-smu: Bypass Security Management Unit of eMMC channel 0 and channel 1
+
 Aliases:
 
 - All the MSHC controller nodes should be represented in the aliases node using

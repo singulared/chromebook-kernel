@@ -1942,6 +1942,9 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 	}
 
+	if (host->pdata->quirks & DW_MCI_QUIRK_BYPASS_SMU)
+		drv_data->cfg_smu(host);
+
 	if (host->pdata->quirks & DW_MCI_QUIRK_HIGHSPEED)
 		mmc->caps |= MMC_CAP_SD_HIGHSPEED | MMC_CAP_MMC_HIGHSPEED;
 
@@ -2095,6 +2098,9 @@ static struct dw_mci_of_quirks {
 	}, {
 		.quirk	= "broken-cd",
 		.id	= DW_MCI_QUIRK_BROKEN_CARD_DETECTION,
+	}, {
+		.quirk	= "bypass-smu",
+		.id	= DW_MCI_QUIRK_BYPASS_SMU,
 	},
 };
 
@@ -2441,6 +2447,8 @@ EXPORT_SYMBOL(dw_mci_suspend);
 
 int dw_mci_resume(struct dw_mci *host)
 {
+	const struct dw_mci_drv_data *drv_data = host->drv_data;
+
 	int i, ret;
 
 	if (host->vmmc) {
@@ -2459,6 +2467,9 @@ int dw_mci_resume(struct dw_mci *host)
 
 	if (host->use_dma && host->dma_ops->init)
 		host->dma_ops->init(host);
+
+	if (host->pdata->quirks & DW_MCI_QUIRK_BYPASS_SMU)
+		drv_data->cfg_smu(host);
 
 	/* Restore the old value at FIFOTH register */
 	mci_writel(host, FIFOTH, host->fifoth_val);

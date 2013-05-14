@@ -33,6 +33,25 @@
 
 #define SDMMC_CMD_USE_HOLD_REG		BIT(29)
 
+/* Block number in eMMC */
+#define DWMCI_BLOCK_NUM			0xFFFFFFFF
+
+#define DWMCI_EMMCP_BASE		0x1000
+#define DWMCI_MPSECURITY		(DWMCI_EMMCP_BASE + 0x0010)
+#define DWMCI_MPSBEGIN0			(DWMCI_EMMCP_BASE + 0x0200)
+#define DWMCI_MPSEND0			(DWMCI_EMMCP_BASE + 0x0204)
+#define DWMCI_MPSCTRL0			(DWMCI_EMMCP_BASE + 0x020C)
+
+/* SMU control bits */
+#define DWMCI_MPSCTRL_SECURE_READ_BIT		BIT(7)
+#define DWMCI_MPSCTRL_SECURE_WRITE_BIT		BIT(6)
+#define DWMCI_MPSCTRL_NON_SECURE_READ_BIT	BIT(5)
+#define DWMCI_MPSCTRL_NON_SECURE_WRITE_BIT	BIT(4)
+#define DWMCI_MPSCTRL_USE_FUSE_KEY		BIT(3)
+#define DWMCI_MPSCTRL_ECB_MODE			BIT(2)
+#define DWMCI_MPSCTRL_ENCRYPTION		BIT(1)
+#define DWMCI_MPSCTRL_VALID			BIT(0)
+
 #define EXYNOS4210_FIXED_CIU_CLK_DIV	2
 #define EXYNOS4412_FIXED_CIU_CLK_DIV	4
 
@@ -90,6 +109,21 @@ static int dw_mci_exynos_priv_init(struct dw_mci *host)
 
 	host->priv = priv;
 	return 0;
+}
+
+/*
+ * By-pass Security Management Unit
+ */
+void dw_mci_exynos_cfg_smu(struct dw_mci *host)
+{
+	/* Set the start and end region to configure */
+	__raw_writel(0, host->regs + DWMCI_MPSBEGIN0);
+	__raw_writel(DWMCI_BLOCK_NUM, host->regs + DWMCI_MPSEND0);
+	__raw_writel(DWMCI_MPSCTRL_SECURE_READ_BIT |
+		DWMCI_MPSCTRL_SECURE_WRITE_BIT |
+		DWMCI_MPSCTRL_NON_SECURE_READ_BIT |
+		DWMCI_MPSCTRL_NON_SECURE_WRITE_BIT |
+		DWMCI_MPSCTRL_VALID, host->regs + DWMCI_MPSCTRL0);
 }
 
 static int dw_mci_exynos_setup_clock(struct dw_mci *host)
@@ -173,6 +207,7 @@ static const struct dw_mci_drv_data exynos_drv_data = {
 	.prepare_command	= dw_mci_exynos_prepare_command,
 	.set_ios		= dw_mci_exynos_set_ios,
 	.parse_dt		= dw_mci_exynos_parse_dt,
+	.cfg_smu		= dw_mci_exynos_cfg_smu,
 };
 
 static const struct of_device_id dw_mci_exynos_match[] = {
