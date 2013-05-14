@@ -29,6 +29,9 @@
 	firmware {
 		chromeos {
 			write-protect-gpio = <&gpd1 6 1>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&wp_gpio>;
 		};
 	};
 
@@ -40,6 +43,86 @@
 		i2c2_bus: i2c2-bus {
 			samsung,pin-pud = <0>;
 		};
+
+		cyapa_irq: cyapa-irq {
+			samsung,pins = "gpx1-2";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		hdmi_hpd_irq: hdmi-hpd-irq {
+			samsung,pins = "gpx3-7";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <0>;
+		};
+
+		max77686_irq: max77686-irq {
+			samsung,pins = "gpx3-2";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		max98095_en: max98095-en {
+			samsung,pins = "gpx1-7";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		power_key_irq: power-key-irq {
+			samsung,pins = "gpx1-3";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		sd_wp: sd-wp {
+			samsung,pins = "gpc2-1";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		spi_cs: spi-cs {
+			samsung,pins = "gpa2-5";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <3>;
+		};
+
+		wifi_en: wifi-en {
+			samsung,pins = "gpx0-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		wifi_rst: wifi-rst {
+			samsung,pins = "gpx0-2";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		wp_gpio: wp-gpio {
+			samsung,pins = "gpd1-6";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	pinctrl@13400000 {
+		hsic_reset: hsic-reset {
+			samsung,pins = "gpe1-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 	};
 
 	i2c@12C60000 {
@@ -50,6 +133,8 @@
 			compatible = "maxim,max77686";
 			interrupt-parent = <&gpx3>;
 			interrupts = <2 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&max77686_irq>;
 			wakeup-source;
 			reg = <0x09>;
 
@@ -248,6 +333,8 @@
 			compatible = "cypress,cyapa";
 			interrupts = <2 0>;
 			interrupt-parent = <&gpx1>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&cyapa_irq>;
 			wakeup-source;
 		};
 	};
@@ -349,7 +436,7 @@
 		samsung,dw-mshc-sdr-timing = <2 3>;
 		samsung,dw-mshc-ddr-timing = <1 2>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_cd &sd2_bus4>;
+		pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_cd &sd2_bus4 &sd_wp>;
 
 		slot@0 {
 			reg = <0>;
@@ -387,6 +474,8 @@
 			compatible = "spidev";
 			reg = <0>;
 			spi-max-frequency = <10000000>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi_cs>;
 
 			controller-data {
 				cs-gpio = <&gpa2 5 0>;
@@ -406,34 +495,44 @@
 
 	hdmi {
 		hpd-gpio = <&gpx3 7 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_hpd_irq>;
 	};
 
-	max98095-en {
+	max98095-en-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "codec-en";
 		gpio = <&gpx1 7 0>;
 		enable-active-high;
 		regulator-boot-on;
 		regulator-always-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&max98095_en>;
 	};
 
 	// NB: these are manually enabled in platform code
-	wifi-en {
+	wifi-en-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "wifi-en";
 		gpio = <&gpx0 1 0>;
 		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_en>;
 	};
-	wifi-rst {
+	wifi-rst-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "wifi-rst-l";
 		gpio = <&gpx0 2 0>;
 		enable-active-high;
 		startup-delay-us = <1500>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_rst>;
 	};
 
 	gpio-keys {
 		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&power_key_irq>;
 
 		power {
 			label = "Power";
@@ -452,6 +551,8 @@
 		regulator-name = "hsichub-reset-l";
 		gpio = <&gpe1 0 0>;
 		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hsic_reset>;
 	};
 
 	vbat: vbat-fixed-regulator {

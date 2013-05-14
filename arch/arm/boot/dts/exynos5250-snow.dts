@@ -33,10 +33,85 @@
 		sd3_bus4: sd3-bus-width4 {
 			samsung,pin-drv = <0>;
 		};
+
+		audio_detection: audio-detection {
+			samsung,pins = "gpx2-0", "gpx2-2";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		ec_irq: ec-irq {
+			samsung,pins = "gpx1-6";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		lid_irq: lid-irq {
+			samsung,pins = "gpx3-5";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		ptn3460_gpios: ptn3460-gpios {
+			samsung,pins = "gpy2-5", "gpx1-5";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		tps65090_irq: tps65090-irq {
+			samsung,pins = "gpx2-6";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		usb2_vbus_en: usb2-vbus-en {
+			samsung,pins = "gpx1-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		usb3_phyclk_en: usb3-phyclk-en {
+			samsung,pins = "gpy1-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		usb3_vbus_en: usb3-vbus-en {
+			samsung,pins = "gpx2-7";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	pinctrl@13400000 {
+		arb_their_claim: arb-their-claim {
+			samsung,pins = "gpe0-4";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <3>;
+			samsung,pin-drv = <0>;
+		};
+
+		arb_our_claim: arb-our-claim {
+			samsung,pins = "gpf0-3";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	gpio-keys {
 		compatible = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&power_key_irq &lid_irq>;
 
 		lid-switch {
 			label = "Lid";
@@ -65,6 +140,9 @@
 		wait-retry-us = <3000>;
 		wait-free-us = <50000>;
 
+		pinctrl-names = "default";
+		pinctrl-0 = <&arb_our_claim &arb_their_claim>;
+
 		/* Use ID 104 as a hint that we're on physical bus 4 */
 		i2c_104: i2c@0 {
 			reg = <0>;
@@ -76,6 +154,8 @@
 				reg = <0x1e>;
 				interrupts = <6 0>;
 				interrupt-parent = <&gpx1>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&ec_irq>;
 				wakeup-source;
 
 				cros-ec-keyb {
@@ -138,6 +218,8 @@
 				reg = <0x48>;
 				interrupts = <6 0>;
 				interrupt-parent = <&gpx2>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&tps65090_irq>;
 				no-ack-irq;
 
 				vsys1-supply = <&vbat>;
@@ -214,15 +296,21 @@
 	usb@12000000 {
 		samsung,vbus-gpio = <&gpx2 7 0>;
 		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_vbus_en>;
 	};
 
 	usbphy@12100000 {
 		samsung,phyclk-gpio = <&gpy1 1 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_phyclk_en>;
 	};
 
 	usb@12110000 {
 		samsung,vbus-gpio = <&gpx1 1 0>;
 		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_vbus_en>;
 	};
 
 	usb@12120000 {
@@ -257,6 +345,8 @@
 	sound {
 		samsung,mic-det-gpios = <&gpx2 0 1>;
 		samsung,hp-det-gpios = <&gpx2 2 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_detection>;
 	};
 
 	i2c@12C90000 {
@@ -273,6 +363,8 @@
 			powerdown-gpio = <&gpy2 5 0>;
 			reset-gpio = <&gpx1 5 0>;
 			edid-emulation = <5>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&ptn3460_gpios>;
 		};
 	};
 };
