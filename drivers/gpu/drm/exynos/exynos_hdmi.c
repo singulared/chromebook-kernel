@@ -161,7 +161,6 @@ struct hdmi_context {
 	bool				is_soc_exynos5;
 	bool				powered;
 	bool				dvi_mode;
-	struct mutex			hdmi_mutex;
 
 	void __iomem			*regs;
 	void				*parent_ctx;
@@ -1674,10 +1673,8 @@ static void hdmi_conf_apply(struct hdmi_context *hdata)
 	hdmiphy_conf_reset(hdata);
 	hdmiphy_conf_apply(hdata);
 
-	mutex_lock(&hdata->hdmi_mutex);
 	hdmi_conf_reset(hdata);
 	hdmi_conf_init(hdata);
-	mutex_unlock(&hdata->hdmi_mutex);
 	if (!hdata->is_soc_exynos5)
 		hdmi_audio_init(hdata);
 
@@ -1890,12 +1887,8 @@ static void hdmi_commit(void *ctx)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	mutex_lock(&hdata->hdmi_mutex);
-	if (!hdata->powered) {
-		mutex_unlock(&hdata->hdmi_mutex);
+	if (!hdata->powered)
 		return;
-	}
-	mutex_unlock(&hdata->hdmi_mutex);
 
 	hdmi_conf_apply(hdata);
 }
@@ -1906,15 +1899,8 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	mutex_lock(&hdata->hdmi_mutex);
-	if (hdata->powered) {
-		mutex_unlock(&hdata->hdmi_mutex);
+	if (hdata->powered)
 		return;
-	}
-
-	hdata->powered = true;
-
-	mutex_unlock(&hdata->hdmi_mutex);
 
 	regulator_bulk_enable(res->regul_count, res->regul_bulk);
 	clk_enable(res->hdmiphy);
@@ -1922,6 +1908,8 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 	clk_enable(res->sclk_hdmi);
 
 	hdmiphy_poweron(hdata);
+
+	hdata->powered = true;
 }
 
 static void hdmi_poweroff(struct hdmi_context *hdata)
@@ -1930,10 +1918,8 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	mutex_lock(&hdata->hdmi_mutex);
 	if (!hdata->powered)
-		goto out;
-	mutex_unlock(&hdata->hdmi_mutex);
+		return;
 
 	/*
 	 * The TV power domain needs any condition of hdmiphy to turn off and
@@ -1947,12 +1933,7 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	clk_disable(res->hdmiphy);
 	regulator_bulk_disable(res->regul_count, res->regul_bulk);
 
-	mutex_lock(&hdata->hdmi_mutex);
-
 	hdata->powered = false;
-
-out:
-	mutex_unlock(&hdata->hdmi_mutex);
 }
 
 static void hdmi_dpms(void *ctx, int mode)
@@ -1997,9 +1978,7 @@ static irqreturn_t hdmi_irq_thread(int irq, void *arg)
 	struct exynos_drm_hdmi_context *ctx = arg;
 	struct hdmi_context *hdata = ctx->ctx;
 
-	mutex_lock(&hdata->hdmi_mutex);
 	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
-	mutex_unlock(&hdata->hdmi_mutex);
 
 	if (ctx->drm_dev)
 		drm_helper_hpd_irq_event(ctx->drm_dev);
@@ -2240,8 +2219,6 @@ static int hdmi_probe(struct platform_device *pdev)
 		DRM_ERROR("out of memory\n");
 		return -ENOMEM;
 	}
-
-	mutex_init(&hdata->hdmi_mutex);
 
 	drm_hdmi_ctx->ctx = (void *)hdata;
 	hdata->parent_ctx = (void *)drm_hdmi_ctx;

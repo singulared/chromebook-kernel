@@ -90,7 +90,6 @@ struct mixer_context {
 	bool			vp_enabled;
 	u32			int_en;
 
-	struct mutex		mixer_mutex;
 	struct mixer_resources	mixer_res;
 	struct hdmi_win_data	win_data[MIXER_WIN_NR];
 	enum mixer_version_id	mxr_ver;
@@ -792,12 +791,8 @@ static void mixer_win_commit(void *ctx, int win)
 
 	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
 
-	mutex_lock(&mixer_ctx->mixer_mutex);
-	if (!mixer_ctx->powered) {
-		mutex_unlock(&mixer_ctx->mixer_mutex);
+	if (!mixer_ctx->powered)
 		return;
-	}
-	mutex_unlock(&mixer_ctx->mixer_mutex);
 
 	if (win > 1 && mixer_ctx->vp_enabled)
 		vp_video_buffer(mixer_ctx, win);
@@ -815,13 +810,10 @@ static void mixer_win_disable(void *ctx, int win)
 
 	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
 
-	mutex_lock(&mixer_ctx->mixer_mutex);
 	if (!mixer_ctx->powered) {
-		mutex_unlock(&mixer_ctx->mixer_mutex);
 		mixer_ctx->win_data[win].resume = false;
 		return;
 	}
-	mutex_unlock(&mixer_ctx->mixer_mutex);
 
 	spin_lock_irqsave(&res->reg_slock, flags);
 	mixer_vsync_set_update(mixer_ctx, false);
@@ -852,12 +844,8 @@ static void mixer_wait_for_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
 
-	mutex_lock(&mixer_ctx->mixer_mutex);
-	if (!mixer_ctx->powered) {
-		mutex_unlock(&mixer_ctx->mixer_mutex);
+	if (!mixer_ctx->powered)
 		return;
-	}
-	mutex_unlock(&mixer_ctx->mixer_mutex);
 
 	atomic_set(&mixer_ctx->wait_vsync_event, 1);
 
@@ -880,12 +868,8 @@ static void mixer_complete_scanout(void *ctx, dma_addr_t dma_addr,
 	int win;
 	bool in_use = false;
 
-	mutex_lock(&mixer_ctx->mixer_mutex);
-	if (!mixer_ctx->powered) {
-		mutex_unlock(&mixer_ctx->mixer_mutex);
+	if (!mixer_ctx->powered)
 		return;
-	}
-	mutex_unlock(&mixer_ctx->mixer_mutex);
 
 	/*
 	 * This dma-addr must not be used next time so check the
@@ -952,13 +936,8 @@ static void mixer_poweron(struct mixer_context *ctx)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	mutex_lock(&ctx->mixer_mutex);
-	if (ctx->powered) {
-		mutex_unlock(&ctx->mixer_mutex);
+	if (ctx->powered)
 		return;
-	}
-	ctx->powered = true;
-	mutex_unlock(&ctx->mixer_mutex);
 
 	clk_enable(res->mixer);
 	if (ctx->vp_enabled) {
@@ -970,6 +949,8 @@ static void mixer_poweron(struct mixer_context *ctx)
 	mixer_win_reset(ctx);
 
 	mixer_window_resume(ctx);
+
+	ctx->powered = true;
 }
 
 static void mixer_poweroff(struct mixer_context *ctx)
@@ -978,10 +959,8 @@ static void mixer_poweroff(struct mixer_context *ctx)
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	mutex_lock(&ctx->mixer_mutex);
 	if (!ctx->powered)
-		goto out;
-	mutex_unlock(&ctx->mixer_mutex);
+		return;
 
 	mixer_window_suspend(ctx);
 
@@ -993,11 +972,7 @@ static void mixer_poweroff(struct mixer_context *ctx)
 		clk_disable(res->sclk_mixer);
 	}
 
-	mutex_lock(&ctx->mixer_mutex);
 	ctx->powered = false;
-
-out:
-	mutex_unlock(&ctx->mixer_mutex);
 }
 
 static void mixer_dpms(void *ctx, int mode)
@@ -1279,8 +1254,6 @@ static int mixer_probe(struct platform_device *pdev)
 		DRM_ERROR("failed to alloc mixer context.\n");
 		return -ENOMEM;
 	}
-
-	mutex_init(&ctx->mixer_mutex);
 
 	if (dev->of_node) {
 		const struct of_device_id *match;
