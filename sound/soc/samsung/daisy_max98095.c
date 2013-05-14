@@ -551,6 +551,8 @@ static int daisy_resume_post(struct snd_soc_card *card)
 
 	if (gpio_is_valid(daisy_hp_jack_gpio.gpio))
 		snd_soc_jack_gpio_detect(&daisy_hp_jack_gpio);
+
+	return 0;
 }
 
 static struct snd_soc_dai_link daisy_dai[] = {
