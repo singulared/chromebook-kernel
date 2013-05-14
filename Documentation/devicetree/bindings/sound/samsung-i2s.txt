@@ -2,20 +2,12 @@
 
 Required SoC Specific Properties:
 
-- compatible : "samsung,samsung-i2s"
+- compatible : "samsung,i2s-v5"
 - reg: physical base address of the controller and length of memory mapped
   region.
-
-[PRELIMINARY: the dma channel allocation will change once there are
-official DMA bindings]
-
-- tx-dma-channel-secondary: The dma channel specifier for secondary tx
-  operations. The format of the dma specifier depends on the dma
-  controller.
-- tx-dma-channel: The dma channel specifier for tx operations. The format of
-  the dma specifier depends on the dma controller.
-- rx-dma-channel: The dma channel specifier for rx operations. The format of
-  the dma specifier depends on the dma controller.
+- dmas: list of DMA controller phandle and DMA request line ordered pairs.
+- dma-names: identifier string for each DMA request line in the dmas property.
+  These strings correspond 1:1 with the ordered pairs in dmas.
 
 Optional SoC Specific Properties:
 
@@ -32,25 +24,31 @@ Optional SoC Specific Properties:
 - pinctrl-0: Should specify pin control groups used for this controller.
 - pinctrl-names: Should contain only one value - "default".
 
-Aliases:
-
-- All the I2S controller nodes are represented in the aliases node using
-  the following format 'i2s{n}' where n is a unique number for the alias.
-
 Example:
 
 - SoC Specific Portion:
 
 i2s@03830000 {
-	compatible = "samsung,samsung-i2s";
+	compatible = "samsung,i2s-v5";
 	reg = <0x03830000 0x100>;
-	tx-dma-channel-secondary = <&pdma0 8>;
-	tx-dma-channel = <&pdma0 10>;
-	rx-dma-channel = <&pdma0 9>;
+	dmas = <&pdma0 10
+		&pdma0 9
+		&pdma0 8>;
+	dma-names = "tx", "rx", "tx-sec";
 	samsung,supports-6ch;
 	samsung,supports-rstclr;
 	samsung,supports-secdai;
 	samsung,idma-addr = <0x03000000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&i2s0_bus>;
+};
+
+- Board Specific Portion:
+
+i2s@03830000 {
+	gpios = <&gpz 0 2 0 0>, /* I2S_0_SCLK */
+		<&gpz 1 2 0 0>, /* I2S_0_CDCLK */
+		<&gpz 2 2 0 0>, /* I2S_0_LRCK */
+		<&gpz 3 2 0 0>, /* I2S_0_SDI */
+		<&gpz 4 2 0 0>, /* I2S_0_SDO[1] */
+		<&gpz 5 2 0 0>, /* I2S_0_SDO[2] */
+		<&gpz 6 2 0 0>; /* I2S_0_SDO[3] */
 };

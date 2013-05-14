@@ -9,6 +9,6 @@ Example:
 sound {
 		compatible = "samsung,smdk-wm8994";
 
-		samsung,i2s-controller = <&i2s_0>;
+		samsung,i2s-controller = <&i2s0>;
 		samsung,audio-codec = <&wm8994>;
 };

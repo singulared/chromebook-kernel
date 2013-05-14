@@ -170,14 +170,14 @@ static int dma_hw_params(struct snd_pcm_substream *substream,
 		req.cap = (samsung_dma_has_circular() ?
 			DMA_CYCLIC : DMA_SLAVE);
 		req.client = prtd->params->client;
-		req.dt_dmach_prop = prtd->params->dma_prop;
 		config.direction =
 			(substream->stream == SNDRV_PCM_STREAM_PLAYBACK
 			? DMA_MEM_TO_DEV : DMA_DEV_TO_MEM);
 		config.width = prtd->params->dma_size;
 		config.fifo = prtd->params->dma_addr;
 		prtd->params->ch = prtd->params->ops->request(
-				prtd->params->channel, &req);
+				prtd->params->channel, &req, rtd->cpu_dai->dev,
+				prtd->params->ch_name);
 		prtd->params->ops->config(prtd->params->ch, &config);
 	}
 

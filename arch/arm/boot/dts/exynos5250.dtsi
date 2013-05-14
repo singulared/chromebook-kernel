@@ -45,9 +45,6 @@
 		i2c6 = &i2c_6;
 		i2c7 = &i2c_7;
 		i2c8 = &i2c_8;
-		i2s0 = &i2s_0;
-		i2s1 = &i2s_1;
-		i2s2 = &i2s_2;
 		pinctrl0 = &pinctrl_0;
 		pinctrl1 = &pinctrl_1;
 		pinctrl2 = &pinctrl_2;
@@ -311,8 +308,9 @@
 		compatible = "samsung,exynos4210-spi";
 		reg = <0x12d20000 0x100>;
 		interrupts = <0 66 0>;
-		tx-dma-channel = <&pdma0 5>; /* preliminary */
-		rx-dma-channel = <&pdma0 4>; /* preliminary */
+		dmas = <&pdma0 5
+			&pdma0 4>;
+		dma-names = "tx", "rx";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-names = "default";
@@ -323,8 +321,9 @@
 		compatible = "samsung,exynos4210-spi";
 		reg = <0x12d30000 0x100>;
 		interrupts = <0 67 0>;
-		tx-dma-channel = <&pdma1 5>; /* preliminary */
-		rx-dma-channel = <&pdma1 4>; /* preliminary */
+		dmas = <&pdma1 5
+			&pdma1 4>;
+		dma-names = "tx", "rx";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-names = "default";
@@ -335,8 +334,9 @@
 		compatible = "samsung,exynos4210-spi";
 		reg = <0x12d40000 0x100>;
 		interrupts = <0 68 0>;
-		tx-dma-channel = <&pdma0 7>; /* preliminary */
-		rx-dma-channel = <&pdma0 6>; /* preliminary */
+		dmas = <&pdma0 7
+			&pdma0 6>;
+		dma-names = "tx", "rx";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-names = "default";
@@ -459,32 +459,6 @@
 		};
 	};
 
-	i2s_0: i2s@03830000 {
-		compatible = "samsung,samsung-i2s";
-		reg = <0x03830000 0x100>;
-		tx-dma-channel-secondary = <&pdma0 8>; /* preliminary */
-		tx-dma-channel = <&pdma0 10>; /* preliminary */
-		rx-dma-channel = <&pdma0 9>; /* preliminary */
-		samsung,supports-6ch;
-		samsung,supports-rstclr;
-		samsung,supports-secdai;
-		samsung,idma-addr = <0x03000000>;
-	};
-
-	i2s_1: i2s@12D60000 {
-		compatible = "samsung,samsung-i2s";
-		reg = <0x12D60000 0x100>;
-		tx-dma-channel = <&pdma1 12>; /* preliminary */
-		rx-dma-channel = <&pdma1 11>; /* preliminary */
-	};
-
-	i2s_2: i2s@12D70000 {
-		compatible = "samsung,samsung-i2s";
-		reg = <0x12D70000 0x100>;
-		tx-dma-channel = <&pdma0 12>; /* preliminary */
-		rx-dma-channel = <&pdma0 11>; /* preliminary */
-	};
-
 	amba {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -496,24 +470,36 @@
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x121A0000 0x1000>;
 			interrupts = <0 34 0>;
+			#dma-cells = <1>;
+			#dma-channels = <8>;
+			#dma-requests = <32>;
 		};
 
 		pdma1: pdma@121B0000 {
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x121B0000 0x1000>;
 			interrupts = <0 35 0>;
+			#dma-cells = <1>;
+			#dma-channels = <8>;
+			#dma-requests = <32>;
 		};
 
 		mdma0: mdma@10800000 {
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x10800000 0x1000>;
 			interrupts = <0 33 0>;
+			#dma-cells = <1>;
+			#dma-channels = <8>;
+			#dma-requests = <1>;
 		};
 
 		mdma1: mdma@11C10000 {
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x11C10000 0x1000>;
 			interrupts = <0 124 0>;
+			#dma-cells = <1>;
+			#dma-channels = <8>;
+			#dma-requests = <1>;
 		};
 	};
 
