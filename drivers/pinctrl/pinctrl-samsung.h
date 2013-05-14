@@ -113,6 +113,7 @@ struct samsung_pinctrl_drv_data;
  * @conpdn_width: width of the sleep mode function selector bin field.
  * @pudpdn_width: width of the sleep mode pull up/down selector bit field.
  * @eint_type: type of the external interrupt supported by the bank.
+ * @eint_base: number of external wakeup interrupts from start to this bank.
  * @name: name to be prefixed for each pin in this pin bank.
  * @of_node: OF node of the bank.
  * @drvdata: link to controller driver data
@@ -132,6 +133,7 @@ struct samsung_pin_bank {
 	u8		pudpdn_width;
 	enum eint_type	eint_type;
 	u32		eint_offset;
+	u32		eint_base;
 	char		*name;
 	struct device_node *of_node;
 	struct samsung_pinctrl_drv_data *drvdata;
