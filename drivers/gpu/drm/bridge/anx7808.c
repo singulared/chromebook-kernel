@@ -41,6 +41,8 @@ struct anx7808_data {
 	struct i2c_client *tx_p2;
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
+
+	struct work_struct work;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -181,6 +183,24 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 	return 0;
 }
 
+static int anx7808_vbus_power_on(struct anx7808_data *anx7808)
+{
+	uint8_t status;
+
+	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL6,
+			 P5V_PROTECT_PD | SHORT_PROTECT_PD);
+	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
+	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
+
+	anx7808_read_reg(anx7808, SP_TX_PLL_FILTER_CTRL6, &status);
+	if (status & (P5V_PROTECT | SHORT_PROTECT)) {
+		DRM_ERROR("Failed to enable VBUS: 0x%02x.\n", status);
+		return -EIO;
+	}
+	DRM_DEBUG_KMS("Enabled VBUS.\n");
+	return 0;
+}
+
 static int anx7808_aux_wait(struct anx7808_data *anx7808)
 {
 	int err;
@@ -215,7 +235,7 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 	if (count > AUX_BUFFER_SIZE)
 		return -EINVAL;
 
-	err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_COUNT_REG, 0x80);
+	err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_COUNT_REG, BUF_CLR);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_CTRL_REG,
 				 ((count - 1) << 4) | cmd);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
@@ -245,20 +265,152 @@ static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
 	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, pBuf);
 }
 
-static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
+static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 {
-	struct anx7808_data *anx7808 = data;
-	uint8_t version;
+	DRM_DEBUG_KMS("Initializing ANX7808 receiver.\n");
 
-	DRM_INFO("Detected cable insertion.\n");
+	anx7808_write_reg(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG,
+			  AUD_MUTE | VID_MUTE);
+	anx7808_set_bits(anx7808, HDMI_RX_CHIP_CTRL_REG,
+			 MAN_HDMI5V_DET | PLLLOCK_CKDT_EN | DIGITAL_CKDT_EN);
+	anx7808_set_bits(anx7808, HDMI_RX_AEC_CTRL_REG, AVC_OE);
+	anx7808_set_bits(anx7808, HDMI_RX_SRST_REG, HDCP_MAN_RST);
+	usleep_range(1000, 2000);
+	anx7808_clear_bits(anx7808, HDMI_RX_SRST_REG, HDCP_MAN_RST);
+	anx7808_set_bits(anx7808, HDMI_RX_SRST_REG, SW_MAN_RST);
+	usleep_range(1000, 2000);
+	anx7808_clear_bits(anx7808, HDMI_RX_SRST_REG, SW_MAN_RST);
+	anx7808_set_bits(anx7808, HDMI_RX_SRST_REG, TMDS_RST);
+	anx7808_write_reg(anx7808, HDMI_RX_AEC_EN0_REG,
+			  AEC_EN07 | AEC_EN06 | AEC_EN05 | AEC_EN02);
+	anx7808_write_reg(anx7808, HDMI_RX_AEC_EN1_REG,
+			  AEC_EN12 | AEC_EN10 | AEC_EN09 | AEC_EN08);
+	anx7808_write_reg(anx7808, HDMI_RX_AEC_EN2_REG,
+			  AEC_EN23 | AEC_EN22 | AEC_EN21 | AEC_EN20);
+	anx7808_set_bits(anx7808, HDMI_RX_AEC_CTRL_REG, AVC_EN);
+	anx7808_clear_bits(anx7808, HDMI_RX_SYS_PWDN1_REG, PWDN_CTRL);
+
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK1_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK3_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK4_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK5_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK6_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK7_REG, 0x00);
+
+	anx7808_set_bits(anx7808, HDMI_RX_VID_DATA_RNG_CTRL_REG,
+			 R2Y_INPUT_LIMIT);
+	anx7808_write_reg(anx7808, HDMI_RX_CEC_CTRL_REG, CEC_RST);
+	anx7808_write_reg(anx7808, HDMI_RX_CEC_SPEED_CTRL_REG, CEC_SPEED_27M);
+	anx7808_write_reg(anx7808, HDMI_RX_CEC_CTRL_REG, CEC_RX_EN);
+
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG2, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG4, 0x28);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG5, 0xE3);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG7, 0x70);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG19, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG21, 0x04);
+	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG22, 0x38);
+
+	DRM_DEBUG_KMS("Issuing HPD low.\n");
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
+	anx7808_set_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+}
+
+static void anx7808_tx_initialization(struct anx7808_data *anx7808)
+{
+	DRM_DEBUG_KMS("Initializing ANX7808 transmitter.\n");
+
+	anx7808_write_reg(anx7808, SP_TX_EXTRA_ADDR_REG, I2C_EXTRA_ADDR);
+	anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL, LINK_POLLING);
+	anx7808_clear_bits(anx7808, SP_TX_HDCP_CTRL, AUTO_START | AUTO_EN);
+	anx7808_set_bits(anx7808, SP_TX_LINK_DEBUG_REG, M_VID_DEBUG);
+	anx7808_set_bits(anx7808, SP_TX_DEBUG_REG1,
+			 FORCE_HPD | FORCE_PLL_LOCK | POLLING_EN);
+	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, AUX_TERM_50OHM);
+	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL6,
+			   P5V_PROTECT_PD | SHORT_PROTECT_PD);
+	anx7808_set_bits(anx7808, SP_TX_ANALOG_DEBUG_REG2, POWERON_TIME_1P5MS);
+	anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL0_REG,
+			 BKSV_SRM_PASS | KSVLIST_VLD);
+
+	anx7808_write_reg(anx7808, SP_TX_ANALOG_CTRL, 0xC5);
+	anx7808_write_reg(anx7808, I2C_GEN_10US_TIMER0, 0x0E);
+	anx7808_write_reg(anx7808, I2C_GEN_10US_TIMER1, 0x01);
+
+	anx7808_write_reg(anx7808, SP_TX_DP_POLLING_CTRL_REG,
+			  AUTO_POLLING_DISABLE);
+	anx7808_write_reg(anx7808, SP_TX_LINK_CHK_TIMER, 0x1D);
+
+	anx7808_set_bits(anx7808, SP_TX_MISC_CTRL_REG, EQ_TRAINING_LOOP);
+
+	anx7808_write_reg(anx7808, SP_COMMON_INT_MASK1, 0x00);
+	anx7808_write_reg(anx7808, SP_COMMON_INT_MASK2, 0x00);
+	anx7808_write_reg(anx7808, SP_COMMON_INT_MASK3, 0x00);
+	anx7808_write_reg(anx7808, SP_COMMON_INT_MASK4, 0x00);
+	anx7808_write_reg(anx7808, SP_INT_MASK, 0x90);
+	anx7808_write_reg(anx7808, SP_TX_INT_CTRL_REG, 0x01);
+
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG0, 0x19);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG4, 0x1B);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG7, 0x22);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG9, 0x23);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG14, 0x09);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG17, 0x16);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG19, 0x1F);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG1, 0x26);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG5, 0x28);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG8, 0x2F);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG15, 0x10);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG18, 0x1F);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG2, 0x36);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG6, 0x3C);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG16, 0x18);
+	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG3, 0x3F);
+}
+
+static int anx7808_cable_plug(struct anx7808_data *anx7808)
+{
+	int err;
+	uint8_t status = 0;
 
 	anx7808_power_on(anx7808);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
-	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
 
-	anx7808_aux_dpcd_read(anx7808, US_COMM_2, 1, &version);
-	DRM_DEBUG_KMS("ANX7730 Firmware version 0x%02x.\n", (version & 0x7f));
+	anx7808_rx_initialization(anx7808);
+	anx7808_tx_initialization(anx7808);
+
+	anx7808_vbus_power_on(anx7808);
+	msleep(20);
+
+	DRM_DEBUG_KMS("Issuing HPD high.\n");
+	anx7808_set_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
+	anx7808_clear_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+
+	err = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status);
+	if (err)
+		return err;
+	if (((~status) & (DOWN_R_TERM_DET | DOWN_STRM_HPD))) {
+		DRM_INFO("HDMI connection not found: 0x%02x\n", status);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+void anx7808_work(struct work_struct *work)
+{
+	struct anx7808_data *anx7808 =
+		container_of(work, struct anx7808_data, work);
+	anx7808_cable_plug(anx7808);
+}
+
+static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
+{
+	struct anx7808_data *anx7808 = data;
+	DRM_INFO("Detected cable insertion.\n");
+	schedule_work(&anx7808->work);
 
 	return IRQ_HANDLED;
 }
@@ -402,6 +554,8 @@ static int anx7808_probe(struct i2c_client *client,
 		DRM_ERROR("Failed to get irq: %d\n", anx7808->cable_det_irq);
 		goto err_i2c;
 	}
+
+	INIT_WORK(&anx7808->work, anx7808_work);
 
 	ret = devm_request_irq(&client->dev,
 			       anx7808->cable_det_irq,
