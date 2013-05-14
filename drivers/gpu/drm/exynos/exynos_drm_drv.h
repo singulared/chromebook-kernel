@@ -174,7 +174,6 @@ struct exynos_drm_display_ops {
  * @commit: set current hw specific display mode to hw.
  * @enable_vblank: specific driver callback for enabling vblank interrupt.
  * @disable_vblank: specific driver callback for disabling vblank interrupt.
- * @complete_scanout: complete scan of buffer so that it can be freed.
  */
 struct exynos_drm_manager_ops {
 	void (*dpms)(struct device *subdrv_dev, int mode);
@@ -189,9 +188,6 @@ struct exynos_drm_manager_ops {
 	void (*commit)(struct device *subdrv_dev);
 	int (*enable_vblank)(struct device *subdrv_dev);
 	void (*disable_vblank)(struct device *subdrv_dev);
-	void (*complete_scanout)(struct device *subdrv_dev,
-					dma_addr_t dma_addr,
-					unsigned long size);
 };
 
 /*

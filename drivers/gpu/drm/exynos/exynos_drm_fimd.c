@@ -706,57 +706,12 @@ static void fimd_wait_for_vblank(struct device *dev)
 	drm_vblank_put(drm_dev, manager->pipe);
 }
 
-static void fimd_complete_scanout(struct device *dev, dma_addr_t dma_addr,
-					unsigned long size)
-{
-	struct fimd_context *ctx = get_fimd_context(dev);
-	dma_addr_t dma_addr_in_use;
-	int win;
-	bool in_use = false;
-
-	if (ctx->suspended)
-		return;
-
-	/*
-	 * This dma-addr must not be used next time so check the
-	 * register and disable the window if yes.
-	 */
-	for (win = 0; win < WINDOWS_NR; win++) {
-		if (!ctx->win_data[win].enabled)
-			continue;
-
-		dma_addr_in_use = readl(ctx->regs + VIDWx_BUF_START(win, 0));
-		if (dma_addr_in_use >= dma_addr &&
-			dma_addr_in_use < (dma_addr + size))
-				fimd_win_disable(dev, win);
-	}
-
-	/*
-	 * If the dma-addr is being used right now, then set in_use
-	 * flag so that we wait for vsync before freeing fb.
-	 */
-	for (win = 0; win < WINDOWS_NR; win++) {
-		dma_addr_in_use = readl(ctx->regs + VIDWx_BUF_START_S(win, 0));
-		if (dma_addr_in_use >= dma_addr &&
-			dma_addr_in_use < (dma_addr + size)) {
-				in_use = true;
-				/* no need to check all windows*/
-				break;
-		}
-	}
-
-	if (in_use)
-		fimd_wait_for_vblank(dev);
-	return;
-}
-
 static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.dpms = fimd_dpms,
 	.apply = fimd_apply,
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
-	.complete_scanout = fimd_complete_scanout,
 };
 
 static struct exynos_drm_manager fimd_manager = {

@@ -82,28 +82,14 @@ void exynos_drm_fb_release(struct kref *kref)
 
 static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
-	struct drm_framebuffer *fb;
 	struct exynos_drm_fb *exynos_fb;
 	unsigned int i;
-	dma_addr_t dma_addr;
-	unsigned long size;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	exynos_fb = container_of(work, struct exynos_drm_fb, release_work);
-	fb = &exynos_fb->fb;
 
-	for (i = 0; i < ARRAY_SIZE(exynos_fb->exynos_gem_obj); i++) {
-		if (exynos_fb->exynos_gem_obj[i] == NULL)
-			continue;
-
-		dma_addr = exynos_fb->exynos_gem_obj[i]->buffer->dma_addr;
-		size = exynos_fb->exynos_gem_obj[i]->buffer->size;
-
-		exynos_drm_encoder_complete_scanout(fb->dev, dma_addr, size);
-	}
-
-	drm_framebuffer_cleanup(fb);
+	drm_framebuffer_cleanup(&exynos_fb->fb);
 
 	for (i = 0; i < ARRAY_SIZE(exynos_fb->exynos_gem_obj); i++) {
 		struct drm_gem_object *obj;
