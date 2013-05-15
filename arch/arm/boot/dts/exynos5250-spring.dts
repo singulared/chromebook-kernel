@@ -24,6 +24,11 @@
 		status = "disabled";
 	};
 
+	rtc {
+		/* disable Exynos RTC as we are using s5m PMIC RTC */
+		status = "disabled";
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
