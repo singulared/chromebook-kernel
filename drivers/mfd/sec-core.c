@@ -252,6 +252,8 @@ static int sec_pmic_remove(struct i2c_client *i2c)
 {
 	struct sec_pmic_dev *sec_pmic = i2c_get_clientdata(i2c);
 
+	device_init_wakeup(sec_pmic->dev, 0);
+	pm_runtime_set_suspended(sec_pmic->dev);
 	mfd_remove_devices(sec_pmic->dev);
 	sec_irq_exit(sec_pmic);
 	return 0;
@@ -263,10 +265,42 @@ static const struct i2c_device_id sec_pmic_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, sec_pmic_id);
 
+#ifdef CONFIG_PM
+static int sec_pmic_suspend(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct sec_pmic_dev *sec_pmic = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		enable_irq_wake(sec_pmic->irq);
+
+	return 0;
+}
+
+static int sec_pmic_resume(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct sec_pmic_dev *sec_pmic = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		disable_irq_wake(sec_pmic->irq);
+
+	return 0;
+}
+
+const struct dev_pm_ops sec_pmic_pm = {
+	.suspend = sec_pmic_suspend,
+	.resume = sec_pmic_resume,
+};
+#endif
+
 static struct i2c_driver sec_pmic_driver = {
 	.driver = {
 		   .name = "sec_pmic",
 		   .owner = THIS_MODULE,
+#ifdef CONFIG_PM
+		   .pm = &sec_pmic_pm,
+#endif
 		   .of_match_table = of_match_ptr(sec_dt_match),
 	},
 	.probe = sec_pmic_probe,
