@@ -847,7 +847,7 @@ static void mixer_wait_for_vblank(void *ctx)
 	if (!mixer_ctx->powered)
 		return;
 
-	drm_vblank_get(drm_dev, ctx->pipe);
+	drm_vblank_get(mixer_ctx->drm_dev, mixer_ctx->pipe);
 
 	atomic_set(&mixer_ctx->wait_vsync_event, 1);
 
@@ -860,7 +860,7 @@ static void mixer_wait_for_vblank(void *ctx)
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 
-	drm_vblank_put(drm_dev, ctx->pipe);
+	drm_vblank_put(mixer_ctx->drm_dev, mixer_ctx->pipe);
 }
 
 static void mixer_complete_scanout(void *ctx, dma_addr_t dma_addr,
