@@ -23,6 +23,16 @@ Required Properties:
   - #gpio-cells: number of cells in GPIO specifier. Since the generic GPIO
     binding is used, the amount of cells must be specified as 2. See generic
     GPIO binding documentation for description of particular cells.
+  - powerdown-settings: Configure GPIO behavior on suspend.
+    Array of u32 with nr_pins elements.  This properties existence
+    indicates the bank supports CONPDN and PUDPDN
+     0 - Use existing
+     1 - Float (input, no PU/PD)
+     2 - Pull up (input)
+     3 - Pull down (input)
+     4 - Output high
+     5 - Output low
+     6 - Maintain powerup settings
 
 - Pin mux/config groups as child nodes: The pin mux (selecting pin function
   mode) and pin config (pull up/down, driver strength) settings are represented
@@ -155,6 +165,7 @@ Example: A pin-controller node with pin banks:
 		gpy0: gpy0 {
 			gpio-controller;
 			#gpio-cells = <2>;
+			powerdown-settings = <0 0 0 2 0 0>;
 		};
 
 		/* ... */

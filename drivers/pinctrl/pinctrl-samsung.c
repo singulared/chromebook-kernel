@@ -860,6 +860,102 @@ static int samsung_gpiolib_unregister(struct platform_device *pdev,
 
 static const struct of_device_id samsung_pinctrl_dt_match[];
 
+/**
+ * samsung_pinctrl_powerdown_cfg - init the powerdown config registers
+ *
+ * The powerdown configuration registers adjust what happens to pins when
+ * you go into various low power modes.  The basic idea here is that some pins
+ * transition over to a lower power part of the SoC that is unrelated to the
+ * normal pin controller.  This lower power part of the SoC acts much like
+ * a simple GPIO controller and can:
+ * - Set the direction of the pins and drive a value if it's an output.
+ * - Have a pulldown or pullup on the pin.
+ *
+ * @pdev: The platform device
+ * @drvdata: The driver data
+ */
+static void samsung_pinctrl_powerdown_cfg(struct platform_device *pdev,
+	struct samsung_pinctrl_drv_data *drvdata)
+{
+	struct device *dev = &pdev->dev;
+	const struct samsung_pin_ctrl *ctrl = drvdata->ctrl;
+	void __iomem * const virt_base = drvdata->virt_base;
+	int i, prop_count, idx;
+	const __be32 *val_ptr;
+	u32 con_pdn, pud_pdn;
+
+	for (idx = 0; idx < ctrl->nr_banks; idx++) {
+		const struct samsung_pin_bank *bank = &ctrl->pin_banks[idx];
+		void __iomem * const reg = virt_base + bank->pctl_offset;
+		const struct samsung_pin_bank_type *type = bank->type;
+		const struct property *prop;
+		const u8 con_pdn_width = type->fld_width[PINCFG_TYPE_CON_PDN];
+		const u8 pud_pdn_width = type->fld_width[PINCFG_TYPE_PUD_PDN];
+
+		prop = of_find_property(bank->of_node,
+					"powerdown-settings", NULL);
+		if (!prop)
+			continue;
+
+		prop_count = prop->length / sizeof(u32);
+		if (prop_count != bank->nr_pins) {
+			dev_warn(dev, "%s: powerdown-settings count %d != %d\n",
+				bank->name, prop_count,	bank->nr_pins);
+			continue;
+		}
+
+		if ((!con_pdn_width) || (!pud_pdn_width)) {
+			dev_warn(dev, "%s: bank doesn't support powerdown\n",
+				bank->name);
+			continue;
+		}
+
+		val_ptr = prop->value;
+
+		con_pdn = __raw_readl(reg +
+				      type->reg_offset[PINCFG_TYPE_CON_PDN]);
+		pud_pdn = __raw_readl(reg +
+				      type->reg_offset[PINCFG_TYPE_PUD_PDN]);
+
+		for (i = 0; i < prop_count; i++) {
+			u32 value = be32_to_cpup(val_ptr++);
+			if (!value)
+				continue; /* 0 = use existing */
+			con_pdn &= ~(0x3 << (i * con_pdn_width));
+			pud_pdn &= ~(0x3 << (i * pud_pdn_width));
+			switch (value) {
+			case 1: /* Float */
+				con_pdn |= 0x2 << (i * con_pdn_width);
+				break;
+			case 2: /* Pull up */
+				con_pdn |= 0x2 << (i * con_pdn_width);
+				pud_pdn |= 0x3 << (i * pud_pdn_width);
+				break;
+			case 3: /* Pull down */
+				con_pdn |= 0x2 << (i * con_pdn_width);
+				pud_pdn |= 0x1 << (i * pud_pdn_width);
+				break;
+			case 4: /* Drive high */
+				con_pdn |= 0x1 << (i * con_pdn_width);
+				break;
+			case 5: /* Drive low */
+				break;
+			case 6: /* Maintain powerup settings */
+				con_pdn |= 0x3 << (i * con_pdn_width);
+				break;
+			default:
+				dev_warn(dev,
+					 "%s(%d): powerdown-settings bad: %d\n",
+					bank->name, i, value);
+			}
+		}
+		__raw_writel(con_pdn,
+			     reg + type->reg_offset[PINCFG_TYPE_CON_PDN]);
+		__raw_writel(pud_pdn,
+			     reg + type->reg_offset[PINCFG_TYPE_PUD_PDN]);
+	}
+}
+
 /* retrieve the soc specific data */
 static struct samsung_pin_ctrl *samsung_pinctrl_get_soc_data(
 				struct samsung_pinctrl_drv_data *d,
@@ -965,6 +1061,7 @@ static int samsung_pinctrl_probe(struct platform_device *pdev)
 		ctrl->eint_gpio_init(drvdata);
 	if (ctrl->eint_wkup_init)
 		ctrl->eint_wkup_init(drvdata);
+	samsung_pinctrl_powerdown_cfg(pdev, drvdata);
 
 	platform_set_drvdata(pdev, drvdata);
 
