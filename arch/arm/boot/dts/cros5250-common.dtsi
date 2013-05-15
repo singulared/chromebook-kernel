@@ -447,12 +447,6 @@
 		compatible = "google,daisy-audio-max98095";
 	};
 
-	charger-detect {
-		compatible = "gpio-charger";
-		charger-type = <3>;
-		gpio = <&gpf0 2 0>;
-	};
-
 	fixed-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "hsichub-reset-l";
