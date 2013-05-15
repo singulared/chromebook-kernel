@@ -9370,7 +9370,7 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 
 			/* Force-cycle the cursor */
 			crtc->cursor_visible = false;
-			intel_crtc_update_cursor(crtc, true);
+			intel_crtc_update_cursor(&crtc->base, true);
 		}
 
 		i915_redisable_vga(dev);
