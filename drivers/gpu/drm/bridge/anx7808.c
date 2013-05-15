@@ -523,12 +523,10 @@ static void anx7808_play_video(struct work_struct *work)
 		}
 
 		/* Check for failures */
-		if (state == STATE_PLAY) {
-			ret = anx7808_check_polling_err(anx7808);
-			if (ret) {
-				DRM_INFO("Polling error: %02x", ret);
-				state = STATE_INIT;
-			}
+		ret = anx7808_check_polling_err(anx7808);
+		if (ret) {
+			DRM_INFO("Polling error: %02x", ret);
+			state = STATE_INIT;
 		}
 
 		msleep(300);
