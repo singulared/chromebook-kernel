@@ -25,6 +25,7 @@
 #include <linux/kthread.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/dmi.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -204,6 +205,24 @@ static struct us_unusual_dev realtek_cr_unusual_dev_list[] = {
 };
 
 #undef UNUSUAL_DEV
+
+static bool disable_mmc_xd_quirk_check(void)
+{
+	const char *dmi_product_name, *dmi_bios_vendor;
+
+	dmi_product_name = dmi_get_system_info(DMI_PRODUCT_NAME);
+	dmi_bios_vendor = dmi_get_system_info(DMI_BIOS_VENDOR);
+	if (!dmi_product_name || !dmi_bios_vendor)
+		return false;
+
+	if (!(strstr(dmi_bios_vendor, "coreboot")))
+		return false;
+
+	if (strstr(dmi_product_name, "Falco"))
+		return true;
+
+	return false;
+}
 
 static int rts51x_bulk_transport(struct us_data *us, u8 lun,
 				 u8 *cmd, int cmd_len, u8 *buf, int buf_len,
@@ -479,6 +498,28 @@ static int rts51x_check_status(struct us_data *us, u8 lun)
 	return 0;
 }
 
+static int rts51x_lun_is_mmc_xd(struct us_data *us, u8 lun)
+{
+	struct rts51x_chip *chip = (struct rts51x_chip *)(us->extra);
+
+	if (rts51x_check_status(us, lun))
+		return -EIO;
+
+	US_DEBUGP("cur_lun = 0x%02X\n", chip->status[lun].cur_lun);
+	US_DEBUGP("card_type = 0x%02X\n", chip->status[lun].card_type);
+	US_DEBUGP("detailed_type1= 0x%02X\n",
+		  chip->status[lun].detailed_type.detailed_type1);
+	switch (chip->status[lun].card_type) {
+	case 0x4: /* XD */
+		return 1;
+	case 0x2: /* SD/MMC */
+		if (chip->status[lun].detailed_type.detailed_type1 & 0x08)
+			return 1;
+	default:
+		return 0;
+	}
+}
+
 static int enable_oscillator(struct us_data *us)
 {
 	int retval;
@@ -567,6 +608,11 @@ static int config_autodelink_after_power_on(struct us_data *us)
 
 	US_DEBUGP("%s: <---\n", __func__);
 
+	if (!(CHECK_PID(chip, 0x0138) ||
+	      CHECK_PID(chip, 0x0158) ||
+	      CHECK_PID(chip, 0x0159)))
+		return 0;
+
 	if (!CHK_AUTO_DELINK(chip))
 		return 0;
 
@@ -636,6 +682,11 @@ static int config_autodelink_before_power_down(struct us_data *us)
 	u8 value;
 
 	US_DEBUGP("%s: <---\n", __func__);
+
+	if (!(CHECK_PID(chip, 0x0138) ||
+	      CHECK_PID(chip, 0x0158) ||
+	      CHECK_PID(chip, 0x0159)))
+		return 0;
 
 	if (!CHK_AUTO_DELINK(chip))
 		return 0;
@@ -885,6 +936,20 @@ static void rts51x_invoke_transport(struct scsi_cmnd *srb, struct us_data *us)
 			chip->proto_handler_backup(srb, us);
 			/* Check whether card is plugged in */
 			if (srb->cmnd[0] == TEST_UNIT_READY) {
+				if (disable_mmc_xd_quirk_check() &&
+				    rts51x_lun_is_mmc_xd(us,
+							 srb->device->lun)) {
+					US_DEBUGP("%s: lun is mmc/xd\n",
+						  __func__);
+					srb->result = SAM_STAT_CHECK_CONDITION;
+					memcpy(srb->sense_buffer,
+							media_not_present,
+							US_SENSE_SIZE);
+					CLR_LUN_READY(chip, srb->device->lun);
+					card_first_show = 1;
+					return;
+				}
+
 				if (srb->result == SAM_STAT_GOOD) {
 					SET_LUN_READY(chip, srb->device->lun);
 					if (card_first_show) {
@@ -962,6 +1027,29 @@ static int realtek_cr_autosuspend_setup(struct us_data *us)
 	return 0;
 }
 #endif
+static void rts51x_simple_invoke_transport(struct scsi_cmnd *srb,
+					   struct us_data *us)
+{
+	struct rts51x_chip *chip = (struct rts51x_chip *)(us->extra);
+	static u8 media_not_present[] = { 0x70, 0, 0x02, 0, 0, 0, 0,
+		10, 0, 0, 0, 0, 0x3A, 0, 0, 0, 0, 0
+	};
+
+	US_DEBUGP("%s: <---\n", __func__);
+
+	chip->proto_handler_backup(srb, us);
+
+	if ((srb->cmnd[0] == TEST_UNIT_READY) &&
+	    (rts51x_lun_is_mmc_xd(us, srb->device->lun))) {
+		US_DEBUGP("%s: lun is mmc/xd\n", __func__);
+		srb->result = SAM_STAT_CHECK_CONDITION;
+		memcpy(srb->sense_buffer,
+				media_not_present,
+				US_SENSE_SIZE);
+		return;
+	}
+	return;
+}
 
 static void realtek_cr_destructor(void *extra)
 {
@@ -1054,6 +1142,16 @@ static int init_realtek_cr(struct us_data *us)
 	if (ss_en) {
 		chip->us = us;
 		realtek_cr_autosuspend_setup(us);
+	} else if (disable_mmc_xd_quirk_check()) {
+		chip = (struct rts51x_chip *)(us->extra);
+		chip->proto_handler_backup = us->proto_handler;
+		us->proto_handler = rts51x_simple_invoke_transport;
+	}
+#else
+	if (disable_mmc_xd_quirk_check()) {
+		chip = (struct rts51x_chip *)(us->extra);
+		chip->proto_handler_backup = us->proto_handler;
+		us->proto_handler = rts51x_simple_invoke_transport;
 	}
 #endif
 
