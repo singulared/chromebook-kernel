@@ -439,21 +439,20 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 
 	plugged = atomic_read(&ctx->plugged);
 
-	if (hdmi_reg_read(ctx, HDMI_MODE_SEL) & HDMI_DVI_MODE_EN) {
-		/* If HDMI operates in DVI mode,
-		 * for audio purposes it is the same as nothing plugged.
-		 * Unfortunately, hotplug interrupt is received multiple times,
-		 * and HDMI_DVI_MODE_EN is set only in the last one.
-		 * So, we have already reported that HDMI audio was plugged.
-		 * So, update ctx, report now that it was unplugged and return.
-		 */
-		atomic_set(&ctx->plugged, 0);
-		if (plugged && ctx->plugin.jack_cb)
-			ctx->plugin.jack_cb(false);
-		return;
-	}
-
 	if (plugged) {
+		if (hdmi_reg_read(ctx, HDMI_MODE_SEL) & HDMI_DVI_MODE_EN) {
+			/* If HDMI operates in DVI mode,
+			 * for audio purposes it is the same as nothing plugged.
+			 * So, change the "ctx->plugged" state to unplugged.
+			 * Also, simulate unplugging for jack_cb, as this
+			 * takes care of swapping HDMI with DVI when suspended.
+			 */
+			atomic_set(&ctx->plugged, 0);
+			if (ctx->plugin.jack_cb)
+				ctx->plugin.jack_cb(false);
+			return;
+		}
+
 		hdmi_audio_control(ctx, false);
 		hdmi_conf_init(ctx);
 		hdmi_audio_init(ctx);
@@ -474,9 +473,9 @@ static irqreturn_t hdmi_audio_irq_handler(int irq, void *arg)
 	snd_printdd("%s %s\n", __func__,
 			atomic_read(&ctx->plugged) ? "plugged" : "unplugged");
 
-	/* should set audio regs after ip, phy got stable. 5ms suff */
+	/* Set audio regs after ip & phy get stable, 3s should suffice. */
 	queue_delayed_work(ctx->hpd_wq, &ctx->hotplug_work,
-			msecs_to_jiffies(5));
+			msecs_to_jiffies(3000));
 	return IRQ_HANDLED;
 }
 

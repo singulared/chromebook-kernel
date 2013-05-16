@@ -237,6 +237,8 @@ static int s5m87xx_i2c_remove(struct i2c_client *i2c)
 {
 	struct s5m87xx_dev *s5m87xx = i2c_get_clientdata(i2c);
 
+	device_init_wakeup(s5m87xx->dev, 0);
+	pm_runtime_set_suspended(s5m87xx->dev);
 	mfd_remove_devices(s5m87xx->dev);
 	s5m_irq_exit(s5m87xx);
 	regmap_exit(s5m87xx->pmic);
@@ -250,10 +252,43 @@ static const struct i2c_device_id s5m87xx_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, s5m87xx_i2c_id);
 
+#ifdef CONFIG_PM
+static int s5m87xx_suspend(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct s5m87xx_dev *s5m87xx = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		enable_irq_wake(s5m87xx->irq);
+
+	return 0;
+}
+
+static int s5m87xx_resume(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct s5m87xx_dev *s5m87xx = i2c_get_clientdata(i2c);
+
+	if (device_may_wakeup(dev))
+		disable_irq_wake(s5m87xx->irq);
+
+	s5m_irq_resume(s5m87xx);
+	return 0;
+}
+
+const struct dev_pm_ops s5m87xx_pm = {
+	.suspend = s5m87xx_suspend,
+	.resume = s5m87xx_resume,
+};
+#endif
+
 static struct i2c_driver s5m87xx_i2c_driver = {
 	.driver = {
 		   .name = "s5m87xx",
 		   .owner = THIS_MODULE,
+#ifdef CONFIG_PM
+		   .pm = &s5m87xx_pm,
+#endif
 		   .of_match_table = of_match_ptr(s5m87xx_pmic_dt_match),
 	},
 	.probe = s5m87xx_i2c_probe,
