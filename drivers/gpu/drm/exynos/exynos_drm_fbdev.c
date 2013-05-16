@@ -76,27 +76,21 @@ static struct fb_ops exynos_drm_fb_ops = {
 };
 
 static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
-				     struct drm_framebuffer *fb,
-				     unsigned int fb_width,
-				     unsigned int fb_height)
+				   struct drm_framebuffer *fb,
+				   struct exynos_drm_gem_obj *exynos_gem_obj,
+				   unsigned int fb_width,
+				   unsigned int fb_height)
 {
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
-	struct exynos_drm_gem_buf *buffer;
+	struct exynos_drm_gem_buf *buffer = exynos_gem_obj->buffer;
 	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(fbi, helper, fb_width, fb_height);
-
-	/* RGB formats use only one buffer */
-	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
-	if (!buffer) {
-		DRM_LOG_KMS("buffer is null.\n");
-		return -EFAULT;
-	}
 
 	/* map pages with kernel virtual space. */
 	if (!buffer->kvaddr) {
@@ -201,8 +195,9 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 		goto err_destroy_framebuffer;
 	}
 
-	ret = exynos_drm_fbdev_update(helper, helper->fb, sizes->fb_width,
-			sizes->fb_height);
+	/* RGB formats use only one buffer */
+	ret = exynos_drm_fbdev_update(helper, helper->fb, exynos_gem_obj,
+			sizes->fb_width, sizes->fb_height);
 	if (ret < 0)
 		goto err_dealloc_cmap;
 
