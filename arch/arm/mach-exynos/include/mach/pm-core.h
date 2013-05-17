@@ -20,9 +20,16 @@
 
 #include <linux/delay.h>
 #include <linux/gpio.h>
+#include <linux/of.h>
 #include <mach/regs-pmu.h>
 #include <plat/gpio-cfg.h>
 #include <plat/gpio-core.h>
+
+#ifdef CONFIG_PINCTRL_EXYNOS
+extern u32 exynos_get_eint_wake_mask(void);
+#else
+static inline u32 exynos_get_eint_wake_mask(void) { return 0xffffffff; }
+#endif
 
 static inline void s3c_pm_debug_init_uart(void)
 {
@@ -49,7 +56,12 @@ static inline void s3c_pm_arch_restore_uarts(void)
 
 static inline void s3c_pm_arch_prepare_irqs(void)
 {
-	__raw_writel(s3c_irqwake_eintmask, S5P_EINT_WAKEUP_MASK);
+	u32 eintmask = s3c_irqwake_eintmask;
+
+	if (of_have_populated_dt())
+		eintmask = exynos_get_eint_wake_mask();
+
+	__raw_writel(eintmask, S5P_EINT_WAKEUP_MASK);
 	__raw_writel(s3c_irqwake_intmask & ~(1 << 31), S5P_WAKEUP_MASK);
 }
 
