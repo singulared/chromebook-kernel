@@ -80,13 +80,31 @@ enum {
 	MCT_L1_IRQ,
 	MCT_L2_IRQ,
 	MCT_L3_IRQ,
+	MCT_L4_IRQ,
+	MCT_L5_IRQ,
+	MCT_L6_IRQ,
+	MCT_L7_IRQ,
 	MCT_NR_IRQS,
 };
+
+#define MCT_NR_LOCAL_IRQS (MCT_NR_IRQS - MCT_L0_IRQ)
 
 static void __iomem *reg_base;
 static unsigned long clk_rate;
 static unsigned int mct_int_type;
 static int mct_irqs[MCT_NR_IRQS];
+static int nr_mct_irqs;
+
+static const char *irq_names[MCT_NR_LOCAL_IRQS] = {
+	"mct_tick0_irq",
+	"mct_tick1_irq",
+	"mct_tick2_irq",
+	"mct_tick3_irq",
+	"mct_tick4_irq",
+	"mct_tick5_irq",
+	"mct_tick6_irq",
+	"mct_tick7_irq",
+};
 
 struct mct_clock_event_device {
 	struct clock_event_device *evt;
@@ -326,6 +344,7 @@ static void exynos4_clockevent_init(void)
 #ifdef CONFIG_LOCAL_TIMERS
 
 static DEFINE_PER_CPU(struct mct_clock_event_device, percpu_mct_tick);
+static DEFINE_PER_CPU(struct irqaction, percpu_mct_tick_action);
 
 /* Clock event handling */
 static void exynos4_mct_tick_stop(struct mct_clock_event_device *mevt)
@@ -433,18 +452,6 @@ static irqreturn_t exynos4_mct_tick_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static struct irqaction mct_tick0_event_irq = {
-	.name		= "mct_tick0_irq",
-	.flags		= IRQF_TIMER | IRQF_NOBALANCING,
-	.handler	= exynos4_mct_tick_isr,
-};
-
-static struct irqaction mct_tick1_event_irq = {
-	.name		= "mct_tick1_irq",
-	.flags		= IRQF_TIMER | IRQF_NOBALANCING,
-	.handler	= exynos4_mct_tick_isr,
-};
-
 static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 {
 	struct mct_clock_event_device *mevt;
@@ -468,14 +475,12 @@ static int __cpuinit exynos4_local_timer_setup(struct clock_event_device *evt)
 	exynos4_mct_write(TICK_BASE_CNT, mevt->base + MCT_L_TCNTB_OFFSET);
 
 	if (mct_int_type == MCT_INT_SPI) {
-		if (cpu == 0) {
-			mct_tick0_event_irq.dev_id = mevt;
-			evt->irq = mct_irqs[MCT_L0_IRQ];
-		} else {
-			mct_tick1_event_irq.dev_id = mevt;
-			evt->irq = mct_irqs[MCT_L1_IRQ];
-			irq_set_affinity(evt->irq, cpumask_of(1));
-		}
+		struct irqaction *mct_tick_action
+			=  this_cpu_ptr(&percpu_mct_tick_action);
+
+		mct_tick_action->dev_id = mevt;
+		evt->irq = mct_irqs[MCT_L0_IRQ + cpu];
+		irq_set_affinity(evt->irq, cpumask_of(cpu));
 		enable_irq(evt->irq);
 	} else {
 		enable_percpu_irq(mct_irqs[MCT_L0_IRQ], 0);
@@ -501,10 +506,26 @@ static struct local_timer_ops exynos4_mct_tick_ops __cpuinitdata = {
 static void __init exynos4_local_timer_init(void)
 {
 	if (mct_int_type == MCT_INT_SPI) {
-		setup_irq(mct_irqs[MCT_L0_IRQ], &mct_tick0_event_irq);
-		disable_irq(mct_irqs[MCT_L0_IRQ]);
-		setup_irq(mct_irqs[MCT_L1_IRQ], &mct_tick1_event_irq);
-		disable_irq(mct_irqs[MCT_L1_IRQ]);
+		int cpu;
+		int nr_cpus = min(num_possible_cpus(),
+				  nr_mct_irqs - MCT_L0_IRQ);
+
+		/*
+		 * NOTE: may have more MCT IRQs than CPUs if you have 8
+		 * cores (or 4 big / 4 little) and are only setup to use 4.
+		 */
+
+		for (cpu = 0; cpu < nr_cpus; cpu++) {
+			struct irqaction *mct_tick_action
+				= per_cpu_ptr(&percpu_mct_tick_action, cpu);
+
+			mct_tick_action->name = irq_names[cpu];
+			mct_tick_action->flags = IRQF_TIMER | IRQF_NOBALANCING;
+			mct_tick_action->handler = exynos4_mct_tick_isr;
+
+			setup_irq(mct_irqs[MCT_L0_IRQ + cpu], mct_tick_action);
+			disable_irq(mct_irqs[MCT_L0_IRQ + cpu]);
+		}
 	}
 }
 #endif /* CONFIG_LOCAL_TIMERS */
@@ -552,7 +573,7 @@ void __init mct_init(void)
 {
 	struct device_node *np = NULL;
 	const struct of_device_id *match;
-	u32 nr_irqs, i;
+	u32 i;
 
 #ifdef CONFIG_OF
 	np = of_find_matching_node_and_match(NULL, exynos_mct_ids, &match);
@@ -569,9 +590,14 @@ void __init mct_init(void)
 		 * irqs are specified.
 		 */
 #ifdef CONFIG_OF
-		nr_irqs = of_irq_count(np);
+		nr_mct_irqs = of_irq_count(np);
 #endif
-		for (i = MCT_L0_IRQ; i < nr_irqs; i++)
+		if (nr_mct_irqs > ARRAY_SIZE(mct_irqs)) {
+			pr_warn("Too many MCT irqs (%d > %d)\n",
+				nr_mct_irqs, ARRAY_SIZE(mct_irqs));
+			nr_mct_irqs = ARRAY_SIZE(mct_irqs);
+		}
+		for (i = MCT_L0_IRQ; i < nr_mct_irqs; i++)
 			mct_irqs[i] = irq_of_parse_and_map(np, i);
 	} else if (soc_is_exynos4210()) {
 		mct_irqs[MCT_G0_IRQ] = EXYNOS4_IRQ_MCT_G0;
