@@ -2,6 +2,9 @@ Google Daisy audio complex
 
 Required properties:
 - compatible : "google,daisy-audio-max988095"
+- samsung,i2s-controller: Reference to the i2s controller that will be used
+  as the CPU DAI.
+- samsung,audio-codec: Reference to the audio codec.
 
 Optional properties:
 - samsung,hp-det-gpios : The GPIO that detects when headphones are plugged in.
@@ -12,6 +15,8 @@ Example:
 sound {
 	compatible = "google,daisy-audio-max98095";
 
+	samsung,i2s-controller = <&i2s0>;
+	samsung,audio-codec = <&max98095>;
 	samsung,mic-det-gpios = <&gpx2 0 2 0 0>;
 	samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
 };

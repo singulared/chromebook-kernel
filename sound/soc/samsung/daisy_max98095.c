@@ -446,17 +446,13 @@ static struct snd_soc_dai_link daisy_dai[] = {
 	{ /* Primary DAI i/f */
 		.name = "MAX98095 RX",
 		.stream_name = "Playback",
-		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "HiFi",
-		.platform_name = "samsung-i2s.0",
 		.init = daisy_init,
 		.ops = &daisy_ops,
 	}, { /* Capture i/f */
 		.name = "MAX98095 TX",
 		.stream_name = "Capture",
-		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "HiFi",
-		.platform_name = "samsung-i2s.0",
 		.ops = &daisy_ops,
 	},
 };
@@ -500,7 +496,7 @@ static int plugin_init(struct audio_codec_plugin **pplugin)
 static int daisy_max98095_driver_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &daisy_snd;
-	struct device_node *dn;
+	struct device_node *i2s_node, *codec_node;
 	struct audio_codec_plugin *plugin = NULL;
 	int i, ret;
 
@@ -519,14 +515,26 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 	    !of_machine_is_compatible("google,daisy"))
 		return -ENODEV;
 
-	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
-	if (!dn)
-		return -ENODEV;
+	i2s_node = of_parse_phandle(pdev->dev.of_node,
+				    "samsung,i2s-controller", 0);
+	if (!i2s_node) {
+		dev_err(&pdev->dev,
+			"Property 'i2s-controller' missing or invalid\n");
+		return -EINVAL;
+	}
+	codec_node = of_parse_phandle(pdev->dev.of_node,
+				      "samsung,audio-codec", 0);
+	if (!codec_node) {
+		dev_err(&pdev->dev,
+			"Property 'audio-codec' missing or invalid\n");
+		return -EINVAL;
+	}
 
-	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++)
-		daisy_dai[i].codec_of_node = of_node_get(dn);
-
-	of_node_put(dn);
+	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++) {
+		daisy_dai[i].codec_of_node = codec_node;
+		daisy_dai[i].cpu_of_node =  i2s_node;
+		daisy_dai[i].platform_of_node = i2s_node;
+	}
 
 	plugin_init(&plugin);
 	daisy_dapm_controls[0].private_value = (unsigned long)plugin;
