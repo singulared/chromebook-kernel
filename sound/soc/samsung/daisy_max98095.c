@@ -43,10 +43,6 @@
 
 #define DRV_NAME "daisy-snd-max98095"
 
-struct daisy_max98095 {
-	struct platform_device *pcm_dev;
-};
-
 /* Audio clock settings are belonged to board specific part. Every
  * board can set audio source clock setting which is matched with H/W
  * like this function-'set_audio_clock_heirachy'.
@@ -505,7 +501,6 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &daisy_snd;
 	struct device_node *dn;
-	struct daisy_max98095 *machine;
 	struct audio_codec_plugin *plugin = NULL;
 	int i, ret;
 
@@ -533,51 +528,25 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 
 	of_node_put(dn);
 
-	machine = devm_kzalloc(&pdev->dev, sizeof(struct daisy_max98095),
-			       GFP_KERNEL);
-	if (!machine) {
-		dev_err(&pdev->dev, "Can't allocate daisy_max98095 struct\n");
-		return -ENOMEM;
-	}
-
 	plugin_init(&plugin);
 	daisy_dapm_controls[0].private_value = (unsigned long)plugin;
 
 	card->dev = &pdev->dev;
-	platform_set_drvdata(pdev, card);
-	snd_soc_card_set_drvdata(card, machine);
-
-	machine->pcm_dev = platform_device_register_simple(
-				"daisy-pcm-audio", -1, NULL, 0);
-	if (IS_ERR(machine->pcm_dev)) {
-		dev_err(&pdev->dev, "Can't instantiate daisy-pcm-audio\n");
-		ret = PTR_ERR(machine->pcm_dev);
-		return ret;
-	}
 
 	ret = snd_soc_register_card(card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
-		goto err_unregister;
+		return ret;
 	}
 
 	return set_audio_clock_heirachy(pdev);
-
-err_unregister:
-	if (!IS_ERR(machine->pcm_dev))
-		platform_device_unregister(machine->pcm_dev);
-	return ret;
 }
 
 static int daisy_max98095_driver_remove(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
-	struct daisy_max98095 *machine = snd_soc_card_get_drvdata(card);
 
 	snd_soc_unregister_card(card);
-
-	if (!IS_ERR(machine->pcm_dev))
-		platform_device_unregister(machine->pcm_dev);
 
 	return 0;
 }
