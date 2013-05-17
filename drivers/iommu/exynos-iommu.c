@@ -1140,7 +1140,8 @@ static int __init exynos_sysmmu_probe(struct platform_device *pdev)
 		data->sysmmu = dev;
 		spin_lock_init(&data->lock);
 
-		data->runtime_active = !pm_runtime_enabled(dev);
+		data->runtime_active = false;
+		pm_runtime_enable(dev);
 
 		__create_debugfs_entry(data);
 
