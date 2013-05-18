@@ -185,14 +185,16 @@ static void ps8622_power_up(struct ps8622_bridge *bridge)
 	regulator_enable(bridge->bck_fet);
 	regulator_enable(bridge->lcd_fet);
 
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_set_value(bridge->gpio_rst_n, 0);
+
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 1);
 
-	if (gpio_is_valid(bridge->gpio_rst_n)) {
-		gpio_set_value(bridge->gpio_rst_n, 0);
-		udelay(10);
+	usleep_range(3000, 30000);
+
+	if (gpio_is_valid(bridge->gpio_rst_n))
 		gpio_set_value(bridge->gpio_rst_n, 1);
-	}
 
 	ret = ps8622_send_config(bridge);
 	if (ret)
