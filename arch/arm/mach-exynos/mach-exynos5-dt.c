@@ -394,8 +394,6 @@ static void __init exynos5_dt_machine_init(void)
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     exynos5250_auxdata_lookup, NULL);
 		platform_device_register(&exynos5_lcd);
-		/* MAX77686 PMIC interrupt setup code */
-		s3c_gpio_setpull(EXYNOS5_GPX3(2), S3C_GPIO_PULL_NONE);
 	}
 	else if (of_machine_is_compatible("samsung,exynos5440"))
 		of_platform_populate(NULL, of_default_bus_match_table,
