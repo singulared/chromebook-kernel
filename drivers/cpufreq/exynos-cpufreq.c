@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
 #include <linux/cpufreq.h>
@@ -242,6 +243,11 @@ static struct notifier_block exynos_cpufreq_nb = {
 
 static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
+	int ret;
+	u32 cap_max;
+	const struct device_node *np = NULL;
+	const char *cpu_dt_path;
+
 	policy->cur = policy->min = policy->max = exynos_getspeed(policy->cpu);
 
 	cpufreq_frequency_table_get_attr(exynos_info->freq_table, policy->cpu);
@@ -263,7 +269,31 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		cpumask_setall(policy->cpus);
 	}
 
-	return cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+	ret = cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
+	if (ret)
+		return ret;
+
+	/*
+	 * If the CPU node in the device tree has a clock frequency set,
+	 * this means our firmware wants us to cap the CPU frequency.
+	 * We are set the current max frequency to that value,
+	 * but this might be overriden in the userspace.
+	 */
+	cpu_dt_path = kasprintf(GFP_KERNEL, "/cpus/cpu@%d", policy->cpu);
+	if (cpu_dt_path) {
+		np = of_find_node_by_path(cpu_dt_path);
+		kfree(cpu_dt_path);
+	}
+	if (np && !of_property_read_u32(np, "clock-frequency-limit",
+					&cap_max)) {
+		pr_info("Capping CPU%d frequency to %d Mhz\n",
+			policy->cpu, cap_max / 1000);
+		policy->max = min(policy->max, cap_max);
+	} else {
+		pr_info("NOT Capping CPU%d frequency\n", policy->cpu);
+	}
+
+	return 0;
 }
 
 static struct cpufreq_driver exynos_driver = {
