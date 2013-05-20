@@ -49,77 +49,85 @@
  */
 static int set_audio_clock_heirachy(struct platform_device *pdev)
 {
-	struct clk *fout_epll, *mout_epll, *sclk_audbus, *audss, *i2sclk;
+	struct clk *fout_epll, *sclk_epll, *mout_audio0, *sclk_audio0;
+	struct clk *mout_audss, *mout_i2s;
 	int ret = 0;
 
-	fout_epll = clk_get(NULL, "fout_epll");
+	fout_epll = clk_get(&pdev->dev, "fout_epll");
 	if (IS_ERR(fout_epll)) {
 		printk(KERN_WARNING "%s: Cannot find fout_epll.\n",
 				__func__);
 		return -EINVAL;
 	}
 
-	mout_epll = clk_get(NULL, "mout_epll");
-	if (IS_ERR(mout_epll)) {
-		printk(KERN_WARNING "%s: Cannot find mout_epll.\n",
-				__func__);
+	sclk_epll = clk_get(&pdev->dev, "sclk_epll");
+	if (IS_ERR(sclk_epll)) {
+		printk(KERN_WARNING "%s: Cannot find sclk_epll.\n", __func__);
 		ret = -EINVAL;
 		goto out1;
 	}
 
-	sclk_audbus = clk_get(&pdev->dev, "sclk-audio0");
-	if (IS_ERR(sclk_audbus)) {
-		printk(KERN_WARNING "%s: Cannot find audio-bus.\n",
-				__func__);
+	mout_audio0 = clk_get(&pdev->dev, "mout_audio0");
+	if (IS_ERR(mout_audio0)) {
+		printk(KERN_WARNING "%s: Cannot find mout_audio0.\n", __func__);
 		ret = -EINVAL;
 		goto out2;
 	}
 
-	audss = clk_get(&pdev->dev, "mout_audss");
-	if (IS_ERR(audss)) {
-		printk(KERN_WARNING "%s: Cannot find audss.\n",
-				__func__);
+	sclk_audio0 = clk_get(&pdev->dev, "sclk_audio0");
+	if (IS_ERR(sclk_audio0)) {
+		printk(KERN_WARNING "%s: Cannot find sclk_audio0.\n", __func__);
 		ret = -EINVAL;
 		goto out3;
 	}
 
-	i2sclk = clk_get(NULL, "sclk-i2s");
-	if (IS_ERR(i2sclk)) {
-		printk(KERN_WARNING "%s: Cannot find i2sclk.\n",
-				__func__);
+	mout_audss = clk_get(&pdev->dev, "mout_audss");
+	if (IS_ERR(mout_audss)) {
+		printk(KERN_WARNING
+			"%s: Cannot find mout_audss clocks.\n", __func__);
 		ret = -EINVAL;
 		goto out4;
 	}
 
-	/* Set audio clock hierarchy for S/PDIF */
-	if (clk_set_parent(mout_epll, fout_epll))
-		printk(KERN_WARNING "Failed to set parent of epll.\n");
-	if (clk_set_parent(sclk_audbus, mout_epll))
-		printk(KERN_WARNING "Failed to set parent of audbus.\n");
-	if (clk_set_parent(audss, fout_epll))
-		printk(KERN_WARNING "Failed to set parent of audss.\n");
-	if (clk_set_parent(i2sclk, sclk_audbus))
-		printk(KERN_WARNING "Failed to set parent of i2sclk.\n");
+	mout_i2s = clk_get(&pdev->dev, "mout_i2s");
+	if (IS_ERR(mout_i2s)) {
+		printk(KERN_WARNING
+			"%s: Cannot find mout_i2s clocks.\n", __func__);
+		ret = -EINVAL;
+		goto out5;
+	}
 
-	clk_put(i2sclk);
+	/* Set audio clock hierarchy for S/PDIF */
+	if (clk_set_parent(sclk_epll, fout_epll))
+		printk(KERN_WARNING "Failed to set parent of epll.\n");
+	if (clk_set_parent(mout_audio0, sclk_epll))
+		printk(KERN_WARNING "Failed to set parent of mout audio0.\n");
+	if (clk_set_parent(mout_audss, fout_epll))
+		printk(KERN_WARNING "Failed to set parent of audss.\n");
+	if (clk_set_parent(mout_i2s, sclk_audio0))
+		printk(KERN_WARNING "Failed to set parent of mout i2s.\n");
+
+	clk_put(mout_i2s);
+out5:
+	clk_put(mout_audss);
 out4:
-	clk_put(audss);
+	clk_put(sclk_audio0);
 out3:
-	clk_put(sclk_audbus);
+	clk_put(mout_audio0);
 out2:
-	clk_put(mout_epll);
+	clk_put(sclk_epll);
 out1:
 	clk_put(fout_epll);
 
 	return ret;
 }
 
-static int set_epll_rate(unsigned long rate)
+static int set_epll_rate(struct device *card_dev, unsigned long rate)
 {
 	int ret;
 	struct clk *fout_epll;
 
-	fout_epll = clk_get(NULL, "fout_epll");
+	fout_epll = clk_get(card_dev, "fout_epll");
 
 	if (IS_ERR(fout_epll)) {
 		printk(KERN_ERR "%s: failed to get fout_epll\n", __func__);
@@ -148,8 +156,9 @@ static int daisy_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int bfs, psr, rfs, ret;
 	unsigned long rclk;
-	unsigned long xtal;
-	struct clk *xtal_clk;
+	unsigned long fin_rate;
+	struct clk *fin_pll;
+	struct device *card_dev = substream->pcm->card->dev;
 
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_U24:
@@ -225,7 +234,7 @@ static int daisy_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	ret = set_epll_rate(rclk * psr);
+	ret = set_epll_rate(card_dev, rclk * psr);
 	if (ret < 0)
 		return ret;
 
@@ -241,16 +250,16 @@ static int daisy_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
-	xtal_clk = clk_get(NULL, "xtal"); /*xtal clk is input to codec MCLK1*/
-	if (IS_ERR(xtal_clk)) {
-		printk(KERN_ERR "%s: failed to get xtal clock\n", __func__);
-		return PTR_ERR(xtal_clk);
+	fin_pll = clk_get(NULL, "fin_pll");
+	if (IS_ERR(fin_pll)) {
+		printk(KERN_ERR "%s: failed to get fin_pll clock\n", __func__);
+		return PTR_ERR(fin_pll);
 	}
 
-	xtal = clk_get_rate(xtal_clk);
-	clk_put(xtal_clk);
+	fin_rate = clk_get_rate(fin_pll);
+	clk_put(fin_pll);
 
-	ret = snd_soc_dai_set_sysclk(codec_dai, 0, xtal, SND_SOC_CLOCK_IN);
+	ret = snd_soc_dai_set_sysclk(codec_dai, 0, fin_rate, SND_SOC_CLOCK_IN);
 	if (ret < 0)
 		return ret;
 

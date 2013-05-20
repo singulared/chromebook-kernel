@@ -5,6 +5,16 @@ Required properties:
 - samsung,i2s-controller: Reference to the i2s controller that will be used
   as the CPU DAI.
 - samsung,audio-codec: Reference to the audio codec.
+- clocks: List of clock handles. The following must be specified:
+  - fout_epll: Parent of sclk_epll
+  - sclk_epll: Mux to select parent of epll
+  - mout_audio0: Mux to select parent of sclk_audio0
+  - sclk_audio0: Controls gating of audio bus clock; parent of mout_i2s
+  - mout_audss: Mux to select parent of audio IP clock
+  - mout_i2s: Mux to select parent of i2s clock
+- clock-names: Aliases for the above clocks. They should be "fout_epll",
+  "sclk_epll", "mout_audio0", "sclk_audio0", "mout_audss", and "mout_i2s",
+  respectively.
 
 Optional properties:
 - samsung,hp-det-gpios : The GPIO that detects when headphones are plugged in.
@@ -19,4 +29,9 @@ sound {
 	samsung,audio-codec = <&max98095>;
 	samsung,mic-det-gpios = <&gpx2 0 2 0 0>;
 	samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
+	clocks = <&clock 3>, <&clock 4>, <&clock 1026>,
+		<&clock 138>, <&clock_audss EXYNOS_MOUT_AUDSS>,
+		<&clock_audss EXYNOS_MOUT_I2S>;
+	clock-names = "fout_epll", "sclk_epll", "mout_audio0",
+		"sclk_audio0", "mout_audss", "mout_i2s";
 };
