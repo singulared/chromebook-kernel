@@ -26,7 +26,6 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
 #include "exynos_drm_iommu.h"
-#include "exynos_drm_encoder.h"
 
 static int check_fb_gem_memory_type(struct drm_device *drm_dev,
 				struct exynos_drm_gem_obj *exynos_gem_obj)
