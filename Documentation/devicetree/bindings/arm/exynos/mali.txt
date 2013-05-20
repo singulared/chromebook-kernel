@@ -1,0 +1,29 @@
+ARM 3D Graphics IP (Mali T6xx)
+
+The Mali T6xx series IP is present in Samsung Exynos
+platforms for enabling 3D grahics acceleration.
+The DT node for this IP has to be defined in the following
+way:
+
+Required properties:
+
+  - compatible : value should be "arm,mali"
+  - reg	: Physical base address of the IP registers and
+		length of the memory mapped region.
+  - interrupts : ARM Mali interrupts to the CPU.
+		Three interrupts are needed which are
+		1) JOB IRQ number
+		2) MMU IRQ number
+		3) GPU IRQ number
+  - clocks : From common clock binding : handle to g3d clock and aclk_400_g3d
+  - clock-names : From common clock binding : Shall be "g3d" and "aclk_400_g3d"
+
+Example :
+
+	mali {
+		compatible = "arm,mali";
+		reg = <0x11800000 0x5000>;
+		interrupts = <0 118 0>, <0 119 0>, <0 117 0>;
+		clocks = <&clock 345>, <&clock 346>;
+		clock-names = "g3d", "aclk_400_g3d";
+	};
