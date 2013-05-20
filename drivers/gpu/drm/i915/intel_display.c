@@ -5297,7 +5297,6 @@ static void ironlake_fdi_set_m_n(struct drm_crtc *crtc)
 		&intel_crtc->config.adjusted_mode;
 	struct intel_link_m_n m_n = {0};
 	int target_clock, lane, link_bw;
-	uint32_t bps;
 
 	/* FDI is a binary signal running at ~2.7GHz, encoding
 	 * each output octet as 10 bits. The actual frequency
