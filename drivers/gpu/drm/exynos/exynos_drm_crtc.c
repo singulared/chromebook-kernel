@@ -419,6 +419,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct exynos_drm_private *dev_priv = crtc->dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_framebuffer *fb = crtc->fb;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	int ret;
 
 	DRM_DEBUG_KMS("[CRTC:%d] @ (%d, %d) [OLD_FB:%d]\n",
@@ -426,6 +427,9 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 	if (!fb)
 		return -EINVAL;
+
+	/* Make sure the framebuffer doesn't disappear while we wait */
+	exynos_drm_fb_get(exynos_fb);
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(dev_priv->wait_vsync_queue,
@@ -435,6 +439,9 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 		DRM_ERROR("Timed out waiting for flips to complete\n");
 
 	ret = exynos_drm_crtc_page_flip(crtc, fb, NULL);
+
+	exynos_drm_fb_put(exynos_fb);
+
 	if (ret)
 		DRM_ERROR("page_flip failed\n");
 
