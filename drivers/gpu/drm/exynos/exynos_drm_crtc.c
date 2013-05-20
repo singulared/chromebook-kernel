@@ -296,9 +296,12 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(crtc->fb);
 	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	exynos_drm_fb_get(exynos_fb);
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
@@ -309,6 +312,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
 
+	exynos_drm_fb_put(exynos_fb);
 	return 0;
 }
 
