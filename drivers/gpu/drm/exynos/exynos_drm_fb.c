@@ -272,7 +272,6 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		if (!obj) {
 			DRM_ERROR("failed to lookup gem object\n");
 			ret = -ENOENT;
-			exynos_fb->buf_cnt = i;
 			goto err_unreference;
 		}
 
@@ -297,11 +296,9 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 
 err_unreference:
 	for (i = 0; i < exynos_fb->buf_cnt; i++) {
-		struct drm_gem_object *obj;
-
-		obj = &exynos_fb->exynos_gem_obj[i]->base;
-		if (obj)
-			drm_gem_object_unreference(obj);
+		exynos_gem_obj = exynos_fb->exynos_gem_obj[i];
+		if (exynos_gem_obj)
+			drm_gem_object_unreference(&exynos_gem_obj->base);
 	}
 err_free:
 	kfree(exynos_fb);
