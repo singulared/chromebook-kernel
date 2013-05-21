@@ -8436,6 +8436,10 @@ static int tg3_chip_reset(struct tg3 *tp)
 		tw32(0x5000, 0x400);
 	}
 
+	err = tg3_poll_fw(tp);
+	if (err)
+		return err;
+
 	tw32(GRC_MODE, tp->grc_mode);
 
 	if (tp->pci_chip_rev_id == CHIPREV_ID_5705_A0) {
@@ -8465,10 +8469,6 @@ static int tg3_chip_reset(struct tg3 *tp)
 	udelay(40);
 
 	tg3_ape_unlock(tp, TG3_APE_LOCK_GRC);
-
-	err = tg3_poll_fw(tp);
-	if (err)
-		return err;
 
 	tg3_mdio_start(tp);
 
