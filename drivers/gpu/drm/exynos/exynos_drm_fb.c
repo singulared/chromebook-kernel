@@ -163,10 +163,8 @@ struct exynos_drm_fb *exynos_drm_fb_init(struct drm_device *dev,
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
 	ret = check_fb_gem_memory_type(dev, exynos_gem_obj);
-	if (ret < 0) {
-		DRM_ERROR("cannot use this gem memory type for fb.\n");
+	if (ret)
 		return ERR_PTR(-EINVAL);
-	}
 
 	exynos_fb = kzalloc(sizeof(*exynos_fb), GFP_KERNEL);
 	if (!exynos_fb) {
@@ -274,10 +272,8 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		exynos_fb->exynos_gem_obj[i] = exynos_gem_obj;
 
 		ret = check_fb_gem_memory_type(dev, exynos_gem_obj);
-		if (ret < 0) {
-			DRM_ERROR("cannot use this gem memory type for fb.\n");
+		if (ret)
 			goto err_unreference;
-		}
 	}
 
 	kref_init(&exynos_fb->refcount);
