@@ -301,4 +301,29 @@
 	usb@12400000 {
 		status = "okay";
 	};
+
+	lcd_fimd0: lcd_panel0 {
+		lcd-htiming = <80 48 32 2560>;
+		lcd-vtiming = <16 8 6 1600>;
+	};
+
+	fimd {
+		samsung,fimd-display = <&lcd_fimd0>;
+		samsung,fimd-vidout-rgb;
+		samsung,fimd-inv-vclk;
+		samsung,fimd-frame-rate = <60>;
+		samsung,default-window = <0>;
+		samsung,fimd-win-bpp = <32>;
+		samsung,src-clk-name = "mout_rpll";
+		samsung,fimd-src-clk-rate = <266000000>;
+	};
+
+	display-port-controller {
+		samsung,color-space = <0>;
+		samsung,dynamic-range = <0>;
+		samsung,ycbcr-coeff = <0>;
+		samsung,color-depth = <1>;
+		samsung,link-rate = <0x0a>;
+		samsung,lane-count = <4>;
+	};
 };

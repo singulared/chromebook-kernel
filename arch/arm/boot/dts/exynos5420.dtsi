@@ -600,4 +600,38 @@
 			reg = <0x10040704 0xc>;
 		};
 	};
+
+	fimd: fimd {
+		compatible = "samsung,exynos5-fimd";
+		interrupt-parent = <&combiner>;
+		reg = <0x14400000 0x40000>;
+		interrupts = <18 5>, <18 4>, <18 6>;
+		clocks = <&clock 147>, <&clock 421>;
+		clock-names = "sclk_fimd", "fimd";
+	};
+
+	sysmmu-fimd1 {
+		mmuname = "fimd1";
+		reg = <0x14640000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <3 2>;
+		mmu-master = <&fimd>;
+	};
+
+	display-port-controller {
+		compatible = "samsung,exynos5-dp";
+		reg = <0x145b0000 0x1000>;
+		interrupts = <10 3>;
+		interrupt-parent = <&combiner>;
+		clocks = <&clock 412>;
+		clock-names = "dp";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		dptx-phy {
+			reg = <0x10040720>;
+			samsung,enable-mask = <1>;
+		};
+	};
 };
