@@ -108,6 +108,11 @@ config EXYNOS5_SETUP_FIMD1
 	help
 	  Common setup code for FIMD1.
 
+config EXYNOS_DEV_SYSMMU
+	bool
+	help
+	  Common setup code for SYSTEM MMU in EXYNOS platforms
+
 config EXYNOS4_DEV_USB_OHCI
 	bool
 	help
@@ -433,7 +438,6 @@ config MACH_EXYNOS5_DT
 	select PINCTRL_EXYNOS
 	select PM_GENERIC_DOMAINS if PM
 	select SAMSUNG_DEV_BACKLIGHT
-	select USB_ARCH_HAS_XHCI
 	select USE_OF
 	help
 	  Machine support for Samsung EXYNOS5 machine with device tree enabled.

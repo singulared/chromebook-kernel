@@ -43,8 +43,6 @@
 #define EXYNOS4_PA_I2S1			0xE3100000
 #define EXYNOS4_PA_I2S2			0xE2A00000
 
-#define EXYNOS_PA_AUDSS			0x03810000
-
 #define EXYNOS4_PA_PCM0			0x03840000
 #define EXYNOS4_PA_PCM1			0x13980000
 #define EXYNOS4_PA_PCM2			0x13990000
@@ -228,8 +226,6 @@
 
 #define EXYNOS4_PA_SDRAM		0x40000000
 #define EXYNOS5_PA_SDRAM		0x40000000
-
-#define EXYNOS5_PA_G3D                  0x11800000
 
 /* Compatibiltiy Defines */
 

@@ -989,10 +989,6 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 
 	of_property_read_u32(np, "samsung,fimd-win-bpp", &pd->bpp);
 
-	of_property_read_string(np, "samsung,src-clk-name",  &pd->src_clk_name);
-
-	of_property_read_u32(np, "samsung,fimd-src-clk-rate", &pd->clock_rate);
-
 	return pd;
 }
 #else
@@ -1010,8 +1006,6 @@ static int fimd_probe(struct platform_device *pdev)
 	struct exynos_drm_fimd_pdata *pdata = pdev->dev.platform_data;
 	struct exynos_drm_panel_info *panel;
 	struct resource *res;
-	struct clk *clk_parent;
-
 	int win;
 	int ret = -EINVAL;
 
@@ -1047,26 +1041,6 @@ static int fimd_probe(struct platform_device *pdev)
 	if (IS_ERR(ctx->lcd_clk)) {
 		dev_err(dev, "failed to get lcd clock\n");
 		return PTR_ERR(ctx->lcd_clk);
-	}
-
-	if (pdata->src_clk_name) {
-		clk_parent = clk_get(&pdev->dev, pdata->src_clk_name);
-		if (IS_ERR(clk_parent)) {
-			dev_err(dev, "failed to get FIMD src clk\n");
-			return PTR_ERR(clk_parent);
-		}
-
-		if (clk_set_parent(ctx->lcd_clk, clk_parent)) {
-			dev_err(dev, "failed to set FIMD parent\n");
-			return PTR_ERR(ctx->lcd_clk);
-		}
-
-		if (clk_set_rate(ctx->lcd_clk, pdata->clock_rate)) {
-			dev_err(dev, "failed to set FIMD src clk rate\n");
-			return PTR_ERR(ctx->lcd_clk);
-		}
-
-		clk_put(clk_parent);
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
