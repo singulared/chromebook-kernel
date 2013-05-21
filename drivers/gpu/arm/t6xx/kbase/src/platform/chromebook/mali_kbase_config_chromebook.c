@@ -312,14 +312,14 @@ static int kbase_platform_power_clock_init(kbase_device *kbdev)
 	else
 	{
 		/* android_v4 support */
-		clk_enable(clk_g3d);
+		clk_prepare_enable(clk_g3d);
 		printk("v4 support\n");
 	}
 
 #ifdef CONFIG_T6XX_HWVER_R0P0
-	platform->sclk_g3d = clk_get(dev, "aclk_400_g3d");
+	platform->sclk_g3d = clk_get(dev, "aclk_g3d");
 	if(IS_ERR(platform->sclk_g3d)) {
-		printk(KERN_ERR "failed to clk_get [sclk_g3d]\n");
+		printk(KERN_ERR "failed to clk_get [aclk_g3d]\n");
 		goto out;
 	}
 #else /* CONFIG_T6XX_HWVER_R0P0 */
@@ -350,7 +350,7 @@ static int kbase_platform_power_clock_init(kbase_device *kbdev)
 		}
 	}
 #endif /*  CONFIG_T6XX_HWVER_R0P0 */
-	(void) clk_enable(platform->sclk_g3d);
+	(void) clk_prepare_enable(platform->sclk_g3d);
 	return 0;
 out:
 	return -EPERM;
@@ -399,12 +399,12 @@ static int kbase_platform_clock_off(struct kbase_device *kbdev)
 	if(clk_g3d)
 	{
 		/* android_v4 support */
-		(void)clk_disable(clk_g3d);
+		(void)clk_disable_unprepare(clk_g3d);
 	}
 	else
 	{
 		/* chrome support */
-		(void)clk_disable(platform->sclk_g3d);
+		(void)clk_disable_unprepare(platform->sclk_g3d);
 	}
 	return 0;
 }
