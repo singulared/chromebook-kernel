@@ -4962,8 +4962,7 @@ static int ironlake_get_refclk(struct drm_crtc *crtc)
 }
 
 static void ironlake_set_pipeconf(struct drm_crtc *crtc,
-				  struct drm_display_mode *adjusted_mode,
-				  bool dither)
+				  struct drm_display_mode *adjusted_mode)
 {
 	struct drm_i915_private *dev_priv = crtc->dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
@@ -4992,7 +4991,7 @@ static void ironlake_set_pipeconf(struct drm_crtc *crtc,
 	}
 
 	val &= ~(PIPECONF_DITHER_EN | PIPECONF_DITHER_TYPE_MASK);
-	if (dither)
+	if (intel_crtc->config.dither)
 		val |= (PIPECONF_DITHER_EN | PIPECONF_DITHER_TYPE_SP);
 
 	val &= ~PIPECONF_INTERLACE_MASK;
@@ -5075,8 +5074,7 @@ static void intel_set_pipe_csc(struct drm_crtc *crtc)
 }
 
 static void haswell_set_pipeconf(struct drm_crtc *crtc,
-				 struct drm_display_mode *adjusted_mode,
-				 bool dither)
+				 struct drm_display_mode *adjusted_mode)
 {
 	struct drm_i915_private *dev_priv = crtc->dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
@@ -5086,7 +5084,7 @@ static void haswell_set_pipeconf(struct drm_crtc *crtc,
 	val = I915_READ(PIPECONF(cpu_transcoder));
 
 	val &= ~(PIPECONF_DITHER_EN | PIPECONF_DITHER_TYPE_MASK);
-	if (dither)
+	if (intel_crtc->config.dither)
 		val |= (PIPECONF_DITHER_EN | PIPECONF_DITHER_TYPE_SP);
 
 	val &= ~PIPECONF_INTERLACE_MASK_HSW;
@@ -5446,7 +5444,7 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 	bool is_lvds = false, is_dp = false, is_cpu_edp = false;
 	struct intel_encoder *encoder;
 	int ret;
-	bool dither, fdi_config_ok;
+	bool fdi_config_ok;
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		switch (encoder->type) {
@@ -5480,11 +5478,6 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 
 	/* Ensure that the cursor is valid for the new mode before changing... */
 	intel_crtc_update_cursor(crtc, true);
-
-	/* determine panel color depth */
-	dither = intel_crtc->config.dither;
-	if (is_lvds && dev_priv->lvds_dither)
-		dither = true;
 
 	fp = clock.n << 16 | clock.m1 << 8 | clock.m2;
 	if (has_reduced_clock)
@@ -5554,7 +5547,7 @@ static int ironlake_crtc_mode_set(struct drm_crtc *crtc,
 	if (is_cpu_edp)
 		ironlake_set_pll_edp(crtc, adjusted_mode->clock);
 
-	ironlake_set_pipeconf(crtc, adjusted_mode, dither);
+	ironlake_set_pipeconf(crtc, adjusted_mode);
 
 	intel_wait_for_vblank(dev, pipe);
 
@@ -5616,7 +5609,6 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 	bool is_dp = false, is_cpu_edp = false;
 	struct intel_encoder *encoder;
 	int ret;
-	bool dither;
 
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		switch (encoder->type) {
@@ -5656,9 +5648,6 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 	/* Ensure that the cursor is valid for the new mode before changing... */
 	intel_crtc_update_cursor(crtc, true);
 
-	/* determine panel color depth */
-	dither = intel_crtc->config.dither;
-
 	DRM_DEBUG_KMS("Mode for pipe %d:\n", pipe);
 	drm_mode_debug_printmodeline(mode);
 
@@ -5672,7 +5661,7 @@ static int haswell_crtc_mode_set(struct drm_crtc *crtc,
 	if (intel_crtc->config.has_pch_encoder)
 		ironlake_fdi_set_m_n(crtc);
 
-	haswell_set_pipeconf(crtc, adjusted_mode, dither);
+	haswell_set_pipeconf(crtc, adjusted_mode);
 
 	intel_set_pipe_csc(crtc);
 

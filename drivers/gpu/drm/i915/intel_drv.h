@@ -194,6 +194,11 @@ struct intel_crtc_config {
 	/* DP has a bunch of special case unfortunately, so mark the pipe
 	 * accordingly. */
 	bool has_dp_encoder;
+
+	/*
+	 * Enable dithering, used when the selected pipe bpp doesn't match the
+	 * plane bpp.
+	 */
 	bool dither;
 	int pipe_bpp;
 	struct intel_link_m_n dp_m_n;
