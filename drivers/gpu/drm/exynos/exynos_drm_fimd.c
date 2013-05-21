@@ -57,7 +57,7 @@
 #define WKEYCON1_BASE(x)		((WKEYCON1 + 0x140) + (x * 8))
 
 /* FIMD has totally five hardware windows. */
-#define WINDOWS_NR	5
+#define FIMD_WIN_NR	5
 
 #define get_fimd_context(dev)	platform_get_drvdata(to_platform_device(dev))
 
@@ -97,7 +97,7 @@ struct fimd_context {
 	struct clk			*lcd_clk;
 	void __iomem			*regs;
 	void __iomem			*regs_mie;
-	struct fimd_win_data		win_data[WINDOWS_NR];
+	struct fimd_win_data		win_data[FIMD_WIN_NR];
 	unsigned int			clkdiv;
 	unsigned int			default_win;
 	u32				vidcon0;
@@ -207,7 +207,7 @@ static void fimd_win_mode_set(struct device *dev,
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
 
-	if (win < 0 || win > WINDOWS_NR)
+	if (win < 0 || win > FIMD_WIN_NR)
 		return;
 
 	offset = overlay->fb_x * (overlay->bpp >> 3);
@@ -370,7 +370,7 @@ static void fimd_win_commit(struct device *dev, int zpos)
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
 
-	if (win < 0 || win > WINDOWS_NR)
+	if (win < 0 || win > FIMD_WIN_NR)
 		return;
 
 	win_data = &ctx->win_data[win];
@@ -490,7 +490,7 @@ static void fimd_win_disable(struct device *dev, int zpos)
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
 
-	if (win < 0 || win > WINDOWS_NR)
+	if (win < 0 || win > FIMD_WIN_NR)
 		return;
 
 	win_data = &ctx->win_data[win];
@@ -570,7 +570,7 @@ static void fimd_apply(struct device *subdrv_dev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	for (i = 0; i < WINDOWS_NR; i++) {
+	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		if (win_data->enabled && (ovl_ops && ovl_ops->commit))
 			ovl_ops->commit(subdrv_dev, i);
@@ -874,7 +874,7 @@ static void fimd_window_suspend(struct device *dev)
 	struct fimd_win_data *win_data;
 	int i;
 
-	for (i = 0; i < WINDOWS_NR; i++) {
+	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		if (win_data->enabled) {
 			win_data->resume = win_data->enabled;
@@ -890,7 +890,7 @@ static void fimd_window_resume(struct device *dev)
 	struct fimd_win_data *win_data;
 	int i;
 
-	for (i = 0; i < WINDOWS_NR; i++) {
+	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		win_data->enabled = win_data->resume;
 		win_data->resume = false;
@@ -1124,7 +1124,7 @@ static int fimd_probe(struct platform_device *pdev)
 	DRM_DEBUG_KMS("pixel clock = %d, clkdiv = %d\n",
 			panel->timing.pixclock, ctx->clkdiv);
 
-	for (win = 0; win < WINDOWS_NR; win++)
+	for (win = 0; win < FIMD_WIN_NR; win++)
 		fimd_clear_win(ctx, win);
 
 	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
