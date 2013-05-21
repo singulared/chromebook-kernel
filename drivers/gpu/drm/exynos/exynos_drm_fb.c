@@ -245,28 +245,12 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
-	if (!obj) {
-		DRM_ERROR("failed to lookup gem object\n");
-		ret = -ENOENT;
-		goto err_free;
-	}
-
-	exynos_gem_obj = to_exynos_gem_obj(obj);
-
-	ret = check_fb_gem_memory_type(dev, exynos_gem_obj);
-	if (ret) {
-		drm_gem_object_unreference(obj);
-		goto err_free;
-	}
-
 	drm_helper_mode_fill_fb_struct(&exynos_fb->fb, mode_cmd);
-	exynos_fb->exynos_gem_obj[0] = exynos_gem_obj;
-	exynos_fb->buf_cnt = exynos_drm_format_num_buffers(mode_cmd);
 
+	exynos_fb->buf_cnt = exynos_drm_format_num_buffers(mode_cmd);
 	DRM_DEBUG_KMS("buf_cnt = %d\n", exynos_fb->buf_cnt);
 
-	for (i = 1; i < exynos_fb->buf_cnt; i++) {
+	for (i = 0; i < exynos_fb->buf_cnt; i++) {
 		obj = drm_gem_object_lookup(dev, file_priv,
 				mode_cmd->handles[i]);
 		if (!obj) {
@@ -300,7 +284,6 @@ err_unreference:
 		if (exynos_gem_obj)
 			drm_gem_object_unreference(&exynos_gem_obj->base);
 	}
-err_free:
 	kfree(exynos_fb);
 	return ERR_PTR(ret);
 }
