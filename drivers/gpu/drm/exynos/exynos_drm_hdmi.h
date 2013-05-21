@@ -12,9 +12,6 @@
 #ifndef _EXYNOS_DRM_HDMI_H_
 #define _EXYNOS_DRM_HDMI_H_
 
-#define MIXER_WIN_NR		3
-#define MIXER_DEFAULT_WIN	0
-
 /*
  * exynos hdmi common context structure.
  *

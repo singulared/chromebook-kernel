@@ -284,33 +284,21 @@ static void drm_mixer_mode_set(struct device *subdrv_dev,
 static void drm_mixer_commit(struct device *subdrv_dev, int zpos)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
-	int win = (zpos == DEFAULT_ZPOS) ? MIXER_DEFAULT_WIN : zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (win < 0 || win >= MIXER_WIN_NR) {
-		DRM_ERROR("mixer window[%d] is wrong\n", win);
-		return;
-	}
+	DRM_DEBUG_KMS("zpos: %d\n", zpos);
 
 	if (mixer_ops && mixer_ops->win_commit)
-		mixer_ops->win_commit(ctx->mixer_ctx->ctx, win);
+		mixer_ops->win_commit(ctx->mixer_ctx->ctx, zpos);
 }
 
 static void drm_mixer_disable(struct device *subdrv_dev, int zpos)
 {
 	struct drm_hdmi_context *ctx = to_context(subdrv_dev);
-	int win = (zpos == DEFAULT_ZPOS) ? MIXER_DEFAULT_WIN : zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (win < 0 || win >= MIXER_WIN_NR) {
-		DRM_ERROR("mixer window[%d] is wrong\n", win);
-		return;
-	}
+	DRM_DEBUG_KMS("zpos: %d\n", zpos);
 
 	if (mixer_ops && mixer_ops->win_disable)
-		mixer_ops->win_disable(ctx->mixer_ctx->ctx, win);
+		mixer_ops->win_disable(ctx->mixer_ctx->ctx, zpos);
 }
 
 static struct exynos_drm_overlay_ops drm_hdmi_overlay_ops = {

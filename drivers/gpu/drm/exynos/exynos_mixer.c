@@ -41,6 +41,9 @@
 
 #define get_mixer_context(dev)	platform_get_drvdata(to_platform_device(dev))
 
+#define MIXER_WIN_NR		3
+#define MIXER_DEFAULT_WIN	0
+
 struct hdmi_win_data {
 	dma_addr_t		dma_addr;
 	dma_addr_t		chroma_dma_addr;
@@ -784,11 +787,17 @@ static void mixer_win_mode_set(void *ctx,
 	win_data->scan_flags = overlay->scan_flag;
 }
 
-static void mixer_win_commit(void *ctx, int win)
+static void mixer_win_commit(void *ctx, int zpos)
 {
 	struct mixer_context *mixer_ctx = ctx;
+	int win = (zpos == DEFAULT_ZPOS) ? MIXER_DEFAULT_WIN : zpos;
 
 	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
+
+	if (win < 0 || win >= MIXER_WIN_NR) {
+		DRM_ERROR("mixer window[%d] is invalid\n", win);
+		return;
+	}
 
 	if (!mixer_ctx->powered)
 		return;
@@ -801,13 +810,19 @@ static void mixer_win_commit(void *ctx, int win)
 	mixer_ctx->win_data[win].enabled = true;
 }
 
-static void mixer_win_disable(void *ctx, int win)
+static void mixer_win_disable(void *ctx, int zpos)
 {
 	struct mixer_context *mixer_ctx = ctx;
 	struct mixer_resources *res = &mixer_ctx->mixer_res;
 	unsigned long flags;
+	int win = (zpos == DEFAULT_ZPOS) ? MIXER_DEFAULT_WIN : zpos;
 
 	DRM_DEBUG_KMS("[%d] %s, win: %d\n", __LINE__, __func__, win);
+
+	if (win < 0 || win >= MIXER_WIN_NR) {
+		DRM_ERROR("mixer window[%d] is invalid\n", win);
+		return;
+	}
 
 	if (!mixer_ctx->powered) {
 		mixer_ctx->win_data[win].resume = false;
