@@ -83,7 +83,6 @@ enum mixer_version_id {
 
 struct mixer_context {
 	struct device		*dev;
-	struct drm_device	*drm_dev;
 	int			pipe;
 	bool			interlace;
 	bool			powered;
@@ -843,11 +842,13 @@ static void mixer_apply(void *ctx)
 static void mixer_wait_for_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
+	struct exynos_drm_hdmi_context *drm_hdmi_ctx = mixer_ctx->parent_ctx;
+	struct drm_device *drm_dev = drm_hdmi_ctx->drm_dev;
 
 	if (!mixer_ctx->powered)
 		return;
 
-	drm_vblank_get(mixer_ctx->drm_dev, mixer_ctx->pipe);
+	drm_vblank_get(drm_dev, mixer_ctx->pipe);
 
 	atomic_set(&mixer_ctx->wait_vsync_event, 1);
 
@@ -860,7 +861,7 @@ static void mixer_wait_for_vblank(void *ctx)
 				DRM_HZ/20))
 		DRM_DEBUG_KMS("vblank wait timed out.\n");
 
-	drm_vblank_put(mixer_ctx->drm_dev, mixer_ctx->pipe);
+	drm_vblank_put(drm_dev, mixer_ctx->pipe);
 }
 
 static void mixer_window_suspend(struct mixer_context *ctx)
