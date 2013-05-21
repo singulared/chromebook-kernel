@@ -57,6 +57,8 @@ Required properties:
 				 with 'reg' property.
  - ranges: allows valid 1:1 translation between child's address space and
 	   parent's address space
+ - clocks: Clock IDs array as required by the controller.
+ - clock-names: names of clocks correseponding to IDs in the clock property
 
 Sub-nodes:
 The dwc3 core should be added as subnode to Exynos dwc3 glue.
@@ -72,6 +74,8 @@ Example:
 	usb@12000000 {
 		compatible = "samsung,exynos5250-dwusb3";
 		samsung,vbus-gpio = <&gpx2 7 1 3 3>;
+		clocks = <&clock 286>;
+		clock-names = "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges;
