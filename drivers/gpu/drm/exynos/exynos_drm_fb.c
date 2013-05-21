@@ -256,7 +256,7 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 
 	ret = check_fb_gem_memory_type(dev, exynos_gem_obj);
 	if (ret) {
-		drm_gem_object_unreference_unlocked(obj);
+		drm_gem_object_unreference(obj);
 		goto err_free;
 	}
 
@@ -301,7 +301,7 @@ err_unreference:
 
 		obj = &exynos_fb->exynos_gem_obj[i]->base;
 		if (obj)
-			drm_gem_object_unreference_unlocked(obj);
+			drm_gem_object_unreference(obj);
 	}
 err_free:
 	kfree(exynos_fb);
