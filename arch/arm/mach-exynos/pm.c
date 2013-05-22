@@ -21,6 +21,7 @@
 #include <linux/clk.h>
 
 #include <asm/cacheflush.h>
+#include <asm/cputype.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/smp_scu.h>
 
@@ -46,6 +47,22 @@ static struct sleep_save exynos4_set_clksrc[] = {
 	{ .reg = EXYNOS4_CLKSRC_MASK_PERIL0		, .val = 0x01111111, },
 	{ .reg = EXYNOS4_CLKSRC_MASK_PERIL1		, .val = 0x01110111, },
 	{ .reg = EXYNOS4_CLKSRC_MASK_DMC		, .val = 0x00010000, },
+};
+
+static struct sleep_save exynos5420_set_clksrc[] = {
+	{ .reg = EXYNOS5420_CLKSRC_MASK_CPERI,		.val = 0xffffffff, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP0,		.val = 0x11111111, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP1,		.val = 0x11100111, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP2,		.val = 0x11111100, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP7,		.val = 0x00111100, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_DISP10,		.val = 0x11111110, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_MAU,		.val = 0x10000000, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_FSYS,		.val = 0x11111110, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_PERIC0,		.val = 0x11111110, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_PERIC1,		.val = 0x11111100, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_ISP,		.val = 0x11111000, },
+	{ .reg = EXYNOS5420_CLKGATE_BUS_DISP1,		.val = 0xffffffff, },
+	{ .reg = EXYNOS5420_CLKGATE_IP_PERIC,		.val = 0xffffffff, },
 };
 
 static struct sleep_save exynos4210_set_clksrc[] = {
@@ -87,14 +104,15 @@ static int exynos_cpu_suspend(unsigned long arg)
 	outer_flush_all();
 #endif
 
-	if (soc_is_exynos5250())
+	if (soc_is_exynos5250() || soc_is_exynos5420())
 		flush_cache_all();
 
 	/*
 	 * Disable all interrupts.  eints will still be active during
 	 * suspend so its ok to mask everything here
 	 */
-	__raw_writel(0x0, S5P_VA_GIC_DIST + GIC_DIST_CTRL);
+	if (soc_is_exynos5250())
+		__raw_writel(0x0, S5P_VA_GIC_DIST + GIC_DIST_CTRL);
 
 	/* issue the standby signal into the pm unit. */
 	for (i = 0; i < 100; i++)
@@ -110,10 +128,12 @@ static void exynos_pm_prepare(void)
 
 	s3c_pm_do_save(exynos_core_save, ARRAY_SIZE(exynos_core_save));
 
-	if (!soc_is_exynos5250()) {
+	if (!(soc_is_exynos5250() || soc_is_exynos5420())) {
 		s3c_pm_do_save(exynos4_epll_save, ARRAY_SIZE(exynos4_epll_save));
 		s3c_pm_do_save(exynos4_vpll_save, ARRAY_SIZE(exynos4_vpll_save));
-	} else {
+	}
+
+	if (soc_is_exynos5250()) {
 		s3c_pm_do_save(exynos5_sys_save, ARRAY_SIZE(exynos5_sys_save));
 		/* Disable USE_RETENTION of JPEG_MEM_OPTION */
 		tmp = __raw_readl(EXYNOS5_JPEG_MEM_OPTION);
@@ -132,12 +152,34 @@ static void exynos_pm_prepare(void)
 
 	/* Before enter central sequence mode, clock src register have to set */
 
-	if (!soc_is_exynos5250())
+	if (!(soc_is_exynos5250() || soc_is_exynos5420()))
 		s3c_pm_do_restore_core(exynos4_set_clksrc, ARRAY_SIZE(exynos4_set_clksrc));
 
 	if (soc_is_exynos4210())
 		s3c_pm_do_restore_core(exynos4210_set_clksrc, ARRAY_SIZE(exynos4210_set_clksrc));
 
+	if (soc_is_exynos5420()) {
+		s3c_pm_do_restore_core(exynos5420_set_clksrc,
+				ARRAY_SIZE(exynos5420_set_clksrc));
+
+		tmp = __raw_readl(EXYNOS5_ARM_L2_OPTION);
+		tmp &= ~EXYNOS5_USE_RETENTION;
+		__raw_writel(tmp, EXYNOS5_ARM_L2_OPTION);
+
+		tmp = __raw_readl(EXYNOS5420_SFR_AXI_CGDIS1);
+		tmp |= EXYNOS5420_UFS;
+		__raw_writel(tmp, EXYNOS5420_SFR_AXI_CGDIS1);
+
+		tmp = __raw_readl(EXYNOS5420_ARM_COMMON_OPTION);
+		tmp &= ~EXYNOS5_L2RSTDISABLE_VALUE;
+		__raw_writel(tmp, EXYNOS5420_ARM_COMMON_OPTION);
+		tmp = __raw_readl(EXYNOS5420_FSYS2_OPTION);
+		tmp |= EXYNOS5420_EMULATION;
+		__raw_writel(tmp, EXYNOS5420_FSYS2_OPTION);
+		tmp = __raw_readl(EXYNOS5420_PSGEN_OPTION);
+		tmp |= EXYNOS5420_EMULATION;
+		__raw_writel(tmp, EXYNOS5420_PSGEN_OPTION);
+	}
 }
 
 static int exynos_pm_add(struct device *dev, struct subsys_interface *sif)
@@ -234,7 +276,7 @@ static __init int exynos_pm_drvinit(void)
 	tmp |= ((0xFF << 8) | (0x1F << 1));
 	__raw_writel(tmp, S5P_WAKEUP_MASK);
 
-	if (!soc_is_exynos5250()) {
+	if (!(soc_is_exynos5250() || soc_is_exynos5420())) {
 		pll_base = clk_get(NULL, "xtal");
 
 		if (!IS_ERR(pll_base)) {
@@ -250,9 +292,11 @@ arch_initcall(exynos_pm_drvinit);
 static int exynos_pm_suspend(void)
 {
 	unsigned long tmp;
+	unsigned int cluster_id;
 
 	/* Powering on ISP before suspend */
-	__raw_writel(S5P_INT_LOCAL_PWR_EN, EXYNOS5_ISP_CONFIGURATION);
+	if (soc_is_exynos5250())
+		__raw_writel(S5P_INT_LOCAL_PWR_EN, EXYNOS5_ISP_CONFIGURATION);
 
 	/* Setting Central Sequence Register for power down mode */
 
@@ -262,10 +306,20 @@ static int exynos_pm_suspend(void)
 
 	/* Setting SEQ_OPTION register */
 
-	tmp = (S5P_USE_STANDBY_WFI0 | S5P_USE_STANDBY_WFE0);
-	__raw_writel(tmp, S5P_CENTRAL_SEQ_OPTION);
+	if (soc_is_exynos5250()) {
+		tmp = (S5P_USE_STANDBY_WFI0 | S5P_USE_STANDBY_WFE0);
+		__raw_writel(tmp, S5P_CENTRAL_SEQ_OPTION);
+	} else if (soc_is_exynos5420()) {
+		cluster_id = (read_cpuid(CPUID_MPIDR) >> 8) & 0xf;
+		if (!cluster_id)
+			__raw_writel(EXYNOS5420_ARM_USE_STANDBY_WFI0,
+				     S5P_CENTRAL_SEQ_OPTION);
+		else
+			__raw_writel(EXYNOS5420_KFC_USE_STANDBY_WFI0,
+				     S5P_CENTRAL_SEQ_OPTION);
+	}
 
-	if (!soc_is_exynos5250()) {
+	if (!(soc_is_exynos5250() || soc_is_exynos5420())) {
 		/* Save Power control register */
 		asm ("mrc p15, 0, %0, c15, c0, 0"
 		     : "=r" (tmp) : : "cc");
@@ -284,6 +338,10 @@ static void exynos_pm_resume(void)
 {
 	unsigned long tmp;
 
+	if (soc_is_exynos5420())
+		__raw_writel(EXYNOS5420_USE_STANDBY_WFI_ALL,
+			S5P_CENTRAL_SEQ_OPTION);
+
 	/*
 	 * If PMU failed while entering sleep mode, WFI will be
 	 * ignored by PMU and then exiting cpu_do_idle().
@@ -299,7 +357,7 @@ static void exynos_pm_resume(void)
 		/* No need to perform below restore code */
 		goto early_wakeup;
 	}
-	if (!soc_is_exynos5250()) {
+	if (!(soc_is_exynos5250() || soc_is_exynos5420())) {
 		/* Restore Power control register */
 		tmp = save_arm_register[0];
 		asm volatile ("mcr p15, 0, %0, c15, c0, 0"
@@ -315,13 +373,29 @@ static void exynos_pm_resume(void)
 
 	/* For release retention */
 
-	__raw_writel((1 << 28), S5P_PAD_RET_MAUDIO_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_GPIO_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_UART_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_MMCA_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_MMCB_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_EBIA_OPTION);
-	__raw_writel((1 << 28), S5P_PAD_RET_EBIB_OPTION);
+	if (soc_is_exynos5250()) {
+		__raw_writel((1 << 28), S5P_PAD_RET_MAUDIO_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_GPIO_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_UART_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_MMCA_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_MMCB_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_EBIA_OPTION);
+		__raw_writel((1 << 28), S5P_PAD_RET_EBIB_OPTION);
+	} else if (soc_is_exynos5420()) {
+		__raw_writel(1 << 28, EXYNOS_PAD_RET_DRAM_OPTION);
+		__raw_writel(1 << 28, EXYNOS_PAD_RET_MAUDIO_OPTION);
+		__raw_writel(1 << 28, EXYNOS_PAD_RET_JTAG_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_GPIO_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_UART_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_MMCA_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_MMCB_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_MMCC_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_HSI_OPTION);
+		__raw_writel(1 << 28, EXYNOS_PAD_RET_EBIA_OPTION);
+		__raw_writel(1 << 28, EXYNOS_PAD_RET_EBIB_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_SPI_OPTION);
+		__raw_writel(1 << 28, EXYNOS5420_PAD_RET_DRAM_COREBLK_OPTION);
+	}
 
 	if (soc_is_exynos5250())
 		s3c_pm_do_restore(exynos5_sys_save,
@@ -329,7 +403,7 @@ static void exynos_pm_resume(void)
 
 	s3c_pm_do_restore_core(exynos_core_save, ARRAY_SIZE(exynos_core_save));
 
-	if (!soc_is_exynos5250()) {
+	if (!(soc_is_exynos5250() || soc_is_exynos5420())) {
 		exynos4_restore_pll();
 
 #ifdef CONFIG_SMP
@@ -340,7 +414,20 @@ static void exynos_pm_resume(void)
 early_wakeup:
 
 	/* Powering off ISP */
-	__raw_writel(0x0, EXYNOS5_ISP_CONFIGURATION);
+	if (soc_is_exynos5250())
+		__raw_writel(0x0, EXYNOS5_ISP_CONFIGURATION);
+
+	if (soc_is_exynos5420()) {
+		tmp = __raw_readl(EXYNOS5420_SFR_AXI_CGDIS1);
+		tmp &= ~EXYNOS5420_UFS;
+		__raw_writel(tmp, EXYNOS5420_SFR_AXI_CGDIS1);
+		tmp = __raw_readl(EXYNOS5420_FSYS2_OPTION);
+		tmp &= ~EXYNOS5420_EMULATION;
+		__raw_writel(tmp, EXYNOS5420_FSYS2_OPTION);
+		tmp = __raw_readl(EXYNOS5420_PSGEN_OPTION);
+		tmp &= ~EXYNOS5420_EMULATION;
+		__raw_writel(tmp, EXYNOS5420_PSGEN_OPTION);
+	}
 
 	/* Clear SLEEP mode set in INFORM1 */
 	__raw_writel(0x0, S5P_INFORM1);
