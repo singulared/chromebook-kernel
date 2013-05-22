@@ -164,6 +164,16 @@ static int __cpuinit exynos_boot_secondary(unsigned int cpu, struct task_struct 
 	while (time_before(jiffies, timeout)) {
 		smp_rmb();
 
+		/*
+		 * Following is a software workaround for an iROM bug
+		 * related to CPU#2. This will be fixed in EVT1 hardware.
+		 */
+		if (soc_is_exynos5420() && samsung_rev() == EXYNOS5420_REV_0) {
+			if (cpu == 2)
+				__raw_writel(__raw_readl(S5P_VA_SYSRAM),
+					S5P_VA_SYSRAM + 0x4);
+		}
+
 		__raw_writel(virt_to_phys(exynos4_secondary_startup),
 							cpu_boot_reg(phys_cpu));
 		gic_raise_softirq(cpumask_of(cpu), 0);
