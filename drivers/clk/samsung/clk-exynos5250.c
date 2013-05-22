@@ -386,7 +386,11 @@ struct samsung_gate_clock exynos5250_gate_clks[] __initdata = {
 	GATE(hsi2c1, "hsi2c1", "aclk66", GATE_IP_PERIC, 29, 0, 0),
 	GATE(hsi2c2, "hsi2c2", "aclk66", GATE_IP_PERIC, 30, 0, 0),
 	GATE(hsi2c3, "hsi2c3", "aclk66", GATE_IP_PERIC, 31, 0, 0),
-	GATE(chipid, "chipid", "aclk66", GATE_IP_PERIS, 0, 0, 0),
+
+	/* TODO: Remove alias and fix ASV */
+	GATE_A(chipid, "chipid", "aclk66", GATE_IP_PERIS, 0, 0, 0,
+	       "chipid_apbif"),
+
 	GATE(sysreg, "sysreg", "aclk66",
 			GATE_IP_PERIS, 1, CLK_IGNORE_UNUSED, 0),
 	GATE(pmu, "pmu", "aclk66",
