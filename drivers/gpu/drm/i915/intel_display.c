@@ -3547,10 +3547,11 @@ static void haswell_crtc_disable(struct drm_crtc *crtc)
 	drm_vblank_off(dev, pipe);
 	intel_crtc_update_cursor(crtc, false);
 
-	intel_disable_plane(dev_priv, plane, pipe);
-
+	/* FBC must be disabled before disabling the plane on HSW. */
 	if (dev_priv->cfb_plane == plane)
 		intel_disable_fbc(dev);
+
+	intel_disable_plane(dev_priv, plane, pipe);
 
 	intel_disable_pipe(dev_priv, pipe);
 
