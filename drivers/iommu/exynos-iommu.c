@@ -740,16 +740,29 @@ set_cfg:
 	__raw_writel(cfg, data->sfrbases[idx] + REG_MMU_CFG);
 }
 
-static void __sysmmu_enable_nocount(struct sysmmu_drvdata *data)
+/**
+ * __sysmmu_enable_nocount - enable sysmmu clock and initialize sysmmu
+ * @data: sysmmu driver data
+ * @init: init flag - true, when called from __sysmmu_enable and sysmmu_resume
+ * 		    - false, when called from sysmmu_runtime_resume
+ */
+static void __sysmmu_enable_nocount(struct sysmmu_drvdata *data, bool init)
 {
 	int i;
 
 	clk_enable(data->clk);
 
 	for (i = 0; i < data->nsfrs; i++) {
-		BUG_ON(__raw_readl(data->sfrbases[i] + REG_MMU_CTRL)
+		/*
+		 * MMU_CTRL has a reset value during bootup and system resume
+		 * which might not be CTRL_DISABLE (as seen with FIMD's sysmmu
+		 * on exynos5420). So have a BUG_ON only when init flag is
+		 * false i.e. not while enabling sysmmu for the first time or
+		 * during sysmmu resume.
+		 */
+		if (!init)
+			BUG_ON(__raw_readl(data->sfrbases[i] + REG_MMU_CTRL)
 								& CTRL_ENABLE);
-
 		__sysmmu_init_config(data, i);
 
 		__sysmmu_set_ptbase(data->sfrbases[i], data->pgtable);
@@ -770,7 +783,7 @@ static int __sysmmu_enable(struct sysmmu_drvdata *data,
 		data->domain = domain;
 
 		if (data->runtime_active)
-			__sysmmu_enable_nocount(data);
+			__sysmmu_enable_nocount(data, true);
 
 		dev_dbg(data->sysmmu, "Enabled\n");
 	} else {
@@ -1178,7 +1191,7 @@ static int sysmmu_resume(struct device *dev)
 	spin_lock_irqsave(&drvdata->lock, flags);
 	if (is_sysmmu_active(drvdata) &&
 		(!pm_runtime_enabled(dev) || drvdata->runtime_active)) {
-		__sysmmu_enable_nocount(drvdata);
+		__sysmmu_enable_nocount(drvdata, true);
 		__sysmmu_restore_state(drvdata);
 	}
 	spin_unlock_irqrestore(&drvdata->lock, flags);
@@ -1206,7 +1219,7 @@ static int sysmmu_runtime_resume(struct device *dev)
 	spin_lock_irqsave(&drvdata->lock, flags);
 	drvdata->runtime_active = true;
 	if (is_sysmmu_active(drvdata))
-		__sysmmu_enable_nocount(drvdata);
+		__sysmmu_enable_nocount(drvdata, false);
 	spin_unlock_irqrestore(&drvdata->lock, flags);
 	return 0;
 }
