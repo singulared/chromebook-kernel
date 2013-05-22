@@ -66,7 +66,6 @@ intel_pch_panel_fitting(struct intel_crtc *intel_crtc,
 			struct intel_crtc_config *pipe_config,
 			int fitting_mode)
 {
-	struct drm_i915_private *dev_priv = intel_crtc->base.dev->dev_private;
 	struct drm_display_mode *mode, *adjusted_mode;
 	int x, y, width, height;
 
