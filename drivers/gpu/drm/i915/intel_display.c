@@ -2298,10 +2298,10 @@ intel_pipe_set_base(struct drm_crtc *crtc, int x, int y,
 		return 0;
 	}
 
-	if(intel_crtc->plane > dev_priv->num_pipe) {
+	if (intel_crtc->plane > INTEL_INFO(dev)->num_pipes) {
 		DRM_ERROR("no plane for crtc: plane %d, num_pipes %d\n",
 				intel_crtc->plane,
-				dev_priv->num_pipe);
+				INTEL_INFO(dev)->num_pipes);
 		return -EINVAL;
 	}
 
@@ -5352,7 +5352,7 @@ static bool ironlake_check_fdi_lanes(struct intel_crtc *intel_crtc)
 		return false;
 	}
 
-	if (dev_priv->num_pipe == 2)
+	if (INTEL_INFO(dev)->num_pipes == 2)
 		return true;
 
 	switch (intel_crtc->pipe) {
@@ -8935,9 +8935,10 @@ void intel_modeset_init(struct drm_device *dev)
 	dev->mode_config.fb_base = dev_priv->mm.gtt_base_addr;
 
 	DRM_DEBUG_KMS("%d display pipe%s available.\n",
-		      dev_priv->num_pipe, dev_priv->num_pipe > 1 ? "s" : "");
+		      INTEL_INFO(dev)->num_pipes,
+		      INTEL_INFO(dev)->num_pipes > 1 ? "s" : "");
 
-	for (i = 0; i < dev_priv->num_pipe; i++) {
+	for (i = 0; i < INTEL_INFO(dev)->num_pipes; i++) {
 		intel_crtc_init(dev, i);
 		ret = intel_plane_init(dev, i);
 		if (ret)
@@ -9388,10 +9389,9 @@ intel_display_print_error_state(struct seq_file *m,
 				struct drm_device *dev,
 				struct intel_display_error_state *error)
 {
-	drm_i915_private_t *dev_priv = dev->dev_private;
 	int i;
 
-	seq_printf(m, "Num Pipes: %d\n", dev_priv->num_pipe);
+	seq_printf(m, "Num Pipes: %d\n", INTEL_INFO(dev)->num_pipes);
 	for_each_pipe(i) {
 		seq_printf(m, "Pipe [%d]:\n", i);
 		seq_printf(m, "  CONF: %08x\n", error->pipe[i].conf);
