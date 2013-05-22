@@ -1,0 +1,22 @@
+/*
+ * Google Peach Pit Rev 1 board device tree source
+ *
+ * Copyright (c) 2013 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+/include/ "exynos5420.dtsi"
+/include/ "exynos5420-peach-pit.dtsi"
+
+/ {
+	model = "Google Peach Pit Rev 1";
+
+	compatible = "google,pit-rev1", "google,pit", "samsung,exynos5420";
+
+	aliases {
+	};
+};
