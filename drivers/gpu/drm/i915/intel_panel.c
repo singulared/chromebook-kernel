@@ -508,11 +508,7 @@ int intel_panel_setup_backlight(struct drm_connector *connector)
 
 	memset(&props, 0, sizeof(props));
 	props.type = BACKLIGHT_RAW;
-	props.max_brightness = _intel_panel_get_max_backlight(dev);
-	if (props.max_brightness == 0) {
-		DRM_DEBUG_DRIVER("Failed to get maximum backlight value\n");
-		return -ENODEV;
-	}
+	props.max_brightness = intel_panel_get_max_backlight(dev);
 	dev_priv->backlight =
 		backlight_device_register("intel_backlight",
 					  &connector->kdev, dev,
