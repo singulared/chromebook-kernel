@@ -215,6 +215,7 @@
 	#define M98095_DAI_DHF                  (1<<3)
 
 /* M98095_045_DSP_CFG */
+	#define M98095_DC_BLOCK_FILTER_ENABLE   (1<<0)
 	#define M98095_DSPNORMAL                (4<<4)
 
 /* M98095_048_MIX_DAC_LR */
