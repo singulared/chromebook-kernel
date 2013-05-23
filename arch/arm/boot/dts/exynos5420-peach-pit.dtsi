@@ -161,6 +161,73 @@
 				#size-cells = <0>;
 
 				google,remote-bus = <0>;
+				power-regulator@48 {
+					compatible = "ti,tps65090";
+					reg = <0x48>;
+
+					/* TODO: add back when no-ack-irq */
+					/* interrupts = <21 0>; */
+					/* interrupt-parent = <&wakeup_eint>; */
+
+					vsys1-supply = <&vbat>;
+					vsys2-supply = <&vbat>;
+					vsys3-supply = <&vbat>;
+					infet1-supply = <&vbat>;
+					infet2-supply = <&vbat>;
+					infet3-supply = <&vbat>;
+					infet4-supply = <&vbat>;
+					infet5-supply = <&vbat>;
+					infet6-supply = <&vbat>;
+					infet7-supply = <&vbat>;
+					vsys-l1-supply = <&vbat>;
+					vsys-l2-supply = <&vbat>;
+
+					regulators {
+						dcdc1 {
+							ti,enable-ext-control;
+						};
+						dcdc2 {
+							ti,enable-ext-control;
+						};
+						dcdc3 {
+							ti,enable-ext-control;
+						};
+						fet1 {
+							regulator-name = "vcd_led";
+						};
+						fet2 {
+							regulator-name = "video_mid";
+							regulator-always-on;
+						};
+						fet3 {
+							regulator-name = "wwan_r";
+							regulator-always-on;
+						};
+						fet4 {
+							regulator-name = "sdcard";
+						};
+						fet5 {
+							regulator-name = "camout";
+							regulator-always-on;
+						};
+						fet6 {
+							regulator-name = "lcd_vdd";
+						};
+						fet7 {
+							regulator-name = "ts";
+						};
+						ldo1 {
+						};
+						ldo2 {
+						};
+					};
+				};
+
+				battery: sbs-battery@b {
+					compatible = "sbs,sbs-battery";
+					reg = <0xb>;
+					sbs,poll-retry-count = <1>;
+				};
 			};
 
 			keyboard-controller {
