@@ -259,4 +259,11 @@
 	usb@12400000 {
 		status = "okay";
 	};
+
+	vbat: fixed-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vbat-supply";
+		regulator-boot-on;
+		regulator-always-on;
+	};
 };
