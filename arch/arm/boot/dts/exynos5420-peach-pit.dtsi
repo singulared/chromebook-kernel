@@ -9,6 +9,10 @@
  */
 
 / {
+	aliases {
+		i2c20 = &i2c_20;
+	};
+
 	chosen {
 		bootargs = "";
 	};
@@ -148,6 +152,15 @@
 
 				/* TODO: feedback delay should be 2?*/
 				samsung,spi-feedback-delay = <0>;
+			};
+
+			/* Arbitrarily assign bus 20 since past exynos range */
+			i2c_20: i2c-tunnel {
+				compatible = "google,cros-ec-i2c-tunnel";
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				google,remote-bus = <0>;
 			};
 
 			keyboard-controller {
