@@ -197,7 +197,7 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 	if (katom->event_code != BASE_JD_EVENT_JOB_CANCELLED)
 		katom->event_code = (base_jd_event_code) completion_code;
 
-	kbase_device_trace_register_access(kctx, REG_WRITE, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 1 << s);
+	if (kctx && kctx->jctx.tb) kbase_device_trace_register_access(kctx, REG_WRITE, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 1 << s);
 
 	/* Complete the job, and start new ones
 	 *
