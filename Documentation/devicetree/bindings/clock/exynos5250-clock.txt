@@ -161,6 +161,7 @@ clock which they consume.
   hdmi			344
   g3d			345
   aclk_400_g3d		346
+  smmu_tv		347
 
 
    [Clock Muxes]
