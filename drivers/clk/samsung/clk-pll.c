@@ -14,6 +14,81 @@
 #include "clk-pll.h"
 
 /*
+ * PLL2650x Clock Type
+ */
+
+#define PLL2650X_MDIV_MASK       (0x1FF)
+#define PLL2650X_PDIV_MASK       (0x3F)
+#define PLL2650X_SDIV_MASK       (0x7)
+#define PLL2650X_MDIV_SHIFT      (16)
+#define PLL2650X_PDIV_SHIFT      (8)
+#define PLL2650X_SDIV_SHIFT      (0)
+
+struct samsung_clk_pll2650x {
+	struct clk_hw		hw;
+	const void __iomem	*con_reg;
+};
+
+#define to_clk_pll2650x(_hw) container_of(_hw, struct samsung_clk_pll2650x, hw)
+
+static unsigned long samsung_pll2650x_recalc_rate(struct clk_hw *hw,
+				unsigned long parent_rate)
+{
+	struct samsung_clk_pll2650x *pll = to_clk_pll2650x(hw);
+	u32 mdiv, pdiv, sdiv, pll_con;
+	u64 fvco = parent_rate;
+
+	pll_con = __raw_readl(pll->con_reg);
+	mdiv = (pll_con >> PLL2650X_MDIV_SHIFT) & PLL2650X_MDIV_MASK;
+	pdiv = (pll_con >> PLL2650X_PDIV_SHIFT) & PLL2650X_PDIV_MASK;
+	sdiv = (pll_con >> PLL2650X_SDIV_SHIFT) & PLL2650X_SDIV_MASK;
+
+	fvco *= mdiv;
+	do_div(fvco, (pdiv << sdiv));
+
+	return (unsigned long)fvco;
+}
+
+static const struct clk_ops samsung_pll2650x_clk_ops = {
+	.recalc_rate = samsung_pll2650x_recalc_rate,
+};
+
+struct clk * __init samsung_clk_register_pll2650x(const char *name,
+			const char *pname, const void __iomem *con_reg)
+{
+	struct samsung_clk_pll2650x *pll;
+	struct clk *clk;
+	struct clk_init_data init;
+
+	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
+	if (!pll) {
+		pr_err("%s: could not allocate pll clk %s\n", __func__, name);
+		return NULL;
+	}
+
+	init.name = name;
+	init.ops = &samsung_pll2650x_clk_ops;
+	init.flags = CLK_GET_RATE_NOCACHE;
+	init.parent_names = &pname;
+	init.num_parents = 1;
+
+	pll->hw.init = &init;
+	pll->con_reg = con_reg;
+
+	clk = clk_register(NULL, &pll->hw);
+	if (IS_ERR(clk)) {
+		pr_err("%s: failed to register pll clock %s\n", __func__,
+				name);
+		kfree(pll);
+	}
+
+	if (clk_register_clkdev(clk, name, NULL))
+		pr_err("%s: failed to register lookup for %s", __func__, name);
+
+	return clk;
+}
+
+/*
  * PLL35xx Clock Type
  */
 
