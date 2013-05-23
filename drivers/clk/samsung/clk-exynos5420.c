@@ -615,7 +615,8 @@ static __initdata struct of_device_id ext_clk_match[] = {
 void __init exynos5420_clk_init(struct device_node *np)
 {
 	void __iomem *reg_base;
-	struct clk *apll, *bpll, *cpll, *dpll, *ipll, *mpll, *spll, *vpll;
+	struct clk *apll, *bpll, *cpll, *dpll, *epll, *rpll,
+		*ipll, *mpll, *spll, *vpll;
 
 	if (np) {
 		reg_base = of_iomap(np, 0);
@@ -640,6 +641,10 @@ void __init exynos5420_clk_init(struct device_node *np)
 			reg_base + 0x10120);
 	dpll = samsung_clk_register_pll35xx("fout_dpll", "oscclk",
 			reg_base + 0x10128);
+	epll = samsung_clk_register_pll2650x("fout_epll", "oscclk",
+			reg_base + 0x10130);
+	rpll = samsung_clk_register_pll2650x("fout_rpll", "oscclk",
+			reg_base + 0x10140);
 	ipll = samsung_clk_register_pll35xx("fout_ipll", "oscclk",
 			reg_base + 0x10150);
 	mpll = samsung_clk_register_pll35xx("fout_mpll", "oscclk",
