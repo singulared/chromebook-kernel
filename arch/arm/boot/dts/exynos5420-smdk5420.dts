@@ -281,4 +281,24 @@
 	hsi2c@12CD0000 {
 		status = "okay";
 	};
+
+	/* dw usb3_0 */
+	usb@12000000 {
+		status = "okay";
+	};
+
+	/* ehci */
+	usb@12110000 {
+		status = "okay";
+	};
+
+	/* ohci */
+	usb@12120000 {
+		status = "okay";
+	};
+
+	/* dw usb3_1 */
+	usb@12400000 {
+		status = "okay";
+	};
 };
