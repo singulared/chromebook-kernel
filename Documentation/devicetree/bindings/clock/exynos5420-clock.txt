@@ -34,31 +34,31 @@ clock which they consume.
   sclk_uart2		130
   sclk_uart3		131
   sclk_mmc0		132
-  sclk_mmc1		132
-  sclk_mmc2		133
-  sclk_spi0		134
-  sclk_spi1		135
-  sclk_spi2		136
-  sclk_i2s1		137
-  sclk_i2s2		138
-  sclk_pcm1		139
-  sclk_pcm2		140
-  sclk_spdif		141
-  sclk_hdmi		142
-  sclk_pixel		143
-  sclk_dp1		144
-  sclk_mipi1		145
-  sclk_fimd1		146
-  sclk_maudio0		147
-  sclk_maupcm0		148
-  sclk_usbd300		149
-  sclk_usbd301		150
-  sclk_usbphy300	151
-  sclk_usbphy301	152
-  sclk_unipro		153
-  sclk_pwm		154
-  sclk_gscl_wa		155
-  sclk_gscl_wb		156
+  sclk_mmc1		133
+  sclk_mmc2		134
+  sclk_spi0		135
+  sclk_spi1		136
+  sclk_spi2		137
+  sclk_i2s1		138
+  sclk_i2s2		139
+  sclk_pcm1		140
+  sclk_pcm2		141
+  sclk_spdif		142
+  sclk_hdmi		143
+  sclk_pixel		144
+  sclk_dp1		145
+  sclk_mipi1		146
+  sclk_fimd1		147
+  sclk_maudio0		148
+  sclk_maupcm0		149
+  sclk_usbd300		150
+  sclk_usbd301		151
+  sclk_usbphy300	152
+  sclk_usbphy301	153
+  sclk_unipro		154
+  sclk_pwm		155
+  sclk_gscl_wa		156
+  sclk_gscl_wb		157
 
    [Peripheral Clock Gates]
 
