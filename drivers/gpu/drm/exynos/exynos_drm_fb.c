@@ -96,12 +96,11 @@ void exynos_drm_fb_release(struct kref *kref)
 
 static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
-	struct drm_framebuffer *fb;
-	struct exynos_drm_fb *exynos_fb;
+	struct exynos_drm_fb *exynos_fb =
+			container_of(work, struct exynos_drm_fb, release_work);
+	struct drm_framebuffer *fb = &exynos_fb->fb;
+	struct drm_device *drm_dev = fb->dev;
 	int i, nr;
-
-	exynos_fb = container_of(work, struct exynos_drm_fb, release_work);
-	fb = &exynos_fb->fb;
 
 	DRM_DEBUG_KMS("[FB:%d]\n", DRM_BASE_ID(fb));
 
@@ -110,6 +109,7 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 		dma_buf_put(exynos_fb->dma_buf);
 #endif
 
+	mutex_lock(&drm_dev->struct_mutex);
 	drm_framebuffer_cleanup(fb);
 
 	exynos_drm_fb_unmap(exynos_fb);
@@ -120,8 +120,9 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 		struct drm_gem_object *obj;
 
 		obj = &exynos_fb->exynos_gem_obj[i]->base;
-		drm_gem_object_unreference_unlocked(obj);
+		drm_gem_object_unreference(obj);
 	}
+	mutex_unlock(&drm_dev->struct_mutex);
 
 	kfree(exynos_fb);
 }
