@@ -56,6 +56,7 @@
 #define DIV_PERIC1		0x1055c
 #define DIV_PERIC2		0x10560
 #define DIV_PERIC3		0x10564
+#define DIV_PERIC4		0x10568
 #define GATE_BUS_TOP		0x10700
 #define GATE_BUS_GSCL1		0x10720
 #define GATE_BUS_FSYS0		0x10740
@@ -166,6 +167,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	DIV_PERIC1,
 	DIV_PERIC2,
 	DIV_PERIC3,
+	DIV_PERIC4,
 	GATE_BUS_TOP,
 	GATE_BUS_GSCL1,
 	GATE_BUS_FSYS0,
@@ -425,6 +427,9 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_spi0", "mout_spi0", DIV_PERIC1, 20, 4),
 	DIV(none, "dout_spi1", "mout_spi1", DIV_PERIC1, 24, 4),
 	DIV(none, "dout_spi2", "mout_spi2", DIV_PERIC1, 28, 4),
+	DIV(none, "dout_spi0_pre", "dout_spi0", DIV_PERIC4, 8, 8),
+	DIV(none, "dout_spi1_pre", "dout_spi1", DIV_PERIC4, 16, 8),
+	DIV(none, "dout_spi2_pre", "dout_spi2", DIV_PERIC4, 24, 8),
 	/* audio -i2s */
 	DIV(none, "dout_audio0", "mout_audio0", DIV_PERIC3, 20, 4),
 	DIV(none, "dout_audio1", "mout_audio1", DIV_PERIC3, 24, 4),
@@ -521,11 +526,11 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(spi0, "spi0", "aclk66_peric", GATE_BUS_PERIC, 19, 0, 0),
 	GATE(spi1, "spi1", "aclk66_peric", GATE_BUS_PERIC, 20, 0, 0),
 	GATE(spi2, "spi2", "aclk66_peric", GATE_BUS_PERIC, 21, 0, 0),
-	GATE(sclk_spi0, "sclk_spi0", "dout_spi0", SRC_MASK_PERIC1, 20,
+	GATE(sclk_spi0, "sclk_spi0", "dout_spi0_pre", SRC_MASK_PERIC1, 20,
 						CLK_SET_RATE_PARENT, 0),
-	GATE(sclk_spi1, "sclk_spi1", "dout_spi1", SRC_MASK_PERIC1, 24,
+	GATE(sclk_spi1, "sclk_spi1", "dout_spi1_pre", SRC_MASK_PERIC1, 24,
 						CLK_SET_RATE_PARENT, 0),
-	GATE(sclk_spi2, "sclk_spi2", "dout_spi2", SRC_MASK_PERIC1, 28,
+	GATE(sclk_spi2, "sclk_spi2", "dout_spi2_pre", SRC_MASK_PERIC1, 28,
 						CLK_SET_RATE_PARENT, 0),
 	/*i2s */
 	GATE(i2s1, "i2s1", "aclk66_peric", GATE_BUS_PERIC, 23, 0, 0),
