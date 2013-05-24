@@ -145,7 +145,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/LPM controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <2>;
 				};
 
 				ldo2_reg: LDO2 {
@@ -154,7 +154,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x20>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo3_reg: LDO3 {
@@ -163,7 +163,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/LPM controlled by PWRREQ */
-					max77686-opmode = <0x80>;
+					regulator-op-mode = <2>;
 				};
 
 				ldo7_reg: LDO7 {
@@ -172,7 +172,7 @@
 					regulator-max-microvolt = <1100000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo8_reg: LDO8 {
@@ -181,7 +181,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo10_reg: LDO10 {
@@ -190,7 +190,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo12_reg: LDO12 {
@@ -199,7 +199,7 @@
 					regulator-max-microvolt = <3000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo14_reg: LDO14 {
@@ -208,7 +208,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo15_reg: LDO15 {
@@ -217,7 +217,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				ldo16_reg: LDO16 {
@@ -226,7 +226,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x40>;
+					regulator-op-mode = <1>;
 				};
 
 				buck1_reg: BUCK1 {
@@ -236,7 +236,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x1>;
+					regulator-op-mode = <1>;
 				};
 
 				buck2_reg: BUCK2 {
@@ -246,7 +246,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x10>;
+					regulator-op-mode = <1>;
 				};
 
 				buck3_reg: BUCK3 {
@@ -256,7 +256,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x10>;
+					regulator-op-mode = <1>;
 				};
 
 				buck4_reg: BUCK4 {
@@ -266,7 +266,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					max77686-opmode = <0x10>;
+					regulator-op-mode = <1>;
 				};
 
 				buck5_reg: BUCK5 {
@@ -276,7 +276,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON */
-					max77686-opmode = <0x3>;
+					regulator-op-mode = <3>;
 				};
 
 				buck6_reg: BUCK6 {
@@ -285,7 +285,7 @@
 					regulator-max-microvolt = <1350000>;
 					regulator-always-on;
 					/* Output ON */
-					max77686-opmode = <0x3>;
+					regulator-op-mode = <3>;
 				};
 
 				buck7_reg: BUCK7 {
@@ -294,7 +294,7 @@
 					regulator-max-microvolt = <2000000>;
 					regulator-always-on;
 					/* Output ON */
-					max77686-opmode = <0x3>;
+					regulator-op-mode = <3>;
 				};
 
 				buck8_reg: BUCK8 {
@@ -303,7 +303,7 @@
 					regulator-max-microvolt = <2850000>;
 					regulator-always-on;
 					/* Output OFF of ENB8 is low */
-					max77686-opmode = <0x1>;
+					regulator-op-mode = <1>;
 				};
 
 				en32khz_ap: EN32KHZ_AP {
