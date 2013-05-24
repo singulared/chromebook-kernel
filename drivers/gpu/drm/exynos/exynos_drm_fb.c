@@ -79,14 +79,16 @@ void exynos_drm_fb_release(struct kref *kref)
 
 static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
-	struct exynos_drm_fb *exynos_fb;
+	struct exynos_drm_fb *exynos_fb =
+			container_of(work, struct exynos_drm_fb, release_work);
+	struct drm_framebuffer *fb = &exynos_fb->fb;
+	struct drm_device *drm_dev = fb->dev;
 	unsigned int i;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_fb = container_of(work, struct exynos_drm_fb, release_work);
-
-	drm_framebuffer_cleanup(&exynos_fb->fb);
+	mutex_lock(&drm_dev->struct_mutex);
+	drm_framebuffer_cleanup(fb);
 
 	for (i = 0; i < ARRAY_SIZE(exynos_fb->exynos_gem_obj); i++) {
 		struct drm_gem_object *obj;
@@ -95,8 +97,9 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 			continue;
 
 		obj = &exynos_fb->exynos_gem_obj[i]->base;
-		drm_gem_object_unreference_unlocked(obj);
+		drm_gem_object_unreference(obj);
 	}
+	mutex_unlock(&drm_dev->struct_mutex);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (exynos_fb->dma_buf)
