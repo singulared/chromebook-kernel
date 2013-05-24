@@ -594,6 +594,9 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(smmu_jpeg, "smmu_jpeg", "aclk300_jpeg", GATE_IP_GEN, 7, 0, 0),
 	GATE(smmu_mdma1, "smmu_mdma1", "aclk266", GATE_IP_GEN, 9, 0, 0),
 	GATE(g3d, "g3d", "mout_user_aclk_g3d", GATE_IP_G3D, 9, 0, 0),
+	GATE(usbh20, "usbh20", "aclk200_fsys", GATE_IP_FSYS, 18, 0, 0),
+	GATE(usbd300, "usbd300", "aclk200_fsys", GATE_IP_FSYS, 19, 0, 0),
+	GATE(usbd301, "usbd301", "aclk200_fsys", GATE_IP_FSYS, 20, 0, 0),
 };
 
 static __initdata struct of_device_id ext_clk_match[] = {
