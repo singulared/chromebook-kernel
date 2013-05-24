@@ -5,6 +5,7 @@
 #include <linux/device.h>
 #include <linux/string.h>
 #include <linux/export.h>
+#include <linux/pm_dark_resume.h>
 #include <linux/pm_qos.h>
 #include <linux/pm_runtime.h>
 #include <linux/atomic.h>
@@ -412,9 +413,9 @@ static ssize_t dark_resume_active_store(struct device *dev,
 				const char *buf, size_t n)
 {
 	if (sysfs_streq(enabled, buf))
-		dev->power.use_dark_resume = true;
+		dev_dark_resume_set_active(dev, true);
 	else if (sysfs_streq(disabled, buf))
-		dev->power.use_dark_resume = false;
+		dev_dark_resume_set_active(dev, false);
 	else
 		return -EINVAL;
 	return n;
@@ -426,7 +427,7 @@ static DEVICE_ATTR(dark_resume_active, 0644,
 static ssize_t dark_resume_source_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	return dev->power.dpd && dev->power.dpd->is_source ?
+	return dev->power.dark_resume && dev->power.dark_resume->is_source ?
 			sprintf(buf, "%s\n", enabled) :
 			sprintf(buf, "%s\n", disabled);
 }
@@ -435,10 +436,10 @@ static ssize_t dark_resume_source_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t n)
 {
-	if (sysfs_streq(enabled, buf) && dev->power.dpd)
-		dpm_set_dark_source(dev->power.dpd, true);
-	else if (sysfs_streq(disabled, buf) && dev->power.dpd)
-		dpm_set_dark_source(dev->power.dpd, false);
+	if (sysfs_streq(enabled, buf) && dev->power.dark_resume)
+		dev_dark_resume_set_source(dev, true);
+	else if (sysfs_streq(disabled, buf) && dev->power.dark_resume)
+		dev_dark_resume_set_source(dev, false);
 	else
 		return -EINVAL;
 	return n;
@@ -540,14 +541,24 @@ static struct attribute *wakeup_attrs[] = {
 	&dev_attr_wakeup_total_time_ms.attr,
 	&dev_attr_wakeup_max_time_ms.attr,
 	&dev_attr_wakeup_last_time_ms.attr,
-	&dev_attr_dark_resume_active.attr,
-	&dev_attr_dark_resume_source.attr,
 #endif /* CONFIG_PM_SLEEP */
 	NULL,
 };
 static struct attribute_group pm_wakeup_attr_group = {
 	.name	= power_group_name,
 	.attrs	= wakeup_attrs,
+};
+
+static struct attribute *dark_resume_attrs[] = {
+#ifdef CONFIG_PM_SLEEP
+	&dev_attr_dark_resume_active.attr,
+	&dev_attr_dark_resume_source.attr,
+#endif
+	NULL,
+};
+static struct attribute_group pm_dark_resume_attr_group = {
+	.name	= power_group_name,
+	.attrs	= dark_resume_attrs,
 };
 
 static struct attribute *runtime_attrs[] = {
@@ -616,6 +627,16 @@ int wakeup_sysfs_add(struct device *dev)
 void wakeup_sysfs_remove(struct device *dev)
 {
 	sysfs_unmerge_group(&dev->kobj, &pm_wakeup_attr_group);
+}
+
+int dark_resume_sysfs_add(struct device *dev)
+{
+	return sysfs_merge_group(&dev->kobj, &pm_dark_resume_attr_group);
+}
+
+void dark_resume_sysfs_remove(struct device *dev)
+{
+	sysfs_unmerge_group(&dev->kobj, &pm_dark_resume_attr_group);
 }
 
 int pm_qos_sysfs_add(struct device *dev)

@@ -39,6 +39,14 @@ enum anx7808_state {
 	STATE_PLAY,
 };
 
+enum dp_link_bw {
+	BW_OVER = 0xFF,
+	BW_54G = 0x14,
+	BW_27G = 0x0A,
+	BW_162G = 0x06,
+	BW_NULL = 0x00
+};
+
 struct anx7808_data {
 	int pd_gpio;
 	int reset_gpio;
@@ -54,6 +62,7 @@ struct anx7808_data {
 	struct i2c_client *rx_p1;
 	struct delayed_work play_video;
 	struct workqueue_struct *wq;
+	enum dp_link_bw dp_supported_bw;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -420,7 +429,18 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
 	if (err)
 		return err;
-	DRM_DEBUG_KMS("DP link bandwidth: 0x%02x\n", dp_bw);
+	anx7808->dp_supported_bw = (enum dp_link_bw)dp_bw;
+	switch (anx7808->dp_supported_bw) {
+	case BW_162G:
+	case BW_27G:
+	case BW_54G:
+		break;
+	case BW_NULL:
+	case BW_OVER:
+	default:
+		DRM_INFO("Waiting to read DP bandwidth.");
+		return -EAGAIN;
+	}
 
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, VIDEO_PD);
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN | VIDEO_MUTE);
@@ -452,7 +472,8 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	usleep_range(1000, 2000);
 	anx7808_clear_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
 
-	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, 0x14);
+	dp_bw = (uint8_t)anx7808->dp_supported_bw;
+	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, dp_bw);
 	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG, SP_TX_LT_EN);
 
 	anx7808_read_reg(anx7808, SP_TX_LT_CTRL_REG, &status);

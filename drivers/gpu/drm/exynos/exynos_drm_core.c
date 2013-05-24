@@ -44,21 +44,12 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 {
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
+	int ret;
 
 	DRM_DEBUG_DRIVER("[DEV:%s] [SUBDRV:%s]\n", dev->devname,
 			subdrv_name(subdrv));
 
 	if (subdrv->probe) {
-		int ret;
-
-		/*
-		 * this probe callback would be called by sub driver
-		 * after setting of all resources to this sub driver,
-		 * such as clock, irq and register map are done or by load()
-		 * of exynos drm driver.
-		 *
-		 * P.S. note that this driver is considered for modularization.
-		 */
 		ret = subdrv->probe(dev, subdrv);
 		if (ret)
 			return ret;

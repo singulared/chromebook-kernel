@@ -2289,7 +2289,8 @@ static int max98095_probe(struct snd_soc_codec *codec)
 		M98095_DAI2M_TO_DACM|M98095_DAI3M_TO_DACM);
 
 	snd_soc_write(codec, M98095_092_PWR_EN_OUT, M98095_SPK_SPREADSPECTRUM);
-	snd_soc_write(codec, M98095_045_CFG_DSP, M98095_DSPNORMAL);
+	snd_soc_write(codec, M98095_045_CFG_DSP, M98095_DSPNORMAL |
+						 M98095_DC_BLOCK_FILTER_ENABLE);
 	snd_soc_write(codec, M98095_04E_CFG_HP, M98095_HPNORMAL);
 
 	snd_soc_write(codec, M98095_02C_DAI1_IOCFG,
