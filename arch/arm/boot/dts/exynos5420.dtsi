@@ -184,6 +184,8 @@
 		compatible = "samsung,s3c6410-rtc";
 		reg = <0x101E0000 0x100>;
 		interrupts = <0 43 0>, <0 44 0>;
+		clocks = <&clock 317>;
+		clock-names = "rtc";
 		status = "disabled";
 	};
 
