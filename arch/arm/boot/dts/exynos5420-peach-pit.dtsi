@@ -131,6 +131,7 @@
 
 	/* spi_2 */
 	spi@12d40000 {
+		status = "okay";
 		samsung,spi-src-clk = <0>;
 		num-cs = <1>;
 		ec: cros-ec@0 {
