@@ -248,7 +248,7 @@
 					fet1 {
 						regulator-name = "vcd_led";
 					};
-					fet2 {
+					tps65090_fet2: fet2 {
 						regulator-name = "video_mid";
 						regulator-always-on;
 					};
@@ -340,6 +340,13 @@
 		samsung,color-depth = <1>;
 		samsung,link-rate = <0x0a>;
 		samsung,lane-count = <2>;
+	};
+
+	hdmi {
+		hdmi-en-supply = <&tps65090_fet2>;
+		vdd-supply = <&ldo8_reg>;
+		vdd_osc-supply = <&ldo10_reg>;
+		vdd_pll-supply = <&ldo8_reg>;
 	};
 
 	sound {
