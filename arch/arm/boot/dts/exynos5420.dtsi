@@ -877,8 +877,10 @@
 		compatible = "arm,mali";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 219 0>, <0 74 0>, <0 117 0>;
-		clocks = <&clock 501>, <&clock 500>;
-		clock-names = "g3d", "aclk_g3d";
+		clocks = <&clock 501>, <&clock 500>, <&clock 6>, <&clock 1>,
+			<&clock 7>;
+		clock-names = "g3d", "aclk_g3d", "mout_vpll", "ext_xtal",
+			"fout_vpll";
 	};
 
 	hdmi {
