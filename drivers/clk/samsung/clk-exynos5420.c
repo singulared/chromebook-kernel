@@ -24,6 +24,9 @@
 #define GATE_BUS_CPU		0x700
 #define GATE_SCLK_CPU		0x800
 #define CLKOUT_CMU_CPU		0xa00
+#define RPLL_CON0		0x10140
+#define RPLL_CON1		0x10144
+#define RPLL_CON2		0x10148
 #define SRC_TOP0		0x10200
 #define SRC_TOP1		0x10204
 #define SRC_TOP2		0x10208
@@ -135,6 +138,9 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	GATE_BUS_CPU,
 	GATE_SCLK_CPU,
 	CLKOUT_CMU_CPU,
+	RPLL_CON0,
+	RPLL_CON1,
+	RPLL_CON2,
 	SRC_TOP0,
 	SRC_TOP1,
 	SRC_TOP2,
