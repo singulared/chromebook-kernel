@@ -25,6 +25,7 @@
 #define DISPLAY_FLAGS_PIXDATA_NEGEDGE	BIT(3)	/* drive data on neg. edge */
 #define DISPLAY_FLAGS_INTERLACED	BIT(4)
 #define DISPLAY_FLAGS_DOUBLESCAN	BIT(5)
+#define DISPLAY_FLAGS_DOUBLECLK		BIT(6)
 
 /*
  * A single signal can be specified via a range of minimal and maximal values
