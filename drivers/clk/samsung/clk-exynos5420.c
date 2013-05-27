@@ -301,9 +301,10 @@ struct samsung_fixed_factor_clock exynos5420_fixed_factor_clks[] __initdata = {
 };
 
 struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
-	MUX(none, "mout_mspll_cpu", mout_mspll_cpu_p, SRC_TOP7, 12, 2),
-	MUX(none, "mout_apll", mout_apll_p, SRC_CPU, 0, 1),
-	MUX(none, "mout_cpu", mout_cpu_p, SRC_CPU, 16, 1),
+	MUX_A(none, "mout_mspll_cpu", mout_mspll_cpu_p, SRC_TOP7, 12, 2,
+							"mout_mspll_cpu"),
+	MUX_A(none, "mout_apll", mout_apll_p, SRC_CPU, 0, 1, "mout_apll"),
+	MUX_A(none, "mout_cpu", mout_cpu_p, SRC_CPU, 16, 1, "mout_cpu"),
 	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP6, 28, 1),
 	MUX(none, "sclk_dpll", mout_dpll_p, SRC_TOP6, 24, 1),
 	MUX(none, "sclk_epll", mout_epll_p, SRC_TOP6, 20, 1),
@@ -534,6 +535,11 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(i2c8, "i2c8", "aclk66_peric", GATE_IP_PERIC, 28, 0, 0),
 	GATE(i2c9, "i2c9", "aclk66_peric", GATE_IP_PERIC, 30, 0, 0),
 	GATE(i2c10, "i2c10", "aclk66_peric", GATE_IP_PERIC, 31, 0, 0),
+
+	/* TODO(arjun.kv@samsung.com): Remove alias and fix ASV */
+	GATE_A(chipid, "chipid", "aclk66", GATE_IP_PERIS, 0, 0, 0,
+	       "chipid_apbif"),
+
 	/* SPI */
 	GATE(spi0, "spi0", "aclk66_peric", GATE_BUS_PERIC, 19, 0, 0),
 	GATE(spi1, "spi1", "aclk66_peric", GATE_BUS_PERIC, 20, 0, 0),
