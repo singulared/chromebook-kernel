@@ -14,7 +14,13 @@ Required properties:
    - VSYNC interrupt
    - FIFO level interrupt
    - FIMD System Interrupt
-
+ - clocks: List of clock handles. The following must be specified:
+   - fimd: Controls gating of aclk_200 to FIMD IP
+   - sclk_fimd: Controls gating of FIMD pixel clock
+   - mout_fimd: Mux to select parent of sclk_fimd
+   - sclk_mout_fimd: Parent clock for mout_fimd
+ - clock-names: Aliases for the above clocks. They should be "fimd",
+   "sclk_fimd", "mout_fimd", and "sclk_mout_fimd", respectively.
  - samsung,fimd-display: This property should specify the phandle of the
    display device node which holds the video interface timing with the
    below mentioned properties.
@@ -39,6 +45,8 @@ Required properties:
  - samsung,default-window: Specifies the default window number of the fimd controller.
 
  - samsung,fimd-win-bpp: Specifies the bits per pixel.
+
+ - samsung,fimd-src-clk-rate: Specifies the pixel clock rate.
 
 Optional properties:
  - samsung,fimd-vidout-rgb: Video output format is RGB.

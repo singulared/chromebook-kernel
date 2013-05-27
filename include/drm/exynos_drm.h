@@ -42,6 +42,7 @@ struct exynos_drm_fimd_pdata {
 	u32				vidcon1;
 	unsigned int			default_win;
 	unsigned int			bpp;
+	unsigned int			src_clk_rate;
 };
 
 /**
