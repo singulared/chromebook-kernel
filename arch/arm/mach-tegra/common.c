@@ -23,7 +23,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/of_irq.h>
-#include <linux/clk/tegra.h>
+#include <linux/clk-provider.h>
 
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/hardware/gic.h>
@@ -67,7 +67,7 @@ static const struct of_device_id tegra_dt_irq_match[] __initconst = {
 
 void __init tegra_dt_init_irq(void)
 {
-	tegra_clocks_init();
+	of_clk_init(NULL);
 	tegra_init_irq();
 	of_irq_init(tegra_dt_irq_match);
 }
