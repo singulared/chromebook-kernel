@@ -83,6 +83,10 @@ static struct sleep_save exynos5_sys_save[] = {
 	SAVE_ITEM(EXYNOS5_SYS_I2C_CFG),
 };
 
+static struct sleep_save exynos5420_sys_save[] = {
+	SAVE_ITEM(EXYNOS5_SYS_DISP1_BLK_CFG),
+};
+
 static struct sleep_save exynos_core_save[] = {
 	/* SROM side */
 	SAVE_ITEM(S5P_SROM_BW),
@@ -139,7 +143,9 @@ static void exynos_pm_prepare(void)
 		tmp = __raw_readl(EXYNOS5_JPEG_MEM_OPTION);
 		tmp &= ~EXYNOS5_OPTION_USE_RETENTION;
 		__raw_writel(tmp, EXYNOS5_JPEG_MEM_OPTION);
-	}
+	} else if (soc_is_exynos5420())
+		s3c_pm_do_save(exynos5420_sys_save,
+					ARRAY_SIZE(exynos5420_sys_save));
 
 	/* Set value of power down register for sleep mode */
 
@@ -400,6 +406,9 @@ static void exynos_pm_resume(void)
 	if (soc_is_exynos5250())
 		s3c_pm_do_restore(exynos5_sys_save,
 			ARRAY_SIZE(exynos5_sys_save));
+	else if (soc_is_exynos5420())
+		s3c_pm_do_restore(exynos5420_sys_save,
+			ARRAY_SIZE(exynos5420_sys_save));
 
 	s3c_pm_do_restore_core(exynos_core_save, ARRAY_SIZE(exynos_core_save));
 
