@@ -654,6 +654,36 @@
 		clock-names = "sysmmu";
 	};
 
+	mfc: codec@11000000 {
+		compatible = "samsung,mfc-v7";
+		reg = <0x11000000 0x10000>;
+		interrupts = <0 96 0>;
+		clocks = <&clock 401>, <&clock 400>;
+		clock-names = "mfc", "aclk_333";
+	};
+
+	sysmmu-mfc-l {
+		mmuname = "mfc_l";
+		reg = <0x11200000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <8 5>;
+		mmu-master = <&mfc>;
+		clocks = <&clock 402>;
+		clock-names = "sysmmu";
+	};
+
+	sysmmu-mfc-r {
+		mmuname = "mfc_r";
+		reg = <0x11210000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <6 2>;
+		mmu-master = <&mfc>;
+		clocks = <&clock 403>;
+		clock-names = "sysmmu";
+	};
+
 	sysmmu-fimd1 {
 		mmuname = "fimd1";
 		reg = <0x14640000 0x1000>;
