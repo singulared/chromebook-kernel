@@ -9,8 +9,8 @@
  * published by the Free Software Foundation.
 */
 
-/include/ "skeleton.dtsi"
-/include/ "exynos5420-pinctrl.dtsi"
+#include "skeleton.dtsi"
+#include "exynos5420-pinctrl.dtsi"
 
 / {
 	compatible = "samsung,exynos5420";

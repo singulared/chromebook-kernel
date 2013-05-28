@@ -10,7 +10,7 @@
 */
 
 /dts-v1/;
-/include/ "exynos5420.dtsi"
+#include "exynos5420.dtsi"
 
 / {
 	model = "SAMSUNG SMDK5420 board based on EXYNOS5420";

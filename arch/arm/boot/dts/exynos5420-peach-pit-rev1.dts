@@ -9,8 +9,8 @@
  */
 
 /dts-v1/;
-/include/ "exynos5420.dtsi"
-/include/ "exynos5420-peach-pit.dtsi"
+#include "exynos5420.dtsi"
+#include "exynos5420-peach-pit.dtsi"
 
 / {
 	model = "Google Peach Pit Rev 1";
