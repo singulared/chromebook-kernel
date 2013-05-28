@@ -126,7 +126,7 @@ enum exynos5420_clks {
 	aclk_g3d = 500, g3d,
 
 	/* mux clocks */
-	mout_fimd1 = 1024, mout_maudio0,
+	mout_fimd1 = 1024, mout_maudio0, mout_hdmi,
 
 	nr_clks,
 };
@@ -410,7 +410,7 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_mipi1", mout_group2_p, SRC_DISP10, 16, 3),
 	MUX(none, "mout_dp1", mout_group2_p, SRC_DISP10, 20, 3),
 	MUX(none, "mout_pixel", mout_group2_p, SRC_DISP10, 24, 3),
-	MUX(none, "mout_hdmi", mout_hdmi_p, SRC_DISP10, 28, 1),
+	MUX(mout_hdmi, "mout_hdmi", mout_hdmi_p, SRC_DISP10, 28, 1),
 };
 
 struct samsung_div_clock exynos5420_div_clks[] __initdata = {
