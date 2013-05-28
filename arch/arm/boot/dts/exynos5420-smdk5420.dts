@@ -333,6 +333,17 @@
 
 	hdmi {
 		hpd-gpio = <&gpx3 7 0>;
+		hdmi-en-supply = <&fixed_regulator>;
+		vdd-supply = <&ldo8_reg>;
+		vdd_osc-supply = <&ldo10_reg>;
+		vdd_pll-supply = <&ldo8_reg>;
+	};
+
+	fixed_regulator: fixedregulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "hdmi-en";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
 	};
 
 	i2c_2: i2c@12C80000 {
