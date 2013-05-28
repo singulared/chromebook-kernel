@@ -199,6 +199,7 @@ clock which they consume.
 
   aclk_g3d		500
   g3d			501
+  smmu_tv		502
 
   Mux			ID
   ----------------------------
