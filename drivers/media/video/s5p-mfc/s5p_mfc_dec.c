@@ -334,10 +334,9 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	    ctx->state >= MFCINST_HEAD_PARSED &&
 	    ctx->state < MFCINST_ABORT) {
 		/* This is run on CAPTURE (decode output) */
-		/* Width and height are set to the dimensions
-		   of the movie, the buffer is bigger and
-		   further processing stages should crop to this
-		   rectangle. */
+		/* Width and height are set to the dimensions of the buffer,
+		   The movie's dimensions may be smaller; the cropping rectangle
+		   required should be queried with VIDIOC_G_CROP. */
 		pix_mp->width = ctx->buf_width;
 		pix_mp->height = ctx->buf_height;
 		pix_mp->field = V4L2_FIELD_NONE;

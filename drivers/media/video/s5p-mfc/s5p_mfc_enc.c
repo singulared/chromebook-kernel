@@ -1518,7 +1518,56 @@ static int vidioc_g_parm(struct file *file, void *priv,
 		a->parm.output.timeperframe.numerator =
 					ctx->enc_params.rc_framerate_denom;
 	} else {
-		mfc_err("Setting FPS is only possible for the output queue\n");
+		mfc_err("Getting FPS is only possible for the output queue\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int vidioc_g_crop(struct file *file, void *priv, struct v4l2_crop *a)
+{
+	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
+	struct s5p_mfc_enc_params *p = &ctx->enc_params;
+
+	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		a->c.left = p->crop_left_offset;
+		a->c.top = p->crop_top_offset;
+		a->c.width = ctx->img_width -
+			(p->crop_left_offset + p->crop_right_offset);
+		a->c.height = ctx->img_height -
+			(p->crop_top_offset + p->crop_bottom_offset);
+	} else {
+		mfc_err("Getting crop is only possible for the output queue\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int vidioc_s_crop(struct file *file, void *priv, struct v4l2_crop *a)
+{
+	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
+	struct s5p_mfc_enc_params *p = &ctx->enc_params;
+
+	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+		int left, right, top, bottom;
+		left = round_down(a->c.left, 16);
+		right = ctx->img_width - (left + a->c.width);
+		top = round_down(a->c.top, 16);
+		bottom = ctx->img_height - (top + a->c.height);
+		if (left > ctx->img_width)
+			left = ctx->img_width;
+		if (right < 0)
+			right = 0;
+		if (top > ctx->img_height)
+			top = ctx->img_height;
+		if (bottom < 0)
+			bottom = 0;
+		p->crop_left_offset = left;
+		p->crop_right_offset = right;
+		p->crop_top_offset = top;
+		p->crop_bottom_offset = bottom;
+	} else {
+		mfc_err("Setting crop is only possible for the output queue\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -1598,6 +1647,8 @@ static const struct v4l2_ioctl_ops s5p_mfc_enc_ioctl_ops = {
 	.vidioc_streamoff = vidioc_streamoff,
 	.vidioc_s_parm = vidioc_s_parm,
 	.vidioc_g_parm = vidioc_g_parm,
+	.vidioc_g_crop = vidioc_g_crop,
+	.vidioc_s_crop = vidioc_s_crop,
 	.vidioc_encoder_cmd = vidioc_encoder_cmd,
 	.vidioc_subscribe_event = vidioc_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,

@@ -535,12 +535,16 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	/* height */
 	WRITEL(ctx->img_height, S5P_FIMV_E_FRAME_HEIGHT_V6); /* 16 align */
 
-	/* cropped width */
-	WRITEL(ctx->img_width, S5P_FIMV_E_CROPPED_FRAME_WIDTH_V6);
-	/* cropped height */
-	WRITEL(ctx->img_height, S5P_FIMV_E_CROPPED_FRAME_HEIGHT_V6);
-	/* cropped offset */
-	WRITEL(0x0, S5P_FIMV_E_FRAME_CROP_OFFSET_V6);
+	/* cropped width, pixels */
+	WRITEL(ctx->img_width - (p->crop_left_offset + p->crop_right_offset),
+		S5P_FIMV_E_CROPPED_FRAME_WIDTH_V6);
+	/* cropped height, pixels */
+	WRITEL(ctx->img_height - (p->crop_top_offset + p->crop_bottom_offset),
+		S5P_FIMV_E_CROPPED_FRAME_HEIGHT_V6);
+	/* cropped offset, macroblocks */
+	WRITEL(((p->crop_left_offset / 16) & 0x2FF) |
+		(((p->crop_top_offset / 16) & 0x2FF) << 10),
+		S5P_FIMV_E_FRAME_CROP_OFFSET_V6);
 
 	/* pictype : IDR period */
 	reg = 0;
