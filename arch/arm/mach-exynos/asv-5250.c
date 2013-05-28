@@ -396,6 +396,9 @@ static int exynos5250_asv_init(void)
 	struct samsung_asv *exynos_asv;
 	struct clk *chipid_clk;
 
+	if (!(soc_is_exynos5250()))
+		return 0;
+
 	printk(KERN_INFO  "EXYNOS5250: Adaptive Support Voltage init\n");
 
 	chipid_clk = clk_get(NULL, "chipid_apbif");

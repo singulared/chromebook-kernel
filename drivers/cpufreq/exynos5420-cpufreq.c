@@ -21,6 +21,7 @@
 #include <plat/clock.h>
 
 #include <mach/cpufreq.h>
+#include <mach/asv-exynos.h>
 
 #define CPUFREQ_NUM_LEVELS	(L18 + 1)
 #define EXYNOS5420_M_MASK	0x3ff
@@ -296,9 +297,17 @@ static void exynos5420_set_frequency(unsigned int old_index,
 static void __init set_volt_table(void)
 {
 	unsigned int i;
+	unsigned int asv_volt = 0;
 
 	for (i = 0; i < CPUFREQ_NUM_LEVELS; i++) {
-		exynos5420_volt_table[i] = asv_voltage_5420[i];
+#ifdef CONFIG_ARM_EXYNOS5420_ASV
+		asv_volt = get_match_volt
+			(ID_ARM, exynos5420_freq_table[i].frequency);
+#endif
+		if (!asv_volt)
+			exynos5420_volt_table[i] = asv_voltage_5420[i];
+		else
+			exynos5420_volt_table[i] = asv_volt;
 		pr_debug("CPUFREQ of CA15 L%d : %d uV\n", i,
 				exynos5420_volt_table[i]);
 	}

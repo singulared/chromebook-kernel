@@ -188,6 +188,11 @@ config EXYNOS_SETUP_SPI
 	help
 	  Common setup code for SPI GPIO configurations.
 
+config ARM_EXYNOS5420_ASV
+	bool "SAMSUNG Exynos 5420 ASV support"
+	depends on SOC_EXYNOS5420
+	help
+	  Enables EXYNOS5420 ASV support
 # machine support
 
 if ARCH_EXYNOS4
