@@ -358,41 +358,41 @@
 				       "gpf1-0", "gpf1-1", "gpf1-2", "gpf1-3";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		cam_i2c2_bus: cam-i2c2-bus {
 			samsung,pins = "gpf0-4", "gpf0-5";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 		cam_spi1_bus: cam-spi1-bus {
 			samsung,pins = "gpe0-4", "gpe0-5", "gpf0-2", "gpf0-3";
 			samsung,pin-function = <4>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		cam_i2c1_bus: cam-i2c1-bus {
 			samsung,pins = "gpf0-2", "gpf0-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		cam_i2c0_bus: cam-i2c0-bus {
 			samsung,pins = "gpf0-0", "gpf0-1";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		cam_spi0_bus: cam-spi0-bus {
 			samsung,pins = "gpf1-0", "gpf1-1", "gpf1-2", "gpf1-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		cam_bayrgb_bus: cam-bayrgb-bus {
@@ -403,7 +403,7 @@
 				       "gpg2-0";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 	};
 
@@ -491,7 +491,7 @@
 			samsung,pins = "gpa0-2", "gpa0-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		uart1_data: uart1-data {
@@ -505,14 +505,14 @@
 			samsung,pins = "gpa0-6", "gpa0-7";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c2_bus: i2c2-bus {
 			samsung,pins = "gpa0-6", "gpa0-7";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		uart2_data: uart2-data {
@@ -526,14 +526,14 @@
 			samsung,pins = "gpa1-2", "gpa1-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c3_bus: i2c3-bus {
 			samsung,pins = "gpa1-2", "gpa1-3";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		uart3_data: uart3-data {
@@ -561,14 +561,14 @@
 			samsung,pins = "gpa2-0", "gpa2-1";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <3>;
 		};
 
 		i2c5_hs_bus: i2c5-hs-bus {
 			samsung,pins = "gpa2-2", "gpa2-3";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2s1_bus: i2s1-bus {
@@ -621,14 +621,14 @@
 			samsung,pins = "gpb1-3", "gpb1-4";
 			samsung,pin-function = <4>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c7_hs_bus: i2c7-hs-bus {
 			samsung,pins = "gpb2-2", "gpb2-3";
 			samsung,pin-function = <3>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c0_bus: i2c0-bus {
@@ -649,21 +649,21 @@
 			samsung,pins = "gpb3-4", "gpb3-5";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c9_hs_bus: i2c9-hs-bus {
 			samsung,pins = "gpb3-6", "gpb3-7";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 
 		i2c10_hs_bus: i2c10-hs-bus {
 			samsung,pins = "gpb4-0", "gpb4-1";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samaung,pin-drv = <0>;
+			samsung,pin-drv = <0>;
 		};
 	};
 
