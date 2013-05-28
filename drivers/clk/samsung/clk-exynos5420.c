@@ -279,7 +279,7 @@ PNAME(mout_audio2_p)		= { "fin_pll", "cdclk2", "sclk_dpll",
 PNAME(mout_spdif_p)		= { "fin_pll", "dout_audio0", "dout_audio1",
 					"dout_audio2", "spdof_extclk",
 					"sclk_ipll", "sclk_epll", "sclk_rpll" };
-PNAME(mout_hdmi_p)		= { "sclk_hdmiphy", "dout_hdmi_pixel" };
+PNAME(mout_hdmi_p)		= { "dout_hdmi_pixel", "sclk_hdmiphy" };
 PNAME(mout_maudio0_p)		= { "fin_pll", "maudio_clk", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
