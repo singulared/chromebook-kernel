@@ -28,6 +28,8 @@ clock which they consume.
   fout_epll		3
   sclk_epll		4
   sclk_mpll		5
+  sclk_vpll		6
+  fout_vpll		7
 
   [Clock Gate for Special Clocks]
 
