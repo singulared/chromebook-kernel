@@ -190,8 +190,8 @@
 	};
 
 	lcd_fimd0: lcd_panel0 {
-			lcd-htiming = <4 4 4 1280>;
-			lcd-vtiming = <4 4 4 800>;
+			lcd-htiming = <80 48 32 2560>;
+			lcd-vtiming = <16 8 6 1600>;
 	};
 
 	fimd {
@@ -201,8 +201,7 @@
 		samsung,fimd-frame-rate = <60>;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
-		samsung,src-clk-name = "mout_mpll_user";
-		samsung,fimd-src-clk-rate = <800000000>;
+		samsung,fimd-src-clk-rate = <266000000>;
 	};
 
 	display-port-controller {
