@@ -769,6 +769,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <7 4>;
 		mmu-master = <&mixer>;
+		clocks = <&clock 347>;
+		clock-names = "sysmmu";
 	};
 
 	sysmmu-gsc0 {
