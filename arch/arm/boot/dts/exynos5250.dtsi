@@ -713,8 +713,8 @@
 		interrupt-parent = <&combiner>;
 		reg = <0x14400000 0x40000>;
 		interrupts = <18 5>, <18 4>, <18 6>;
-		clocks = <&clock 133>, <&clock 339>;
-		clock-names = "sclk_fimd", "fimd";
+		clocks = <&clock 133>, <&clock 339>, <&clock 1025>, <&clock 2>;
+		clock-names = "sclk_fimd", "fimd", "mout_fimd", "sclk_mout_fimd";
 	};
 
 	sysmmu-mfc-l {
