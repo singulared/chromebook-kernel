@@ -409,7 +409,7 @@
 	};
 
 	lcd_fimd0: lcd_panel0 {
-		lcd-htiming = <80 40 40 1366>;
+		lcd-htiming = <40 40 32 1366>;
 		lcd-vtiming = <10 12 6 768>;
 	};
 
