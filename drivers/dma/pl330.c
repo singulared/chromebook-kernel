@@ -3138,7 +3138,18 @@ static struct amba_driver pl330_driver = {
 	.remove = pl330_remove,
 };
 
-module_amba_driver(pl330_driver);
+static int __init pl330_init(void)
+{
+	return amba_driver_register(&pl330_driver);
+}
+subsys_initcall(pl330_init);
+
+static void __exit pl330_exit(void)
+{
+	amba_driver_unregister(&pl330_driver);
+}
+module_exit(pl330_exit);
+
 
 MODULE_AUTHOR("Jaswinder Singh <jassi.brar@samsung.com>");
 MODULE_DESCRIPTION("API Driver for PL330 DMAC");
