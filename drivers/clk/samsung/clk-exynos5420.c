@@ -640,25 +640,25 @@ void __init exynos5420_clk_init(struct device_node *np)
 			ext_clk_match);
 
 	apll = samsung_clk_register_pll35xx("fout_apll", "oscclk",
-			reg_base);
+			reg_base, NULL, 0);
 	bpll = samsung_clk_register_pll35xx("fout_bpll", "oscclk",
-			reg_base + 0x20010);
+			reg_base + 0x20010, NULL, 0);
 	cpll = samsung_clk_register_pll35xx("fout_cpll", "oscclk",
-			reg_base + 0x10020);
+			reg_base + 0x10020, NULL, 0);
 	dpll = samsung_clk_register_pll35xx("fout_dpll", "oscclk",
-			reg_base + 0x10028);
+			reg_base + 0x10028, NULL, 0);
 	epll = samsung_clk_register_pll2650x("fout_epll", "oscclk",
 			reg_base + 0x10130);
 	rpll = samsung_clk_register_pll2650x("fout_rpll", "oscclk",
 			reg_base + 0x10140);
 	ipll = samsung_clk_register_pll35xx("fout_ipll", "oscclk",
-			reg_base + 0x10050);
+			reg_base + 0x10050, NULL, 0);
 	mpll = samsung_clk_register_pll35xx("fout_mpll", "oscclk",
-			reg_base + 0x10080);
+			reg_base + 0x10080, NULL, 0);
 	spll = samsung_clk_register_pll35xx("fout_spll", "oscclk",
-			reg_base + 0x10060);
+			reg_base + 0x10060, NULL, 0);
 	vpll = samsung_clk_register_pll35xx("fout_vpll", "oscclk",
-			reg_base + 0x10070);
+			reg_base + 0x10070, NULL, 0);
 
 	samsung_clk_register_fixed_rate(exynos5420_fixed_rate_clks,
 			ARRAY_SIZE(exynos5420_fixed_rate_clks));
