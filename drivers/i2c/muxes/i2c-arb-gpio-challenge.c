@@ -243,7 +243,17 @@ static struct platform_driver i2c_arbitrator_driver = {
 	},
 };
 
-module_platform_driver(i2c_arbitrator_driver);
+static int __init i2c_arbitrator_init(void)
+{
+	return platform_driver_register(&i2c_arbitrator_driver);
+}
+subsys_initcall(i2c_arbitrator_init);
+
+static void __exit i2c_arbitrator_exit(void)
+{
+	platform_driver_unregister(&i2c_arbitrator_driver);
+}
+module_exit(i2c_arbitrator_exit);
 
 MODULE_DESCRIPTION("GPIO-based I2C Arbitration");
 MODULE_AUTHOR("Doug Anderson <dianders@chromium.org>");
