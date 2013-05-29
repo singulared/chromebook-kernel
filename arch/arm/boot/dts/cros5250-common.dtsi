@@ -321,6 +321,10 @@
 					regulator-always-on;
 				};
 			};
+
+			maxim_rtc: rtc {
+				reg = <0x6>;
+			};
 		};
 	};
 
