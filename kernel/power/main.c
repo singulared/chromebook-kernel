@@ -386,6 +386,8 @@ static ssize_t wakeup_count_store(struct kobject *kobj,
 	if (sscanf(buf, "%u", &val) == 1) {
 		if (pm_save_wakeup_count(val))
 			return n;
+		else
+			pm_print_active_wakeup_sources();
 	}
 	return -EINVAL;
 }
