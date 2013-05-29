@@ -97,12 +97,14 @@
 #define GATE_IP_PERIL		0xc950
 #define E4210_GATE_IP_PERIR	0xc960
 #define GATE_BLOCK		0xc970
+#define E4X12_MPLL_LOCK		0x10008
 #define E4X12_MPLL_CON0		0x10108
 #define SRC_DMC			0x10200
 #define SRC_MASK_DMC		0x10300
 #define DIV_DMC0		0x10500
 #define DIV_DMC1		0x10504
 #define GATE_IP_DMC		0x10900
+#define APLL_LOCK		0x14000
 #define APLL_CON0		0x14100
 #define E4210_MPLL_CON0		0x14108
 #define SRC_CPU			0x14200
@@ -1019,13 +1021,13 @@ void __init exynos4_clk_init(struct device_node *np, enum exynos4_soc exynos4_so
 					reg_base + VPLL_CON0, pll_4650c);
 	} else {
 		apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
-					reg_base + APLL_CON0);
+					reg_base + APLL_LOCK);
 		mpll = samsung_clk_register_pll35xx("fout_mpll", "fin_pll",
-					reg_base + E4X12_MPLL_CON0);
+					reg_base + E4X12_MPLL_LOCK);
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-					reg_base + EPLL_CON0);
+					reg_base + EPLL_LOCK);
 		vpll = samsung_clk_register_pll36xx("fout_vpll", "fin_pll",
-					reg_base + VPLL_CON0);
+					reg_base + VPLL_LOCK);
 	}
 
 	samsung_clk_add_lookup(apll, fout_apll);

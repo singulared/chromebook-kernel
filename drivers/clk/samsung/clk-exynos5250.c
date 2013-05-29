@@ -507,19 +507,19 @@ void __init exynos5250_clk_init(struct device_node *np)
 			ext_clk_match);
 
 	apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
-			reg_base + 0x100);
+			reg_base);
 	mpll = samsung_clk_register_pll35xx("fout_mpll", "fin_pll",
-			reg_base + 0x4100);
+			reg_base + 0x4000);
 	bpll = samsung_clk_register_pll35xx("fout_bpll", "fin_pll",
-			reg_base + 0x20110);
+			reg_base + 0x20010);
 	gpll = samsung_clk_register_pll35xx("fout_gpll", "fin_pll",
-			reg_base + 0x10150);
+			reg_base + 0x10050);
 	cpll = samsung_clk_register_pll35xx("fout_cpll", "fin_pll",
-			reg_base + 0x10120);
+			reg_base + 0x10020);
 	epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-			reg_base + 0x10130);
+			reg_base + 0x10030);
 	vpll = samsung_clk_register_pll36xx("fout_vpll", "mout_vpllsrc",
-			reg_base + 0x10140);
+			reg_base + 0x10040);
 
 	samsung_clk_register_fixed_rate(exynos5250_fixed_rate_clks,
 			ARRAY_SIZE(exynos5250_fixed_rate_clks));
