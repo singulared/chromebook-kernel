@@ -653,10 +653,10 @@ void __init exynos5420_clk_init(struct device_node *np)
 			reg_base + 0x10020, NULL, 0);
 	dpll = samsung_clk_register_pll35xx("fout_dpll", "fin_pll",
 			reg_base + 0x10028, NULL, 0);
-	epll = samsung_clk_register_pll2650x("fout_epll", "fin_pll",
-			reg_base + 0x10130);
-	rpll = samsung_clk_register_pll2650x("fout_rpll", "fin_pll",
-			reg_base + 0x10140);
+	epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
+			reg_base + 0x10030, NULL, 0);
+	rpll = samsung_clk_register_pll36xx("fout_rpll", "fin_pll",
+			reg_base + 0x10040, NULL, 0);
 	ipll = samsung_clk_register_pll35xx("fout_ipll", "fin_pll",
 			reg_base + 0x10050, NULL, 0);
 	mpll = samsung_clk_register_pll35xx("fout_mpll", "fin_pll",
