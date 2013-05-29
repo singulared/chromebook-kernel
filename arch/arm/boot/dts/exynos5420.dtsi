@@ -798,6 +798,17 @@
 		mmu-master = <&fimd>;
 	};
 
+	sysmmu-tv {
+		mmuname = "tv";
+		reg = <0x14650000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <7 4>;
+		mmu-master = <&mixer>;
+		clocks = <&clock 502>;
+		clock-names = "sysmmu";
+	};
+
 	display-port-controller {
 		compatible = "samsung,exynos5-dp";
 		reg = <0x145b0000 0x1000>;
