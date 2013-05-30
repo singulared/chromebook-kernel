@@ -67,6 +67,8 @@
 	/* hsi2c4 */
 	hsi2c@12CA0000 {
 		status = "okay";
+		samsung,hs-mode;
+		clock-frequency = <1000000>;
 
 		max77802-pmic@9 {
 			compatible = "maxim,max77802";
