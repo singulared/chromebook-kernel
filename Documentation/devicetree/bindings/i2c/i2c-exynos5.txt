@@ -20,7 +20,8 @@ Optional properties:
   - samsung,hs-mode: Mode of operation, High speed or Fast speed mode. If not
     specified, default is fast speed.
   - clock-frequency: Desired operating frequency in Hz of the bus.
-    If not specified, the default value in Hz is 100000.
+    If not specified, the default value in 100khz in fast-speed mode and 1Mhz
+    in high-speed mode.
 
 Example:
 

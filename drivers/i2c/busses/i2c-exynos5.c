@@ -144,7 +144,7 @@
  * are calculated against this frequency
  */
 #define HSI2C_HS_TX_CLOCK	1000000
-#define HSI2C_FS_TX_CLOCK	1000000
+#define HSI2C_FS_TX_CLOCK	100000
 #define HSI2C_HIGH_SPD		1
 #define HSI2C_FAST_SPD		0
 
