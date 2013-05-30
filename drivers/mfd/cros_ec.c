@@ -22,6 +22,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/cros_ec.h>
 #include <linux/mfd/cros_ec_commands.h>
+#include <linux/module.h>
 
 int cros_ec_prepare_tx(struct cros_ec_device *ec_dev,
 		       struct cros_ec_msg *msg)
@@ -160,6 +161,7 @@ fail_dout:
 fail_din:
 	return err;
 }
+EXPORT_SYMBOL(cros_ec_register);
 
 int cros_ec_remove(struct cros_ec_device *ec_dev)
 {
@@ -173,6 +175,7 @@ int cros_ec_remove(struct cros_ec_device *ec_dev)
 
 	return 0;
 }
+EXPORT_SYMBOL(cros_ec_remove);
 
 #ifdef CONFIG_PM_SLEEP
 int cros_ec_suspend(struct cros_ec_device *ec_dev)
