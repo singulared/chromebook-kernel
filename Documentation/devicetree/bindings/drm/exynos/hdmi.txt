@@ -14,6 +14,28 @@ Required properties:
 	c) pin function mode.
 	d) optional flags and pull up/down.
 	e) drive strength.
+- clocks: list of clock IDs from SoC clock driver.
+	a) hdmi: It is required for gate operation on aclk_200_disp1 clock
+		which clocks the display1 block.
+	b) sclk_hdmi: It is required for gate operation on sclk_hdmi clock
+		which clocks hdmi IP.
+	c) sclk_pixel: Parent for mux mout_hdmi.
+	d) sclk_hdmiphy: Parent for mux mout_hdmi.
+	e) mout_hdmi: It is required by the driver to switch between the 2
+		parents i.e. sclk_pixel and sclk_hdmiphy. If hdmiphy is stable
+		after configuration, parent is set to sclk_hdmiphy else
+		sclk_pixel.
+- clock-names: aliases as per driver requirements for above clock IDs:
+	"hdmi", "sclk_hdmi", "sclk_pixel", "sclk_hdmiphy" and "mout_hdmi".
+- phy-power-control child node: it is required to control the power to hdmiphy.
+	It should provide the following information:
+	- reg : base physical address and size of phy control registers
+- hdmiphy child node: it is a optional node required for SoCs in which hdmiphy
+	is mapped to the platform bus. It is required to map the phy registers
+	and configure them for given resolution. This node should provide the
+	following information:
+        - reg : base physical address and size of hdmiphy configuration
+		registers
 
 Example:
 
@@ -22,4 +44,8 @@ Example:
 		reg = <0x14530000 0x100000>;
 		interrupts = <0 95 0>;
 		hpd-gpio = <&gpx3 7 0xf 1 3>;
+		clocks = <&clock 344>, <&clock 136>, <&clock 137>,
+				<&clock 157>, <&clock 1024>;
+		clock-names = "hdmi", "sclk_hdmi", "sclk_pixel",
+				"sclk_hdmiphy", "mout_hdmi";
 	};
