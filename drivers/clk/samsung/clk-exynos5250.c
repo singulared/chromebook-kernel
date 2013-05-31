@@ -81,7 +81,7 @@ enum exynos5250_clks {
 	none,
 
 	/* core clocks */
-	fin_pll,
+	fin_pll, sclk_vpll,
 
 	/* gate for special clocks (sclk) */
 	sclk_cam_bayer = 128, sclk_cam0, sclk_cam1, sclk_gscl_wa, sclk_gscl_wb,
@@ -104,7 +104,7 @@ enum exynos5250_clks {
 	wdt, rtc, tmu, fimd1, mie1, dsim0, dp, mixer, hdmi, g3d, aclk_400_g3d,
 
 	/* mux clocks */
-	mout_hdmi = 1024,
+	mout_hdmi = 1024, mout_fimd1,
 
 	nr_clks,
 };
@@ -227,7 +227,8 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(none, "sclk_mpll", mout_mpll_p, SRC_CORE1, 8, 1),
 	MUX(none, "mout_bpll_fout", mout_bpll_fout_p, PLL_DIV2_SEL, 0, 1),
 	MUX(none, "sclk_bpll", mout_bpll_p, SRC_CDREX, 0, 1),
-	MUX(none, "sclk_vpll", mout_vpll_p, SRC_TOP2, 16, 1),
+	MUX_F(sclk_vpll, "sclk_vpll", mout_vpll_p, SRC_TOP2, 16, 1,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "sclk_epll", mout_epll_p, SRC_TOP2, 12, 1),
 	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP2, 8, 1),
 	MUX(none, "sclk_mpll_user", mout_mpll_user_p, SRC_TOP2, 20, 1),
@@ -243,7 +244,8 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(none, "mout_cam1", mout_group1_p, SRC_GSCL, 20, 4),
 	MUX(none, "mout_gscl_wa", mout_group1_p, SRC_GSCL, 24, 4),
 	MUX(none, "mout_gscl_wb", mout_group1_p, SRC_GSCL, 28, 4),
-	MUX(none, "mout_fimd1", mout_group1_p, SRC_DISP1_0, 0, 4),
+	MUX_F(mout_fimd1, "mout_fimd1", mout_group1_p, SRC_DISP1_0, 0, 4,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_mipi1", mout_group1_p, SRC_DISP1_0, 12, 4),
 	MUX(none, "mout_dp", mout_group1_p, SRC_DISP1_0, 16, 4),
 	MUX(mout_hdmi, "mout_hdmi", mout_hdmi_p, SRC_DISP1_0, 20, 1),
@@ -283,7 +285,8 @@ struct samsung_div_clock exynos5250_div_clks[] __initdata = {
 	DIV(none, "div_cam1", "mout_cam1", DIV_GSCL, 20, 4),
 	DIV(none, "div_gscl_wa", "mout_gscl_wa", DIV_GSCL, 24, 4),
 	DIV(none, "div_gscl_wb", "mout_gscl_wb", DIV_GSCL, 28, 4),
-	DIV(none, "div_fimd1", "mout_fimd1", DIV_DISP1_0, 0, 4),
+	DIV_F(none, "div_fimd1", "mout_fimd1", DIV_DISP1_0, 0, 4,
+						CLK_SET_RATE_PARENT, 0),
 	DIV(none, "div_mipi1", "mout_mipi1", DIV_DISP1_0, 16, 4),
 	DIV(none, "div_dp", "mout_dp", DIV_DISP1_0, 24, 4),
 	DIV(none, "div_jpeg", "mout_jpeg", DIV_GEN, 4, 4),
