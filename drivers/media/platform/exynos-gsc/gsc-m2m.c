@@ -755,30 +755,25 @@ int gsc_register_m2m_device(struct gsc_dev *gsc)
 	gsc->m2m.m2m_dev = v4l2_m2m_init(&gsc_m2m_ops);
 	if (IS_ERR(gsc->m2m.m2m_dev)) {
 		dev_err(&pdev->dev, "failed to initialize v4l2-m2m device\n");
-		ret = PTR_ERR(gsc->m2m.m2m_dev);
-		goto err_m2m_r1;
+		return PTR_ERR(gsc->m2m.m2m_dev);
 	}
 
 	ret = video_register_device(&gsc->vdev, VFL_TYPE_GRABBER, 10);
 	if (ret) {
 		dev_err(&pdev->dev,
 			 "%s(): failed to register video device\n", __func__);
-		goto err_m2m_r2;
+		v4l2_m2m_release(gsc->m2m.m2m_dev);
+		return ret;
 	}
 
 	pr_debug("gsc m2m driver registered as /dev/video%d", gsc->vdev.num);
 	return 0;
-
-err_m2m_r2:
-	v4l2_m2m_release(gsc->m2m.m2m_dev);
-err_m2m_r1:
-	video_device_release(gsc->m2m.vfd);
-
-	return ret;
 }
 
 void gsc_unregister_m2m_device(struct gsc_dev *gsc)
 {
-	if (gsc)
+	if (gsc) {
+		video_unregister_device(gsc->m2m.vfd);
 		v4l2_m2m_release(gsc->m2m.m2m_dev);
+	}
 }
