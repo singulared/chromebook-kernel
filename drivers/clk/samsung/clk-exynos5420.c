@@ -88,7 +88,7 @@ enum exynos5420_clks {
 	none,
 
 	/* core clocks */
-	oscclk /* AKA "xxti", AKA "fin_pll" */,
+	oscclk /* AKA "xxti", AKA "fin_pll" */, sclk_rpll,
 
 	/* gate for special clocks (sclk) */
 	sclk_uart0 = 128, sclk_uart1, sclk_uart2, sclk_uart3, sclk_mmc0 = 132,
@@ -123,6 +123,9 @@ enum exynos5420_clks {
 	aclk333_432_gscl = 490, smmu_3aa, smmu_fimcl0, smmu_fimcl1, smmu_fimcl3,
 	fimc_lite3,
 	aclk_g3d = 500, g3d,
+
+	/* mux clocks */
+	mout_fimd1 = 1024,
 
 	nr_clks,
 };
@@ -304,7 +307,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP6, 28, 1),
 	MUX(none, "sclk_dpll", mout_dpll_p, SRC_TOP6, 24, 1),
 	MUX(none, "sclk_epll", mout_epll_p, SRC_TOP6, 20, 1),
-	MUX(none, "sclk_rpll", mout_rpll_p, SRC_TOP6, 16, 1),
+	MUX_F(sclk_rpll, "sclk_rpll", mout_rpll_p, SRC_TOP6, 16, 1,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1),
 	MUX(none, "sclk_spll", mout_spll_p, SRC_TOP6, 8, 1),
 	MUX(none, "sclk_vpll", mout_vpll_p, SRC_TOP6, 4, 1),
@@ -396,7 +400,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_usbd300", mout_group2_p, SRC_FSYS, 20, 3),
 	MUX(none, "mout_usbd301", mout_group2_p, SRC_FSYS, 4, 3),
 	/* Disp1 Block*/
-	MUX(none, "mout_fimd1", mout_group3_p, SRC_DISP10, 4, 3),
+	MUX_F(mout_fimd1, "mout_fimd1", mout_group3_p, SRC_DISP10, 4, 3,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_mipi1", mout_group2_p, SRC_DISP10, 16, 3),
 	MUX(none, "mout_dp1", mout_group2_p, SRC_DISP10, 20, 3),
 	MUX(none, "mout_pixel", mout_group2_p, SRC_DISP10, 24, 3),
@@ -457,7 +462,8 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_usbd300", "mout_usbd300", DIV_FSYS0, 24, 4),
 	DIV(none, "dout_unipro", "mout_unipro", DIV_FSYS2, 24, 4),
 	/* Display */
-	DIV(none, "dout_fimd1", "mout_fimd1", DIV_DISP10, 0, 4),
+	DIV_F(none, "dout_fimd1", "mout_fimd1", DIV_DISP10, 0, 4,
+						CLK_SET_RATE_PARENT, 0),
 	DIV(none, "dout_mipi1", "mout_mipi1", DIV_DISP10, 16, 8),
 	DIV(none, "dout_dp1", "mout_dp1", DIV_DISP10, 24, 4),
 	DIV(none, "dout_hdmi_pixel", "mout_pixel", DIV_DISP10, 28, 4),

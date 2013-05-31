@@ -24,6 +24,7 @@ clock which they consume.
   ----------------------------
 
   oscclk		1	(AKA xxti, AKA fin_pll)
+  sclk_rpll		2
 
   [Clock Gate for Special Clocks]
 
@@ -195,6 +196,11 @@ clock which they consume.
 
   aclk_g3d		500
   g3d			501
+
+  Mux			ID
+  ----------------------------
+
+  mout_fimd1		1024
 
 Example 1: An example of a clock controller node is listed below.
 
