@@ -265,7 +265,7 @@
 						fet1 {
 							regulator-name = "vcd_led";
 						};
-						fet2 {
+						tps65090_fet2: fet2 {
 							regulator-name = "video_mid";
 							regulator-always-on;
 						};

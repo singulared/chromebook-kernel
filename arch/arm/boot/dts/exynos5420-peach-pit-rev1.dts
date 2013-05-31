@@ -450,4 +450,11 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&dp_hpd>;
 	};
+
+	hdmi {
+		hdmi-en-supply = <&tps65090_fet2>;
+		vdd-supply = <&ldo8_reg>;
+		vdd_osc-supply = <&ldo10_reg>;
+		vdd_pll-supply = <&ldo8_reg>;
+	};
 };
