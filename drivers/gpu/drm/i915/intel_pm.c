@@ -2076,7 +2076,7 @@ haswell_update_linetime_wm(struct drm_device *dev, struct drm_crtc *crtc)
 	enum pipe pipe = intel_crtc->pipe;
 	struct drm_display_mode *mode = &intel_crtc->config.adjusted_mode;
 	int target_clock;
-	u32 temp;
+	u32 linetime, ips_linetime;
 
 	if (!intel_crtc_active(crtc)) {
 		I915_WRITE(PIPE_WM_LINETIME(pipe), 0);
@@ -2088,24 +2088,16 @@ haswell_update_linetime_wm(struct drm_device *dev, struct drm_crtc *crtc)
 	else
 		target_clock = intel_crtc->config.adjusted_mode.clock;
 
-	temp = I915_READ(PIPE_WM_LINETIME(pipe));
-	temp &= ~PIPE_WM_LINETIME_MASK;
-
 	/* The WM are computed with base on how long it takes to fill a single
 	 * row at the given clock rate, multiplied by 8.
 	 * */
-	temp |= PIPE_WM_LINETIME_TIME(
-		DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, target_clock));
+	linetime = DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, mode->clock);
+	ips_linetime = DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8,
+					 intel_ddi_get_cdclk_freq(dev_priv));
 
-	/* IPS watermarks are only used by pipe A, and are ignored by
-	 * pipes B and C.  They are calculated similarly to the common
-	 * linetime values, except that we are using CD clock frequency
-	 * in MHz instead of pixel rate for the division.
-	 *
-	 * This is a placeholder for the IPS watermark calculation code.
-	 */
-
-	I915_WRITE(PIPE_WM_LINETIME(pipe), temp);
+	I915_WRITE(PIPE_WM_LINETIME(pipe),
+		   PIPE_WM_LINETIME_IPS_LINETIME(ips_linetime) |
+		   PIPE_WM_LINETIME_TIME(linetime));
 }
 
 static void haswell_update_wm(struct drm_device *dev)
