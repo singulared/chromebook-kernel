@@ -125,6 +125,10 @@ MODULE_PARM_DESC(preliminary_hw_support,
 		"Enable Haswell and ValleyView Support. "
 		"(default: false)");
 
+int i915_enable_ips __read_mostly = 1;
+module_param_named(enable_ips, i915_enable_ips, int, 0600);
+MODULE_PARM_DESC(enable_ips, "Enable IPS (default: true)");
+
 static struct drm_driver driver;
 extern int intel_agp_enabled;
 
