@@ -567,6 +567,9 @@ static void __tty_hangup(struct tty_struct *tty)
 	if (!tty)
 		return;
 
+	/* Don't hangup if there are other users */
+	if (tty->count > 1)
+		return;
 
 	spin_lock(&redirect_lock);
 	if (redirect && file_tty(redirect) == tty) {
