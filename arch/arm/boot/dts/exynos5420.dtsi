@@ -318,10 +318,11 @@
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x03880000 0x1000>;
 			interrupts = <0 110 0>;
-			/* TODO: clocks */
+			clocks = <&clock_audss EXYNOS_ADMA>;
+			clock-names = "apb_pclk";
 			#dma-cells = <1>;
-			#dma-channels = <8>;
-			#dma-requests = <32>;
+			#dma-channels = <6>;
+			#dma-requests = <16>;
 		};
 
 		mdma0: mdma@10800000 {
