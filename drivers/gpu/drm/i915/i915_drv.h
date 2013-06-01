@@ -273,7 +273,8 @@ struct drm_i915_display_funcs {
 	int (*get_fifo_size)(struct drm_device *dev, int plane);
 	void (*update_wm)(struct drm_device *dev);
 	void (*update_sprite_wm)(struct drm_device *dev, int pipe,
-				 uint32_t sprite_width, int pixel_size);
+				 uint32_t sprite_width, int pixel_size,
+				 bool enable);
 	void (*modeset_global_resources)(struct drm_device *dev);
 	int (*crtc_mode_set)(struct drm_crtc *crtc,
 			     int x, int y,

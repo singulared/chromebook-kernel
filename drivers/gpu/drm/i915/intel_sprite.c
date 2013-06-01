@@ -99,7 +99,7 @@ ivb_update_plane(struct drm_plane *plane, struct drm_framebuffer *fb,
 	crtc_w--;
 	crtc_h--;
 
-	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size);
+	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size, true);
 
 	/*
 	 * IVB workaround: must disable low power watermarks for at least
@@ -165,6 +165,8 @@ ivb_disable_plane(struct drm_plane *plane)
 	POSTING_READ(SPRSURF(pipe));
 
 	dev_priv->sprite_scaling_enabled &= ~(1 << pipe);
+
+	intel_update_sprite_watermarks(dev, pipe, 0, 0, false);
 
 	/* potentially re-enable LP watermarks */
 	if (scaling_was_enabled && !dev_priv->sprite_scaling_enabled)
@@ -284,7 +286,7 @@ ilk_update_plane(struct drm_plane *plane, struct drm_framebuffer *fb,
 	crtc_w--;
 	crtc_h--;
 
-	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size);
+	intel_update_sprite_watermarks(dev, pipe, crtc_w, pixel_size, true);
 
 	dvsscale = 0;
 	if (IS_GEN5(dev) || crtc_w != src_w || crtc_h != src_h)
