@@ -3379,6 +3379,42 @@ static void ironlake_crtc_enable(struct drm_crtc *crtc)
 	intel_wait_for_vblank(dev, intel_crtc->pipe);
 }
 
+/* IPS only exists on ULT machines and is tied to pipe A. */
+static bool hsw_crtc_supports_ips(struct intel_crtc *crtc)
+{
+	return IS_ULT(crtc->base.dev) && crtc->pipe == PIPE_A;
+}
+
+static void hsw_enable_ips(struct intel_crtc *crtc)
+{
+	struct drm_i915_private *dev_priv = crtc->base.dev->dev_private;
+
+	if (!crtc->config.ips_enabled)
+		return;
+
+	/* We can only enable IPS after we enable a plane and wait for a vblank.
+	 * We guarantee that the plane is enabled by calling intel_enable_ips
+	 * only after intel_enable_plane. And intel_enable_plane already waits
+	 * for a vblank, so all we need to do here is to enable the IPS bit. */
+	assert_plane_enabled(dev_priv, crtc->plane);
+	I915_WRITE(IPS_CTL, IPS_ENABLE);
+}
+
+static void hsw_disable_ips(struct intel_crtc *crtc)
+{
+	struct drm_device *dev = crtc->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (!crtc->config.ips_enabled)
+		return;
+
+	assert_plane_enabled(dev_priv, crtc->plane);
+	I915_WRITE(IPS_CTL, 0);
+
+	/* We need to wait for a vblank before we can disable the plane. */
+	intel_wait_for_vblank(dev, crtc->pipe);
+}
+
 static void haswell_crtc_enable(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
@@ -3420,6 +3456,8 @@ static void haswell_crtc_enable(struct drm_crtc *crtc)
 	intel_enable_pipe(dev_priv, pipe,
 			  intel_crtc->config.has_pch_encoder);
 	intel_enable_plane(dev_priv, plane, pipe);
+
+	hsw_enable_ips(intel_crtc);
 
 	if (intel_crtc->config.has_pch_encoder)
 		lpt_pch_enable(crtc);
@@ -3550,6 +3588,8 @@ static void haswell_crtc_disable(struct drm_crtc *crtc)
 	/* FBC must be disabled before disabling the plane on HSW. */
 	if (dev_priv->cfb_plane == plane)
 		intel_disable_fbc(dev);
+
+	hsw_disable_ips(intel_crtc);
 
 	intel_disable_plane(dev_priv, plane, pipe);
 
@@ -3927,11 +3967,19 @@ bool intel_connector_get_hw_state(struct intel_connector *connector)
 	return encoder->get_hw_state(encoder, &pipe);
 }
 
+static void hsw_compute_ips_config(struct intel_crtc *crtc,
+				   struct intel_crtc_config *pipe_config)
+{
+	pipe_config->ips_enabled = hsw_crtc_supports_ips(crtc) &&
+				   pipe_config->pipe_bpp == 24;
+}
+
 static bool intel_crtc_compute_config(struct drm_crtc *crtc,
 				      struct intel_crtc_config *pipe_config)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_display_mode *adjusted_mode = &pipe_config->adjusted_mode;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 
 	if (HAS_PCH_SPLIT(dev)) {
 		/* FDI link clock is fixed at 2.7G */
@@ -3952,6 +4000,9 @@ static bool intel_crtc_compute_config(struct drm_crtc *crtc,
 	if ((INTEL_INFO(dev)->gen > 4 || IS_G4X(dev)) &&
 		adjusted_mode->hsync_start == adjusted_mode->hdisplay)
 		return false;
+
+	if (IS_HASWELL(dev))
+		hsw_compute_ips_config(intel_crtc, pipe_config);
 
 	return true;
 }
@@ -6001,8 +6052,10 @@ void intel_crtc_load_lut(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	int palreg = PALETTE(intel_crtc->pipe);
+	enum pipe pipe = intel_crtc->pipe;
+	int palreg = PALETTE(pipe);
 	int i;
+	bool reenable_ips = false;
 
 	/* The clocks have to be on to load the palette. */
 	if (!crtc->enabled || !intel_crtc->active)
@@ -6010,7 +6063,17 @@ void intel_crtc_load_lut(struct drm_crtc *crtc)
 
 	/* use legacy palette for Ironlake */
 	if (HAS_PCH_SPLIT(dev))
-		palreg = LGC_PALETTE(intel_crtc->pipe);
+		palreg = LGC_PALETTE(pipe);
+
+	/* Workaround : Do not read or write the pipe palette/gamma data while
+	 * GAMMA_MODE is configured for split gamma and IPS_CTL has IPS enabled.
+	 */
+	if (intel_crtc->config.ips_enabled &&
+	    ((I915_READ(GAMMA_MODE(pipe)) & GAMMA_MODE_MODE_MASK) ==
+	     GAMMA_MODE_MODE_SPLIT)) {
+		hsw_disable_ips(intel_crtc);
+		reenable_ips = true;
+	}
 
 	for (i = 0; i < 256; i++) {
 		I915_WRITE(palreg + 4 * i,
@@ -6018,6 +6081,9 @@ void intel_crtc_load_lut(struct drm_crtc *crtc)
 			   (intel_crtc->lut_g[i] << 8) |
 			   intel_crtc->lut_b[i]);
 	}
+
+	if (reenable_ips)
+		hsw_enable_ips(intel_crtc);
 }
 
 static void i845_update_cursor(struct drm_crtc *crtc, u32 base)

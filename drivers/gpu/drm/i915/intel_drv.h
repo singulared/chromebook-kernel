@@ -222,6 +222,8 @@ struct intel_crtc_config {
 		u32 pos;
 		u32 size;
 	} pch_pfit;
+
+	bool ips_enabled;
 };
 
 struct intel_crtc {
