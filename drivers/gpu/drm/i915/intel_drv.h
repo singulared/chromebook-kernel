@@ -269,6 +269,18 @@ struct intel_plane {
 	bool can_scale;
 	int max_downscale;
 	u32 lut_r[1024], lut_g[1024], lut_b[1024];
+
+	/* Since we need to change the watermarks before/after
+	 * enabling/disabling the planes, we need to store the parameters here
+	 * as the other pieces of the struct may not reflect the values we want
+	 * for the watermark calculations. Currently only Haswell uses this.
+	 */
+	struct {
+		bool enable;
+		uint8_t bytes_per_pixel;
+		uint32_t horiz_pixels;
+	} wm;
+
 	void (*update_plane)(struct drm_plane *plane,
 			     struct drm_framebuffer *fb,
 			     struct drm_i915_gem_object *obj,
