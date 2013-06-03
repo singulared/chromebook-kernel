@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -16,7 +19,6 @@
  * @file mali_kbase_js_ctx_attr.h
  * Job Scheduler Context Attribute APIs
  */
-
 
 #ifndef _KBASE_JS_CTX_ATTR_H_
 #define _KBASE_JS_CTX_ATTR_H_
@@ -42,8 +44,7 @@
  * Requires:
  * - Hold the jsctx_mutex
  */
-void kbasep_js_ctx_attr_set_initial_attrs( kbase_device *kbdev,
-										   kbase_context *kctx );
+void kbasep_js_ctx_attr_set_initial_attrs(kbase_device *kbdev, kbase_context *kctx);
 
 /**
  * Retain all attributes of a context
@@ -56,8 +57,7 @@ void kbasep_js_ctx_attr_set_initial_attrs( kbase_device *kbdev,
  * - runpool_irq spinlock
  * - ctx->is_scheduled is true
  */
-void kbasep_js_ctx_attr_runpool_retain_ctx( kbase_device *kbdev,
-											 kbase_context *kctx );
+void kbasep_js_ctx_attr_runpool_retain_ctx(kbase_device *kbdev, kbase_context *kctx);
 
 /**
  * Release all attributes of a context
@@ -76,8 +76,7 @@ void kbasep_js_ctx_attr_runpool_retain_ctx( kbase_device *kbdev,
  * or similar is called sometime later.
  * @return MALI_FALSE indicates no change in ctx attributes state of the runpool.
  */
-mali_bool kbasep_js_ctx_attr_runpool_release_ctx( kbase_device *kbdev,
-											  kbase_context *kctx );
+mali_bool kbasep_js_ctx_attr_runpool_release_ctx(kbase_device *kbdev, kbase_context *kctx);
 
 /**
  * Retain all attributes of an atom
@@ -88,9 +87,7 @@ mali_bool kbasep_js_ctx_attr_runpool_release_ctx( kbase_device *kbdev,
  * - jsctx mutex
  * - If the context is scheduled, then runpool_irq spinlock must also be held
  */
-void kbasep_js_ctx_attr_ctx_retain_atom( kbase_device *kbdev,
-											  kbase_context *kctx,
-											  kbase_jd_atom *katom );
+void kbasep_js_ctx_attr_ctx_retain_atom(kbase_device *kbdev, kbase_context *kctx, kbase_jd_atom *katom);
 
 /**
  * Release all attributes of an atom, given its retained state.
@@ -109,54 +106,51 @@ void kbasep_js_ctx_attr_ctx_retain_atom( kbase_device *kbdev,
  * or similar is called sometime later.
  * @return MALI_FALSE indicates no change in ctx attributes state of the runpool.
  */
-mali_bool kbasep_js_ctx_attr_ctx_release_atom( kbase_device *kbdev,
-										  kbase_context *kctx,
-										  kbasep_js_atom_retained_state *katom_retained_state );
+mali_bool kbasep_js_ctx_attr_ctx_release_atom(kbase_device *kbdev, kbase_context *kctx, kbasep_js_atom_retained_state *katom_retained_state);
 
 /**
  * Requires:
  * - runpool_irq spinlock
  */
-OSK_STATIC_INLINE s8 kbasep_js_ctx_attr_count_on_runpool( kbase_device *kbdev, kbasep_js_ctx_attr attribute )
+static INLINE s8 kbasep_js_ctx_attr_count_on_runpool(kbase_device *kbdev, kbasep_js_ctx_attr attribute)
 {
 	kbasep_js_device_data *js_devdata;
 
-	OSK_ASSERT( kbdev != NULL );
-	OSK_ASSERT( attribute < KBASEP_JS_CTX_ATTR_COUNT );
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+	KBASE_DEBUG_ASSERT(attribute < KBASEP_JS_CTX_ATTR_COUNT);
 	js_devdata = &kbdev->js_data;
 
 	return js_devdata->runpool_irq.ctx_attr_ref_count[attribute];
 }
 
-
 /**
  * Requires:
  * - runpool_irq spinlock
  */
-OSK_STATIC_INLINE mali_bool kbasep_js_ctx_attr_is_attr_on_runpool( kbase_device *kbdev, kbasep_js_ctx_attr attribute )
+static INLINE mali_bool kbasep_js_ctx_attr_is_attr_on_runpool(kbase_device *kbdev, kbasep_js_ctx_attr attribute)
 {
 	/* In general, attributes are 'on' when they have a non-zero refcount (note: the refcount will never be < 0) */
-	return (mali_bool)kbasep_js_ctx_attr_count_on_runpool( kbdev, attribute );
+	return (mali_bool) kbasep_js_ctx_attr_count_on_runpool(kbdev, attribute);
 }
 
 /**
  * Requires:
  * - jsctx mutex
  */
-OSK_STATIC_INLINE mali_bool kbasep_js_ctx_attr_is_attr_on_ctx( kbase_context *kctx, kbasep_js_ctx_attr attribute )
+static INLINE mali_bool kbasep_js_ctx_attr_is_attr_on_ctx(kbase_context *kctx, kbasep_js_ctx_attr attribute)
 {
 	kbasep_js_kctx_info *js_kctx_info;
 
-	OSK_ASSERT( kctx != NULL );
-	OSK_ASSERT( attribute < KBASEP_JS_CTX_ATTR_COUNT );
+	KBASE_DEBUG_ASSERT(kctx != NULL);
+	KBASE_DEBUG_ASSERT(attribute < KBASEP_JS_CTX_ATTR_COUNT);
 	js_kctx_info = &kctx->jctx.sched_info;
 
 	/* In general, attributes are 'on' when they have a refcount (which should never be < 0) */
-	return (mali_bool)(js_kctx_info->ctx.ctx_attr_ref_count[ attribute ]);
+	return (mali_bool) (js_kctx_info->ctx.ctx_attr_ref_count[attribute]);
 }
 
-/** @} */ /* end group kbase_js */
-/** @} */ /* end group base_kbase_api */
-/** @} */ /* end group base_api */
+	  /** @} *//* end group kbase_js */
+	  /** @} *//* end group base_kbase_api */
+	  /** @} *//* end group base_api */
 
-#endif /* _KBASE_JS_DEFS_H_ */
+#endif				/* _KBASE_JS_DEFS_H_ */
