@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -17,10 +20,8 @@
  * "Always on" power management policy
  */
 
-#include <osk/mali_osk.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_pm.h>
-
 
 /** Function to handle a GPU state change for the always_on power policy.
  *
@@ -33,11 +34,9 @@ static void always_on_state_changed(kbase_device *kbdev)
 {
 	kbasep_pm_policy_always_on *data = &kbdev->pm.policy_data.always_on;
 
-	switch(data->state)
-	{
+	switch (data->state) {
 	case KBASEP_PM_ALWAYS_ON_STATE_POWERING_UP:
-		if (kbase_pm_get_pwr_active(kbdev))
-		{
+		if (kbase_pm_get_pwr_active(kbdev)) {
 			/* Cores still transitioning */
 			return;
 		}
@@ -47,8 +46,7 @@ static void always_on_state_changed(kbase_device *kbdev)
 
 		break;
 	case KBASEP_PM_ALWAYS_ON_STATE_POWERING_DOWN:
-		if (kbase_pm_get_pwr_active(kbdev))
-		{
+		if (kbase_pm_get_pwr_active(kbdev)) {
 			/* Cores still transitioning */
 			return;
 		}
@@ -62,12 +60,11 @@ static void always_on_state_changed(kbase_device *kbdev)
 
 		break;
 	case KBASEP_PM_ALWAYS_ON_STATE_CHANGING_POLICY:
-		if (kbase_pm_get_pwr_active(kbdev))
-		{
+		if (kbase_pm_get_pwr_active(kbdev)) {
 			/* Cores still transitioning */
 			return;
 		}
-		/* All cores have transitioned, inform the system we can change policy*/
+		/* All cores have transitioned, inform the system we can change policy */
 		kbase_pm_change_policy(kbdev);
 
 		break;
@@ -149,12 +146,11 @@ static void always_on_event(kbase_device *kbdev, kbase_pm_event event)
 {
 	kbasep_pm_policy_always_on *data = &kbdev->pm.policy_data.always_on;
 
-	switch(event)
-	{
+	switch (event) {
 	case KBASE_PM_EVENT_SYSTEM_SUSPEND:
 		always_on_suspend(kbdev);
 		break;
-	case KBASE_PM_EVENT_POLICY_INIT: /* Init is the same as resume for this policy */
+	case KBASE_PM_EVENT_POLICY_INIT:	/* Init is the same as resume for this policy */
 	case KBASE_PM_EVENT_SYSTEM_RESUME:
 		always_on_resume(kbdev);
 		break;
@@ -162,15 +158,10 @@ static void always_on_event(kbase_device *kbdev, kbase_pm_event event)
 		always_on_state_changed(kbdev);
 		break;
 	case KBASE_PM_EVENT_POLICY_CHANGE:
-		if (data->state == KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP ||
-		    data->state == KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN)
-		{
+		if (data->state == KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP || data->state == KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN)
 			kbase_pm_change_policy(kbdev);
-		}
 		else
-		{
 			data->state = KBASEP_PM_ALWAYS_ON_STATE_CHANGING_POLICY;
-		}
 		break;
 	case KBASE_PM_EVENT_GPU_ACTIVE:
 	case KBASE_PM_EVENT_GPU_IDLE:
@@ -184,7 +175,7 @@ static void always_on_event(kbase_device *kbdev, kbase_pm_event event)
 		break;
 	default:
 		/* Unrecognised event - this should never happen */
-		OSK_ASSERT(0);
+		KBASE_DEBUG_ASSERT(0);
 	}
 }
 
@@ -217,14 +208,13 @@ static void always_on_term(kbase_device *kbdev)
  *
  * This is the extern structure that defines the always_on power policy's callback and name.
  */
-const kbase_pm_policy kbase_pm_always_on_policy_ops =
-{
-	"always_on",                /* name */
-	always_on_init,             /* init */
-	always_on_term,             /* term */
-	always_on_event,            /* event */
-	KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS, /* flags */
-	KBASE_PM_POLICY_ID_ALWAYS_ON, /* id */
+const kbase_pm_policy kbase_pm_always_on_policy_ops = {
+	"always_on",		/* name */
+	always_on_init,		/* init */
+	always_on_term,		/* term */
+	always_on_event,	/* event */
+	KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS,	/* flags */
+	KBASE_PM_POLICY_ID_ALWAYS_ON,	/* id */
 };
 
 KBASE_EXPORT_TEST_API(kbase_pm_always_on_policy_ops)

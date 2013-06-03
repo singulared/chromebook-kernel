@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -19,12 +22,6 @@
 #include <linux/workqueue.h>
 
 #define KDS_WAIT_BLOCKING (ULONG_MAX)
-
-/* what to do when waitall must wait for a synchronous locked resource: */
-#define KDS_FLAG_LOCKED_FAIL    (0u <<  0) /* fail waitall */
-#define KDS_FLAG_LOCKED_IGNORE  (1u <<  0) /* don't wait, but block other that waits */
-#define KDS_FLAG_LOCKED_WAIT    (2u <<  0) /* wait (normal */
-#define KDS_FLAG_LOCKED_ACTION  (3u <<  0) /* mask to extract the action to do on locked resources */
 
 struct kds_resource_set;
 
@@ -47,7 +44,6 @@ struct kds_link
 struct kds_resource
 {
 	struct kds_link waiters;
-	unsigned long lock_count;
 };
 
 /* callback API */
@@ -81,7 +77,7 @@ void kds_callback_term(struct kds_callback *cb);
 /* resource object API */
 
 /* initialize a resource handle for a shared resource */
-void kds_resource_init(struct kds_resource *resource);
+void kds_resource_init(struct kds_resource * const resource);
 
 /*
  * Will return 0 on success.
@@ -96,15 +92,13 @@ int kds_resource_term(struct kds_resource *resource);
  * If all the resources was available the callback will be called before kds_async_waitall returns.
  * So one must not hold any locks the callback code-flow can take when calling kds_async_waitall.
  * Caller considered to own/use the resources until \a kds_rset_release is called.
- * flags is one or more of the KDS_FLAG_* set.
  * exclusive_access_bitmap is a bitmap where a high bit means exclusive access while a low bit means shared access.
  * Use the Linux __set_bit API, where the index of the buffer to control is used as the bit index.
  *
  * Standard Linux error return value.
  */
 int kds_async_waitall(
-		struct kds_resource_set **pprset,
-		unsigned long             flags,
+		struct kds_resource_set ** const pprset,
 		struct kds_callback      *cb,
 		void                     *callback_parameter,
 		void                     *callback_extra_parameter,
@@ -118,10 +112,9 @@ int kds_async_waitall(
  * - timeout lapsed while waiting
  * - a signal was received while waiting
  *
- * To wait without a timeout, specify KDS_WAIT_BLOCKING for \a jifies_timeout,
- * otherwise the timeout in jiffies. A zero timeout attempts to obtain all
- * resources and returns immediately without a timeout if all resources could
- * not be obtained.
+ * To wait without a timeout, specify KDS_WAIT_BLOCKING for \a jifies_timeout, otherwise
+ * the timeout in jiffies. A zero timeout attempts to obtain all resources and returns
+ * immediately with a timeout if all resources could not be obtained.
  *
  * Caller considered to own/use the resources when the function returns.
  * Caller must release the resources using \a kds_rset_release.
@@ -171,9 +164,8 @@ void kds_resource_set_release(struct kds_resource_set **pprset);
  * resource.
  *
  * It is a bug to call this from atomic contexts and from within
- * a kds callback that now owns the kds_reource.
+ * a kds callback that now owns the kds_rseource.
  */
 
 void kds_resource_set_release_sync(struct kds_resource_set **pprset);
-
 #endif /* _KDS_H_ */

@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -31,7 +34,7 @@
  * - dup to add a ref
  * - close to remove a ref
  */
-mali_error kbase_stream_create(const char * name, int * out_fd);
+mali_error kbase_stream_create(const char *name, int *const out_fd);
 
 /*
  * Create a fence in a stream object
@@ -47,7 +50,6 @@ int kbase_stream_create_fence(int tl_fd);
  */
 mali_error kbase_fence_validate(int fd);
 
-
 /* Returns true if the specified timeline is allocated by Mali */
 int kbase_sync_timeline_is_ours(struct sync_timeline *timeline);
 
@@ -55,7 +57,7 @@ int kbase_sync_timeline_is_ours(struct sync_timeline *timeline);
  *
  * One timeline should be allocated per API context.
  */
-struct sync_timeline *kbase_sync_timeline_alloc(const char * name);
+struct sync_timeline *kbase_sync_timeline_alloc(const char *name);
 
 /* Allocates a sync point within the timeline.
  *
@@ -71,7 +73,9 @@ struct sync_pt *kbase_sync_pt_alloc(struct sync_timeline *parent);
  *
  * If they are signalled in the wrong order then a message will be printed in debug
  * builds and otherwise attempts to signal order sync_pts will be ignored.
+ *
+ * result can be negative to indicate error, any other value is interpreted as success.
  */
-void kbase_sync_signal_pt(struct sync_pt *pt);
+void kbase_sync_signal_pt(struct sync_pt *pt, int result);
 
 #endif

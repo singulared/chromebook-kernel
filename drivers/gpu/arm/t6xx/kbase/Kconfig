@@ -1,11 +1,14 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
 #
-# This program is free software and is provided to you under the terms of the GNU General Public License version 2
-# as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
 #
-# A copy of the licence is included with the program, and can also be obtained from Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
 #
 #
 
@@ -21,7 +24,7 @@ menuconfig MALI_T6XX
 
 config MALI_GATOR_SUPPORT
 	bool "Streamline Debug support"
-	depends on MALI_T6XX=m
+	depends on MALI_T6XX
 	default n
 	help
 	  Adds diagnostic support for use with the ARM Streamline Performance Analyzer.
@@ -30,17 +33,10 @@ config MALI_GATOR_SUPPORT
 
 config MALI_T6XX_DVFS
 	bool "Enable DVFS"
-	depends on MALI_T6XX && MACH_MANTA
-	default n
-	help
-	  Choose this option to enable DVFS on MALI T6XX DDK.
-
-config MALI_T6XX_DEMAND_POLICY
-	bool "Enable demand power policy by default"
 	depends on MALI_T6XX
 	default n
 	help
-	  Sets the default power policy to "demand"
+	  Choose this option to enable DVFS on MALI T6XX DDK.
 
 config MALI_T6XX_RT_PM
 	bool "Enable Runtime power management"
@@ -48,22 +44,22 @@ config MALI_T6XX_RT_PM
 	depends on PM_RUNTIME
 	default n
 	help
-	  Choose this option to enable runtime power management on vithar DDK.
+	  Choose this option to enable runtime power management on MALI T6XX DDK.
 
 config MALI_T6XX_ENABLE_TRACE
-       bool "Enable kbase tracing"
-       depends on MALI_T6XX
-       default n
-       help
-         Enables tracing in the kbase.  Trace log available through
-	 the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
+	bool "Enable kbase tracing"
+	depends on MALI_T6XX
+	default n
+	help
+	  Enables tracing in kbase.  Trace log available through
+	  the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
 
 config MALI_T6XX_DEBUG_SYS
-       bool "Enable sysfs for mali t6xx"
-       depends on MALI_T6XX && SYSFS
-       default n
-       help
-         Enables sysfs for mali t6xx device. Set/Monitor Mali T6xx Device
+	bool "Enable sysfs for mali t6xx"
+	depends on MALI_T6XX && SYSFS
+	default n
+	help
+	  Enables sysfs for mali t6xx device. Set/Monitor Mali T6xx Device
 
 # MALI_EXPERT configuration options
 
@@ -74,6 +70,14 @@ menuconfig MALI_EXPERT
 	help
 	  Enabling this option and modifying the default settings may produce a driver with performance or
 	  other limitations.
+
+config MALI_DEBUG_SHADER_SPLIT_FS
+	bool "Allow mapping of shader cores via sysfs"
+	depends on MALI_T6XX && MALI_T6XX_DEBUG_SYS && MALI_EXPERT
+	default n
+	help
+	  Select this option to provide a sysfs entry for runtime configuration of shader
+	  core affinity masks.
 
 config MALI_PLATFORM_FAKE
 	bool "Enable fake platform device support"
@@ -111,7 +115,7 @@ config MALI_PLATFORM_THIRDPARTY_NAME
 	help
 	  Enter the name of a third party platform that is supported. The third part configuration
 	  file must be in kbase/src/linux/config/tpip/mali_kbase_config_xxx.c where xxx is the name
-	  specifed here.
+	  specified here.
 
 config MALI_DEBUG
 	bool "Debug build"
@@ -119,27 +123,6 @@ config MALI_DEBUG
 	default n
 	help
 	  Select this option for increased checking and reporting of errors.
-
-config MALI_UNCACHED
-	bool "Disable CPU caching for GPU memory regions"
-	depends on MALI_T6XX && MALI_EXPERT
-	default n
-	help
-	  Select this option to disable CPU caching for all GPU memory regions.
-
-config MALI_QA_LEAK
-	bool "Enable the tracking of memory leaks"
-	depends on MALI_T6XX && MALI_EXPERT
-	default n
-	help
-	  Enables additional memory leak tracking diagnostics.
-
-config MALI_QA_RESFAIL
-	bool "Enable simulated failures"
-	depends on MALI_T6XX && MALI_EXPERT
-	default n
-	help
-	  Enables forced failures in APIs for additional test coverage
 
 config MALI_NO_MALI
 	bool "No Mali"
@@ -160,63 +143,12 @@ config MALI_ERROR_INJECT
 	help
 	  Enables insertion of errors to test module failure and recovery mechanisms.
 
-config MALI_BASE_ALLOC_FAIL
-	bool "Change allocation GFP flags so that allocations can fail"
+config MALI_TRACE_TIMELINE
+	bool "Timeline tracing"
 	depends on MALI_T6XX && MALI_EXPERT
 	default n
 	help
-	  Change the default memory allocation GFP flags so that allocations
-	  can fail.
-
-	  By default, kbase memory allocations don't fail. This is consisent
-	  with other GPU drivers. However, kbase (i.e. texture memory)
-	  allocations are accounted to the process which caused the allocation.
-	  This means there's a potential DoS attack an application could make
-	  by just allocating lots and lots of memory (E.g. textures). That
-	  memory wouldn't be seen as being owned by the malicious/buggy
-	  application and so the OOM killer wouldn't kill that app's process.
-	  By permitting allocations to fail in low memory situations, we can
-	  avoid that DoS attack vector at the cost of GL allocations being able
-	  to fail.
-
-	  Turn this on if you're confident your code can handle GL allocations
-	  failures.
-
-config T6XX_DVFS
-	bool "Enable Dynamic frequency and voltage scaling"
-	depends on MALI_T6XX
-	default n
-	help
-	   Choose this option to enable dynamic frequency and voltage scaling
-
-config T6XX_DVFS_FREQ_LOCK
-	bool "Enable dvfs frequency lock support"
-	depends on T6XX_DVFS
-	default n
-	help
-	  Choose this option to enable locking the DVFS frequency.  If sysfs
-	  support is enabled files will be created for inspecting and
-	  (potentially) setting a fixed DVFS frequency.  This is used
-	  for debugging; enable only if you know what you are doing.
-
-config T6XX_DEBUG_SYS
-	bool "Enable sysfs support"
-	depends on MALI_T6XX && MALI_EXPERT
-	default n
-	help
-	  Choose this option to enable creating sysfs files for inspecting
-	  and (potentially) tweaking driver parameters.  This is typically
-	  used for debugging; enable only if you know what you are doing.
-
-config MALI_HWC_TRACE
-	bool "Enable hardware counter event tracing support"
-	depends on MALI_T6XX && MALI_EXPERT
-	default n
-	help
-	  Choose this option to enable collecting hardware counter data
-	  with system trace events.  This is typically used for debugging
-	  but has minimal overhead when not in use. Enable only if you
-	  know what you are doing.
+	  Enables timeline tracing through the kernel tracepoint system.
 
 config MALI_SYSTEM_TRACE
 	bool "Enable system event tracing support"
@@ -227,3 +159,12 @@ config MALI_SYSTEM_TRACE
 	  kbase event.	This is typically used for debugging but has
 	  minimal overhead when not in use. Enable only if you know what
 	  you are doing.
+
+config MALI_GPU_TRACEPOINTS
+	bool "Enable GPU tracepoints"
+	depends on MALI_T6XX && ANDROID
+	select GPU_TRACEPOINTS
+	help
+	  Enables GPU tracepoints using Android trace event definitions.
+
+source "drivers/gpu/arm/t6xx/kbase/src/platform/Kconfig"

@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -17,10 +20,8 @@
  * "Coarse Demand" power management policy
  */
 
-#include <osk/mali_osk.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_pm.h>
-
 
 /** Function to handle a GPU state change for the coarse_demand power policy.
  *
@@ -34,14 +35,12 @@ static void coarse_demand_state_changed(kbase_device *kbdev)
 	kbasep_pm_policy_coarse_demand *data = &kbdev->pm.policy_data.coarse_demand;
 
 	/* No need to early-out if cores transitioning during the POWERING_UP state */
-	if (data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERING_UP
-		&& kbase_pm_get_pwr_active(kbdev)) {
+	if (data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERING_UP && kbase_pm_get_pwr_active(kbdev)) {
 		/* Cores are still transitioning - ignore the event */
 		return;
 	}
 
-	switch(data->state)
-	{
+	switch (data->state) {
 	case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_UP:
 		/* All cores are ready, inform the OS */
 		data->state = KBASEP_PM_COARSE_DEMAND_STATE_POWERED_UP;
@@ -125,7 +124,6 @@ static void coarse_demand_suspend(kbase_device *kbdev)
 	kbase_pm_check_transitions(kbdev);
 }
 
-
 /** Turns the cores on.
  *
  * This function turns all the cores of the GPU on.
@@ -167,66 +165,55 @@ static void coarse_demand_event(kbase_device *kbdev, kbase_pm_event event)
 {
 	kbasep_pm_policy_coarse_demand *data = &kbdev->pm.policy_data.coarse_demand;
 
-	switch(event)
-	{
+	switch (event) {
 	case KBASE_PM_EVENT_POLICY_INIT:
 		coarse_demand_power_up(kbdev);
 		break;
 	case KBASE_PM_EVENT_SYSTEM_SUSPEND:
-		switch (data->state)
-		{
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN:
-				break;
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN:
-				kbase_pm_power_down_done(kbdev);
-				break;
-			default:
-				coarse_demand_suspend(kbdev);
+		switch (data->state) {
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN:
+			break;
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN:
+			kbase_pm_power_down_done(kbdev);
+			break;
+		default:
+			coarse_demand_suspend(kbdev);
 		}
 		break;
 	case KBASE_PM_EVENT_GPU_IDLE:
-		switch (data->state)
-		{
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN:
-				break;
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN:
-				kbase_pm_power_down_done(kbdev);
-				break;
-			default:
-				coarse_demand_power_down(kbdev);
+		switch (data->state) {
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN:
+			break;
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN:
+			kbase_pm_power_down_done(kbdev);
+			break;
+		default:
+			coarse_demand_power_down(kbdev);
 		}
 		break;
 	case KBASE_PM_EVENT_GPU_ACTIVE:
 	case KBASE_PM_EVENT_SYSTEM_RESUME:
-		switch (data->state)
-		{
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_UP:
-				break;
-			case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_UP:
-				kbase_pm_power_up_done(kbdev);
-				break;
-			default:
-				coarse_demand_power_up(kbdev);
+		switch (data->state) {
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERING_UP:
+			break;
+		case KBASEP_PM_COARSE_DEMAND_STATE_POWERED_UP:
+			kbase_pm_power_up_done(kbdev);
+			break;
+		default:
+			coarse_demand_power_up(kbdev);
 		}
 		break;
 	case KBASE_PM_EVENT_GPU_STATE_CHANGED:
 		coarse_demand_state_changed(kbdev);
 		break;
 	case KBASE_PM_EVENT_POLICY_CHANGE:
-		if (data->state == KBASEP_PM_COARSE_DEMAND_STATE_POWERED_UP ||
-		    data->state == KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN)
-		{
+		if (data->state == KBASEP_PM_COARSE_DEMAND_STATE_POWERED_UP || data->state == KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN)
 			kbase_pm_change_policy(kbdev);
-		}
 		else
-		{
 			data->state = KBASEP_PM_COARSE_DEMAND_STATE_CHANGING_POLICY;
-		}
 		break;
 	case KBASE_PM_EVENT_CHANGE_GPU_STATE:
-		if (data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN &&
-			data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN)
-		{
+		if (data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERED_DOWN && data->state != KBASEP_PM_COARSE_DEMAND_STATE_POWERING_DOWN) {
 			/*
 			 * Update anyone waiting for power up events.
 			 */
@@ -235,7 +222,7 @@ static void coarse_demand_event(kbase_device *kbdev, kbase_pm_event event)
 		break;
 	default:
 		/* Unrecognised event - this should never happen */
-		OSK_ASSERT(0);
+		KBASE_DEBUG_ASSERT(0);
 	}
 }
 
@@ -268,14 +255,13 @@ static void coarse_demand_term(kbase_device *kbdev)
  *
  * This is the extern structure that defines the coarse_demand power policy's callback and name.
  */
-const kbase_pm_policy kbase_pm_coarse_demand_policy_ops =
-{
-	"coarse_demand",                /* name */
-	coarse_demand_init,             /* init */
-	coarse_demand_term,             /* term */
-	coarse_demand_event,            /* event */
-	KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS, /* flags */
-	KBASE_PM_POLICY_ID_COARSE_DEMAND, /* id */
+const kbase_pm_policy kbase_pm_coarse_demand_policy_ops = {
+	"coarse_demand",	/* name */
+	coarse_demand_init,	/* init */
+	coarse_demand_term,	/* term */
+	coarse_demand_event,	/* event */
+	KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS,	/* flags */
+	KBASE_PM_POLICY_ID_COARSE_DEMAND,	/* id */
 };
 
 KBASE_EXPORT_TEST_API(kbase_pm_coarse_demand_policy_ops)
