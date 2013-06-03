@@ -161,6 +161,19 @@ static const struct clk_ops samsung_pll35xx_clk_min_ops = {
 	.recalc_rate = samsung_pll35xx_recalc_rate,
 };
 
+/**
+ * samsung_clk_register_pll35xx - register a 35xx compatible PLL
+ *
+ * Can be used to register a PLL that is 35xx compatible.
+ *
+ * @name: The name of the PLL output, like "fout_apll"
+ * @pname: The name of the parent, like "fin_pll"
+ * @base: Pointer to iomapped memory for the LOCK register
+ * @rate_table: A table of rates that this PLL can run at, sorted fastest rate
+ *     first.
+ * @rate_count: The number of rates in rate_table.
+ */
+
 struct clk * __init samsung_clk_register_pll35xx(const char *name,
 			const char *pname, const void __iomem *base,
 			const struct samsung_pll_rate_table *rate_table,
@@ -298,6 +311,20 @@ static const struct clk_ops samsung_pll36xx_clk_ops = {
 static const struct clk_ops samsung_pll36xx_clk_min_ops = {
 	.recalc_rate = samsung_pll36xx_recalc_rate,
 };
+
+/**
+ * samsung_clk_register_pll36xx - register a 36xx compatible PLL
+ *
+ * Can be used to register a PLL that is 36xx compatible.  This includes
+ * PLL2650x on exynos5420.
+ *
+ * @name: The name of the PLL output, like "fout_epll"
+ * @pname: The name of the parent, like "fin_pll"
+ * @base: Pointer to iomapped memory for the LOCK register
+ * @rate_table: A table of rates that this PLL can run at, sorted fastest rate
+ *     first.
+ * @rate_count: The number of rates in rate_table.
+ */
 
 struct clk * __init samsung_clk_register_pll36xx(const char *name,
 			const char *pname, const void __iomem *base,
