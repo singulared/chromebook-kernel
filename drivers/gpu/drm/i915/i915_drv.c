@@ -452,6 +452,32 @@ bool i915_semaphore_is_enabled(struct drm_device *dev)
 	return 1;
 }
 
+/* Repin all fbs which are currently bound to a crtc on resume */
+static void i915_repin_bound_fbs(struct drm_device *dev)
+{
+	struct drm_crtc *crtc;
+	struct drm_i915_gem_object *obj;
+	int ret;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (!crtc || !crtc->fb)
+			continue;
+		obj = to_intel_framebuffer(crtc->fb)->obj;
+		if (!obj)
+			continue;
+
+		/* Install a fence for tiled scan-out. */
+		if (obj->tiling_mode != I915_TILING_NONE) {
+			ret = i915_gem_object_get_fence(obj);
+			if (ret)
+				DRM_ERROR("Couldn't get a fence\n");
+			else
+				i915_gem_object_pin_fence(obj);
+		}
+
+	}
+}
+
 static int i915_drm_freeze(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -550,6 +576,7 @@ static int __i915_drm_thaw(struct drm_device *dev)
 		error = i915_gem_init_hw(dev);
 		mutex_unlock(&dev->struct_mutex);
 
+		i915_repin_bound_fbs(dev);
 		intel_modeset_init_hw(dev);
 		intel_modeset_setup_hw_state(dev, true);
 
