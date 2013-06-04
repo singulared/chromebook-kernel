@@ -507,8 +507,8 @@ static void __init exynos4_local_timer_init(void)
 {
 	if (mct_int_type == MCT_INT_SPI) {
 		int cpu;
-		int nr_cpus = min(num_possible_cpus(),
-				  nr_mct_irqs - MCT_L0_IRQ);
+		int nr_cpus = min_t(int, num_possible_cpus(),
+				    nr_mct_irqs - MCT_L0_IRQ);
 
 		/*
 		 * NOTE: may have more MCT IRQs than CPUs if you have 8
