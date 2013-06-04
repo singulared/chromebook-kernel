@@ -556,10 +556,6 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 
 	spin_lock_irqsave(&res->reg_slock, flags);
 
-	/* Only allow one update per vsync */
-	if (ctx->mxr_ver == MXR_VER_16_0_33_0 && win_data->updated)
-		goto end;
-
 	mixer_vsync_set_update(ctx, false);
 
 	/* setup format */
@@ -593,7 +589,7 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	mixer_cfg_layer(ctx, win, true);
 
 	/* layer update mandatory for mixer 16.0.33.0 */
-	if (ctx->mxr_ver == MXR_VER_16_0_33_0) {
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0 && !win_data->updated) {
 		mixer_layer_update(ctx);
 		win_data->updated = true;
 	}
@@ -601,7 +597,6 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	mixer_run(ctx);
 
 	mixer_vsync_set_update(ctx, true);
-end:
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 }
 
