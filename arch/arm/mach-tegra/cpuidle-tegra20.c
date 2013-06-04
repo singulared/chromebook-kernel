@@ -218,10 +218,6 @@ int __init tegra20_cpuidle_init(void)
 	struct cpuidle_device *dev;
 	struct cpuidle_driver *drv = &tegra_idle_driver;
 
-#ifdef CONFIG_PM_SLEEP
-	tegra_tear_down_cpu = tegra20_tear_down_cpu;
-#endif
-
 	drv->state_count = ARRAY_SIZE(tegra_idle_states);
 	memcpy(drv->states, tegra_idle_states,
 			drv->state_count * sizeof(drv->states[0]));

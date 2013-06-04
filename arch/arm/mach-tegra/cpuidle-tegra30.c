@@ -154,10 +154,6 @@ int __init tegra30_cpuidle_init(void)
 	struct cpuidle_device *dev;
 	struct cpuidle_driver *drv = &tegra_idle_driver;
 
-#ifdef CONFIG_PM_SLEEP
-	tegra_tear_down_cpu = tegra30_tear_down_cpu;
-#endif
-
 	ret = cpuidle_register_driver(&tegra_idle_driver);
 	if (ret) {
 		pr_err("CPUidle driver registration failed\n");
