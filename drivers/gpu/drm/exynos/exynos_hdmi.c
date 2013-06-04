@@ -1906,11 +1906,6 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	if (!hdata->powered)
 		return;
 
-	/*
-	 * The TV power domain needs any condition of hdmiphy to turn off and
-	 * its reset state seems to meet the condition.
-	 */
-	hdmiphy_conf_reset(hdata);
 	hdmiphy_poweroff(hdata);
 
 	clk_disable_unprepare(res->hdmiphy);
