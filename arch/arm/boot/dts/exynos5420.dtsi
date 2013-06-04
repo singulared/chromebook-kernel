@@ -393,12 +393,54 @@
 		};
 	};
 
-	gsc_0:  gsc@0x13e00000 {
+	isparm_pd: pd@10042480 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10042480 0x20>;
+	};
+
+	dis_irq_isparm_pd: pd@100424A0 {
+		compatible = "samsung,exynos4210-pd";
+		/* Docs say reserved - http://crosbug.com/p/20126 */
+		reg = <0x100424A0 0x20>;
+	};
+
+	xusbxti_pd: pd@10043400 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10043400 0x20>;
+	};
+
+	gsc_pd: pd@10044000 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044000 0x20>;
+	};
+
+	isp_pd: pd@10044020 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044020 0x20>;
+	};
+
+	mfc_pd: pd@10044060 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044060 0x20>;
+	};
+
+	g2d_pd: pd@10044100 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044100 0x20>;
+	};
+
+	msc_pd: pd@10044120 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044120 0x20>;
+	};
+
+	gsc_0:  gsc@13e00000 {
 		compatible = "samsung,exynos5-gsc";
 		reg = <0x13e00000 0x1000>;
 		interrupts = <0 85 0>;
 		clocks = <&clock 465>;
 		clock-names = "gscl";
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	gsc_1:  gsc@0x13e10000 {
@@ -407,6 +449,7 @@
 		interrupts = <0 86 0>;
 		clocks = <&clock 466>;
 		clock-names = "gscl";
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	dwmmc_0: dwmmc0@12200000 {
@@ -746,6 +789,7 @@
 		mmu-master = <&gsc_0>;
 		clocks = <&clock 461>;
 		clock-names = "sysmmu";
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	sysmmu-gsc1 {
@@ -757,6 +801,7 @@
 		mmu-master = <&gsc_1>;
 		clocks = <&clock 462>;
 		clock-names = "sysmmu";
+		samsung,power-domain = <&gsc_pd>;
 	};
 
 	mfc: codec@11000000 {
@@ -765,6 +810,7 @@
 		interrupts = <0 96 0>;
 		clocks = <&clock 401>, <&clock 400>;
 		clock-names = "mfc", "aclk_333";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-l {
@@ -776,6 +822,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 402>;
 		clock-names = "sysmmu";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-r {
@@ -787,6 +834,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 403>;
 		clock-names = "sysmmu";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-fimd1 {
