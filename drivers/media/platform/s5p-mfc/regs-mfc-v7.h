@@ -49,8 +49,8 @@
 			(SZ_1M + ((w) * 144) + (8192 * (h)) + 49216)
 
 #define S5P_FIMV_ME_BUFFER_SIZE_V7(imw, imh, mbw, mbh) \
-	(((((imw + 127) / 64) * 16) * (((imh + 63) / 64) * 16)) + \
-	(((mbw * mbh + 31) / 32) * 16))
+       ((DIV_ROUND_UP(((imw)+64), 64) *  DIV_ROUND_UP((imh), 64) * 256) + \
+        (DIV_ROUND_UP((mbw) * (mbh), 32) * 16))
 
 /* MFCv7 variant defines */
 #define MAX_FW_SIZE_V7			(SZ_1M)		/* 1MB */
