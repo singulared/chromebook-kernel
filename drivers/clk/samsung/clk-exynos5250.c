@@ -81,7 +81,7 @@ enum exynos5250_clks {
 	none,
 
 	/* core clocks */
-	fin_pll, sclk_vpll,
+	fin_pll, sclk_vpll, fout_epll, sclk_epll,
 
 	/* gate for special clocks (sclk) */
 	sclk_cam_bayer = 128, sclk_cam0, sclk_cam1, sclk_gscl_wa, sclk_gscl_wb,
@@ -104,7 +104,7 @@ enum exynos5250_clks {
 	wdt, rtc, tmu, fimd1, mie1, dsim0, dp, mixer, hdmi, g3d, aclk_400_g3d,
 
 	/* mux clocks */
-	mout_hdmi = 1024, mout_fimd1,
+	mout_hdmi = 1024, mout_fimd1, mout_audio0,
 
 	nr_clks,
 };
@@ -229,7 +229,8 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(none, "sclk_bpll", mout_bpll_p, SRC_CDREX, 0, 1),
 	MUX_F(sclk_vpll, "sclk_vpll", mout_vpll_p, SRC_TOP2, 16, 1,
 						CLK_SET_RATE_PARENT, 0),
-	MUX(none, "sclk_epll", mout_epll_p, SRC_TOP2, 12, 1),
+	MUX_F(sclk_epll, "sclk_epll", mout_epll_p, SRC_TOP2, 12, 1,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP2, 8, 1),
 	MUX(none, "sclk_mpll_user", mout_mpll_user_p, SRC_TOP2, 20, 1),
 	MUX(none, "sclk_bpll_user", mout_bpll_user_p, SRC_TOP2, 24, 1),
@@ -249,7 +250,8 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(none, "mout_mipi1", mout_group1_p, SRC_DISP1_0, 12, 4),
 	MUX(none, "mout_dp", mout_group1_p, SRC_DISP1_0, 16, 4),
 	MUX(mout_hdmi, "mout_hdmi", mout_hdmi_p, SRC_DISP1_0, 20, 1),
-	MUX(none, "mout_audio0", mout_audio0_p, SRC_MAU, 0, 4),
+	MUX_F(mout_audio0, "mout_audio0", mout_audio0_p, SRC_MAU, 0, 4,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_mmc0", mout_group1_p, SRC_FSYS, 0, 4),
 	MUX(none, "mout_mmc1", mout_group1_p, SRC_FSYS, 4, 4),
 	MUX(none, "mout_mmc2", mout_group1_p, SRC_FSYS, 8, 4),
@@ -567,6 +569,7 @@ void __init exynos5250_clk_init(struct device_node *np)
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
 				reg_base + 0x10030, NULL, 0);
 	}
+	samsung_clk_add_lookup(epll, fout_epll);
 
 	if (mout_vpllsrc_rate == (24 * MHZ)) {
 		vpll = samsung_clk_register_pll36xx("fout_vpll", "mout_vpllsrc"
