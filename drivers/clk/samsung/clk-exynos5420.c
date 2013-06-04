@@ -88,7 +88,7 @@ enum exynos5420_clks {
 	none,
 
 	/* core clocks */
-	oscclk /* AKA "xxti", AKA "fin_pll" */, sclk_rpll,
+	fin_pll /* AKA "oscclk" */, sclk_rpll,
 
 	/* gate for special clocks (sclk) */
 	sclk_uart0 = 128, sclk_uart1, sclk_uart2, sclk_uart3, sclk_mmc0 = 132,
@@ -204,17 +204,17 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 PNAME(mout_mspll_cpu_p)		= { "sclk_cpll", "sclk_dpll", "sclk_mpll",
 					"sclk_spll" };
 PNAME(mout_cpu_p)		= { "mout_apll" , "mout_mspll_cpu" };
-PNAME(mout_apll_p)		= { "oscclk", "fout_apll", };
-PNAME(mout_cpll_p)		= { "oscclk", "fout_cpll", };
-PNAME(mout_dpll_p)		= { "oscclk", "fout_dpll", };
-PNAME(mout_epll_p)		= { "oscclk", "fout_epll", };
-PNAME(mout_rpll_p)		= { "oscclk", "fout_rpll", };
-PNAME(mout_ipll_p)		= { "oscclk", "fout_ipll", };
-PNAME(mout_spll_p)		= { "oscclk", "fout_spll", };
-PNAME(mout_vpll_p)		= { "oscclk", "fout_vpll", };
-PNAME(mout_mpll_p)		= { "oscclk", "fout_mpll", };
+PNAME(mout_apll_p)		= { "fin_pll", "fout_apll", };
+PNAME(mout_cpll_p)		= { "fin_pll", "fout_cpll", };
+PNAME(mout_dpll_p)		= { "fin_pll", "fout_dpll", };
+PNAME(mout_epll_p)		= { "fin_pll", "fout_epll", };
+PNAME(mout_rpll_p)		= { "fin_pll", "fout_rpll", };
+PNAME(mout_ipll_p)		= { "fin_pll", "fout_ipll", };
+PNAME(mout_spll_p)		= { "fin_pll", "fout_spll", };
+PNAME(mout_vpll_p)		= { "fin_pll", "fout_vpll", };
+PNAME(mout_mpll_p)		= { "fin_pll", "fout_mpll", };
 PNAME(mout_group1_p)		= { "sclk_cpll", "sclk_dpll", "sclk_mpll" };
-PNAME(mout_group2_p)		= { "oscclk", "sclk_cpll", "sclk_dpll",
+PNAME(mout_group2_p)		= { "fin_pll", "sclk_cpll", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
 PNAME(mout_group3_p)		= { "sclk_rpll", "sclk_spll" };
@@ -222,69 +222,69 @@ PNAME(mout_group4_p)		= { "sclk_ipll", "sclk_dpll", "sclk_mpll" };
 PNAME(mout_group5_p)		= { "sclk_vpll", "sclk_dpll" };
 
 PNAME(mout_sw_aclk66_p)		= { "dout_aclk66", "sclk_spll" };
-PNAME(mout_aclk66_peric_p)	= { "oscclk", "mout_sw_aclk66" };
+PNAME(mout_aclk66_peric_p)	= { "fin_pll", "mout_sw_aclk66" };
 
 PNAME(mout_sw_aclk200_fsys_p)	= { "dout_aclk200_fsys", "sclk_spll"};
-PNAME(mout_user_aclk200_fsys_p)	= { "oscclk", "mout_sw_aclk200_fsys" };
+PNAME(mout_user_aclk200_fsys_p)	= { "fin_pll", "mout_sw_aclk200_fsys" };
 PNAME(mout_sw_aclk200_fsys2_p)	= { "dout_aclk200_fsys2", "sclk_spll"};
-PNAME(mout_user_aclk200_fsys2_p) = { "oscclk", "mout_sw_aclk200_fsys2" };
+PNAME(mout_user_aclk200_fsys2_p) = { "fin_pll", "mout_sw_aclk200_fsys2" };
 
 PNAME(mout_sw_aclk200_p)	= { "dout_aclk200", "sclk_spll"};
-PNAME(mout_aclk200_disp1_p)	= { "oscclk", "mout_sw_aclk200" };
+PNAME(mout_aclk200_disp1_p)	= { "fin_pll", "mout_sw_aclk200" };
 
 PNAME(mout_sw_aclk400_mscl_p)	= { "dout_aclk400_mscl", "sclk_spll"};
-PNAME(mout_user_aclk400_mscl_p)	= { "oscclk", "mout_sw_aclk400_mscl" };
+PNAME(mout_user_aclk400_mscl_p)	= { "fin_pll", "mout_sw_aclk400_mscl" };
 
 PNAME(mout_sw_aclk333_p)	= { "dout_aclk333", "sclk_spll"};
-PNAME(mout_user_aclk333_p)	= { "oscclk", "mout_sw_aclk333" };
+PNAME(mout_user_aclk333_p)	= { "fin_pll", "mout_sw_aclk333" };
 
 PNAME(mout_sw_aclk166_p)	= { "dout_aclk166", "sclk_spll"};
-PNAME(mout_user_aclk166_p)	= { "oscclk", "mout_sw_aclk166" };
+PNAME(mout_user_aclk166_p)	= { "fin_pll", "mout_sw_aclk166" };
 
 PNAME(mout_sw_aclk266_p)	= { "dout_aclk266", "sclk_spll"};
-PNAME(mout_user_aclk266_p)	= { "oscclk", "mout_sw_aclk266" };
+PNAME(mout_user_aclk266_p)	= { "fin_pll", "mout_sw_aclk266" };
 
 PNAME(mout_sw_aclk333_432_gscl_p) = { "dout_aclk333_432_gscl", "sclk_spll"};
-PNAME(mout_user_aclk333_432_gscl_p) = { "oscclk", "mout_sw_aclk333_432_gscl" };
+PNAME(mout_user_aclk333_432_gscl_p) = { "fin_pll", "mout_sw_aclk333_432_gscl" };
 
 PNAME(mout_sw_aclk300_gscl_p)	= { "dout_aclk300_gscl", "sclk_spll"};
-PNAME(mout_user_aclk300_gscl_p)	= { "oscclk", "mout_sw_aclk300_gscl" };
+PNAME(mout_user_aclk300_gscl_p)	= { "fin_pll", "mout_sw_aclk300_gscl" };
 
 PNAME(mout_sw_aclk300_disp1_p)	= { "dout_aclk300_disp1", "sclk_spll"};
-PNAME(mout_user_aclk300_disp1_p) = { "oscclk", "mout_sw_aclk300_disp1" };
+PNAME(mout_user_aclk300_disp1_p) = { "fin_pll", "mout_sw_aclk300_disp1" };
 
 PNAME(mout_sw_aclk300_jpeg_p) = { "dout_aclk300_jpeg", "sclk_spll"};
-PNAME(mout_user_aclk300_jpeg_p)	= { "oscclk", "mout_sw_aclk300_jpeg" };
+PNAME(mout_user_aclk300_jpeg_p)	= { "fin_pll", "mout_sw_aclk300_jpeg" };
 
 PNAME(mout_sw_aclk_g3d_p)	= { "dout_aclk_g3d", "sclk_spll"};
-PNAME(mout_user_aclk_g3d_p)	= { "oscclk", "mout_sw_aclk_g3d" };
+PNAME(mout_user_aclk_g3d_p)	= { "fin_pll", "mout_sw_aclk_g3d" };
 
 PNAME(mout_sw_aclk266_g2d_p)	= { "dout_aclk266_g2d", "sclk_spll"};
-PNAME(mout_user_aclk266_g2d_p)	= { "oscclk", "mout_sw_aclk266_g2d" };
+PNAME(mout_user_aclk266_g2d_p)	= { "fin_pll", "mout_sw_aclk266_g2d" };
 
 PNAME(mout_sw_aclk333_g2d_p)	= { "dout_aclk333_g2d", "sclk_spll"};
-PNAME(mout_user_aclk333_g2d_p)	= { "oscclk", "mout_sw_aclk333_g2d" };
+PNAME(mout_user_aclk333_g2d_p)	= { "fin_pll", "mout_sw_aclk333_g2d" };
 
-PNAME(mout_audio0_p)		= { "oscclk", "cdclk0", "sclk_dpll",
+PNAME(mout_audio0_p)		= { "fin_pll", "cdclk0", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
-PNAME(mout_audio1_p)		= { "oscclk", "cdclk1", "sclk_dpll",
+PNAME(mout_audio1_p)		= { "fin_pll", "cdclk1", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
-PNAME(mout_audio2_p)		= { "oscclk", "cdclk2", "sclk_dpll",
+PNAME(mout_audio2_p)		= { "fin_pll", "cdclk2", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
-PNAME(mout_spdif_p)		= { "oscclk", "dout_audio0", "dout_audio1",
+PNAME(mout_spdif_p)		= { "fin_pll", "dout_audio0", "dout_audio1",
 					"dout_audio2", "spdof_extclk",
 					"sclk_ipll", "sclk_epll", "sclk_rpll" };
 PNAME(mout_hdmi_p)		= { "sclk_hdmiphy", "dout_hdmi_pixel" };
-PNAME(mout_maudio0_p)		= { "oscclk", "maudio_clk", "sclk_dpll",
+PNAME(mout_maudio0_p)		= { "fin_pll", "maudio_clk", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
 
 /* fixed rate clocks generated outside the soc */
 struct samsung_fixed_rate_clock exynos5420_fixed_rate_ext_clks[] __initdata = {
-	FRATE(oscclk, "oscclk", NULL, CLK_IS_ROOT, 0),
+	FRATE(fin_pll, "fin_pll", NULL, CLK_IS_ROOT, 0),
 };
 
 /* fixed rate clocks generated inside the soc */
@@ -297,7 +297,7 @@ struct samsung_fixed_rate_clock exynos5420_fixed_rate_clks[] __initdata = {
 };
 
 struct samsung_fixed_factor_clock exynos5420_fixed_factor_clks[] __initdata = {
-	FFACTOR(none, "sclk_hsic_12m", "oscclk", 1, 2, 0),
+	FFACTOR(none, "sclk_hsic_12m", "fin_pll", 1, 2, 0),
 };
 
 struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
@@ -645,25 +645,25 @@ void __init exynos5420_clk_init(struct device_node *np)
 			ARRAY_SIZE(exynos5420_fixed_rate_ext_clks),
 			ext_clk_match);
 
-	apll = samsung_clk_register_pll35xx("fout_apll", "oscclk",
+	apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
 			reg_base, NULL, 0);
-	bpll = samsung_clk_register_pll35xx("fout_bpll", "oscclk",
+	bpll = samsung_clk_register_pll35xx("fout_bpll", "fin_pll",
 			reg_base + 0x20010, NULL, 0);
-	cpll = samsung_clk_register_pll35xx("fout_cpll", "oscclk",
+	cpll = samsung_clk_register_pll35xx("fout_cpll", "fin_pll",
 			reg_base + 0x10020, NULL, 0);
-	dpll = samsung_clk_register_pll35xx("fout_dpll", "oscclk",
+	dpll = samsung_clk_register_pll35xx("fout_dpll", "fin_pll",
 			reg_base + 0x10028, NULL, 0);
-	epll = samsung_clk_register_pll2650x("fout_epll", "oscclk",
+	epll = samsung_clk_register_pll2650x("fout_epll", "fin_pll",
 			reg_base + 0x10130);
-	rpll = samsung_clk_register_pll2650x("fout_rpll", "oscclk",
+	rpll = samsung_clk_register_pll2650x("fout_rpll", "fin_pll",
 			reg_base + 0x10140);
-	ipll = samsung_clk_register_pll35xx("fout_ipll", "oscclk",
+	ipll = samsung_clk_register_pll35xx("fout_ipll", "fin_pll",
 			reg_base + 0x10050, NULL, 0);
-	mpll = samsung_clk_register_pll35xx("fout_mpll", "oscclk",
+	mpll = samsung_clk_register_pll35xx("fout_mpll", "fin_pll",
 			reg_base + 0x10080, NULL, 0);
-	spll = samsung_clk_register_pll35xx("fout_spll", "oscclk",
+	spll = samsung_clk_register_pll35xx("fout_spll", "fin_pll",
 			reg_base + 0x10060, NULL, 0);
-	vpll = samsung_clk_register_pll35xx("fout_vpll", "oscclk",
+	vpll = samsung_clk_register_pll35xx("fout_vpll", "fin_pll",
 			reg_base + 0x10070, NULL, 0);
 
 	samsung_clk_register_fixed_rate(exynos5420_fixed_rate_clks,
