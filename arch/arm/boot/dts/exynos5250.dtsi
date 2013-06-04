@@ -462,6 +462,7 @@
 		samsung,idma-addr = <0x03000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s0_bus>;
+		status = "disabled";
 	};
 
 	i2s1: i2s@12D60000 {
@@ -474,6 +475,7 @@
 		clock-names = "iis";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s1_bus>;
+		status = "disabled";
 	};
 
 	i2s2: i2s@12D70000 {
@@ -486,6 +488,7 @@
 		clock-names = "iis";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s2_bus>;
+		status = "disabled";
 	};
 
 	usb@12000000 {
