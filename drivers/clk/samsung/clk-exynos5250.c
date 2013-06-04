@@ -529,6 +529,20 @@ static const struct samsung_pll_rate_table epll_24mhz_tbl[] = {
 	PLL_36XX_RATE(32768000, 131, 3, 5, 4719),
 };
 
+static const struct samsung_pll_rate_table gpll_24mhz_tbl[] = {
+	/* sorted in descending order */
+	/* PLL_35XX_RATE(rate, m, p, s) */
+	PLL_35XX_RATE(1400000000, 175, 3, 0), /* for 466MHz */
+	PLL_35XX_RATE(800000000, 100, 3, 0),  /* for 400MHz, 200MHz */
+	PLL_35XX_RATE(667000000, 389, 7, 1),  /* for 333MHz, 222MHz, 166MHz */
+	PLL_35XX_RATE(600000000, 200, 4, 1),  /* for 300MHz, 200MHz, 150MHz */
+	PLL_35XX_RATE(533000000, 533, 12, 1), /* for 533MHz, 266MHz, 133MHz */
+	PLL_35XX_RATE(450000000, 450, 12, 1), /* for 450 Hz */
+	PLL_35XX_RATE(400000000, 100, 3, 1),
+	PLL_35XX_RATE(333000000, 222, 4, 2),
+	PLL_35XX_RATE(200000000, 100, 3, 2),
+};
+
 /* register exynox5250 clocks */
 void __init exynos5250_clk_init(struct device_node *np)
 {
@@ -565,10 +579,20 @@ void __init exynos5250_clk_init(struct device_node *np)
 			reg_base + 0x4000, reg_base + 0x4100, NULL, 0);
 	bpll = samsung_clk_register_pll35xx("fout_bpll", "fin_pll",
 			reg_base + 0x20010, reg_base + 0x20110, NULL, 0);
-	gpll = samsung_clk_register_pll35xx("fout_gpll", "fin_pll",
-			reg_base + 0x10050, reg_base + 0x10150, NULL, 0);
 	cpll = samsung_clk_register_pll35xx("fout_cpll", "fin_pll",
 			reg_base + 0x10020, reg_base + 0x10120, NULL, 0);
+
+	if (fin_pll_rate == (24 * MHZ)) {
+		gpll = samsung_clk_register_pll35xx("fout_gpll", "fin_pll",
+				reg_base + 0x10050, reg_base + 0x10150,
+				gpll_24mhz_tbl, ARRAY_SIZE(gpll_24mhz_tbl));
+	} else {
+		pr_warn("Exynos5250: valid gpll rate_table missing for\n"
+			"parent fin_pll:%lu hz\n", fin_pll_rate);
+		gpll = samsung_clk_register_pll35xx("fout_gpll", "fin_pll",
+				reg_base + 0x10050, reg_base + 0x10150,
+				NULL, 0);
+	}
 
 	if (fin_pll_rate == (24 * MHZ)) {
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
