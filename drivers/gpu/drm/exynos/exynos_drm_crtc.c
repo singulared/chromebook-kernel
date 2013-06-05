@@ -595,13 +595,16 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int pipe)
 	struct drm_crtc *crtc = private->crtc[pipe];
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
+	int ret = 0;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	if (manager->ops->enable_vblank)
-		manager->ops->enable_vblank(manager->ctx);
+		ret = manager->ops->enable_vblank(manager->ctx);
 
-	return 0;
+	DRM_DEBUG_KMS("pipe: %d = %d\n", pipe, ret);
+
+	return ret;
 }
 
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int pipe)
