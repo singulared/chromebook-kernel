@@ -320,7 +320,7 @@ static int tprxy_parse_feature_event(struct wtp_data *wtp,
 
 	for (i = 0; i < TPRXY_SLOTS_PER_FRAME; ++i) {
 		u8 *raw = buf + (2 + i * 7);
-		event->fingers[i].status = raw[0];
+		event->fingers[i].status = get_bit(raw[2], 6);
 		event->fingers[i].abs_x = make_u16(raw[0] & 0x3f, raw[1]);
 		event->fingers[i].abs_y = make_u16(raw[2] & 0x3f, raw[3]);
 		event->fingers[i].pressure = raw[5];
