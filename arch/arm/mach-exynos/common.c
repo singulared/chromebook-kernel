@@ -392,6 +392,8 @@ void __init exynos_init_io(struct map_desc *mach_desc, int size)
 	}
 #endif
 
+	debug_ll_io_init();
+
 	iotable_init(iodesc, iodesc_sz);
 
 	if (mach_desc)
