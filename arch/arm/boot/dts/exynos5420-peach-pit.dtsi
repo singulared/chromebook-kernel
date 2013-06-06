@@ -31,6 +31,21 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+
+		lid_irq: lid-irq {
+			samsung,pins = "gpx3-4";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		power_key_irq: power-key-irq {
+			samsung,pins = "gpx1-2";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 	};
 
 	pinctrl@14010000 {
@@ -50,6 +65,29 @@
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <3>;
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&power_key_irq &lid_irq>;
+
+		power {
+			label = "Power";
+			gpios = <&gpx1 2 1>;
+			linux,code = <116>; /* KEY_POWER */
+			gpio-key,wakeup;
+		};
+
+		lid-switch {
+			label = "Lid";
+			gpios = <&gpx3 4 1>;
+			linux,input-type = <5>; /* EV_SW */
+			linux,code = <0>; /* SW_LID */
+			debounce-interval = <1>;
+			gpio-key,wakeup;
 		};
 	};
 
