@@ -313,6 +313,11 @@ static const struct snd_soc_dapm_route daisy_audio_map[] = {
 	{"MIC2", "NULL", "Mic Jack"},
 };
 
+static const struct snd_soc_dapm_route max98090_audio_map[] = {
+	{"Mic Jack", "NULL", "MICBIAS"},
+	{"MIC2", "NULL", "Mic Jack"},
+};
+
 static const struct snd_soc_dapm_widget daisy_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
@@ -383,6 +388,7 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_card *card = codec->card;
 	struct device_node *dn = card->dev->of_node;
+	struct device_node *codec_dn = codec->dev->of_node;
 	struct audio_codec_plugin *plugin;
 
 	if (dn) {
@@ -426,16 +432,20 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 
 	/* Microphone BIAS is needed to power the analog mic.
 	 * MICBIAS2 is connected to analog mic (MIC3, which is in turn
-	 * connected to MIC2 via 'External MIC') on Daisy.
+	 * connected to MIC2 via 'External MIC') on the max98095 codec.
+	 * Microphone BIAS is controlled by MICBIAS on the max98090 codec.
 	 *
 	 * Ultimately, the following should hold:
 	 *
-	 *   Microphone in jack	    => MICBIAS2 enabled &&
+	 *   Microphone in jack	    => MICBIAS/MICBIAS2 enabled &&
 	 *			       'External Mic' = MIC2
-	 *   Microphone not in jack => MICBIAS2 disabled &&
+	 *   Microphone not in jack => MICBIAS/MICBIAS2 disabled &&
 	 *			       'External Mic' = MIC1
 	*/
-	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	if (of_device_is_compatible(codec_dn, "maxim,max98095"))
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	else
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
 
 	snd_soc_dapm_sync(dapm);
 
@@ -521,7 +531,8 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 
 	if (!of_machine_is_compatible("google,snow") &&
 	    !of_machine_is_compatible("google,spring") &&
-	    !of_machine_is_compatible("google,daisy"))
+	    !of_machine_is_compatible("google,daisy") &&
+	    !of_machine_is_compatible("google,pit"))
 		return -ENODEV;
 
 	i2s_node = of_parse_phandle(pdev->dev.of_node,
@@ -537,6 +548,11 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev,
 			"Property 'audio-codec' missing or invalid\n");
 		return -EINVAL;
+	}
+
+	if (of_device_is_compatible(codec_node, "maxim,max98090")) {
+		card->dapm_routes = max98090_audio_map;
+		card->num_dapm_routes = ARRAY_SIZE(max98090_audio_map);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++) {
@@ -570,6 +586,7 @@ static int daisy_max98095_driver_remove(struct platform_device *pdev)
 
 static const struct of_device_id daisy_max98095_of_match[] = {
 	{ .compatible = "google,daisy-audio-max98095", },
+	{ .compatible = "google,daisy-audio-max98090", },
 	{},
 };
 
