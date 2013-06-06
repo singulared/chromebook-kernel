@@ -162,7 +162,8 @@
 		num-slots = <1>;
 		broken-cd;
 		bypass-smu;
-		supports-highspeed;
+		supports-highspeed;	/* >= 25MHz */
+		supports-hs200-mode;	/* 200MHz */
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		samsung,dw-mshc-ciu-div = <3>;
