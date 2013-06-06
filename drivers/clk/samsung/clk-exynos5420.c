@@ -44,6 +44,7 @@
 #define SRC_TOP11		0x10284
 #define SRC_TOP12		0x10288
 #define	SRC_MASK_DISP10		0x1032c
+#define SRC_MASK_MAU		0x10334
 #define SRC_MASK_FSYS		0x10340
 #define SRC_MASK_PERIC0		0x10350
 #define SRC_MASK_PERIC1		0x10354
@@ -88,7 +89,7 @@ enum exynos5420_clks {
 	none,
 
 	/* core clocks */
-	fin_pll /* AKA "oscclk" */, sclk_rpll,
+	fin_pll /* AKA "oscclk" */, sclk_rpll, fout_epll, sclk_epll,
 
 	/* gate for special clocks (sclk) */
 	sclk_uart0 = 128, sclk_uart1, sclk_uart2, sclk_uart3, sclk_mmc0 = 132,
@@ -125,7 +126,7 @@ enum exynos5420_clks {
 	aclk_g3d = 500, g3d,
 
 	/* mux clocks */
-	mout_fimd1 = 1024,
+	mout_fimd1 = 1024, mout_maudio0,
 
 	nr_clks,
 };
@@ -161,6 +162,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	SRC_TOP11,
 	SRC_TOP12,
 	SRC_MASK_DISP10,
+	SRC_MASK_MAU,
 	SRC_MASK_FSYS,
 	SRC_MASK_PERIC0,
 	SRC_MASK_PERIC1,
@@ -307,7 +309,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX_A(none, "mout_cpu", mout_cpu_p, SRC_CPU, 16, 1, "mout_cpu"),
 	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP6, 28, 1),
 	MUX(none, "sclk_dpll", mout_dpll_p, SRC_TOP6, 24, 1),
-	MUX(none, "sclk_epll", mout_epll_p, SRC_TOP6, 20, 1),
+	MUX_F(sclk_epll, "sclk_epll", mout_epll_p, SRC_TOP6, 20, 1,
+						CLK_SET_RATE_PARENT, 0),
 	MUX_F(sclk_rpll, "sclk_rpll", mout_rpll_p, SRC_TOP6, 16, 1,
 						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1),
@@ -336,7 +339,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_sw_aclk66", mout_sw_aclk66_p, SRC_TOP11, 8, 1),
 	MUX(none, "mout_aclk66_peric", mout_aclk66_peric_p, SRC_TOP4, 8, 1),
 	MUX(none, "mout_aclk66_psgen", mout_aclk66_peric_p, SRC_TOP5, 4, 1),
-	MUX(none, "mout_maudio0", mout_maudio0_p, SRC_MAU, 28, 3),
+	MUX_F(mout_maudio0, "mout_maudio0", mout_maudio0_p, SRC_MAU, 28, 3,
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_aclk200_fsys", mout_group1_p, SRC_TOP0, 28, 2),
 	MUX(none, "mout_sw_aclk200_fsys", mout_sw_aclk200_fsys_p,
 							SRC_TOP10, 28, 1),
@@ -550,6 +554,11 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 						CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_spi2, "sclk_spi2", "dout_spi2_pre", SRC_MASK_PERIC1, 28,
 						CLK_SET_RATE_PARENT, 0),
+	/* audio */
+	GATE(sclk_maudio0, "sclk_maudio0", "dout_maudio0", GATE_TOP_SCLK_MAU,
+						0, CLK_SET_RATE_PARENT, 0),
+	GATE(sclk_maupcm0, "sclk_maupcm0", "dout_maupcm0", GATE_TOP_SCLK_MAU,
+						1, CLK_SET_RATE_PARENT, 0),
 	/*i2s */
 	GATE(i2s1, "i2s1", "aclk66_peric", GATE_BUS_PERIC, 23, 0, 0),
 	GATE(i2s2, "i2s2", "aclk66_peric", GATE_BUS_PERIC, 24, 0, 0),
@@ -693,6 +702,7 @@ void __init exynos5420_clk_init(struct device_node *np)
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
 				reg_base + 0x10030, NULL, 0);
 	}
+	samsung_clk_add_lookup(epll, fout_epll);
 
 	samsung_clk_register_fixed_rate(exynos5420_fixed_rate_clks,
 			ARRAY_SIZE(exynos5420_fixed_rate_clks));
