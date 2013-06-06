@@ -1277,7 +1277,7 @@ static int gsc_probe(struct platform_device *pdev)
 	gsc->alloc_ctx = vb2_dma_contig_init_ctx(&pdev->dev);
 	if (IS_ERR(gsc->alloc_ctx)) {
 		ret = PTR_ERR(gsc->alloc_ctx);
-		goto err_irq;
+		goto err_m2m;
 	}
 
 	if (pm_genpd_of_add_device_by_name(pdev->dev.of_node, &pdev->dev,
@@ -1290,6 +1290,8 @@ static int gsc_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_m2m:
+        gsc_unregister_m2m_device(gsc);
 err_irq:
 	free_irq(gsc->irq, gsc);
 err_regs_unmap:
