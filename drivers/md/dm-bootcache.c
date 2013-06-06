@@ -29,6 +29,7 @@
 #include <linux/device-mapper.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mount.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -933,45 +934,53 @@ no_match:
  *
  * N.B., uuid_string is not checked for safety just strlen().
  */
-static int dm_get_device_by_uuid(struct dm_target *ti, const char *uuid_str,
+static int dm_get_device_by_uuid(struct dm_target *ti, char *uuid_str,
 			     sector_t dev_start, sector_t dev_len,
 			     struct dm_dev **dm_dev)
 {
+	const char partuuid[] = "PARTUUID=";
 	struct device *dev = NULL;
 	dev_t devt = 0;
 	char devt_buf[BDEVT_SIZE];
 	u8 uuid[16];
 	size_t uuid_length = strlen(uuid_str);
 
-	if (uuid_length < 36)
-		goto bad_uuid;
-	/* Pack the requested UUID in the expected format. */
-	part_pack_uuid(uuid_str, uuid);
+	if (strncmp(uuid_str, partuuid, strlen(partuuid)) == 0) {
+		devt = name_to_dev_t(uuid_str);
+	} else {
+		if (uuid_length < 36)
+			goto bad_uuid;
+		/* Pack the requested UUID in the expected format. */
+		part_pack_uuid(uuid_str, uuid);
 
-	dev = class_find_device(&block_class, NULL, uuid, &match_dev_by_uuid);
-	if (!dev)
-		goto found_nothing;
+		dev = class_find_device(&block_class, NULL, uuid,
+					&match_dev_by_uuid);
+		if (!dev)
+			goto found_nothing;
 
-	devt = dev->devt;
-	put_device(dev);
+		devt = dev->devt;
+		put_device(dev);
 
-	/* The caller may specify +/-%u after the UUID if they want a partition
-	 * before or after the one identified.
-	 */
-	if (uuid_length > 36) {
-		unsigned int part_offset;
-		char sign;
-		unsigned minor = MINOR(devt);
-		if (sscanf(uuid_str + 36, "%c%u", &sign, &part_offset) == 2) {
-			if (sign == '+') {
-				minor += part_offset;
-			} else if (sign == '-') {
-				minor -= part_offset;
-			} else {
-				DMWARN("Trailing characters after UUID: %s\n",
-					uuid_str);
+		/* The caller may specify +/-%u after the UUID if they want
+		 * a partition before or after the one identified.
+		 */
+		if (uuid_length > 36) {
+			unsigned int part_offset;
+			char sign;
+			unsigned minor = MINOR(devt);
+			if (sscanf(uuid_str + 36, "%c%u",
+			    &sign, &part_offset) == 2) {
+				if (sign == '+') {
+					minor += part_offset;
+				} else if (sign == '-') {
+					minor -= part_offset;
+				} else {
+					DMWARN("Trailing characters"
+						" after UUID: %s\n",
+						uuid_str);
+				}
+				devt = MKDEV(MAJOR(devt), minor);
 			}
-			devt = MKDEV(MAJOR(devt), minor);
 		}
 	}
 
@@ -1000,7 +1009,7 @@ found_nothing:
 
 static int bootcache_get_device(
 	struct dm_target *ti,
-	const char *devname,
+	char *devname,
 	sector_t dev_start,
 	sector_t dev_len,
 	struct dm_dev **dm_dev)
@@ -1051,7 +1060,7 @@ static int bootcache_ctr(struct dm_target *ti, unsigned argc, char **argv)
 {
 	struct bootcache *cache = NULL;
 	const char *signature = NULL;
-	const char *device = NULL;
+	char *device = NULL;
 	u64 cache_start = 0;
 	u64 max_pages = DEFAULT_MAX_PAGES;
 	u64 size_limit = DEFAULT_SIZE_LIMIT;

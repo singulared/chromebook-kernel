@@ -54,6 +54,7 @@
 #define SDMMC_DSCADDR		0x094
 #define SDMMC_BUFADDR		0x098
 #define SDMMC_CLKSEL		0x09C /* specific to Samsung Exynos5250 */
+#define SDMMC_CDTHRCTL		0x100
 #define SDMMC_DATA(x)		(x)
 
 /*
@@ -129,6 +130,9 @@
 #define SDMMC_CMD_INDX(n)		((n) & 0x1F)
 /* Status register defines */
 #define SDMMC_GET_FCNT(x)		(((x)>>17) & 0x1FFF)
+/* FIFOTH register defines */
+#define SDMMC_FIFOTH_DMA_MULTI_TRANS_SIZE	28
+#define SDMMC_FIFOTH_RX_WMARK		16
 /* Internal DMAC interrupt defines */
 #define SDMMC_IDMAC_INT_AI		BIT(9)
 #define SDMMC_IDMAC_INT_NI		BIT(8)
@@ -146,9 +150,9 @@
 
 #define DW_MCI_DEF_SDR_TIMING		0x03030002
 #define DW_MCI_DEF_DDR_TIMING		0x03020001
-#define SDMMC_CLKSEL_CCLK_SAMPLE(x)	(((x) & 3) << 0)
-#define SDMMC_CLKSEL_CCLK_DRIVE(x)	(((x) & 3) << 16)
-#define SDMMC_CLKSEL_CCLK_DIVIDER(x)	(((x) & 3) << 24)
+#define SDMMC_CLKSEL_CCLK_SAMPLE(x)	(((x) & 7) << 0)
+#define SDMMC_CLKSEL_CCLK_DRIVE(x)	(((x) & 7) << 16)
+#define SDMMC_CLKSEL_CCLK_DIVIDER(x)	(((x) & 7) << 24)
 #define SDMMC_CLKSEL_TIMING(x, y, z)	(SDMMC_CLKSEL_CCLK_SAMPLE(x) |	\
 					SDMMC_CLKSEL_CCLK_DRIVE(y) |	\
 					SDMMC_CLKSEL_CCLK_DIVIDER(z))

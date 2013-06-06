@@ -36,6 +36,8 @@ static unsigned samsung_dmadev_request(enum dma_ch dma_ch,
 	filter_param = (dma_ch == DMACH_DT_PROP) ? (void *)info->dt_dmach_prop :
 				(void *)dma_ch;
 	chan = dma_request_channel(mask, pl330_filter, filter_param);
+	if (!chan)
+		return (unsigned)chan;
 
 	if (info->direction == DMA_DEV_TO_MEM) {
 		memset(&slave_config, 0, sizeof(struct dma_slave_config));

@@ -948,7 +948,7 @@ int gsc_prepare_addr(struct gsc_ctx *ctx, struct vb2_buffer *vb,
 	int ret = 0;
 	u32 pix_size;
 
-	if (IS_ERR(vb) || IS_ERR(frame)) {
+	if (!vb) {
 		gsc_err("Invalid argument");
 		return -EINVAL;
 	}

@@ -1426,7 +1426,7 @@ static const unsigned int mali_dvfs_asv_vol_tbl
 };
 
 static const unsigned int mali_dvfs_vol_default[MALI_DVFS_STEP] = {
-	 925000, 925000, 1025000, 1075000, 1125000, 1150000, 120000
+	 925000, 925000, 1025000, 1075000, 1125000, 1150000, 1200000
 };
 
 static int mali_dvfs_update_asv(int group)

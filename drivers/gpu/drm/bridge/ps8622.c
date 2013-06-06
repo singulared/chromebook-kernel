@@ -218,6 +218,9 @@ static int ps8622_backlight_update(struct backlight_device *bl)
 	struct ps8622_bridge *bridge = dev_get_drvdata(&bl->dev);
 	int brightness = bl->props.brightness;
 
+	if (!bridge->enabled)
+		return -EINVAL;
+
 	if (bl->props.power != FB_BLANK_UNBLANK ||
 	    bl->props.state & (BL_CORE_SUSPENDED | BL_CORE_FBBLANK))
 		brightness = 0;

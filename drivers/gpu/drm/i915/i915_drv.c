@@ -464,6 +464,7 @@ static void i915_repin_bound_fbs(struct drm_device *dev)
 {
 	struct drm_crtc *crtc;
 	struct drm_i915_gem_object *obj;
+	int ret;
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		if (!crtc || !crtc->fb)
@@ -471,7 +472,16 @@ static void i915_repin_bound_fbs(struct drm_device *dev)
 		obj = to_intel_framebuffer(crtc->fb)->obj;
 		if (!obj)
 			continue;
-		intel_pin_and_fence_fb_obj(dev, obj, NULL);
+
+		/* Install a fence for tiled scan-out. */
+		if (obj->tiling_mode != I915_TILING_NONE) {
+			ret = i915_gem_object_get_fence(obj, NULL);
+			if (ret)
+				DRM_ERROR("Couldn't get a fence\n");
+			else
+				i915_gem_object_pin_fence(obj);
+		}
+
 	}
 }
 
