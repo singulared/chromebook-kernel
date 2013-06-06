@@ -43,6 +43,13 @@
 
 #define DRV_NAME "daisy-snd-max98095"
 
+/*
+ * The initial rate that EPLL will be set to.  This is the smallest multiple (4)
+ * of the desired master clock frequency 256 * FS for FS = 44.1khz that can
+ * be generated on both the 5250 and 5420 SoCs.
+ */
+#define DEFAULT_EPLL_RATE (256 * 44100 * 4)
+
 /* Audio clock settings are belonged to board specific part. Every
  * board can set audio source clock setting which is matched with H/W
  * like this function-'set_audio_clock_heirachy'.
@@ -97,6 +104,20 @@ static int set_audio_clock_heirachy(struct platform_device *pdev)
 		goto out5;
 	}
 
+	/*
+	 * fout_epll may have been initialized to operate at a frequency higher
+	 * than the audio block's maximum (192Mhz on 5250, 200Mhz on 5420),
+	 * so lower it to a reasonable rate here.  If we attempt to set
+	 * fout_epll as the parent of mout_audss when fout_epll is operating
+	 * at a frequency higher than the audio block's maximum, the system
+	 * may hang.
+	 */
+	ret = clk_set_rate(fout_epll, DEFAULT_EPLL_RATE);
+	if (ret < 0) {
+		printk(KERN_WARNING "Failed to set epll rate.\n");
+		goto out6;
+	}
+
 	/* Set audio clock hierarchy for S/PDIF */
 	if (clk_set_parent(sclk_epll, fout_epll))
 		printk(KERN_WARNING "Failed to set parent of epll.\n");
@@ -107,6 +128,13 @@ static int set_audio_clock_heirachy(struct platform_device *pdev)
 	if (clk_set_parent(mout_i2s, sclk_audio0))
 		printk(KERN_WARNING "Failed to set parent of mout i2s.\n");
 
+	/* Ensure that the divider between mout_audio0 and sclk_audio0 is 1. */
+	ret = clk_set_rate(sclk_audio0, clk_get_rate(mout_audio0));
+	if (ret < 0)
+		printk(KERN_WARNING "Failed to set audio bus rate (%d).\n",
+			ret);
+
+out6:
 	clk_put(mout_i2s);
 out5:
 	clk_put(mout_audss);
