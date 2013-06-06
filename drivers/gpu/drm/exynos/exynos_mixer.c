@@ -724,15 +724,25 @@ static int mixer_enable_vblank(void *ctx, int pipe)
 {
 	struct mixer_context *mixer_ctx = ctx;
 	struct mixer_resources *res = &mixer_ctx->mixer_res;
+	unsigned long flags;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
+	spin_lock_irqsave(&res->reg_slock, flags);
+
 	mixer_ctx->pipe = pipe;
+
+	if (!mixer_ctx->powered) {
+		mixer_ctx->int_en |= MXR_INT_EN_VSYNC;
+		goto out;
+	}
 
 	/* enable vsync interrupt */
 	mixer_reg_writemask(res, MXR_INT_EN, MXR_INT_EN_VSYNC,
 			MXR_INT_EN_VSYNC);
 
+out:
+	spin_unlock_irqrestore(&res->reg_slock, flags);
 	return 0;
 }
 
@@ -740,11 +750,22 @@ static void mixer_disable_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
 	struct mixer_resources *res = &mixer_ctx->mixer_res;
+	unsigned long flags;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
+	spin_lock_irqsave(&res->reg_slock, flags);
+
+	if (!mixer_ctx->powered) {
+		mixer_ctx->int_en &= ~MXR_INT_EN_VSYNC;
+		goto out;
+	}
+
 	/* disable vsync interrupt */
 	mixer_reg_writemask(res, MXR_INT_EN, 0, MXR_INT_EN_VSYNC);
+
+out:
+	spin_unlock_irqrestore(&res->reg_slock, flags);
 }
 
 static void mixer_win_mode_set(void *ctx,
@@ -920,6 +941,7 @@ static void mixer_window_resume(struct mixer_context *ctx)
 static void mixer_poweron(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
+	unsigned long flags;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
@@ -932,7 +954,10 @@ static void mixer_poweron(struct mixer_context *ctx)
 		clk_prepare_enable(res->sclk_mixer);
 	}
 
+	spin_lock_irqsave(&res->reg_slock, flags);
 	mixer_reg_write(res, MXR_INT_EN, ctx->int_en);
+	spin_unlock_irqrestore(&res->reg_slock, flags);
+
 	mixer_win_reset(ctx);
 
 	mixer_window_resume(ctx);
@@ -943,6 +968,7 @@ static void mixer_poweron(struct mixer_context *ctx)
 static void mixer_poweroff(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
+	unsigned long flags;
 
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
@@ -951,7 +977,9 @@ static void mixer_poweroff(struct mixer_context *ctx)
 
 	mixer_window_suspend(ctx);
 
+	spin_lock_irqsave(&res->reg_slock, flags);
 	ctx->int_en = mixer_reg_read(res, MXR_INT_EN);
+	spin_unlock_irqrestore(&res->reg_slock, flags);
 
 	clk_disable_unprepare(res->mixer);
 	if (ctx->vp_enabled) {
