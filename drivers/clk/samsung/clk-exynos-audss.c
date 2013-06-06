@@ -141,6 +141,12 @@ void __init exynos_audss_clk_init(struct device_node *np)
 				"div_pcm0", CLK_SET_RATE_PARENT,
 				reg_base + ASS_CLK_GATE, 5, 0, &lock);
 
+	if (of_device_is_compatible(np, "samsung,exynos5420-audss-clock")) {
+		clk_table[EXYNOS_ADMA] = clk_register_gate(NULL, "adma",
+				"dout_srp", CLK_SET_RATE_PARENT,
+				reg_base + ASS_CLK_GATE, 9, 0, &lock);
+	}
+
 #ifdef CONFIG_PM_SLEEP
 	register_syscore_ops(&exynos_audss_clk_syscore_ops);
 #endif
@@ -150,4 +156,6 @@ void __init exynos_audss_clk_init(struct device_node *np)
 CLK_OF_DECLARE(exynos4210_audss_clk, "samsung,exynos4210-audss-clock",
 		exynos_audss_clk_init);
 CLK_OF_DECLARE(exynos5250_audss_clk, "samsung,exynos5250-audss-clock",
+		exynos_audss_clk_init);
+CLK_OF_DECLARE(exynos5420_audss_clk, "samsung,exynos5420-audss-clock",
 		exynos_audss_clk_init);
