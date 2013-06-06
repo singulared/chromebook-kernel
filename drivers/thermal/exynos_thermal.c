@@ -114,6 +114,8 @@
 
 #define EXYNOS_ZONE_COUNT	3
 
+struct exynos_thermal_zone;
+
 struct exynos_tmu_data {
 	struct exynos_tmu_platform_data *pdata;
 	struct resource *mem;
@@ -124,6 +126,7 @@ struct exynos_tmu_data {
 	struct mutex lock;
 	struct clk *clk;
 	u32 thd_temp_rise, thd_temp_fall;	/* exynos5 resume support */
+	struct exynos_thermal_zone *th_zone;
 	u8 temp_error1, temp_error2;
 };
 
@@ -156,14 +159,17 @@ struct exynos_thermal_zone {
 	bool bind;
 };
 
-static struct exynos_thermal_zone *th_zone;
-static void exynos_unregister_thermal(void);
-static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf);
+static void exynos_unregister_thermal(struct exynos_tmu_data *data);
+static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf,
+				   struct exynos_tmu_data *data);
 
 /* Get mode callback functions for thermal zone */
 static int exynos_get_mode(struct thermal_zone_device *thermal,
 			enum thermal_device_mode *mode)
 {
+	struct exynos_tmu_data *data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = data->th_zone;
+
 	if (th_zone)
 		*mode = th_zone->mode;
 	return 0;
@@ -173,6 +179,9 @@ static int exynos_get_mode(struct thermal_zone_device *thermal,
 static int exynos_set_mode(struct thermal_zone_device *thermal,
 			enum thermal_device_mode mode)
 {
+	struct exynos_tmu_data *data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = data->th_zone;
+
 	if (!th_zone->therm_dev) {
 		pr_notice("thermal zone not registered\n");
 		return 0;
@@ -218,6 +227,9 @@ static int exynos_get_trip_type(struct thermal_zone_device *thermal, int trip,
 static int exynos_get_trip_temp(struct thermal_zone_device *thermal, int trip,
 				unsigned long *temp)
 {
+	struct exynos_tmu_data *data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = data->th_zone;
+
 	if (trip < GET_TRIP(MONITOR_ZONE) || trip > GET_TRIP(PANIC_ZONE))
 		return -EINVAL;
 
@@ -244,7 +256,10 @@ static int exynos_bind(struct thermal_zone_device *thermal,
 {
 	int ret = 0, i, tab_size, level;
 	struct freq_clip_table *tab_ptr, *clip_data;
+	struct exynos_tmu_data *tmu_data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = tmu_data->th_zone;
 	struct thermal_sensor_conf *data = th_zone->sensor_conf;
+
 
 	tab_ptr = (struct freq_clip_table *)data->cooling_data.freq_data;
 	tab_size = data->cooling_data.freq_clip_count;
@@ -290,6 +305,8 @@ static int exynos_unbind(struct thermal_zone_device *thermal,
 			struct thermal_cooling_device *cdev)
 {
 	int ret = 0, i, tab_size;
+	struct exynos_tmu_data *tmu_data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = tmu_data->th_zone;
 	struct thermal_sensor_conf *data = th_zone->sensor_conf;
 
 	if (th_zone->bind == false)
@@ -332,6 +349,8 @@ static int exynos_unbind(struct thermal_zone_device *thermal,
 static int exynos_get_temp(struct thermal_zone_device *thermal,
 			unsigned long *temp)
 {
+	struct exynos_tmu_data *tmu_data = thermal->devdata;
+	struct exynos_thermal_zone *th_zone = tmu_data->th_zone;
 	void *data;
 
 	if (!th_zone->sensor_conf) {
@@ -380,7 +399,7 @@ static struct thermal_zone_device_ops const exynos_dev_ops = {
  * This function may be called from interrupt based temperature sensor
  * when threshold is changed.
  */
-static void exynos_report_trigger(void)
+static void exynos_report_trigger(struct exynos_thermal_zone *th_zone)
 {
 	unsigned int i;
 	char data[10];
@@ -421,10 +440,12 @@ static void exynos_report_trigger(void)
 }
 
 /* Register with the in-kernel thermal management */
-static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf)
+static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf,
+				   struct exynos_tmu_data *data)
 {
 	int ret;
 	struct cpumask mask_val;
+	struct exynos_thermal_zone *th_zone;
 
 	if (!sensor_conf || !sensor_conf->read_temperature) {
 		pr_err("Temperature sensor not initialised\n");
@@ -444,9 +465,10 @@ static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf)
 		goto err_unregister;
 	}
 	th_zone->cool_dev_size++;
+	data->th_zone = th_zone;
 
 	th_zone->therm_dev = thermal_zone_device_register(sensor_conf->name,
-			EXYNOS_ZONE_COUNT, 0, NULL, &exynos_dev_ops, NULL, 0,
+			EXYNOS_ZONE_COUNT, 0, data, &exynos_dev_ops, NULL, 0,
 			sensor_conf->trip_data.trigger_falling ?
 			0 : IDLE_INTERVAL);
 
@@ -461,13 +483,14 @@ static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf)
 	return 0;
 
 err_unregister:
-	exynos_unregister_thermal();
+	exynos_unregister_thermal(data);
 	return ret;
 }
 
 /* Un-Register with the in-kernel thermal management */
-static void exynos_unregister_thermal(void)
+static void exynos_unregister_thermal(struct exynos_tmu_data *data)
 {
+	struct exynos_thermal_zone *th_zone = data->th_zone;
 	int i;
 
 	if (!th_zone)
@@ -773,7 +796,7 @@ static void exynos_tmu_work(struct work_struct *work)
 	struct exynos_tmu_data *data = container_of(work,
 			struct exynos_tmu_data, irq_work);
 
-	exynos_report_trigger();
+	exynos_report_trigger(data->th_zone);
 	mutex_lock(&data->lock);
 	clk_enable(data->clk);
 	if (data->soc == SOC_ARCH_EXYNOS)
@@ -785,7 +808,6 @@ static void exynos_tmu_work(struct work_struct *work)
 				data->base + EXYNOS_TMU_REG_INTCLEAR);
 	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
-
 	enable_irq(data->irq);
 }
 
@@ -1010,7 +1032,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 	exynos_tmu_control(pdev, true);
 
-	ret = exynos_register_thermal(&exynos_sensor_conf);
+	ret = exynos_register_thermal(&exynos_sensor_conf, data);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register thermal interface\n");
 		goto err_clk;
@@ -1026,7 +1048,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	return 0;
 
 err_irq:
-	exynos_unregister_thermal();
+	exynos_unregister_thermal(data);
 err_clk:
 	platform_set_drvdata(pdev, NULL);
 	clk_unprepare(data->clk);
@@ -1040,7 +1062,7 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	free_irq(data->irq, data);
 	exynos_tmu_control(pdev, false);
 
-	exynos_unregister_thermal();
+	exynos_unregister_thermal(data);
 
 	clk_unprepare(data->clk);
 
