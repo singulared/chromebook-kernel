@@ -32,10 +32,6 @@ static unsigned long reg_save[][2] = {
 	{ASS_CLK_GATE, 0},
 };
 
-/* list of all parent clock list */
-static const char *mout_audss_p[] = { "fin_pll", "fout_epll" };
-static const char *mout_i2s_p[] = { "mout_audss", "cdclk0", "sclk_audio0" };
-
 #ifdef CONFIG_PM_SLEEP
 static int exynos_audss_clk_suspend(void)
 {
@@ -64,6 +60,10 @@ static struct syscore_ops exynos_audss_clk_syscore_ops = {
 /* register exynos_audss clocks */
 void __init exynos_audss_clk_init(struct device_node *np)
 {
+	const char *mout_audss_p[] = {"fin_pll", "fout_epll"};
+	const char *mout_i2s_p[] = {"mout_audss", "cdclk0", "sclk_audio0"};
+	struct clk *pll_ref, *pll_in, *cdclk, *sclk_audio;
+
 	reg_base = of_iomap(np, 0);
 	if (!reg_base) {
 		pr_err("%s: failed to map audss registers\n", __func__);
@@ -81,10 +81,30 @@ void __init exynos_audss_clk_init(struct device_node *np)
 	clk_data.clk_num = EXYNOS_AUDSS_MAX_CLKS;
 	of_clk_add_provider(np, of_clk_src_onecell_get, &clk_data);
 
+	pll_ref = of_clk_get_by_name(np, "pll_ref");
+	pll_in = of_clk_get_by_name(np, "pll_in");
+	if (!IS_ERR(pll_ref)) {
+		mout_audss_p[0] = __clk_get_name(pll_ref);
+		clk_put(pll_ref);
+	}
+	if (!IS_ERR(pll_in)) {
+		mout_audss_p[1] = __clk_get_name(pll_in);
+		clk_put(pll_in);
+	}
 	clk_table[EXYNOS_MOUT_AUDSS] = clk_register_mux(NULL, "mout_audss",
 				mout_audss_p, ARRAY_SIZE(mout_audss_p), 0,
 				reg_base + ASS_CLK_SRC, 0, 1, 0, &lock);
 
+	cdclk = of_clk_get_by_name(np, "cdclk");
+	sclk_audio = of_clk_get_by_name(np, "sclk_audio");
+	if (!IS_ERR(cdclk)) {
+		mout_i2s_p[1] = __clk_get_name(cdclk);
+		clk_put(cdclk);
+	}
+	if (!IS_ERR(sclk_audio)) {
+		mout_i2s_p[2] = __clk_get_name(sclk_audio);
+		clk_put(sclk_audio);
+	}
 	clk_table[EXYNOS_MOUT_I2S] = clk_register_mux(NULL, "mout_i2s",
 				mout_i2s_p, ARRAY_SIZE(mout_i2s_p), 0,
 				reg_base + ASS_CLK_SRC, 2, 2, 0, &lock);
