@@ -390,6 +390,11 @@
 		};
 	};
 
+	/* i2s_0 */
+	i2s@03830000 {
+		status = "okay";
+	};
+
 	/* dw usb3_0 */
 	usb@12000000 {
 		status = "okay";
