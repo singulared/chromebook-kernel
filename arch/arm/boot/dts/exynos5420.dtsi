@@ -12,6 +12,8 @@
 #include "skeleton.dtsi"
 #include "exynos5420-pinctrl.dtsi"
 
+#include <dt-bindings/clk/exynos-audss-clk.h>
+
 / {
 	compatible = "samsung,exynos5420";
 	interrupt-parent = <&gic>;
@@ -49,6 +51,14 @@
 		compatible = "samsung,exynos5420-clock";
 		reg = <0x10010000 0x30000>;
 		#clock-cells = <1>;
+	};
+
+	clock_audss: audss-clock-controller@3810000 {
+		compatible = "samsung,exynos5420-audss-clock";
+		reg = <0x03810000 0x0C>;
+		#clock-cells = <1>;
+		clocks = <&clock 148>;
+		clock-names = "sclk_audio";
 	};
 
 	gic:interrupt-controller@10481000 {
