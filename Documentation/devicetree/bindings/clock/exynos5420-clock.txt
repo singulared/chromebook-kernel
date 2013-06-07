@@ -140,6 +140,8 @@ clock which they consume.
   usbd300		366
   usbd301		367
 
+  pclk200_fsys		370
+
   aclk400_mscl		380
   mscl0			381
   mscl1			382
