@@ -94,7 +94,7 @@ enum exynos5420_clks {
 	none,
 
 	/* core clocks */
-	fin_pll /* AKA "oscclk" */, sclk_rpll, fout_epll, sclk_epll,
+	fin_pll /* AKA "oscclk" */, sclk_rpll, fout_epll, sclk_epll, sclk_mpll,
 
 	/* gate for special clocks (sclk) */
 	sclk_uart0 = 128, sclk_uart1, sclk_uart2, sclk_uart3, sclk_mmc0 = 132,
@@ -131,7 +131,8 @@ enum exynos5420_clks {
 	aclk_g3d = 500, g3d, smmu_tv,
 
 	/* mux clocks */
-	mout_fimd1 = 1024, mout_maudio0, mout_hdmi,
+	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
+	mout_spi2,
 
 	nr_clks,
 };
@@ -332,7 +333,7 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1),
 	MUX(none, "sclk_spll", mout_spll_p, SRC_TOP6, 8, 1),
 	MUX(none, "sclk_vpll", mout_vpll_p, SRC_TOP6, 4, 1),
-	MUX(none, "sclk_mpll", mout_mpll_p, SRC_TOP6, 0, 1),
+	MUX(sclk_mpll, "sclk_mpll", mout_mpll_p, SRC_TOP6, 0, 1),
 	MUX(none, "mout_aclk200_fsys2", mout_group1_p, SRC_TOP0, 12, 2),
 	MUX(none, "mout_sw_aclk200_fsys2", mout_sw_aclk200_fsys2_p,
 							SRC_TOP10, 12, 1),
@@ -410,9 +411,9 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_audio0", mout_audio0_p, SRC_PERIC1, 8, 3),
 	MUX(none, "mout_audio1", mout_audio1_p, SRC_PERIC1, 12, 3),
 	MUX(none, "mout_audio2", mout_audio2_p, SRC_PERIC1, 16, 3),
-	MUX(none, "mout_spi0", mout_group2_p, SRC_PERIC1, 20, 3),
-	MUX(none, "mout_spi1", mout_group2_p, SRC_PERIC1, 24, 3),
-	MUX(none, "mout_spi2", mout_group2_p, SRC_PERIC1, 28, 3),
+	MUX(mout_spi0, "mout_spi0", mout_group2_p, SRC_PERIC1, 20, 3),
+	MUX(mout_spi1, "mout_spi1", mout_group2_p, SRC_PERIC1, 24, 3),
+	MUX(mout_spi2, "mout_spi2", mout_group2_p, SRC_PERIC1, 28, 3),
 	/*FSYS Blk */
 	MUX(none, "mout_mmc0", mout_group2_p, SRC_FSYS, 8, 3),
 	MUX(none, "mout_mmc1", mout_group2_p, SRC_FSYS, 12, 3),
@@ -461,9 +462,12 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_spi0", "mout_spi0", DIV_PERIC1, 20, 4),
 	DIV(none, "dout_spi1", "mout_spi1", DIV_PERIC1, 24, 4),
 	DIV(none, "dout_spi2", "mout_spi2", DIV_PERIC1, 28, 4),
-	DIV(none, "dout_spi0_pre", "dout_spi0", DIV_PERIC4, 8, 8),
-	DIV(none, "dout_spi1_pre", "dout_spi1", DIV_PERIC4, 16, 8),
-	DIV(none, "dout_spi2_pre", "dout_spi2", DIV_PERIC4, 24, 8),
+	DIV_F(none, "dout_spi0_pre", "dout_spi0", DIV_PERIC4, 8, 8,
+						CLK_SET_RATE_PARENT, 0),
+	DIV_F(none, "dout_spi1_pre", "dout_spi1", DIV_PERIC4, 16, 8,
+						CLK_SET_RATE_PARENT, 0),
+	DIV_F(none, "dout_spi2_pre", "dout_spi2", DIV_PERIC4, 24, 8,
+						CLK_SET_RATE_PARENT, 0),
 	/* audio -i2s */
 	DIV(none, "dout_audio0", "mout_audio0", DIV_PERIC3, 20, 4),
 	DIV(none, "dout_audio1", "mout_audio1", DIV_PERIC3, 24, 4),

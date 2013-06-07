@@ -27,6 +27,7 @@ clock which they consume.
   sclk_rpll		2
   fout_epll		3
   sclk_epll		4
+  sclk_mpll		5
 
   [Clock Gate for Special Clocks]
 
@@ -207,6 +208,9 @@ clock which they consume.
   mout_fimd1		1024
   mout_maudio0		1025
   mout_hdmi		1026
+  mout_spi0		1027
+  mout_spi1		1028
+  mout_spi2		1029
 
 Example 1: An example of a clock controller node is listed below.
 
