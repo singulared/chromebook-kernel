@@ -68,6 +68,9 @@ Optional properties:
 
 * broken-cd: as documented in mmc core bindings.
 
+* vmmc-supply: The phandle to the regulator to use for vmmc.  If this is
+  specified we'll defer probe until we can find this regulator.
+
 * bypass-smu: Bypass Security Management Unit of eMMC channel 0 and channel 1
 
 Aliases:
@@ -97,6 +100,7 @@ board specific portions as listed below.
 		broken-cd;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
+		vmmc-supply = <&buck8>;
 
 		slot@0 {
 			reg = <0>;
