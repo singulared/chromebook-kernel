@@ -187,6 +187,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	if (suspend_ops->wake)
 		suspend_ops->wake();
 
+	pm_print_active_wakeup_sources();
 	dpm_resume_start(PMSG_RESUME);
 
  Platform_finish:
