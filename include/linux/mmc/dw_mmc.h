@@ -38,6 +38,42 @@ enum {
 struct mmc_data;
 
 /**
+ * struct dw_mci_slot - MMC slot state
+ * @mmc: The mmc_host representing this slot.
+ * @host: The MMC controller this slot is using.
+ * @quirks: Slot-level quirks (DW_MCI_SLOT_QUIRK_XXX)
+ * @wp_gpio: If gpio_is_valid() we'll use this to read write protect.
+ * @ctype: Card type for this slot.
+ * @mrq: mmc_request currently being processed or waiting to be
+ *	processed, or NULL when the slot is idle.
+ * @queue_node: List node for placing this node in the @queue list of
+ *	&struct dw_mci.
+ * @clock: Clock rate configured by set_ios(). Protected by host->lock.
+ * @flags: Random state bits associated with the slot.
+ * @id: Number of this slot.
+ * @last_detect_state: Most recently observed card detect state.
+ */
+struct dw_mci_slot {
+	struct mmc_host		*mmc;
+	struct dw_mci		*host;
+
+	int			quirks;
+	int			wp_gpio;
+
+	u32			ctype;
+
+	struct mmc_request	*mrq;
+	struct list_head	queue_node;
+
+	unsigned int		clock;
+	unsigned long		flags;
+#define DW_MMC_CARD_PRESENT	0
+#define DW_MMC_CARD_NEED_INIT	1
+	int			id;
+	int			last_detect_state;
+};
+
+/**
  * struct dw_mci - MMC controller state shared between all slots
  * @lock: Spinlock protecting the queue and associated data.
  * @regs: Pointer to MMIO registers.
