@@ -36,12 +36,16 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/usb.h>
+#include <linux/usb/hcd.h>
+#include <linux/usb/phy.h>
 
 #include "core.h"
 
 int dwc3_host_init(struct dwc3 *dwc)
 {
 	struct platform_device	*xhci;
+	struct usb_hcd		*hcd;
 	int			ret;
 
 	xhci = platform_device_alloc("xhci-hcd", PLATFORM_DEVID_AUTO);
@@ -71,6 +75,10 @@ int dwc3_host_init(struct dwc3 *dwc)
 		dev_err(dwc->dev, "failed to register xHCI device\n");
 		goto err1;
 	}
+
+	hcd = dev_get_drvdata(&xhci->dev);
+	hcd->phy = dwc->usb3_phy;
+	usb_phy_tune(hcd->phy);
 
 	return 0;
 

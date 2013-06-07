@@ -29,6 +29,86 @@
 
 #include "samsung-usbphy.h"
 
+static void crport_handshake(struct samsung_usbphy *sphy,
+					u32 val, u32 cmd)
+{
+	u32 usec = 100;
+	u32 result;
+	void __iomem *regs = sphy->regs;
+
+	writel(val | cmd, regs + EXYNOS5_DRD_PHYREG0);
+
+	do {
+		result = readl(regs + EXYNOS5_DRD_PHYREG1);
+		if (result & EXYNOS5_DRD_PHYREG1_CR_ACK)
+			break;
+
+		udelay(1);
+	} while (usec-- > 0);
+
+	if (!usec)
+		dev_err(sphy->dev, "CRPORT handshake timeout1 (0x%08x)\n", val);
+
+	usec = 100;
+
+	writel(val, regs + EXYNOS5_DRD_PHYREG0);
+
+	do {
+		result = readl(regs + EXYNOS5_DRD_PHYREG1);
+		if (!(result & EXYNOS5_DRD_PHYREG1_CR_ACK))
+			break;
+
+		udelay(1);
+	} while (usec-- > 0);
+
+	if (!usec)
+		dev_err(sphy->dev, "CRPORT handshake timeout2 (0x%08x)\n", val);
+}
+
+static void crport_ctrl_write(struct samsung_usbphy *sphy, u32 addr, u32 data)
+{
+	/* Write Address */
+	crport_handshake(sphy, EXYNOS5_DRD_PHYREG0_CR_DATA_IN(addr),
+				EXYNOS5_DRD_PHYREG0_CR_CAP_ADDR);
+
+	/* Write Data */
+	crport_handshake(sphy, EXYNOS5_DRD_PHYREG0_CR_DATA_IN(data),
+				EXYNOS5_DRD_PHYREG0_CR_CAP_DATA);
+	crport_handshake(sphy, EXYNOS5_DRD_PHYREG0_CR_DATA_IN(data),
+				EXYNOS5_DRD_PHYREG0_CR_WRITE);
+}
+
+void samsung_usb3phy_tune(struct usb_phy *phy)
+{
+	struct samsung_usbphy *sphy = phy_to_sphy(phy);
+
+	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5420) {
+		u32 temp;
+
+		/*
+		 * Change los_bias to (0x5) for 28nm PHY from a
+		 * default value (0x0); los_level is set as default
+		 * (0x9) as also reflected in los_level[30:26] bits
+		 * of PHYPARAM0 register.
+		 */
+		temp = LOSLEVEL_OVRD_IN_LOS_BIAS_5420 |
+			LOSLEVEL_OVRD_IN_EN |
+			LOSLEVEL_OVRD_IN_LOS_LEVEL_DEFAULT;
+		crport_ctrl_write(sphy,
+				  EXYNOS5_DRD_PHYSS_LOSLEVEL_OVRD_IN,
+				  temp);
+
+		/*
+		 * Set tx_vboost_lvl to (0x5) for 28nm PHY Tuning,
+		 * to raise Tx signal level from its default value of (0x4)
+		 */
+		temp = TX_VBOOSTLEVEL_OVRD_IN_VBOOST_5420;
+		crport_ctrl_write(sphy,
+				  EXYNOS5_DRD_PHYSS_TX_VBOOSTLEVEL_OVRD_IN,
+				  temp);
+	}
+}
+
 /*
  * Sets the phy clk as EXTREFCLK (XXTI) which is internal clock from clock core.
  */
@@ -281,6 +361,7 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 	sphy->phy.label		= "samsung-usb3phy";
 	sphy->phy.init		= samsung_usb3phy_init;
 	sphy->phy.shutdown	= samsung_usb3phy_shutdown;
+	sphy->phy.tune		= samsung_usb3phy_tune;
 	sphy->drv_data		= samsung_usbphy_get_driver_data(pdev);
 	sphy->ref_clk_freq	= samsung_usbphy_get_refclk_freq(sphy);
 

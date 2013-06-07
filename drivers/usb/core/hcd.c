@@ -43,6 +43,7 @@
 
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
+#include <linux/usb/phy.h>
 
 #include "usb.h"
 
@@ -2081,6 +2082,7 @@ int hcd_bus_resume(struct usb_device *rhdev, pm_message_t msg)
 
 	hcd->state = HC_STATE_RESUMING;
 	status = hcd->driver->bus_resume(hcd);
+	usb_phy_tune(hcd->phy);
 	clear_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
 	if (status == 0) {
 		struct usb_device *udev;

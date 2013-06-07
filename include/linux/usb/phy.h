@@ -91,6 +91,9 @@ struct usb_phy {
 	int	(*init)(struct usb_phy *x);
 	void	(*shutdown)(struct usb_phy *x);
 
+	/* tune the PHY controller */
+	void	(*tune)(struct usb_phy *x);
+
 	/* effective for B devices, ignored for A-peripheral */
 	int	(*set_power)(struct usb_phy *x,
 				unsigned mA);
@@ -158,6 +161,13 @@ usb_phy_shutdown(struct usb_phy *x)
 {
 	if (x->shutdown)
 		x->shutdown(x);
+}
+
+static inline void
+usb_phy_tune(struct usb_phy *x)
+{
+	if (x && x->tune)
+		x->tune(x);
 }
 
 /* for usb host and peripheral controller drivers */
