@@ -398,7 +398,7 @@
 		};
 
 		light-sensor@44 {
-			compatible = "invn,isl29023";
+			compatible = "isil,isl29018";
 			reg = <0x44>;
 		};
 	};
