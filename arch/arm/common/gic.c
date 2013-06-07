@@ -95,6 +95,10 @@ struct irq_chip gic_arch_extn = {
 #define MAX_GIC_NR	1
 #endif
 
+#if defined(CONFIG_BL_SWITCHER)
+DEFINE_PER_CPU(bool, is_switching);
+#endif
+
 static struct gic_chip_data gic_data[MAX_GIC_NR] __read_mostly;
 
 #ifdef CONFIG_GIC_NON_BANKED
@@ -447,6 +451,10 @@ static void __cpuinit gic_cpu_init(struct gic_chip_data *gic)
 
 	writel_relaxed(0xf0, base + GIC_CPU_PRIMASK);
 	writel_relaxed(1, base + GIC_CPU_CTRL);
+#if defined(CONFIG_BL_SWITCHER)
+	per_cpu(is_switching, cpu) = false;
+#endif
+
 }
 
 #ifdef CONFIG_CPU_PM
@@ -554,13 +562,17 @@ static void gic_cpu_save(unsigned int gic_nr)
 	for (i = 0; i < DIV_ROUND_UP(32, 16); i++)
 		ptr[i] = readl_relaxed(dist_base + GIC_DIST_CONFIG + i * 4);
 
-	ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
-	for (i = 0; i < DIV_ROUND_UP(16, 4); i++) {
-		ptr[i] =
-		readl_relaxed(dist_base + GIC_DIST_SGI_PENDING_SET + i * 4);
-		writel_relaxed(ptr[i],
-			dist_base + GIC_DIST_SGI_PENDING_CLEAR + i * 4);
+#if defined(CONFIG_BL_SWITCHER)
+	if (per_cpu(is_switching, smp_processor_id()) == true) {
+		ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
+		for (i = 0; i < DIV_ROUND_UP(16, 4); i++) {
+			ptr[i] = readl_relaxed(dist_base +
+				GIC_DIST_SGI_PENDING_SET + i * 4);
+			writel_relaxed(ptr[i],
+				dist_base + GIC_DIST_SGI_PENDING_CLEAR + i * 4);
+		}
 	}
+#endif
 }
 
 static void gic_cpu_restore(unsigned int gic_nr)
@@ -590,11 +602,15 @@ static void gic_cpu_restore(unsigned int gic_nr)
 	for (i = 0; i < DIV_ROUND_UP(32, 4); i++)
 		writel_relaxed(0xa0a0a0a0, dist_base + GIC_DIST_PRI + i * 4);
 
-	ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
-	for (i = 0; i < DIV_ROUND_UP(16, 4); i++)
-		writel_relaxed(ptr[i],
-			dist_base + GIC_DIST_SGI_PENDING_SET + i * 4);
-
+#if defined(CONFIG_BL_SWITCHER)
+	if (per_cpu(is_switching, smp_processor_id()) == true) {
+		ptr = __this_cpu_ptr(gic_data[gic_nr].saved_sgi_pending);
+		for (i = 0; i < DIV_ROUND_UP(16, 4); i++)
+			writel_relaxed(ptr[i],
+				dist_base + GIC_DIST_SGI_PENDING_SET + i * 4);
+		per_cpu(is_switching, smp_processor_id()) = false;
+	}
+#endif
 	writel_relaxed(0xf0, cpu_base + GIC_CPU_PRIMASK);
 	writel_relaxed(1, cpu_base + GIC_CPU_CTRL);
 }
@@ -888,6 +904,8 @@ void gic_migrate_target(unsigned int new_cpu_id)
 	ror_val = (old_cpu_id - new_cpu_id) & 31;
 
 	raw_spin_lock(&irq_controller_lock);
+
+	per_cpu(is_switching, cpu) = true;
 
 	gic_cpu_map[cpu] = 1 << new_cpu_id;
 
