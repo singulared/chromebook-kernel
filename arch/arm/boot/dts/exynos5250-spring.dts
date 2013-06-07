@@ -342,6 +342,13 @@
 						regulator-max-microvolt = <3300000>;
 						regulator-always-on;
 					};
+					VFET5 {
+						tps65090-control-reg = <0x13>;
+						regulator-name = "cam";
+						regulator-min-microvolt = <3300000>;
+						regulator-max-microvolt = <3300000>;
+						regulator-always-on;
+					};
 					VFET6 {
 						tps65090-control-reg = <0x14>;
 						regulator-name = "lcd_vdd";
