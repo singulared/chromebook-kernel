@@ -536,13 +536,19 @@
 #define SP_TX_VID_BIT_CTRL20_REG 0x7254
 
 #define SP_TX_AVI_TYPE 0x7270
+#define SP_TX_AVI_KTYPE 0x82
 #define SP_TX_AVI_VER 0x7271
+#define SP_TX_AVI_KVER 0x02
 #define SP_TX_AVI_LEN 0x7272
+#define SP_TX_AVI_KLEN 0x0D
 #define SP_TX_AVI_DB0 0x7273
 
 #define SP_TX_AUD_TYPE 0x7283
+#define SP_TX_AUD_KTYPE 0x84
 #define SP_TX_AUD_VER 0x7284
+#define SP_TX_AUD_KVER 0x01
 #define SP_TX_AUD_LEN 0x7285
+#define SP_TX_AUD_KLEN 0x0A
 #define SP_TX_AUD_DB0 0x7286
 
 #define SP_TX_SPD_TYPE 0x7291
