@@ -61,6 +61,22 @@
 		};
 	};
 
+	pinctrl@13410000 {
+		/* Adjust WiFi drive strengths lower for EMI */
+		sd1_clk: sd1-clk {
+			samsung,pin-drv = <0>;
+		};
+		sd1_cmd: sd1-cmd {
+			samsung,pin-drv = <0>;
+		};
+		sd1_bus4: sd1-bus-width4 {
+			samsung,pin-drv = <0>;
+		};
+		sd1_bus8: sd1-bus-width8 {
+			samsung,pin-drv = <0>;
+		};
+	};
+
 	pinctrl@14010000 {
 		/*
 		 * TODO(sjg@chromium.org: Do we need this
