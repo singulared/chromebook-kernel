@@ -710,6 +710,7 @@ static int __init exynos_pmu_init(void)
 		__raw_writel(0x1, EXYNOS5420_UP_SCHEDULER);
 
 		exynos_pmu_config = exynos5420_pmu_config;
+		pm_power_off = exynos5_power_off;
 		pr_info("EXYNOS5420 PMU Initialized\n");
 	} else {
 		pr_info("EXYNOS: PMU not supported\n");
