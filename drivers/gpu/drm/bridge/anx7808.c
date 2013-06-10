@@ -32,8 +32,9 @@
 #define CABLE_DET_TIME_MS 1000
 
 enum anx7808_state {
-	STATE_INIT,
+	STATE_CABLE_NOT_DETECTED,
 	STATE_CABLE_DETECTED,
+	STATE_HPD_DETECTED,
 	STATE_HDMI_OK,
 	STATE_DP_OK,
 	STATE_PLAY,
@@ -302,6 +303,17 @@ static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
 	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, pBuf);
 }
 
+static void anx7808_set_hpd(struct anx7808_data *anx7808, bool enable)
+{
+	if (!enable) {
+		anx7808_clear_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
+		anx7808_set_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+	} else {
+		anx7808_clear_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+		anx7808_set_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
+	}
+}
+
 static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 {
 	DRM_DEBUG_KMS("Initializing ANX7808 receiver.\n");
@@ -349,9 +361,7 @@ static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG21, 0x04);
 	anx7808_write_reg(anx7808, HDMI_RX_TMDS_CTRL_REG22, 0x38);
 
-	DRM_DEBUG_KMS("Issuing HPD low.\n");
-	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
-	anx7808_set_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+	anx7808_set_hpd(anx7808, 0);
 }
 
 static void anx7808_tx_initialization(struct anx7808_data *anx7808)
@@ -413,10 +423,19 @@ static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 
 	anx7808_vbus_power_on(anx7808);
 	msleep(20);
+}
 
-	DRM_DEBUG_KMS("Issuing HPD high.\n");
-	anx7808_set_bits(anx7808, SP_TX_VID_CTRL3_REG, HPD_OUT);
-	anx7808_clear_bits(anx7808, HDMI_RX_TMDS_CTRL_REG6, TERM_PD);
+static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
+{
+	uint8_t status;
+
+	if (anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status))
+		return -EAGAIN;
+	if (!(status & DOWN_STRM_HPD)) {
+		DRM_INFO("Waiting for downstream HPD.\n");
+		return -EAGAIN;
+	}
+	return 0;
 }
 
 static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
@@ -545,8 +564,10 @@ static int anx7808_check_polling_err(struct anx7808_data *anx7808)
 	uint8_t tx_int_status;
 	anx7808_read_reg(anx7808, SP_TX_INT_STATUS1, &tx_int_status);
 	anx7808_write_reg(anx7808, SP_TX_INT_STATUS1, tx_int_status);
-	if (tx_int_status & POLLING_ERR)
+	if (tx_int_status & POLLING_ERR) {
+		DRM_INFO("Polling error: %02x", tx_int_status);
 		return -EFAULT;
+	}
 	return 0;
 }
 
@@ -556,31 +577,31 @@ static void anx7808_play_video(struct work_struct *work)
 		container_of(work, struct delayed_work, work);
 	struct anx7808_data *anx7808 =
 		container_of(dw, struct anx7808_data, play_video);
-	int ret;
 	enum anx7808_state state = STATE_CABLE_DETECTED;
 
-	ret = anx7808_power_on(anx7808);
-	if (ret)
+	if (anx7808_power_on(anx7808))
 		return;
 
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
 	anx7808_init_pipeline(anx7808);
 
-	while (state != STATE_INIT) {
-		DRM_DEBUG_KMS("State: %d\n", state);
-
+	while (true) {
 		/* Make progress towards playback state. */
 		switch (state) {
 		case STATE_CABLE_DETECTED:
-			ret = anx7808_detect_hdmi_input(anx7808);
-			if (ret)
+			if (anx7808_detect_dp_hotplug(anx7808))
+				break;
+			anx7808_set_hpd(anx7808, 1);
+			state = STATE_HPD_DETECTED;
+
+		case STATE_HPD_DETECTED:
+			if (anx7808_detect_hdmi_input(anx7808))
 				break;
 			state = STATE_HDMI_OK;
 
 		case STATE_HDMI_OK:
-			ret = anx7808_dp_link_training(anx7808);
-			if (ret)
+			if (anx7808_dp_link_training(anx7808))
 				break;
 			state = STATE_DP_OK;
 
@@ -594,10 +615,17 @@ static void anx7808_play_video(struct work_struct *work)
 		}
 
 		/* Check for failures */
-		ret = anx7808_check_polling_err(anx7808);
-		if (ret) {
-			DRM_INFO("Polling error: %02x", ret);
-			state = STATE_INIT;
+		if (anx7808_check_polling_err(anx7808)) {
+			DRM_INFO("Cable connection lost.\n");
+			break;
+		}
+
+		if (state > STATE_CABLE_DETECTED) {
+			if (anx7808_detect_dp_hotplug(anx7808)) {
+				DRM_INFO("Hotplug detection lost.\n");
+				anx7808_set_hpd(anx7808, 0);
+				state = STATE_CABLE_DETECTED;
+			}
 		}
 
 		msleep(300);
