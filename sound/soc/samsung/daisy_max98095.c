@@ -480,6 +480,70 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
+static int daisy_suspend_post(struct snd_soc_card *card)
+{
+	struct clk *mout_audss, *mout_i2s;
+	int ret;
+
+	mout_audss = clk_get(card->dev, "mout_audss");
+	if (IS_ERR(mout_audss)) {
+		pr_warn("Can't find mout_audss clock\n");
+		ret = PTR_ERR(mout_audss);
+		goto out1;
+	}
+	mout_i2s = clk_get(card->dev, "mout_i2s");
+	if (IS_ERR(mout_i2s)) {
+		pr_warn("Can't find mout_i2s clock\n");
+		ret = PTR_ERR(mout_i2s);
+		goto out2;
+	}
+
+	/*
+	 * This really shouldn't fail. We probably won't come back from
+	 * suspend if it does.
+	 */
+	ret = clk_set_parent(mout_i2s, mout_audss);
+	WARN_ON(ret < 0);
+
+	clk_put(mout_i2s);
+out2:
+	clk_put(mout_audss);
+out1:
+	return ret;
+}
+
+static int daisy_resume_pre(struct snd_soc_card *card)
+{
+	struct clk *sclk_audio0, *mout_i2s;
+	int ret;
+
+	sclk_audio0 = clk_get(card->dev, "sclk_audio0");
+	if (IS_ERR(sclk_audio0)) {
+		pr_warn("Can't find sclk_audio0 clock\n");
+		ret = PTR_ERR(sclk_audio0);
+		goto out1;
+	}
+	mout_i2s = clk_get(card->dev, "mout_i2s");
+	if (IS_ERR(mout_i2s)) {
+		pr_warn("Can't find mout_i2s clock\n");
+		ret = PTR_ERR(mout_i2s);
+		goto out2;
+	}
+
+	/*
+	 * If we were able to reparent this for suspend, we ought to be
+	 * able to change it back.
+	 */
+	ret = clk_set_parent(mout_i2s, sclk_audio0);
+	WARN_ON(ret < 0);
+
+	clk_put(mout_i2s);
+out2:
+	clk_put(sclk_audio0);
+out1:
+	return ret;
+}
+
 static int daisy_resume_post(struct snd_soc_card *card)
 {
 	if (gpio_is_valid(daisy_mic_jack_gpio.gpio))
@@ -514,6 +578,8 @@ static struct snd_soc_card daisy_snd = {
 	.num_dapm_widgets = ARRAY_SIZE(daisy_dapm_widgets),
 	.dapm_routes = daisy_audio_map,
 	.num_dapm_routes = ARRAY_SIZE(daisy_audio_map),
+	.suspend_post = daisy_suspend_post,
+	.resume_pre = daisy_resume_pre,
 	.resume_post = daisy_resume_post,
 };
 
