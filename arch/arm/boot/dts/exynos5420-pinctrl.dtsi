@@ -215,7 +215,7 @@
 			samsung,pin-drv = <3>;
 		};
 
-		sd1_int: sd1_int {
+		sd1_int: sd1-int {
 			samsung,pins = "gpd1-1";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
@@ -238,13 +238,6 @@
 
 		sd1_bus8: sd1-bus-width8 {
 			samsung,pins = "gpd1-4", "gpd1-5", "gpd1-6", "gpd1-7";
-			samsung,pin-function = <2>;
-			samsung,pin-pud = <3>;
-			samsung,pin-drv = <3>;
-		};
-
-		sd1_intn: sd1-intn {
-			samsung,pins = "gpd1-1";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
 			samsung,pin-drv = <3>;
