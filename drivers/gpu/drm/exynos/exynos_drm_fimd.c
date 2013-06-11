@@ -880,7 +880,7 @@ static void fimd_window_resume(struct fimd_context *ctx)
 
 static int fimd_activate(struct fimd_context *ctx, bool enable)
 {
-	if (enable) {
+	if (enable && ctx->suspended) {
 		int ret;
 
 		ret = fimd_clock(ctx, true);
@@ -895,7 +895,7 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 
 		if (dp_dev)
 			exynos_dp_resume(dp_dev);
-	} else {
+	} else if (!enable && !ctx->suspended) {
 		if (dp_dev)
 			exynos_dp_suspend(dp_dev);
 
@@ -1075,6 +1075,7 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->default_win = pdata->default_win;
 	ctx->panel = panel;
 	ctx->dev = dev;
+	ctx->suspended = true;
 	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);
 
