@@ -782,6 +782,18 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	}
 }
 
+static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	const struct dw_mci_drv_data *drv_data = slot->host->drv_data;
+	int ret = 0;
+
+	if (drv_data && drv_data->execute_tuning)
+		ret = drv_data->execute_tuning(slot->host, opcode);
+
+	return ret;
+}
+
 static int dw_mci_get_ro(struct mmc_host *mmc)
 {
 	int read_only;
@@ -885,6 +897,7 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.get_ro			= dw_mci_get_ro,
 	.get_cd			= dw_mci_get_cd,
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
+	.execute_tuning		= dw_mci_execute_tuning,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
