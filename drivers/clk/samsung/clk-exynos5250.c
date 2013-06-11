@@ -22,6 +22,9 @@
 #define SRC_CPU			0x200
 #define DIV_CPU0		0x500
 #define SRC_CORE1		0x4204
+#define EPLL_CON0		0x10130
+#define EPLL_CON1		0x10134
+#define EPLL_CON2		0x10138
 #define SRC_TOP0		0x10210
 #define SRC_TOP1		0x10214
 #define SRC_TOP2		0x10218
@@ -119,6 +122,9 @@ static __initdata unsigned long exynos5250_clk_regs[] = {
 	SRC_CPU,
 	DIV_CPU0,
 	SRC_CORE1,
+	EPLL_CON0,
+	EPLL_CON1,
+	EPLL_CON2,
 	SRC_TOP0,
 	SRC_TOP1,
 	SRC_TOP2,
