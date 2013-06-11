@@ -1155,10 +1155,6 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 	/* change the rates */
 	clk_change_rate(top);
-
-	mutex_unlock(&prepare_lock);
-
-	return 0;
 out:
 	clk_prepare_unlock();
 
