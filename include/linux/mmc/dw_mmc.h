@@ -194,6 +194,7 @@ struct dw_mci {
 	u32			current_speed;
 	u32			num_slots;
 	u32			fifoth_val;
+	u32			cd_rd_thr;
 	u16			verid;
 	u16			data_offset;
 	struct device		*dev;
@@ -278,6 +279,15 @@ struct dw_mci_board {
 	 * it.
 	 */
 	unsigned int fifo_depth;
+
+	/*
+	 * clk_smpl is "clock-in sample phase shift" value that is
+	 * determined by execute_tuning() support.
+	 * "tuned" says we've already called execute_tuning() and don't
+	 * need to retest all the possible values again.
+	 */
+	u8 clk_smpl;
+	bool tuned;
 
 	/* delay in mS before detecting cards after interrupt */
 	u32 detect_delay_ms;

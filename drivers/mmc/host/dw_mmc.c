@@ -1013,6 +1013,17 @@ static void dw_mci_tasklet_func(unsigned long priv)
 				goto unlock;
 			}
 
+			if (data && cmd->error && cmd != data->stop) {
+				if (host->mrq->data->stop) {
+					host->data = host->mrq->data;
+					send_stop_cmd(host, host->mrq->data);
+					state = STATE_SENDING_STOP;
+					break;
+				} else {
+					host->data = NULL;
+				}
+			}
+
 			if (!host->mrq->data || cmd->error) {
 				dw_mci_request_end(host, host->mrq);
 				goto unlock;
@@ -1024,7 +1035,8 @@ static void dw_mci_tasklet_func(unsigned long priv)
 		case STATE_SENDING_DATA:
 			if (test_and_clear_bit(EVENT_DATA_ERROR,
 					       &host->pending_events)) {
-				dw_mci_stop_dma(host);
+				set_bit(EVENT_XFER_COMPLETE,
+						&host->pending_events);
 				if (data->stop)
 					send_stop_cmd(host, data);
 				state = STATE_DATA_ERROR;
@@ -1107,7 +1119,18 @@ static void dw_mci_tasklet_func(unsigned long priv)
 						&host->pending_events))
 				break;
 
+			if (host->mrq->cmd->error &&
+					host->mrq->data) {
+				dw_mci_stop_dma(host);
+				sg_miter_stop(&host->sg_miter);
+				host->sg = NULL;
+				ctrl = mci_readl(host, CTRL);
+				ctrl |= SDMMC_CTRL_FIFO_RESET;
+				mci_writel(host, CTRL, ctrl);
+			}
+
 			host->cmd = NULL;
+			host->data = NULL;
 			dw_mci_command_complete(host, host->mrq->stop);
 			dw_mci_request_end(host, host->mrq);
 			goto unlock;
@@ -1116,6 +1139,9 @@ static void dw_mci_tasklet_func(unsigned long priv)
 			if (!test_and_clear_bit(EVENT_XFER_COMPLETE,
 						&host->pending_events))
 				break;
+
+			dw_mci_stop_dma(host);
+			set_bit(EVENT_XFER_COMPLETE, &host->completed_events);
 
 			state = STATE_DATA_BUSY;
 			break;
@@ -2129,6 +2155,9 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "enable-sdio-wakeup", NULL))
 		pdata->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 
+	if (of_find_property(np, "supports-hs200-mode", NULL))
+		pdata->caps2 |= MMC_CAP2_HS200;
+
 	return pdata;
 }
 
@@ -2143,7 +2172,7 @@ int dw_mci_probe(struct dw_mci *host)
 {
 	const struct dw_mci_drv_data *drv_data = host->drv_data;
 	int width, i, ret = 0;
-	u32 fifo_size;
+	u32 fifo_size, msize, tx_wmark, rx_wmark;
 	int init_slots = 0;
 
 	if (!host->pdata) {
@@ -2253,10 +2282,6 @@ int dw_mci_probe(struct dw_mci *host)
 	/* Put in max timeout */
 	mci_writel(host, TMOUT, 0xFFFFFFFF);
 
-	/*
-	 * FIFO threshold settings  RxMark  = fifo_size / 2 - 1,
-	 *                          Tx Mark = fifo_size / 2 DMA Size = 8
-	 */
 	if (!host->pdata->fifo_depth) {
 		/*
 		 * Power-on value of RX_WMark is FIFO_DEPTH-1, but this may
@@ -2265,13 +2290,64 @@ int dw_mci_probe(struct dw_mci *host)
 		 * should put it in the platform data.
 		 */
 		fifo_size = mci_readl(host, FIFOTH);
-		fifo_size = 1 + ((fifo_size >> 16) & 0xfff);
+		fifo_size = 1 + ((fifo_size >> SDMMC_FIFOTH_RX_WMARK) & 0xfff);
 	} else {
 		fifo_size = host->pdata->fifo_depth;
 	}
+
 	host->fifo_depth = fifo_size;
-	host->fifoth_val = ((0x2 << 28) | ((fifo_size/2 - 1) << 16) |
-			((fifo_size/2) << 0));
+
+	/*
+	 * Quoting the Samsung Docs about MSize:
+	 * "Value should be sub-multiple of
+	 *	(RX_WMark + 1) / (F_DATA_WIDTH/H_DATA_WIDTH)
+	 * and
+	 *	(FIFO_DEPTH – TX_WMark) / (F_DATA_WIDTH/ H_DATA_WIDTH)"
+	 *
+	 * Or phrased differently in the Synopsys docs:
+	 *	"for all DMA modes the RX Watermark (RX_Wmark) chosen
+	 *	must be a multiple of the chosen MSIZE."
+	 *
+	 * Additionally DMA setup code has to enforce this constraint:
+	 *	"One data-transfer requirement between the FIFO and host
+	 *	is that the number of transfers should be a multiple of
+	 *	the FIFO data width (F_DATA_WIDTH)."
+	 *
+	 */
+	WARN_ON(fifo_size < 8);
+	msize = fifo_size/4;
+
+	/*
+	 * Synopsys recommended FIFO threshold settings:
+	 *	Rx_WMark = fifo_size / 2 - 1,
+	 *	Tx_WMark = fifo_size / 2
+	 *
+	 * See sections:
+	 *	"6.2.20 FIFOTH" (FIFOTH register details)
+	 *	"7.2.14 Card Read Threshold" and in particular
+	 *	"7.2.14.2 Card Read Threshold Programming Sequence"
+	 *
+	 * Synopsys "Design Ware" dwc_mobile_storage_db.pdf document.
+	 * Version 2.40a, December 2010
+	 *
+	 * HS200 burst rate can fill the FIFO faster. We buy more time
+	 * for the SoC to move data out of the FIFO by setting the RX_WMark
+	 * lower than reccomended.
+	 */
+	rx_wmark = (msize - 1) & 0x7ff;	/* 11 bits */
+	tx_wmark = (msize * 2) & 0xfff;	/* 12 bits */
+
+	/*
+	 * fls() get order of magnitude: returns 1-32
+	 *  "- 1" once for "divide by 2"
+	 *  "- 1" again to convert range to 0-31.
+	 */
+	msize = fls(msize) - 1 - 1;
+	msize &= 7;		/* 0=1 xfer, 1=4, ...,, 7=256 transfers */
+
+	host->fifoth_val = msize << SDMMC_FIFOTH_DMA_MULTI_TRANS_SIZE;
+	host->fifoth_val |= (rx_wmark << SDMMC_FIFOTH_RX_WMARK) | tx_wmark;
+
 	mci_writel(host, FIFOTH, host->fifoth_val);
 
 	/* disable clock to CIU */
