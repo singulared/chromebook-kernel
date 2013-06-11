@@ -148,6 +148,9 @@
 #define mci_writel(dev, reg, value)			\
 	__raw_writel((value), (dev)->regs + SDMMC_##reg)
 
+/* timeout (maximum) */
+#define dw_mci_set_timeout(host)	mci_writel(host, TMOUT, 0xffffffff)
+
 /* 16-bit FIFO access macros */
 #define mci_readw(dev, reg)			\
 	__raw_readw((dev)->regs + SDMMC_##reg)
