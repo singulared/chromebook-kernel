@@ -272,9 +272,6 @@ static int s5p_ehci_suspend(struct device *dev)
 	if (pdata && pdata->phy_exit)
 		pdata->phy_exit(pdev, S5P_USB_PHY_HOST);
 
-	if (gpio_is_valid(s5p_ehci->vbus_gpio))
-		gpio_set_value(s5p_ehci->vbus_gpio, 0);
-
 	clk_disable(s5p_ehci->clk);
 
 	return rc;
