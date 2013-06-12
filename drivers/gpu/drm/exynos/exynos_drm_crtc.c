@@ -324,11 +324,19 @@ static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
 
 static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 {
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct drm_plane *plane;
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_OFF);
+	list_for_each_entry(plane, &crtc->dev->mode_config.plane_list, head) {
+		if (plane->crtc != crtc)
+			continue;
+
+		ret = plane->funcs->disable_plane(plane);
+		if (ret)
+			DRM_ERROR("Failed to disable plane %d\n", ret);
+	}
 }
 
 static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
