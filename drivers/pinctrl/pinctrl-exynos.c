@@ -57,10 +57,15 @@ static void exynos_gpio_irq_unmask(struct irq_data *irqd)
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
 	unsigned long reg_mask = d->ctrl->geint_mask + bank->eint_offset;
 	unsigned long mask;
+	unsigned long flags;
+
+	spin_lock_irqsave(&bank->slock, flags);
 
 	mask = readl(d->virt_base + reg_mask);
 	mask &= ~(1 << irqd->hwirq);
 	writel(mask, d->virt_base + reg_mask);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 }
 
 static void exynos_gpio_irq_mask(struct irq_data *irqd)
@@ -69,10 +74,15 @@ static void exynos_gpio_irq_mask(struct irq_data *irqd)
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
 	unsigned long reg_mask = d->ctrl->geint_mask + bank->eint_offset;
 	unsigned long mask;
+	unsigned long flags;
+
+	spin_lock_irqsave(&bank->slock, flags);
 
 	mask = readl(d->virt_base + reg_mask);
 	mask |= 1 << irqd->hwirq;
 	writel(mask, d->virt_base + reg_mask);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 }
 
 static void exynos_gpio_irq_ack(struct irq_data *irqd)
@@ -265,10 +275,15 @@ static void exynos_wkup_irq_unmask(struct irq_data *irqd)
 	struct samsung_pinctrl_drv_data *d = b->drvdata;
 	unsigned long reg_mask = d->ctrl->weint_mask + b->eint_offset;
 	unsigned long mask;
+	unsigned long flags;
+
+	spin_lock_irqsave(&b->slock, flags);
 
 	mask = readl(d->virt_base + reg_mask);
 	mask &= ~(1 << irqd->hwirq);
 	writel(mask, d->virt_base + reg_mask);
+
+	spin_unlock_irqrestore(&b->slock, flags);
 }
 
 static void exynos_wkup_irq_mask(struct irq_data *irqd)
@@ -277,10 +292,15 @@ static void exynos_wkup_irq_mask(struct irq_data *irqd)
 	struct samsung_pinctrl_drv_data *d = b->drvdata;
 	unsigned long reg_mask = d->ctrl->weint_mask + b->eint_offset;
 	unsigned long mask;
+	unsigned long flags;
+
+	spin_lock_irqsave(&b->slock, flags);
 
 	mask = readl(d->virt_base + reg_mask);
 	mask |= 1 << irqd->hwirq;
 	writel(mask, d->virt_base + reg_mask);
+
+	spin_unlock_irqrestore(&b->slock, flags);
 }
 
 static void exynos_wkup_irq_ack(struct irq_data *irqd)
