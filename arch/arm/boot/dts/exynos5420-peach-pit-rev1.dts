@@ -15,7 +15,8 @@
 / {
 	model = "Google Peach Pit Rev 1";
 
-	compatible = "google,pit-rev1", "google,pit", "samsung,exynos5420";
+	compatible = "google,pit-rev1", "google,pit", "google,peach",
+		"samsung,exynos5420";
 
 	aliases {
 	};
