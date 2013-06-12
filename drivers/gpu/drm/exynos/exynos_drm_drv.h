@@ -185,6 +185,7 @@ struct exynos_drm_display {
  * @remove: cleans up the manager for removal
  * @dpms: control device power.
  * @apply: set timing, vblank and overlay data to registers.
+ * @update: set the given mode to the manager
  * @commit: set current hw specific display mode to hw.
  * @enable_vblank: specific driver callback for enabling vblank interrupt.
  * @disable_vblank: specific driver callback for disabling vblank interrupt.
@@ -198,6 +199,7 @@ struct exynos_drm_manager_ops {
 	void (*remove)(void *ctx);
 	void (*dpms)(void *ctx, int mode);
 	void (*apply)(void *ctx);
+	void (*update)(void *ctx, const struct drm_display_mode *mode);
 	void (*commit)(void *ctx);
 	int (*enable_vblank)(void *ctx);
 	void (*disable_vblank)(void *ctx);

@@ -99,12 +99,16 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 				   struct drm_framebuffer *fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 
 	crtc_w = fb->width - crtc->x;
 	crtc_h = fb->height - crtc->y;
+
+	if (manager->ops->update)
+		manager->ops->update(manager->ctx, &crtc->mode);
 
 	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
 			      crtc->x, crtc->y, crtc_w, crtc_h);
