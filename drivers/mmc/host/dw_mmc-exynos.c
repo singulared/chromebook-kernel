@@ -36,8 +36,6 @@
 					SDMMC_CLKSEL_CCLK_DIVIDER(z))
 #define SDMMC_CLKSEL_WAKEUP_INT		BIT(11)
 
-#define SDMMC_CMD_USE_HOLD_REG		BIT(29)
-
 /* Block number in eMMC */
 #define DWMCI_BLOCK_NUM			0xFFFFFFFF
 
