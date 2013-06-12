@@ -680,7 +680,14 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	return set_audio_clock_heirachy(pdev);
+	ret = set_audio_clock_heirachy(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to set up clock hierarchy (%d)\n",
+			ret);
+		snd_soc_unregister_card(card);
+	}
+
+	return ret;
 }
 
 static int daisy_max98095_driver_remove(struct platform_device *pdev)
