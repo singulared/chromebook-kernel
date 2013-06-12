@@ -20,6 +20,8 @@
 #include <linux/regulator/machine.h>
 #include <linux/memblock.h>
 #include <linux/of_fdt.h>
+#include <linux/clk.h>
+#include <linux/clk-provider.h>
 #include <linux/clocksource.h>
 
 #include <asm/mach/arch.h>
@@ -298,6 +300,88 @@ static void __init exynos5_reserve(void)
 
 	exynos5_ramoops_reserve();
 }
+
+struct muxing_entry {
+	const char *clock;
+	const char *parent;
+};
+
+/**
+ * peach_muxing_table - Peach static muxing table
+ *
+ * Contains clock muxing that should happen at startup.
+ */
+static const struct muxing_entry peach_muxing_table[] __initconst = {
+	{ .clock = "mout_spi0", .parent = "sclk_mpll" },
+	{ .clock = "mout_spi1", .parent = "sclk_mpll" },
+	{ .clock = "mout_spi2", .parent = "sclk_mpll" },
+	{ /* sentinel */ },
+};
+
+/**
+ * apply_clock_muxing - apply a clock muxing table
+ *
+ * This will walk through the given table and set clocks to have the given
+ * parent.
+ */
+
+static void __init apply_clock_muxing(const struct muxing_entry *muxing_table)
+{
+	const struct muxing_entry *entry;
+	int ret;
+
+	/*
+	 * UGLY: We use __clk_lookup() here to avoid adding aliases
+	 * for every last clock in clk-exynos5yyy.c
+	 */
+	for (entry = muxing_table; entry->parent; entry++) {
+		struct clk *parent = __clk_lookup(entry->parent);
+		struct clk *clock = __clk_lookup(entry->clock);
+
+		pr_debug("Set parent of '%s' to '%s'\n",
+			 entry->clock, entry->parent);
+
+		if (!parent) {
+			pr_err("Missing parent clock: '%s'\n", entry->parent);
+			continue;
+		} else if (!clock) {
+			pr_err("Missing child clock: '%s'\n", entry->clock);
+			continue;
+		}
+
+		ret = clk_set_parent(clock, parent);
+		if (ret)
+			pr_err("Couldn't set parent of '%s' to '%s'\n",
+			       entry->clock, entry->parent);
+	}
+}
+
+/**
+ * exynos5_dt_setup_clock_muxing - static initialization of clock muxing
+ *
+ * We somehow need to setup clock muxing and would rather not rely on U-Boot
+ * setting it up properly for us (it makes us fragile against U-Boot changes).
+ *
+ * The setup of clock muxing is a mix of the design of the board and the way
+ * that the software is currently setup.  Because it's not purely defined by
+ * the board, it can't live in the device tree.  That means that (at the moment)
+ * the best place for it is here.
+ *
+ * We don't setup clock rates here and probably shouldn't add that because:
+ * - If changing the muxing makes a clock violate its allowable frequency it
+ *   seems like we should add the appropriate callbacks to the exynos5yyy clock
+ *   driver to disallow that.
+ * - If a given driver needs a certain frequency it should ask for it, probably
+ *   by using a device tree node like "clock-frequency".
+ */
+static int __init exynos5_dt_setup_clock_muxing(void)
+{
+	if (of_machine_is_compatible("google,peach"))
+		apply_clock_muxing(peach_muxing_table);
+
+	return 0;
+}
+core_initcall(exynos5_dt_setup_clock_muxing);
 
 DT_MACHINE_START(EXYNOS5_DT, "SAMSUNG EXYNOS5 (Flattened Device Tree)")
 	/* Maintainer: Kukjin Kim <kgene.kim@samsung.com> */
