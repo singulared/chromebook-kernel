@@ -248,7 +248,7 @@ unsigned char *choose_kernel_location(unsigned char *input,
 	unsigned long choice = (unsigned long)output;
 	unsigned long random;
 
-	if (cmdline_find_option_bool("nokaslr")) {
+	if (!cmdline_find_option_bool("kaslr")) {
 		debug_putstr("KASLR disabled...\n");
 		goto out;
 	}
