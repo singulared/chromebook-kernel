@@ -305,9 +305,6 @@ static int dwc3_exynos_suspend(struct device *dev)
 	if (gpio_is_valid(exynos->phyclk_gpio))
 		gpio_set_value(exynos->phyclk_gpio, 0);
 
-	if (gpio_is_valid(exynos->vbus_gpio))
-		gpio_set_value(exynos->vbus_gpio, 0);
-
 	return 0;
 }
 
