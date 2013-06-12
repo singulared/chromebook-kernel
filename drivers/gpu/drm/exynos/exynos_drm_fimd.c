@@ -89,6 +89,20 @@ struct fimd_win_data {
 	bool			resume;
 };
 
+struct fimd_mode_data {
+	unsigned		vtotal;
+	unsigned		vdisplay;
+	unsigned		vsync_len;
+	unsigned		vbpd;
+	unsigned		vfpd;
+	unsigned		htotal;
+	unsigned		hdisplay;
+	unsigned		hsync_len;
+	unsigned		hbpd;
+	unsigned		hfpd;
+	u32			clkdiv;
+};
+
 struct fimd_context {
 	struct device			*dev;
 	struct drm_device		*drm_dev;
@@ -100,8 +114,8 @@ struct fimd_context {
 	struct clk			*lcd_clk;
 	void __iomem			*regs;
 	void __iomem			*regs_mie;
+	struct fimd_mode_data		mode;
 	struct fimd_win_data		win_data[FIMD_WIN_NR];
-	unsigned int			clkdiv;
 	unsigned int			default_win;
 	u32				vidcon0;
 	u32				vidcon1;
@@ -311,35 +325,28 @@ static void fimd_win_set_colkey(struct fimd_context *ctx, unsigned int win)
 
 static void mie_set_6bit_dithering(struct fimd_context *ctx)
 {
-	struct fb_videomode *timing = &ctx->panel->timing;
-	unsigned long val;
+	struct fimd_mode_data *mode = &ctx->mode;
 	int i;
 
-	writel(MIE_HRESOL(timing->xres) | MIE_VRESOL(timing->yres) |
-				MIE_MODE_UI, ctx->regs_mie + MIE_CTRL1);
+	writel(MIE_HRESOL(mode->hdisplay) | MIE_VRESOL(mode->vdisplay) |
+			MIE_MODE_UI, ctx->regs_mie + MIE_CTRL1);
 
-	writel(MIE_WINHADDR0(0) | MIE_WINHADDR1(timing->xres),
-						ctx->regs_mie + MIE_WINHADDR);
-	writel(MIE_WINVADDR0(0) | MIE_WINVADDR1(timing->yres),
-						ctx->regs_mie + MIE_WINVADDR);
+	writel(MIE_WINHADDR0(0) | MIE_WINHADDR1(mode->hdisplay),
+			ctx->regs_mie + MIE_WINHADDR);
 
-	val = (timing->xres + timing->left_margin +
-			timing->right_margin + timing->hsync_len) *
-	      (timing->yres + timing->upper_margin +
-			timing->lower_margin + timing->vsync_len) /
-							(MIE_PWMCLKVAL + 1);
-	writel(PWMCLKCNT(val), ctx->regs_mie + MIE_PWMCLKCNT);
+	writel(MIE_WINVADDR0(0) | MIE_WINVADDR1(mode->vdisplay),
+		ctx->regs_mie + MIE_WINVADDR);
 
-	writel((MIE_VBPD(timing->upper_margin)) |
-		MIE_VFPD(timing->lower_margin) |
-		MIE_VSPW(timing->vsync_len), ctx->regs_mie + MIE_PWMVIDTCON1);
+	writel(PWMCLKCNT(mode->vtotal * mode->htotal /
+		(MIE_PWMCLKVAL + 1)), ctx->regs_mie + MIE_PWMCLKCNT);
 
-	writel(MIE_HBPD(timing->left_margin) |
-		MIE_HFPD(timing->right_margin) |
-		MIE_HSPW(timing->hsync_len), ctx->regs_mie + MIE_PWMVIDTCON2);
+	writel(MIE_VBPD(mode->vbpd) | MIE_VFPD(mode->vfpd) |
+		MIE_VSPW(mode->vsync_len), ctx->regs_mie + MIE_PWMVIDTCON1);
 
-	writel(MIE_DITHCON_EN | MIE_RGB6MODE,
-					ctx->regs_mie + MIE_AUXCON);
+	writel(MIE_HBPD(mode->hbpd) | MIE_HFPD(mode->hbpd) |
+		MIE_HSPW(mode->hsync_len), ctx->regs_mie + MIE_PWMVIDTCON2);
+
+	writel(MIE_DITHCON_EN | MIE_RGB6MODE, ctx->regs_mie + MIE_AUXCON);
 
 	/* Bypass MIE image brightness enhancement */
 	for (i = 0; i <= 0x30; i += 4) {
@@ -580,11 +587,58 @@ static void fimd_dpms(void *in_ctx, int mode)
 	mutex_unlock(&ctx->lock);
 }
 
+static u32 fimd_calc_clkdiv(struct fimd_context *ctx,
+		const struct drm_display_mode *mode)
+{
+	unsigned long ideal_clk = mode->htotal * mode->vtotal * mode->vrefresh;
+	u32 clkdiv;
+
+	/* Find the clock divider value that gets us closest to ideal_clk */
+	clkdiv = DIV_ROUND_CLOSEST(clk_get_rate(ctx->lcd_clk), ideal_clk);
+
+	return (clkdiv < 0x100) ? clkdiv : 0xff;
+}
+
+static bool fimd_mode_fixup(void *in_ctx, const struct drm_display_mode *mode,
+		struct drm_display_mode *adjusted_mode)
+{
+	struct fimd_context *ctx = in_ctx;
+
+	if (adjusted_mode->vrefresh == 0)
+		adjusted_mode->vrefresh = 60;
+
+	adjusted_mode->clock = clk_get_rate(ctx->lcd_clk) /
+			fimd_calc_clkdiv(ctx, adjusted_mode);
+	return true;
+}
+
+static void fimd_update(void *in_ctx, const struct drm_display_mode *in_mode)
+{
+	struct fimd_context *ctx = in_ctx;
+	struct fimd_mode_data *mode = &ctx->mode;
+	int hblank, vblank;
+
+	vblank = in_mode->crtc_vblank_end - in_mode->crtc_vblank_start;
+	mode->vtotal = in_mode->crtc_vtotal;
+	mode->vdisplay = in_mode->crtc_vdisplay;
+	mode->vsync_len = in_mode->crtc_vsync_end - in_mode->crtc_vsync_start;
+	mode->vbpd = (vblank - mode->vsync_len) / 2;
+	mode->vfpd = vblank - mode->vsync_len - mode->vbpd;
+
+	hblank = in_mode->crtc_hblank_end - in_mode->crtc_hblank_start;
+	mode->htotal = in_mode->crtc_htotal;
+	mode->hdisplay = in_mode->crtc_hdisplay;
+	mode->hsync_len = in_mode->crtc_hsync_end - in_mode->crtc_hsync_start;
+	mode->hbpd = (hblank - mode->hsync_len) / 2;
+	mode->hfpd = hblank - mode->hsync_len - mode->hbpd;
+
+	mode->clkdiv = fimd_calc_clkdiv(ctx, in_mode);
+}
+
 static void fimd_commit(void *in_ctx)
 {
 	struct fimd_context *ctx = in_ctx;
-	struct exynos_drm_panel_info *panel = ctx->panel;
-	struct fb_videomode *timing = &panel->timing;
+	struct fimd_mode_data *mode = &ctx->mode;
 	struct fimd_driver_data *driver_data;
 	struct platform_device *pdev = to_platform_device(ctx->dev);
 	u32 val;
@@ -593,36 +647,40 @@ static void fimd_commit(void *in_ctx)
 	if (ctx->suspended)
 		return;
 
+	/* nothing to do if we haven't set the mode yet */
+	if (mode->htotal == 0 || mode->vtotal == 0)
+		return;
+
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	/* setup polarity values from machine code. */
 	writel(ctx->vidcon1, ctx->regs + driver_data->timing_base + VIDCON1);
 
 	/* setup vertical timing values. */
-	val = VIDTCON0_VBPD(timing->upper_margin - 1) |
-	       VIDTCON0_VFPD(timing->lower_margin - 1) |
-	       VIDTCON0_VSPW(timing->vsync_len - 1);
+	val = VIDTCON0_VBPD(mode->vbpd - 1) |
+		VIDTCON0_VFPD(mode->vfpd - 1) |
+		VIDTCON0_VSPW(mode->vsync_len - 1);
 	writel(val, ctx->regs + driver_data->timing_base + VIDTCON0);
 
 	/* setup horizontal timing values.  */
-	val = VIDTCON1_HBPD(timing->left_margin - 1) |
-	       VIDTCON1_HFPD(timing->right_margin - 1) |
-	       VIDTCON1_HSPW(timing->hsync_len - 1);
+	val = VIDTCON1_HBPD(mode->hbpd - 1) |
+		VIDTCON1_HFPD(mode->hfpd - 1) |
+		VIDTCON1_HSPW(mode->hsync_len - 1);
 	writel(val, ctx->regs + driver_data->timing_base + VIDTCON1);
 
 	/* setup horizontal and vertical display size. */
-	val = VIDTCON2_LINEVAL(timing->yres - 1) |
-	       VIDTCON2_HOZVAL(timing->xres - 1) |
-	       VIDTCON2_LINEVAL_E(timing->yres - 1) |
-	       VIDTCON2_HOZVAL_E(timing->xres - 1);
+	val = VIDTCON2_LINEVAL(mode->vdisplay - 1) |
+	       VIDTCON2_HOZVAL(mode->hdisplay - 1) |
+	       VIDTCON2_LINEVAL_E(mode->vdisplay - 1) |
+	       VIDTCON2_HOZVAL_E(mode->hdisplay - 1);
 	writel(val, ctx->regs + driver_data->timing_base + VIDTCON2);
 
 	/* setup clock source, clock divider, enable dma. */
 	val = ctx->vidcon0;
 	val &= ~(VIDCON0_CLKVAL_F_MASK | VIDCON0_CLKDIR);
 
-	if (ctx->clkdiv > 1)
-		val |= VIDCON0_CLKVAL_F(ctx->clkdiv - 1) | VIDCON0_CLKDIR;
+	if (mode->clkdiv > 1)
+		val |= VIDCON0_CLKVAL_F(mode->clkdiv - 1) | VIDCON0_CLKDIR;
 	else
 		val &= ~VIDCON0_CLKDIR;	/* 1:1 clock */
 
@@ -724,6 +782,8 @@ static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.remove = fimd_mgr_remove,
 	.dpms = fimd_dpms,
 	.apply = fimd_apply,
+	.mode_fixup = fimd_mode_fixup,
+	.update = fimd_update,
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
@@ -763,27 +823,6 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 	}
 out:
 	return IRQ_HANDLED;
-}
-
-static int fimd_calc_clkdiv(struct fimd_context *ctx,
-			    struct fb_videomode *timing)
-{
-	unsigned long ideal_clk;
-	u32 clkdiv;
-
-	if (!timing->refresh)
-		timing->refresh = 60;
-
-	ideal_clk = timing->left_margin + timing->hsync_len +
-				timing->right_margin + timing->xres;
-	ideal_clk *= timing->upper_margin + timing->vsync_len +
-				timing->lower_margin + timing->yres;
-	ideal_clk *= timing->refresh;
-
-	/* Find the clock divider value that gets us closest to ideal_clk */
-	clkdiv = DIV_ROUND_CLOSEST(clk_get_rate(ctx->lcd_clk), ideal_clk);
-
-	return (clkdiv < 0x100) ? clkdiv : 0xff;
 }
 
 static void fimd_clear_win(struct fimd_context *ctx, int win)
@@ -1063,12 +1102,6 @@ static int fimd_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
-
-	ctx->clkdiv = fimd_calc_clkdiv(ctx, &panel->timing);
-	panel->timing.pixclock = clk_get_rate(ctx->lcd_clk) / ctx->clkdiv;
-
-	DRM_DEBUG_KMS("pixel clock = %d, clkdiv = %d\n",
-			panel->timing.pixclock, ctx->clkdiv);
 
 	for (win = 0; win < FIMD_WIN_NR; win++)
 		fimd_clear_win(ctx, win);
