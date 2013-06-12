@@ -560,37 +560,38 @@ void __init exynos5250_clk_init(struct device_node *np)
 		mout_vpllsrc_rate = clk_get_rate(vpllsrc);
 
 	apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
-			reg_base, NULL, 0);
+			reg_base, reg_base + 0x100, NULL, 0);
 	mpll = samsung_clk_register_pll35xx("fout_mpll", "fin_pll",
-			reg_base + 0x4000, NULL, 0);
+			reg_base + 0x4000, reg_base + 0x4100, NULL, 0);
 	bpll = samsung_clk_register_pll35xx("fout_bpll", "fin_pll",
-			reg_base + 0x20010, NULL, 0);
+			reg_base + 0x20010, reg_base + 0x20110, NULL, 0);
 	gpll = samsung_clk_register_pll35xx("fout_gpll", "fin_pll",
-			reg_base + 0x10050, NULL, 0);
+			reg_base + 0x10050, reg_base + 0x10150, NULL, 0);
 	cpll = samsung_clk_register_pll35xx("fout_cpll", "fin_pll",
-			reg_base + 0x10020, NULL, 0);
+			reg_base + 0x10020, reg_base + 0x10120, NULL, 0);
 
 	if (fin_pll_rate == (24 * MHZ)) {
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-				reg_base + 0x10030, epll_24mhz_tbl,
-				ARRAY_SIZE(epll_24mhz_tbl));
+				reg_base + 0x10030, reg_base + 0x10130,
+				epll_24mhz_tbl, ARRAY_SIZE(epll_24mhz_tbl));
 	} else {
 		pr_warn("Exynos5250: valid epll rate_table missing for\n"
 			"parent fin_pll:%lu hz\n", fin_pll_rate);
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-				reg_base + 0x10030, NULL, 0);
+				reg_base + 0x10030, reg_base + 0x10130,
+				NULL, 0);
 	}
 	samsung_clk_add_lookup(epll, fout_epll);
 
 	if (mout_vpllsrc_rate == (24 * MHZ)) {
 		vpll = samsung_clk_register_pll36xx("fout_vpll", "mout_vpllsrc"
-			, reg_base + 0x10040, vpll_24mhz_tbl,
-			ARRAY_SIZE(vpll_24mhz_tbl));
+			, reg_base + 0x10040, reg_base + 0x10140,
+			vpll_24mhz_tbl, ARRAY_SIZE(vpll_24mhz_tbl));
 	} else {
 		pr_warn("Exynos5250: valid vpll rate_table missing for\n"
 			"parent mout_vpllsrc_rate:%lu hz\n", mout_vpllsrc_rate);
 		samsung_clk_register_pll36xx("fout_vpll", "mout_vpllsrc",
-			reg_base + 0x10040, NULL, 0);
+			reg_base + 0x10040, reg_base + 0x10140, NULL, 0);
 	}
 
 	samsung_clk_register_fixed_rate(exynos5250_fixed_rate_clks,

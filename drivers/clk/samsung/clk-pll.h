@@ -52,11 +52,13 @@ enum pll46xx_type {
 };
 
 extern struct clk * __init samsung_clk_register_pll35xx(const char *name,
-			const char *pname, const void __iomem *base,
+			const char *pname, void __iomem *lock_reg,
+			void __iomem *con_reg,
 			const struct samsung_pll_rate_table *rate_table,
 			const unsigned int rate_count);
 extern struct clk * __init samsung_clk_register_pll36xx(const char *name,
-			const char *pname, const void __iomem *base,
+			const char *pname, void __iomem *lock_reg,
+			void __iomem *con_reg,
 			const struct samsung_pll_rate_table *rate_table,
 			const unsigned int rate_count);
 extern struct clk * __init samsung_clk_register_pll45xx(const char *name,
