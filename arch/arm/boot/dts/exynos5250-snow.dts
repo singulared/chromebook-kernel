@@ -321,22 +321,22 @@
 		status = "okay";
 	};
 
-	lcd_fimd0: lcd_panel0 {
-			lcd-htiming = <40 40 32 1366>;
-			lcd-vtiming = <10 12 6 768>;
-	};
-
 	fimd {
-		samsung,fimd-display = <&lcd_fimd0>;
 		samsung,fimd-vidout-rgb;
 		samsung,fimd-inv-vclk;
-		samsung,fimd-frame-rate = <60>;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
 		samsung,fimd-src-clk-rate = <70500000>;
 	};
 
+	lcd_dp0: lcd_panel0 {
+			lcd-htiming = <40 40 32 1366>;
+			lcd-vtiming = <10 12 6 768>;
+	};
+
 	display-port-controller {
+		samsung,dp-display = <&lcd_dp0>;
+		samsung,dp-frame-rate = <60>;
 		samsung,color-space = <0>;
 		samsung,dynamic-range = <0>;
 		samsung,ycbcr-coeff = <0>;
