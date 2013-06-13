@@ -896,6 +896,34 @@ static void exynos_dp_hotplug(struct work_struct *work)
 		dev_err(dp->dev, "unable to config video\n");
 }
 
+static bool exynos_dp_display_is_connected(void *in_ctx)
+{
+	return true;
+}
+
+static void *exynos_dp_get_panel(void *in_ctx)
+{
+	struct exynos_dp_device *dp = in_ctx;
+
+	return &dp->panel;
+}
+
+static int exynos_dp_check_mode(void *in_ctx, struct drm_display_mode *mode)
+{
+	return 0;
+}
+
+static struct exynos_drm_display_ops exynos_dp_display_ops = {
+	.is_connected = exynos_dp_display_is_connected,
+	.get_panel = exynos_dp_get_panel,
+	.check_mode = exynos_dp_check_mode,
+};
+
+static struct exynos_drm_display exynos_dp_display = {
+	.type = EXYNOS_DISPLAY_TYPE_LCD,
+	.ops = &exynos_dp_display_ops,
+};
+
 #ifdef CONFIG_OF
 static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 {
@@ -1005,6 +1033,42 @@ err:
 	return ret;
 }
 
+static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
+{
+	struct device_node *np = of_node_get(dp->dev->of_node);
+	struct device_node *disp_np;
+	u32 data[4];
+
+	disp_np = of_parse_phandle(np, "samsung,dp-display", 0);
+	if (!disp_np) {
+		dev_err(dp->dev, "unable to find display panel info\n");
+		return -EINVAL;
+	}
+
+	if (of_property_read_u32_array(disp_np, "lcd-htiming", data, 4)) {
+		dev_err(dp->dev, "invalid horizontal timing\n");
+		return -EINVAL;
+	}
+	dp->panel.timing.left_margin = data[0];
+	dp->panel.timing.right_margin = data[1];
+	dp->panel.timing.hsync_len = data[2];
+	dp->panel.timing.xres = data[3];
+
+	if (of_property_read_u32_array(disp_np, "lcd-vtiming", data, 4)) {
+		dev_err(dp->dev, "invalid vertical timing\n");
+		return -EINVAL;
+	}
+	dp->panel.timing.upper_margin = data[0];
+	dp->panel.timing.lower_margin = data[1];
+	dp->panel.timing.vsync_len = data[2];
+	dp->panel.timing.yres = data[3];
+
+	of_property_read_u32(np, "samsung,dp-frame-rate",
+				&dp->panel.timing.refresh);
+
+	return 0;
+}
+
 static void exynos_dp_phy_init(struct exynos_dp_device *dp)
 {
 	u32 reg;
@@ -1033,6 +1097,11 @@ static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
 	return -EINVAL;
 }
 
+static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
+{
+	return -EINVAL;
+}
+
 static void exynos_dp_phy_init(struct exynos_dp_device *dp)
 {
 	return;
@@ -1043,6 +1112,46 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 	return;
 }
 #endif /* CONFIG_OF */
+
+void exynos_dp_poweron(struct exynos_dp_device *dp)
+{
+	struct device *dev = dp->dev;
+	struct exynos_dp_platdata *pdata = dev->platform_data;
+
+	if (dev->of_node) {
+		if (dp->phy_addr)
+			exynos_dp_phy_init(dp);
+	} else {
+		if (pdata->phy_init)
+			pdata->phy_init();
+	}
+
+	clk_prepare_enable(dp->clock);
+
+	exynos_dp_init_dp(dp);
+
+	enable_irq(dp->irq);
+}
+
+void exynos_dp_poweroff(struct exynos_dp_device *dp)
+{
+	struct device *dev = dp->dev;
+	struct exynos_dp_platdata *pdata = dev->platform_data;
+
+	disable_irq(dp->irq);
+
+	flush_work(&dp->hotplug_work);
+
+	if (dev->of_node) {
+		if (dp->phy_addr)
+			exynos_dp_phy_exit(dp);
+	} else {
+		if (pdata->phy_exit)
+			pdata->phy_exit();
+	}
+
+	clk_disable_unprepare(dp->clock);
+}
 
 static int exynos_dp_probe(struct platform_device *pdev)
 {
@@ -1067,6 +1176,10 @@ static int exynos_dp_probe(struct platform_device *pdev)
 			return PTR_ERR(pdata);
 
 		ret = exynos_dp_dt_parse_phydata(dp);
+		if (ret)
+			return ret;
+
+		ret = exynos_dp_dt_parse_panel(dp);
 		if (ret)
 			return ret;
 	} else {
@@ -1147,6 +1260,9 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	exynos_fimd_dp_attach(dp->dev);
 
+	exynos_dp_display.ctx = dp;
+	exynos_drm_display_register(&exynos_dp_display);
+
 	return 0;
 }
 
@@ -1154,6 +1270,8 @@ static int exynos_dp_remove(struct platform_device *pdev)
 {
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
+
+	exynos_drm_display_unregister(&exynos_dp_display);
 
 	flush_work(&dp->hotplug_work);
 
@@ -1173,45 +1291,17 @@ static int exynos_dp_remove(struct platform_device *pdev)
 
 int exynos_dp_suspend(struct device *dev)
 {
-	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
 
-	disable_irq(dp->irq);
-
-	flush_work(&dp->hotplug_work);
-
-	if (dev->of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_exit(dp);
-	} else {
-		if (pdata->phy_exit)
-			pdata->phy_exit();
-	}
-
-	clk_disable_unprepare(dp->clock);
-
+	exynos_dp_poweroff(dp);
 	return 0;
 }
 
 int exynos_dp_resume(struct device *dev)
 {
-	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
 
-	if (dev->of_node) {
-		if (dp->phy_addr)
-			exynos_dp_phy_init(dp);
-	} else {
-		if (pdata->phy_init)
-			pdata->phy_init();
-	}
-
-	clk_prepare_enable(dp->clock);
-
-	exynos_dp_init_dp(dp);
-
-	enable_irq(dp->irq);
-
+	exynos_dp_poweron(dp);
 	return 0;
 }
 

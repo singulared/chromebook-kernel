@@ -23,6 +23,27 @@ Required properties for dp-controller:
 		interrupt combiner values.
 	-interrupt-parent:
 		phandle to Interrupt combiner node.
+	- samsung,dp-display:
+		This property should specify the phandle of the display device
+		node which holds the video interface timing with the below
+		mentioned properties.
+		  - lcd-htiming: Specifies the horizontal timing for the
+			overlay. The horizontal timing includes four parameters
+			in the following order.
+			- horizontal back porch (in number of lcd clocks)
+			- horizontal front porch (in number of lcd clocks)
+			- hsync pulse width (in number of lcd clocks)
+			- Display panels X resolution.
+
+		   - lcd-vtiming: Specifies the vertical timing for the overlay.
+			The vertical timing includes four parameters in the
+			following order.
+			- vertical back porch (in number of lcd lines)
+			- vertical front porch (in number of lcd lines)
+			- vsync pulse width (in number of lcd clocks)
+			- Display panels Y resolution.
+	- samsung,dp-frame-rate:
+		Number of video frames per second.
 	-samsung,color-space:
 		input video data format.
 			COLOR_RGB = 0, COLOR_YCBCR422 = 1, COLOR_YCBCR444 = 2
@@ -74,7 +95,15 @@ SOC specific portion:
 	};
 
 Board Specific portion:
+	lcd_dp0: lcd_panel0 {
+			lcd-htiming = <4 4 4 480>;
+			lcd-vtiming = <4 4 4 320>;
+			supports-mipi-panel;
+	};
+
 	dp-controller {
+		samsung,dp-display = <&lcd_dp0>;
+		samsung,dp-frame-rate = <60>;
 		samsung,color-space = <0>;
 		samsung,dynamic-range = <0>;
 		samsung,ycbcr-coeff = <0>;

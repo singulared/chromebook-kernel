@@ -25,23 +25,6 @@ Required properties:
    display device node which holds the video interface timing with the
    below mentioned properties.
 
-   - lcd-htiming: Specifies the horizontal timing for the overlay. The
-     horizontal timing includes four parameters in the following order.
-
-     - horizontal back porch (in number of lcd clocks)
-     - horizontal front porch (in number of lcd clocks)
-     - hsync pulse width (in number of lcd clocks)
-     - Display panels X resolution.
-
-   - lcd-vtiming: Specifies the vertical timing for the overlay. The
-     vertical timing includes four parameters in the following order.
-
-     - vertical back porch (in number of lcd lines)
-     - vertical front porch (in number of lcd lines)
-     - vsync pulse width (in number of lcd clocks)
-     - Display panels Y resolution.
-
-
  - samsung,default-window: Specifies the default window number of the fimd controller.
 
  - samsung,fimd-win-bpp: Specifies the bits per pixel.
@@ -51,7 +34,6 @@ Required properties:
 Optional properties:
  - samsung,fimd-vidout-rgb: Video output format is RGB.
  - samsung,fimd-inv-vclk: invert video clock polarity.
- - samsung,fimd-frame-rate: Number of video frames per second.
 
 Example:
 
@@ -71,17 +53,9 @@ Example:
 
 	- Board Specific portion
 
-	lcd_fimd0: lcd_panel0 {
-			lcd-htiming = <4 4 4 480>;
-			lcd-vtiming = <4 4 4 320>;
-			supports-mipi-panel;
-	};
-
 	fimd {
-		samsung,fimd-display = <&lcd_fimd0>;
 		samsung,fimd-vidout-rgb;
 		samsung,fimd-inv-vclk;
-		samsung,fimd-frame-rate = <60>;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
 	};

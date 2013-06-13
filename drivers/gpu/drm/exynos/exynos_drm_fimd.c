@@ -121,8 +121,6 @@ struct fimd_context {
 	int				pipe;
 	wait_queue_head_t		wait_vsync_queue;
 	atomic_t			wait_vsync_event;
-
-	struct exynos_drm_panel_info *panel;
 };
 
 static struct device *dp_dev;
@@ -158,44 +156,6 @@ static inline struct fimd_driver_data *drm_fimd_get_driver_data(
 	return (struct fimd_driver_data *)
 		platform_get_device_id(pdev)->driver_data;
 }
-
-static bool fimd_display_is_connected(void *in_ctx)
-{
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/* TODO. */
-
-	return true;
-}
-
-static void *fimd_get_panel(void *in_ctx)
-{
-	struct fimd_context *ctx = in_ctx;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	return ctx->panel;
-}
-
-static int fimd_check_mode(void *in_ctx, struct drm_display_mode *mode)
-{
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/* TODO. */
-
-	return 0;
-}
-
-static struct exynos_drm_display_ops fimd_display_ops = {
-	.is_connected = fimd_display_is_connected,
-	.get_panel = fimd_get_panel,
-	.check_mode = fimd_check_mode,
-};
-
-static struct exynos_drm_display fimd_display = {
-	.type = EXYNOS_DISPLAY_TYPE_LCD,
-	.ops = &fimd_display_ops,
-};
 
 static void fimd_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
 {
@@ -927,9 +887,7 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
-	struct device_node *disp_np;
 	struct exynos_drm_fimd_pdata *pd;
-	u32 data[4];
 
 	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
 	if (!pd) {
@@ -947,33 +905,6 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 		pd->vidcon1 |= VIDCON1_INV_VCLK;
 	if (of_get_property(np, "samsung,fimd-inv-vden", NULL))
 		pd->vidcon1 |= VIDCON1_INV_VDEN;
-
-	disp_np = of_parse_phandle(np, "samsung,fimd-display", 0);
-	if (!disp_np) {
-		dev_err(dev, "unable to find display panel info\n");
-		return ERR_PTR(-EINVAL);
-	}
-
-	if (of_property_read_u32_array(disp_np, "lcd-htiming", data, 4)) {
-		dev_err(dev, "invalid horizontal timing\n");
-		return ERR_PTR(-EINVAL);
-	}
-	pd->panel.timing.left_margin = data[0];
-	pd->panel.timing.right_margin = data[1];
-	pd->panel.timing.hsync_len = data[2];
-	pd->panel.timing.xres = data[3];
-
-	if (of_property_read_u32_array(disp_np, "lcd-vtiming", data, 4)) {
-		dev_err(dev, "invalid vertical timing\n");
-		return ERR_PTR(-EINVAL);
-	}
-	pd->panel.timing.upper_margin = data[0];
-	pd->panel.timing.lower_margin = data[1];
-	pd->panel.timing.vsync_len = data[2];
-	pd->panel.timing.yres = data[3];
-
-	of_property_read_u32(np, "samsung,fimd-frame-rate",
-				&pd->panel.timing.refresh);
 
 	of_property_read_u32(np, "samsung,default-window", &pd->default_win);
 
@@ -1081,7 +1012,6 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->vidcon0 = pdata->vidcon0;
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
-	ctx->panel = panel;
 	ctx->dev = dev;
 	ctx->suspended = true;
 	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
@@ -1100,9 +1030,6 @@ static int fimd_probe(struct platform_device *pdev)
 	fimd_manager.ctx = ctx;
 	exynos_drm_manager_register(&fimd_manager);
 
-	fimd_display.ctx = ctx;
-	exynos_drm_display_register(&fimd_display);
-
 	return 0;
 }
 
@@ -1113,7 +1040,6 @@ static int fimd_remove(struct platform_device *pdev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	exynos_drm_display_unregister(&fimd_display);
 	exynos_drm_manager_unregister(&fimd_manager);
 
 	if (ctx->suspended)

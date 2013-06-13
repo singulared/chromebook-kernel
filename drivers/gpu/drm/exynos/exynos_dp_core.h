@@ -13,6 +13,7 @@
 #ifndef _EXYNOS_DP_CORE_H
 #define _EXYNOS_DP_CORE_H
 
+#include <drm/exynos_drm.h>
 #include <video/exynos_dp.h>
 
 enum dp_irq_type {
@@ -52,6 +53,8 @@ struct exynos_dp_device {
 	struct video_info	*video_info;
 	struct link_train	link_train;
 	struct work_struct	hotplug_work;
+
+	struct exynos_drm_panel_info panel;
 };
 
 /* exynos_dp_core.c */
