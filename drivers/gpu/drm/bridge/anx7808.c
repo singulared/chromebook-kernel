@@ -64,6 +64,8 @@ struct anx7808_data {
 	struct delayed_work play_video;
 	struct workqueue_struct *wq;
 	enum dp_link_bw dp_supported_bw;
+	enum dp_link_bw dp_manual_bw;
+	int dp_manual_bw_changed;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -508,7 +510,10 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	usleep_range(1000, 2000);
 	anx7808_clear_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
 
-	dp_bw = (uint8_t)anx7808->dp_supported_bw;
+	if (anx7808->dp_manual_bw == 0)
+		dp_bw = (uint8_t)anx7808->dp_supported_bw;
+	else
+		dp_bw = (uint8_t)anx7808->dp_manual_bw;
 	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, dp_bw);
 	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG, SP_TX_LT_EN);
 
@@ -586,8 +591,13 @@ static void anx7808_play_video(struct work_struct *work)
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
 	anx7808_init_pipeline(anx7808);
 
+	anx7808->dp_manual_bw_changed = 0;
+
 	while (true) {
 		/* Make progress towards playback state. */
+		if (anx7808->dp_manual_bw_changed)
+			break;
+
 		switch (state) {
 		case STATE_CABLE_DETECTED:
 			if (anx7808_detect_dp_hotplug(anx7808))
@@ -655,6 +665,44 @@ static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static ssize_t anx7808_bw_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
+	return sprintf(buf, "%x\n", anx7808->dp_manual_bw);
+}
+
+static ssize_t anx7808_bw_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
+	int val;
+	enum dp_link_bw dp_bw;
+	if (!kstrtoint(buf, 16, &val)) {
+		dp_bw = (enum dp_link_bw)val;
+		switch (dp_bw) {
+		case BW_NULL:
+		case BW_162G:
+		case BW_27G:
+		case BW_54G:
+			anx7808->dp_manual_bw = val;
+			anx7808->dp_manual_bw_changed = 1;
+			break;
+		default:
+			break;
+		}
+	}
+	return count;
+}
+
+static struct device_attribute anx7808_device_attrs[] = {
+	__ATTR(dp_manual_bw, S_IRUSR | S_IWUSR, anx7808_bw_show,
+	       anx7808_bw_store),
+};
+
 static void anx7808_free_gpios(struct anx7808_data *anx7808)
 {
 	gpio_free(anx7808->cable_det_gpio);
@@ -678,7 +726,7 @@ static void unregister_i2c_clients(struct anx7808_data *anx7808)
 static int anx7808_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
-	int ret = 0;
+	int i, ret = 0;
 	struct device_node *node = client->dev.of_node;
 	struct anx7808_data *anx7808;
 
@@ -818,9 +866,21 @@ static int anx7808_probe(struct i2c_client *client,
 		goto err_wq;
 	}
 
+	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++) {
+		ret = device_create_file(
+			&client->dev, &anx7808_device_attrs[i]);
+		if (ret) {
+			DRM_ERROR("anx7808 sysfs register failed.\n");
+			goto err_sysfs;
+		}
+	}
+
 	DRM_INFO("ANX7808 initialization successful.\n");
 
 	return 0;
+err_sysfs:
+	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
+		device_remove_file(&client->dev, &anx7808_device_attrs[i]);
 err_wq:
 	destroy_workqueue(anx7808->wq);
 err_i2c:
@@ -834,7 +894,11 @@ err_reg:
 
 static int anx7808_remove(struct i2c_client *client)
 {
+	int i;
 	struct anx7808_data *anx7808 = i2c_get_clientdata(client);
+
+	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
+		device_remove_file(&client->dev, &anx7808_device_attrs[i]);
 	destroy_workqueue(anx7808->wq);
 	unregister_i2c_clients(anx7808);
 	anx7808_free_gpios(anx7808);
