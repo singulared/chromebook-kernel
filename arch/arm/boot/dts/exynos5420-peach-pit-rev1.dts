@@ -22,7 +22,7 @@
 	};
 
 	pinctrl@13400000 {
-		cyapa_irq: cyapa-irq {
+		trackpad_irq: trackpad-irq {
 			samsung,pins = "gpx1-1";
 			samsung,pin-function = <0>;
 			samsung,pin-pud = <0>;
@@ -408,13 +408,37 @@
 		status = "okay";
 		clock-frequency = <333000>;
 
+		/*
+		 * TODO: for now config the IRQ at the i2c level since
+		 * pinctrl can't handle sharing it between two children, even
+		 * if one fails to probe.
+		 * See crosbug.com/p/20329
+		 */
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c8_hs_bus &trackpad_irq>;
+
+		/* Only one of the following trackpads should be probed */
 		trackpad@67 {
 			reg = <0x67>;
 			compatible = "cypress,cyapa";
 			interrupts = <1 0>;
 			interrupt-parent = <&gpx1>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&cyapa_irq>;
+			wakeup-source;
+		};
+
+		trackpad@4a {
+			reg=<0x4a>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<1 0>;
+			interrupt-parent=<&gpx1>;
+			wakeup-source;
+		};
+
+		trackpad-bootloader@25 {
+			reg=<0x25>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<1 0>;
+			interrupt-parent=<&gpx1>;
 			wakeup-source;
 		};
 	};
