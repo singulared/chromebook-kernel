@@ -416,6 +416,7 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
+	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_private *dev_priv = crtc->dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_framebuffer *fb = crtc->fb;
@@ -431,12 +432,24 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	/* Make sure the framebuffer doesn't disappear while we wait */
 	exynos_drm_fb_get(exynos_fb);
 
+	/*
+	 * Force DPMS ON, which allows us to enables vblank irqs which
+	 * we need to drain the flip fifo below while we wait.
+	 */
+	exynos_drm_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
+
+	ret = drm_vblank_get(dev, exynos_crtc->pipe);
+	if (ret)
+		DRM_ERROR("Unable to get vblank\n");
+
 	/* We should never timeout here. */
 	ret = wait_event_timeout(dev_priv->wait_vsync_queue,
 				 kfifo_is_empty(&exynos_crtc->flip_fifo),
 				 DRM_HZ/20);
 	if (!ret)
 		DRM_ERROR("Timed out waiting for flips to complete\n");
+
+	drm_vblank_put(dev, exynos_crtc->pipe);
 
 	ret = exynos_drm_crtc_page_flip(crtc, fb, NULL);
 
