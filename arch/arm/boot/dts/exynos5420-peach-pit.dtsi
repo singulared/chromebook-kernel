@@ -39,6 +39,13 @@
 			samsung,pin-drv = <0>;
 		};
 
+		mask_tpm_reset: mask-tpm-reset {
+			samsung,pins = "gpx0-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 		power_key_irq: power-key-irq {
 			samsung,pins = "gpx1-2";
 			samsung,pin-function = <0>;
@@ -498,6 +505,18 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&wifi_en>;
 		vin-supply = <&wifi_rst_regulator>;
+	};
+
+	/* We need GPX0_6 to be low at sleep time; just keep it low always */
+	mask_tpm_reset_regulator: mask-tpm-reset-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "mask-tpm-reset ";
+		gpio = <&gpx0 6 0>;
+		enable-active-low;
+		regulator-boot-on;
+		regulator-always-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mask_tpm_reset>;
 	};
 
 	vbat: fixed-regulator {
