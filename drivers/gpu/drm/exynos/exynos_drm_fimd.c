@@ -858,13 +858,7 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
 
 		fimd_window_resume(ctx);
-
-		if (dp_dev)
-			exynos_dp_resume(dp_dev);
 	} else if (!enable && !ctx->suspended) {
-		if (dp_dev)
-			exynos_dp_suspend(dp_dev);
-
 		/*
 		 * We need to make sure that all windows are disabled before we
 		 * suspend that connector. Otherwise we might try to scan from
@@ -1053,43 +1047,49 @@ static int fimd_suspend(struct device *dev)
 	 * called here, an error would be returned by that interface
 	 * because the usage_count of pm runtime is more than 1.
 	 */
-	if (!pm_runtime_suspended(dev))
-		return fimd_activate(ctx, false);
+	if (pm_runtime_suspended(dev))
+		return 0;
 
-	return 0;
+	if (dp_dev)
+		exynos_dp_suspend(dp_dev);
+
+	return fimd_activate(ctx, false);
 }
 
 static int fimd_resume(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	int ret;
 
 	/*
 	 * if entered to sleep when lcd panel was on, the usage_count
 	 * of pm runtime would still be 1 so in this case, fimd driver
 	 * should be on directly not drawing on pm runtime interface.
 	 */
-	if (!pm_runtime_suspended(dev)) {
-		int ret;
+	if (pm_runtime_suspended(dev))
+		return 0;
 
-		ret = fimd_activate(ctx, true);
-		if (ret < 0)
-			return ret;
+	ret = fimd_activate(ctx, true);
+	if (ret < 0)
+		return ret;
 
-		/*
-		 * in case of dpms on(standby), fimd_apply function will
-		 * be called by encoder's dpms callback to update fimd's
-		 * registers but in case of sleep wakeup, it's not.
-		 * so fimd_apply function should be called at here.
-		 */
-		fimd_apply(ctx);
+	/*
+	 * in case of dpms on(standby), fimd_apply function will
+	 * be called by encoder's dpms callback to update fimd's
+	 * registers but in case of sleep wakeup, it's not.
+	 * so fimd_apply function should be called at here.
+	 */
+	fimd_apply(ctx);
 
-		/*
-		 * Restore the vblank interrupts to whichever state DRM
-		 * wants them.
-		 */
-		if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-			fimd_enable_vblank(ctx);
-	}
+	/*
+	 * Restore the vblank interrupts to whichever state DRM
+	 * wants them.
+	 */
+	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
+		fimd_enable_vblank(ctx);
+
+	if (dp_dev)
+		exynos_dp_resume(dp_dev);
 
 	return 0;
 }
@@ -1102,16 +1102,27 @@ static int fimd_runtime_suspend(struct device *dev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
+	if (dp_dev)
+		exynos_dp_suspend(dp_dev);
+
 	return fimd_activate(ctx, false);
 }
 
 static int fimd_runtime_resume(struct device *dev)
 {
 	struct fimd_context *ctx = get_fimd_context(dev);
+	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	return fimd_activate(ctx, true);
+	ret = fimd_activate(ctx, true);
+	if (ret)
+		return ret;
+
+	if (dp_dev)
+		exynos_dp_resume(dp_dev);
+
+	return 0;
 }
 #endif
 
