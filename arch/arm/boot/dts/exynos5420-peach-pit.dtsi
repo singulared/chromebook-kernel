@@ -259,7 +259,6 @@
 			reg = <0>;
 			interrupts = <5 0>;
 			interrupt-parent = <&gpx1>;
-			wakeup-source;
 
 			controller-data {
 				cs-gpio = <&gpb1 2 0>;
