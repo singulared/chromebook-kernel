@@ -32,6 +32,7 @@
 #define S3C2410_WTCON_DIV32   (1<<3)
 #define S3C2410_WTCON_DIV64   (2<<3)
 #define S3C2410_WTCON_DIV128  (3<<3)
+#define S3C2410_WTCON_DIV_MASK (3 << 3)
 
 #define S3C2410_WTCON_PRESCALE(x) ((x) << 8)
 #define S3C2410_WTCON_PRESCALE_MASK (0xff00)
