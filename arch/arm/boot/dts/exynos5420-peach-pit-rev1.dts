@@ -254,8 +254,9 @@
 				};
 				ldo30_reg: LDO30 {
 					regulator-name = "ldo_30";
-					regulator-min-microvolt = <1200000>;
-					regulator-max-microvolt = <1200000>;
+					regulator-min-microvolt = <1000000>;
+					regulator-max-microvolt = <1000000>;
+					regulator-always-on;
 				};
 				ldo32_reg: LDO32 {
 					regulator-name = "ldo_32";
