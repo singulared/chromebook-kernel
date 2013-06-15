@@ -312,6 +312,7 @@
 						};
 						fet4 {
 							regulator-name = "sdcard";
+							regulator-always-on;
 						};
 						fet5 {
 							regulator-name = "camout";
