@@ -30,7 +30,7 @@
 #include "hdmi_audio.h"
 
 #define DRV_NAME "exynos-hdmi-audio"
-#define HDMI_POWERON_WAIT_COUNT (100)
+#define HDMI_POWERON_WAIT_COUNT (200)
 #define HDMI_INIT_DELAY (50)
 
 struct hdmi_audio_params {
