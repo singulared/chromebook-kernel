@@ -64,7 +64,7 @@
 			samsung,pin-drv = <0>;
 		};
 
-		usb3503_reset: usb3503-reset {
+		hsic_reset: hsic-reset {
 			samsung,pins = "gpx2-4";
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
@@ -401,15 +401,6 @@
 			compatible = "invn,isl29023";
 			reg = <0x44>;
 		};
-
-		usb3503@8 {
-			compatible = "smsc,usb3503";
-			reg = <0x08>;
-			reset-gpios = <&gpx2 4 1>;
-			initial-mode = <1>;  /* HUB mode */
-			pinctrl-names = "default";
-			pinctrl-0 = <&usb3503_reset>;
-		};
 	};
 
 	/* hsi2c8 */
@@ -486,5 +477,11 @@
 		vdd-supply = <&ldo8_reg>;
 		vdd_osc-supply = <&ldo10_reg>;
 		vdd_pll-supply = <&ldo8_reg>;
+	};
+
+	usb2_phy: usbphy@12130000 {
+		samsung,hsic-reset-gpio = <&gpx2 4 1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hsic_reset>;
 	};
 };
