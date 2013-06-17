@@ -443,33 +443,41 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 	static int tries = HDMI_POWERON_WAIT_COUNT;
 
 	snd_printdd("[%d] %s plugged %d\n",
-			__LINE__, __func__, atomic_read(&ctx->plugged));
+		__LINE__, __func__, atomic_read(&ctx->plugged));
 
+	plugged = atomic_read(&ctx->plugged);
+
+	/* skip if unplugged */
+	if (!plugged)
+		goto report_event;
+
+	/* wait till hdmi is powered on */
 	if (pm_runtime_suspended(&ctx->parent_pdev->dev)) {
 		if (--tries) {
 			cancel_delayed_work(&ctx->hotplug_work);
 			queue_delayed_work(ctx->hpd_wq, &ctx->hotplug_work,
 					msecs_to_jiffies(5));
+		} else {
+			/* hdmi is still off, reset count. */
+			tries = HDMI_POWERON_WAIT_COUNT;
 		}
 		return;
-	} else {
-		snd_printdd("[%d] %s hdmi powered on after %d tries\n",
-			__LINE__, __func__, tries);
-
-		/* should set audio regs after ip, phy got stable.*/
-		mdelay(HDMI_INIT_DELAY);
-		tries = HDMI_POWERON_WAIT_COUNT;
 	}
 
-	plugged = atomic_read(&ctx->plugged);
-	if (plugged) {
-		hdmi_audio_control(ctx, false);
-		hdmi_conf_init(ctx);
-		hdmi_audio_init(ctx);
-		if (ctx->enabled)
-			hdmi_audio_control(ctx, true);
-	}
+	snd_printdd("[%d] %s hdmi powered on after %d tries\n",
+		__LINE__, __func__, HDMI_POWERON_WAIT_COUNT - tries);
 
+	/* should set audio regs after ip, phy got stable.*/
+	mdelay(HDMI_INIT_DELAY);
+
+	hdmi_audio_control(ctx, false);
+	hdmi_conf_init(ctx);
+	hdmi_audio_init(ctx);
+	if (ctx->enabled)
+		hdmi_audio_control(ctx, true);
+
+report_event:
+	tries = HDMI_POWERON_WAIT_COUNT;
 	if (ctx->plugin.jack_cb)
 		ctx->plugin.jack_cb(plugged);
 }
