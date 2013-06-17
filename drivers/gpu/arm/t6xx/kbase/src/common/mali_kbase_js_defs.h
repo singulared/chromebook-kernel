@@ -1,15 +1,12 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the
- * GNU General Public License version 2 as published by the Free Software
- * Foundation, and any use by you of this program is subject to the terms
- * of such GNU licence.
+ * This program is free software and is provided to you under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained from Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
 
@@ -19,6 +16,7 @@
  * @file mali_kbase_js.h
  * Job Scheduler Type Definitions
  */
+
 
 #ifndef _KBASE_JS_DEFS_H_
 #define _KBASE_JS_DEFS_H_
@@ -37,28 +35,26 @@
  * @addtogroup kbase_js
  * @{
  */
-/* Forward decls */
-struct kbase_device;
-struct kbase_jd_atom;
-
 
 /* Types used by the policies must go here */
-enum {
+enum
+{
 	/** Context will not submit any jobs */
-	KBASE_CTX_FLAG_SUBMIT_DISABLED = (1u << 0),
+	KBASE_CTX_FLAG_SUBMIT_DISABLED  = (1u << 0),
 
 	/** Set if the context uses an address space and should be kept scheduled in */
-	KBASE_CTX_FLAG_PRIVILEGED = (1u << 1),
+	KBASE_CTX_FLAG_PRIVILEGED       = (1u << 1),
 
 	/** Kernel-side equivalent of BASE_CONTEXT_HINT_ONLY_COMPUTE. Non-mutable after creation flags set */
-	KBASE_CTX_FLAG_HINT_ONLY_COMPUTE = (1u << 2)
+	KBASE_CTX_FLAG_HINT_ONLY_COMPUTE= (1u << 2)
 
-	    /* NOTE: Add flags for other things, such as 'is scheduled', and 'is dying' */
+	/* NOTE: Add flags for other things, such as 'is scheduled', and 'is dying' */
 };
 
 typedef u32 kbase_context_flags;
 
-typedef struct kbasep_atom_req {
+typedef struct kbasep_atom_req
+{
 	base_jd_core_req core_req;
 	kbase_context_flags ctx_req;
 	u32 device_nr;
@@ -66,40 +62,39 @@ typedef struct kbasep_atom_req {
 
 #include "mali_kbase_js_policy_cfs.h"
 
+
 /* Wrapper Interface - doxygen is elsewhere */
-typedef union kbasep_js_policy {
+typedef union kbasep_js_policy
+{
 #ifdef KBASE_JS_POLICY_AVAILABLE_FCFS
-	kbasep_js_policy_fcfs fcfs;
+	kbasep_js_policy_fcfs   fcfs;
 #endif
 #ifdef KBASE_JS_POLICY_AVAILABLE_CFS
-	kbasep_js_policy_cfs cfs;
+	kbasep_js_policy_cfs    cfs;
 #endif
 } kbasep_js_policy;
 
 /* Wrapper Interface - doxygen is elsewhere */
-typedef union kbasep_js_policy_ctx_info {
+typedef union kbasep_js_policy_ctx_info
+{
 #ifdef KBASE_JS_POLICY_AVAILABLE_FCFS
-	kbasep_js_policy_fcfs_ctx fcfs;
+	kbasep_js_policy_fcfs_ctx   fcfs;
 #endif
 #ifdef KBASE_JS_POLICY_AVAILABLE_CFS
-	kbasep_js_policy_cfs_ctx cfs;
+	kbasep_js_policy_cfs_ctx    cfs;
 #endif
 } kbasep_js_policy_ctx_info;
 
 /* Wrapper Interface - doxygen is elsewhere */
-typedef union kbasep_js_policy_job_info {
+typedef union kbasep_js_policy_job_info
+{
 #ifdef KBASE_JS_POLICY_AVAILABLE_FCFS
 	kbasep_js_policy_fcfs_job fcfs;
 #endif
 #ifdef KBASE_JS_POLICY_AVAILABLE_CFS
-	kbasep_js_policy_cfs_job cfs;
+	kbasep_js_policy_cfs_job  cfs;
 #endif
 } kbasep_js_policy_job_info;
-
-
-/** Callback function run on all of a context's jobs registered with the Job
- * Scheduler */
-typedef void (*kbasep_js_policy_ctx_job_cb)(struct kbase_device *kbdev, struct kbase_jd_atom *katom);
 
 /**
  * @brief Maximum number of jobs that can be submitted to a job slot whilst
@@ -145,7 +140,8 @@ typedef void (*kbasep_js_policy_ctx_job_cb)(struct kbase_device *kbdev, struct k
  * - Finding out when there are a mix of @ref BASE_CONTEXT_HINT_ONLY_COMPUTE
  * and ! @ref BASE_CONTEXT_HINT_ONLY_COMPUTE contexts in the runpool
  */
-typedef enum {
+typedef enum
+{
 	/** Attribute indicating an NSS context */
 	KBASEP_JS_CTX_ATTR_NSS,
 
@@ -197,15 +193,6 @@ typedef enum {
 	KBASEP_JS_CTX_ATTR_COUNT
 } kbasep_js_ctx_attr;
 
-enum {
-	/** Bit indicating that new atom should be started because this atom completed */
-	KBASE_JS_ATOM_DONE_START_NEW_ATOMS = (1u << 0),
-	/** Bit indicating that the atom was evicted from the JSn_NEXT registers */
-	KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT = (1u << 1)
-};
-
-/** Combination of KBASE_JS_ATOM_DONE_<...> bits */
-typedef u32 kbasep_js_atom_done_code;
 
 /**
  * Data used by the scheduler that is unique for each Address Space.
@@ -214,7 +201,8 @@ typedef u32 kbasep_js_atom_done_code;
  * must be held whilst accessing this data (inculding reads and atomic
  * decisions based on the read).
  */
-typedef struct kbasep_js_per_as_data {
+typedef struct kbasep_js_per_as_data
+{
 	/**
 	 * Ref count of whether this AS is busy, and must not be scheduled out
 	 *
@@ -242,9 +230,11 @@ typedef struct kbasep_js_per_as_data {
  * would be undefined behavior), and so under the Total License model, it is free
  * to make optimizations based on that (i.e. to remove masking).
  */
-typedef struct kbasep_js_device_data {
+typedef struct kbasep_js_device_data
+{
 	/** Sub-structure to collect together Job Scheduling data used in IRQ context */
-	struct runpool_irq {
+	struct runpool_irq
+	{
 		/**
 		 * Lock for accessing Job Scheduling data used in IRQ context
 		 *
@@ -296,10 +286,10 @@ typedef struct kbasep_js_device_data {
 		 */
 		/** Bitvector to aid affinity checking. Element 'n' bit 'i' indicates
 		 * that slot 'n' is using core i (i.e. slot_affinity_refcount[n][i] > 0) */
-		u64 slot_affinities[BASE_JM_MAX_NR_SLOTS];
+		u64                     slot_affinities[BASE_JM_MAX_NR_SLOTS];
 		/** Bitvector indicating which slots \em might have atoms blocked on
 		 * them because otherwise they'd violate affinity restrictions */
-		u16 slots_blocked_on_affinity;
+		u16                     slots_blocked_on_affinity;
 		/** Refcount for each core owned by each slot. Used to generate the
 		 * slot_affinities array of bitvectors
 		 *
@@ -307,13 +297,13 @@ typedef struct kbasep_js_device_data {
 		 * because it is refcounted only when a job is definitely about to be
 		 * submitted to a slot, and is de-refcounted immediately after a job
 		 * finishes */
-		s8 slot_affinity_refcount[BASE_JM_MAX_NR_SLOTS][64];
+		s8                      slot_affinity_refcount[BASE_JM_MAX_NR_SLOTS][64];
+
 	} runpool_irq;
 
 	/**
 	 * Run Pool mutex, for managing contexts within the runpool.
-	 * Unless otherwise specified, you must hold this lock whilst accessing any
-	 * members that follow
+	 * You must hold this lock whilst accessing any members that follow
 	 *
 	 * In addition, this is used to access:
 	 * - the kbasep_js_kctx_info::runpool substructure
@@ -328,7 +318,7 @@ typedef struct kbasep_js_device_data {
 	 */
 	struct mutex queue_mutex;
 
-	u16 as_free;				/**< Bitpattern of free Address Spaces */
+	u16 as_free;                            /**< Bitpattern of free Address Spaces */
 
 	/** Number of currently scheduled user contexts (excluding ones that are not submitting jobs) */
 	s8 nr_user_contexts_running;
@@ -347,28 +337,25 @@ typedef struct kbasep_js_device_data {
 	 * @note This is a write-once member, and so no locking is required to read */
 	base_jd_core_req js_reqs[BASE_JM_MAX_NR_SLOTS];
 
-	u32 scheduling_tick_ns;		 /**< Value for KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS */
-	u32 soft_stop_ticks;		 /**< Value for KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS */
-	u32 hard_stop_ticks_ss;		 /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS */
-	u32 hard_stop_ticks_nss;	 /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS */
-	u32 gpu_reset_ticks_ss;		 /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS */
-	u32 gpu_reset_ticks_nss;	 /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS */
-	u32 ctx_timeslice_ns;		 /**< Value for KBASE_CONFIG_ATTR_JS_CTX_TIMESLICE_NS */
+	u32 scheduling_tick_ns;          /**< Value for KBASE_CONFIG_ATTR_JS_SCHEDULING_TICK_NS */
+	u32 soft_stop_ticks;             /**< Value for KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS */
+	u32 hard_stop_ticks_ss;          /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS */
+	u32 hard_stop_ticks_nss;         /**< Value for KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_NSS */
+	u32 gpu_reset_ticks_ss;          /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS */
+	u32 gpu_reset_ticks_nss;         /**< Value for KBASE_CONFIG_ATTR_JS_RESET_TICKS_NSS */
+	u32 ctx_timeslice_ns;            /**< Value for KBASE_CONFIG_ATTR_JS_CTX_TIMESLICE_NS */
 	u32 cfs_ctx_runtime_init_slices; /**< Value for KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_INIT_SLICES */
-	u32 cfs_ctx_runtime_min_slices;	 /**< Value for  KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_MIN_SLICES */
-
-	/** List of suspended soft jobs */
-	struct list_head suspended_soft_jobs_list;
-
+	u32 cfs_ctx_runtime_min_slices;  /**< Value for  KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_MIN_SLICES */
 #ifdef CONFIG_MALI_DEBUG
 	/* Support soft-stop on a single context */
 	mali_bool softstop_always;
-#endif				/* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_DEBUG */
 	/** The initalized-flag is placed at the end, to avoid cache-pollution (we should
 	 * only be using this during init/term paths).
 	 * @note This is a write-once member, and so no locking is required to read */
 	int init_status;
 } kbasep_js_device_data;
+
 
 /**
  * @brief KBase Context Job Scheduling information structure
@@ -376,7 +363,8 @@ typedef struct kbasep_js_device_data {
  * This is a substructure in the kbase_context that encapsulates all the
  * scheduling information.
  */
-typedef struct kbasep_js_kctx_info {
+typedef struct kbasep_js_kctx_info
+{
 	/**
 	 * Runpool substructure. This must only be accessed whilst the Run Pool
 	 * mutex ( kbasep_js_device_data::runpool_mutex ) is held.
@@ -387,8 +375,9 @@ typedef struct kbasep_js_kctx_info {
 	 * @note some of the members could be moved into kbasep_js_device_data for
 	 * improved d-cache/tlb efficiency.
 	 */
-	struct {
-		kbasep_js_policy_ctx_info policy_ctx;	/**< Policy-specific context */
+	struct
+	{
+		kbasep_js_policy_ctx_info policy_ctx;   /**< Policy-specific context */
 	} runpool;
 
 	/**
@@ -403,8 +392,9 @@ typedef struct kbasep_js_kctx_info {
 	 *
 	 * You may not access any of these members from IRQ context.
 	 */
-	struct {
-		struct mutex jsctx_mutex;		    /**< Job Scheduler Context lock */
+	struct
+	{
+		struct mutex jsctx_mutex;                   /**< Job Scheduler Context lock */
 
 		/** Number of jobs <b>ready to run</b> - does \em not include the jobs waiting in
 		 * the dispatcher, and dependency-only jobs. See kbase_jd_context::job_nr
@@ -416,7 +406,7 @@ typedef struct kbasep_js_kctx_info {
 		 * the context. **/
 		u32 ctx_attr_ref_count[KBASEP_JS_CTX_ATTR_COUNT];
 
-		kbase_context_flags flags;
+		kbase_context_flags     flags;
 		/* NOTE: Unify the following flags into kbase_context_flags */
 		/**
 		 * Is the context scheduled on the Run Pool?
@@ -429,7 +419,7 @@ typedef struct kbasep_js_kctx_info {
 		 * */
 		wait_queue_head_t is_scheduled_wait;
 
-		mali_bool is_dying;			/**< Is the context in the process of being evicted? */
+		mali_bool is_dying;                     /**< Is the context in the process of being evicted? */
 	} ctx;
 
 	/* The initalized-flag is placed at the end, to avoid cache-pollution (we should
@@ -440,13 +430,14 @@ typedef struct kbasep_js_kctx_info {
 /** Subset of atom state that can be available after jd_done_nolock() is called
  * on that atom. A copy must be taken via kbasep_js_atom_retained_state_copy(),
  * because the original atom could disappear. */
-typedef struct kbasep_js_atom_retained_state {
+typedef struct kbasep_js_atom_retained_state
+{
 	/** Event code - to determine whether the atom has finished */
-	base_jd_event_code event_code;
+	base_jd_event_code  event_code;
 	/** core requirements */
-	base_jd_core_req core_req;
+	base_jd_core_req    core_req;
 	/** Job Slot to retry submitting to if submission from IRQ handler failed */
-	int retry_submit_on_slot;
+	int                 retry_submit_on_slot;
 
 } kbasep_js_atom_retained_state;
 
@@ -471,8 +462,10 @@ typedef struct kbasep_js_atom_retained_state {
  */
 #define KBASEP_JS_TICK_RESOLUTION_US 1
 
-#endif				/* _KBASE_JS_DEFS_H_ */
 
-	  /** @} *//* end group kbase_js */
-	  /** @} *//* end group base_kbase_api */
-	  /** @} *//* end group base_api */
+#endif /* _KBASE_JS_DEFS_H_ */
+
+
+/** @} */ /* end group kbase_js */
+/** @} */ /* end group base_kbase_api */
+/** @} */ /* end group base_api */

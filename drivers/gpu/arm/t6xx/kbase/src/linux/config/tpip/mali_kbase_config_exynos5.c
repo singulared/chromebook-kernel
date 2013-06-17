@@ -31,6 +31,8 @@
 #include <linux/fb.h>
 #include <linux/clk.h>
 #include <mach/regs-clock.h>
+#include <mach/pmu.h>
+#include <mach/regs-pmu.h>
 #include <asm/delay.h>
 #include <mach/map.h>
 #include <generated/autoconf.h>
@@ -68,7 +70,7 @@
 #endif
 
 #ifdef MALI_DVFS_ASV_ENABLE
-#include <mach/asv-5250.h>
+#include <mach/busfreq_exynos5.h>
 #define MALI_DVFS_ASV_GROUP_SPECIAL_NUM 10
 #define MALI_DVFS_ASV_GROUP_NUM 12
 #endif
@@ -78,6 +80,7 @@
 #define VITHAR_DEFAULT_CLOCK 533000000
 #define RUNTIME_PM_DELAY_TIME 10
 #define CONFIG_T6XX_HWVER_R0P0 1
+#define G3D_ASV_VOL_OFFSET	25000
 
 struct regulator *kbase_platform_get_regulator(void);
 int kbase_platform_regulator_init(void);
@@ -1423,7 +1426,7 @@ static const unsigned int mali_dvfs_asv_vol_tbl
 };
 
 static const unsigned int mali_dvfs_vol_default[MALI_DVFS_STEP] = {
-	 925000, 925000, 1025000, 1075000, 1125000, 1150000, 120000
+	 925000, 925000, 1025000, 1075000, 1125000, 1150000, 1200000
 };
 
 static int mali_dvfs_update_asv(int group)
@@ -1456,8 +1459,12 @@ static int mali_dvfs_update_asv(int group)
 		if (exynos_lot_id)
 			mali_dvfs_infotbl[i].voltage =
 				mali_dvfs_asv_vol_tbl_special[group-1][i];
-		 else
-			 mali_dvfs_infotbl[i].voltage =
+		else if (g3d_vol_lock)
+				mali_dvfs_infotbl[i].voltage =
+					mali_dvfs_asv_vol_tbl[group][i] +
+						G3D_ASV_VOL_OFFSET;
+		else
+			mali_dvfs_infotbl[i].voltage =
 				mali_dvfs_asv_vol_tbl[group][i];
 	}
 
@@ -1824,7 +1831,6 @@ static void kbase_platform_dvfs_set_vol(unsigned int vol)
 	return;
 }
 
-#if defined CONFIG_T6XX_DVFS
 int kbase_platform_dvfs_get_level(int freq)
 {
 	int i;
@@ -1834,7 +1840,6 @@ int kbase_platform_dvfs_get_level(int freq)
 	}
 	return -1;
 }
-#endif
 
 #if defined CONFIG_T6XX_DVFS || defined CONFIG_T6XX_DEBUG_SYS
 void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
