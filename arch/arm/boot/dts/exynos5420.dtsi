@@ -927,6 +927,10 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 
+		hdmi-audio {
+			compatible = "samsung,exynos5-hdmi-audio";
+		};
+
 		hdmiphy {
 			reg = <0x145D0000 0x20>;
 		};
