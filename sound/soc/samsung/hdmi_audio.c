@@ -308,10 +308,10 @@ static int hdmi_audio_hw_params(struct device *dev,
 		ctx->params.bits_per_sample = 8;
 		break;
 	case SNDRV_PCM_FORMAT_S16_LE:
-		ctx->params.bits_per_sample = 12;
+		ctx->params.bits_per_sample = 16;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
-		ctx->params.bits_per_sample = 16;
+		ctx->params.bits_per_sample = 24;
 		break;
 	default:
 		dev_err(dev, "Format(%d) not supported\n",
