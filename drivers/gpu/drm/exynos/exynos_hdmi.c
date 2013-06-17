@@ -186,7 +186,6 @@ struct hdmi_context {
 	struct device			*dev;
 	struct drm_device		*drm_dev;
 	bool				hpd;
-	bool				is_soc_exynos5;
 	bool				powered;
 	bool				dvi_mode;
 
@@ -518,6 +517,12 @@ struct hdmi_infoframe {
 	u8 ver;
 	u8 len;
 };
+
+static inline u32 support_hdmi_audio_through_alsa(struct hdmi_context *hdata)
+{
+	return (hdata->version == HDMI_VER_EXYNOS4212 ||
+		hdata->version == HDMI_VER_EXYNOS5420);
+}
 
 static inline u32 hdmi_reg_read(struct hdmi_context *hdata, u32 reg_id)
 {
@@ -1634,12 +1639,12 @@ static void hdmi_conf_apply(struct hdmi_context *hdata)
 
 	hdmi_conf_reset(hdata);
 	hdmi_conf_init(hdata);
-	if (!hdata->is_soc_exynos5)
+	if (!support_hdmi_audio_through_alsa(hdata))
 		hdmi_audio_init(hdata);
 
 	/* setting core registers */
 	hdmi_mode_apply(hdata);
-	if (!hdata->is_soc_exynos5)
+	if (!support_hdmi_audio_through_alsa(hdata))
 		hdmi_audio_control(hdata, true);
 
 	hdmi_regs_dump(hdata, "start");
@@ -2275,8 +2280,6 @@ static int hdmi_probe(struct platform_device *pdev)
 
 	hdata->hpd_gpio = pdata->hpd_gpio;
 	hdata->dev = dev;
-	hdata->is_soc_exynos5 = of_device_is_compatible(dev->of_node,
-		"samsung,exynos5-hdmi");
 
 	ret = hdmi_resources_init(hdata);
 
@@ -2372,8 +2375,7 @@ static int hdmi_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&hdata->hotplug_work, hdmi_hotplug_work_func);
 
-	if (of_device_is_compatible(dev->of_node,
-		"samsung,exynos5-hdmi")) {
+	if (support_hdmi_audio_through_alsa(hdata)) {
 		ret = hdmi_register_audio_device(pdev);
 		if (ret) {
 			DRM_ERROR("hdmi-audio device registering failed.\n");
