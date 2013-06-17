@@ -49,6 +49,7 @@ static int exynos_target(struct cpufreq_policy *policy,
 	unsigned int index, old_index;
 	unsigned int arm_volt, safe_arm_volt = 0;
 	int ret = 0;
+	unsigned int saved_min = 0, saved_max = 0;
 	struct cpufreq_frequency_table *freq_table = exynos_info->freq_table;
 	unsigned int *volt_table = exynos_info->volt_table;
 	unsigned int mpll_freq_khz = exynos_info->mpll_freq_khz;
@@ -77,6 +78,19 @@ static int exynos_target(struct cpufreq_policy *policy,
 		goto out;
 	}
 
+
+	/*
+	 * if we need a specific frequency for suspend/resume,
+	 * ensure we can set it whatever the governor/userspace is currently
+	 * doing.
+	 */
+	if (frequency_locked) {
+		saved_min = policy->min;
+		saved_max = policy->max;
+		policy->min = policy->cpuinfo.min_freq;
+		policy->max = policy->cpuinfo.max_freq;
+	}
+
 	if (cpufreq_frequency_table_target(policy, freq_table,
 					   target_freq, relation, &index)) {
 		ret = -EINVAL;
@@ -85,6 +99,16 @@ static int exynos_target(struct cpufreq_policy *policy,
 
 	freqs.new = freq_table[index].frequency;
 	freqs.cpu = policy->cpu;
+
+	/*
+	 * restore the policy frequency settings,
+	 * if we force it due to frequency locking.
+	 */
+	if (saved_min || saved_max) {
+		policy->min = saved_min;
+		policy->max = saved_max;
+	}
+
 
 	/*
 	 * ARM clock source will be changed APLL to MPLL temporary
@@ -150,8 +174,8 @@ static int exynos_cpufreq_resume(struct cpufreq_policy *policy)
  * @v
  *
  * While frequency_locked == true, target() ignores every frequency but
- * locking_frequency. The locking_frequency value is the initial frequency,
- * which is set by the bootloader. In order to eliminate possible
+ * locking_frequency. The locking_frequency value is the maximum CPU frequency,
+ * to ensure with the highest core voltage. In order to eliminate possible
  * inconsistency in clock values, we save and restore frequencies during
  * suspend and resume and block CPUFREQ activities. Note that the standard
  * suspend/resume cannot be used as they are too deep (syscore_ops) for
@@ -221,8 +245,6 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 	cpufreq_frequency_table_get_attr(exynos_info->freq_table, policy->cpu);
 
-	locking_frequency = exynos_getspeed(0);
-
 	/* set the transition latency value */
 	policy->cpuinfo.transition_latency = 100000;
 
@@ -242,6 +264,12 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	ret = cpufreq_frequency_table_cpuinfo(policy, exynos_info->freq_table);
 	if (ret)
 		return ret;
+
+	/*
+	 * ensure we suspend at the maximum frequency, so the voltage cannot be
+	 * too low anywhere in the suspend/resume path.
+	 */
+	locking_frequency = policy->cpuinfo.max_freq;
 
 	cpufreq_frequency_table_get_attr(exynos_info->freq_table, policy->cpu);
 	return 0;
