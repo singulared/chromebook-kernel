@@ -24,9 +24,6 @@
 #include <mach/asv-exynos.h>
 
 #define CPUFREQ_NUM_LEVELS	(L18 + 1)
-#define EXYNOS5420_M_MASK	0x3ff
-#define EXYNOS5420_P_MASK	0x3f
-#define EXYNOS5420_S_MASK	0x7
 #define EXYNOS5_CLKDIV_STATCPU0_MASK	0x11111111
 #define EXYNOS5_CLKDIV_STATCPU1_MASK	0x111
 
@@ -118,28 +115,6 @@ unsigned int clkdiv_cpu1_5420[CPUFREQ_NUM_LEVELS][2] = {
 	{ 7, 7 }, /* ARM L18: 200MHz */
 };
 
-static unsigned int exynos5420_apll_pms_table[CPUFREQ_NUM_LEVELS] = {
-	((250 << 16) | (3 << 8) | 0x0), /* APLL FOUT L0: 2GHz */
-	((475 << 16) | (6 << 8) | 0x0), /* APLL FOUT L1: 1.9GHz */
-	((225 << 16) | (3 << 8) | 0x0), /* APLL FOUT L2: 1.8GHz */
-	((425 << 16) | (6 << 8) | 0x0), /* APLL FOUT L3: 1.7GHz */
-	((200 << 16) | (3 << 8) | 0x0), /* APLL FOUT L4: 1.6GHz */
-	((250 << 16) | (4 << 8) | 0x0), /* APLL FOUT L5: 1.5GHz */
-	((175 << 16) | (3 << 8) | 0x0), /* APLL FOUT L6: 1.4GHz */
-	((325 << 16) | (6 << 8) | 0x0), /* APLL FOUT L7: 1.3GHz */
-	((200 << 16) | (2 << 8) | 0x1), /* APLL FOUT L8: 1.2GHz */
-	((275 << 16) | (3 << 8) | 0x1), /* APLL FOUT L9: 1.1GHz */
-	((250 << 16) | (3 << 8) | 0x1), /* APLL FOUT L10: 1GHz */
-	((150 << 16) | (2 << 8) | 0x1), /* APLL FOUT L11: 900MHz */
-	((200 << 16) | (3 << 8) | 0x1), /* APLL FOUT L12: 800MHz */
-	((175 << 16) | (3 << 8) | 0x1), /* APLL FOUT L13: 700MHz */
-	((200 << 16) | (2 << 8) | 0x2), /* APLL FOUT L14: 600MHz */
-	((250 << 16) | (3 << 8) | 0x2), /* APLL FOUT L15: 500MHz */
-	((200 << 16) | (3 << 8) | 0x2), /* APLL FOUT L16: 400MHz */
-	((400 << 16) | (4 << 8) | 0x3), /* APLL FOUT L17: 300MHz */
-	((200 << 16) | (3 << 8) | 0x3), /* APLL FOUT L18: 200MHz */
-};
-
 /*
  * Default ASV table
  */
@@ -201,7 +176,8 @@ static void exynos5420_set_clkdiv(unsigned int div_index)
 static void exynos5420_set_apll(unsigned int new_index,
 				unsigned int old_index)
 {
-	unsigned int tmp, pdiv;
+	unsigned int tmp;
+	unsigned long rate;
 
 	/* 1. MUX_CORE_SEL = MOUT_MSPLL; ARMCLK uses MOUT_MSPLL for lock time */
 	if (clk_set_parent(mout_cpu, mout_mspll_cpu)) {
@@ -209,32 +185,19 @@ static void exynos5420_set_apll(unsigned int new_index,
 			mout_mspll_cpu->name, mout_cpu->name);
 	}
 
+
 	do {
 		cpu_relax();
-		tmp = __raw_readl(EXYNOS5_CLKMUX_STATCPU)
-			>> EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT;
-		tmp &= EXYNOS5420_S_MASK;
-	} while (tmp != 0x2);
+		tmp = __raw_readl(EXYNOS5_CLKMUX_STATCPU);
+		tmp &= EXYNOS5_CLKMUX_STATCPU_MUXCORE_MASK;
+	} while (tmp != (0x2 << EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT));
 
-	/* 2. Set APLL Lock time */
-	pdiv = ((exynos5420_apll_pms_table[new_index] >> 8) &
-						EXYNOS5420_P_MASK);
-	__raw_writel((pdiv * 250), EXYNOS5_APLL_LOCK);
+	/* 2. Set APLL rate */
+	rate = exynos5420_freq_table[new_index].frequency * 1000;
+	if (clk_set_rate(fout_apll, rate))
+		pr_err("Unable to change apll rate to %lu\n", rate);
 
-	/* 3. Change PLL PMS values */
-	tmp = __raw_readl(EXYNOS5_APLL_CON0);
-	tmp &= ~((EXYNOS5420_M_MASK << 16) | (EXYNOS5420_P_MASK << 8) |
-						(EXYNOS5420_S_MASK << 0));
-	tmp |= exynos5420_apll_pms_table[new_index];
-	 __raw_writel(tmp, EXYNOS5_APLL_CON0);
-
-	/* 4. wait_lock_time */
-	do {
-		cpu_relax();
-		tmp = __raw_readl(EXYNOS5_APLL_CON0);
-	} while (!(tmp & EXYNOS5_APLLCON0_LOCKED_MASK));
-
-	/* 5. MUX_CORE_SEL = APLL */
+	/* 3. MUX_CORE_SEL = APLL */
 	if (clk_set_parent(mout_cpu, mout_apll)) {
 		pr_err("Unable to set parent %s of clock %s.\n",
 				mout_apll->name, mout_cpu->name);
@@ -245,53 +208,39 @@ static void exynos5420_set_apll(unsigned int new_index,
 		tmp = __raw_readl(EXYNOS5_CLKMUX_STATCPU);
 		tmp &= EXYNOS5_CLKMUX_STATCPU_MUXCORE_MASK;
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT));
+
 }
 
 static bool exynos5420_pms_change(unsigned int old_index,
 				  unsigned int new_index)
 {
-	unsigned int old_pm = (exynos5420_apll_pms_table[old_index] >> 8);
-	unsigned int new_pm = (exynos5420_apll_pms_table[new_index] >> 8);
-
-	return (old_pm != new_pm);
+	/*
+	 * The Exynos cpufreq driver uses this to determine if it can
+	 * avoid changing the CPU voltage and re-parenting the CPU clock
+	 * while chaning the PLL rate.  Because we're using CCF to change
+	 * the PLL rate, we no longer have access to the PLL divider table,
+	 * so we can't tell whether or not we can take the fast path from
+	 * here and must always take the slow path.  Since this only affects
+	 * a few transitions, there should hopefully be no impact on
+	 * performance.
+	 */
+	return (old_index != new_index);
 }
 
 static void exynos5420_set_frequency(unsigned int old_index,
 				     unsigned int new_index)
 {
-	unsigned int tmp;
-
 	if (old_index > new_index) {
 		/* 1. Change the system clock divider values */
 		exynos5420_set_clkdiv(new_index);
-		if (!exynos5420_pms_change(old_index, new_index)) {
-			/* 2. Change just s value in apll m,p,s value */
-			tmp = __raw_readl(EXYNOS5_APLL_CON0);
-			tmp &= ~(EXYNOS5420_S_MASK << 0);
-			tmp |= (exynos5420_apll_pms_table[new_index] &
-							EXYNOS5420_S_MASK);
-			__raw_writel(tmp, EXYNOS5_APLL_CON0);
-		} else {
-			/* 2. Change the apll m,p,s value */
-			exynos5420_set_apll(new_index, old_index);
-		}
+		/* 2. Change the apll rate */
+		exynos5420_set_apll(new_index, old_index);
 	} else if (old_index < new_index) {
-		if (!exynos5420_pms_change(old_index, new_index)) {
-			/* 1. Change just s value in apll m,p,s value */
-			tmp = __raw_readl(EXYNOS5_APLL_CON0);
-			tmp &= ~(EXYNOS5420_S_MASK << 0);
-			tmp |= (exynos5420_apll_pms_table[new_index] &
-							EXYNOS5420_S_MASK);
-			__raw_writel(tmp, EXYNOS5_APLL_CON0);
-		} else {
-			/* 1. Change the apll m,p,s value */
-			exynos5420_set_apll(new_index, old_index);
-		}
+		/* 1. Change the apll rate */
+		exynos5420_set_apll(new_index, old_index);
 		/* 2. Change the system clock divider values */
 		exynos5420_set_clkdiv(new_index);
 	}
-	clk_set_rate(fout_apll,
-			exynos5420_freq_table[new_index].frequency * 1000);
 }
 
 static void __init set_volt_table(void)
