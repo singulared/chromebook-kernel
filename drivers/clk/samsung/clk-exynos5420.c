@@ -740,6 +740,47 @@ static __initdata struct of_device_id ext_clk_match[] = {
 	{ },
 };
 
+static const struct samsung_pll_rate_table apll_24mhz_tbl[] = {
+	/* sorted in descending order */
+	/* PLL_35XX_RATE(rate, m, p, s) */
+	PLL_35XX_RATE(2000000000, 250, 3, 0),
+	PLL_35XX_RATE(1900000000, 475, 6, 0),
+	PLL_35XX_RATE(1800000000, 225, 3, 0),
+	PLL_35XX_RATE(1700000000, 425, 6, 0),
+	PLL_35XX_RATE(1600000000, 200, 3, 0),
+	PLL_35XX_RATE(1500000000, 250, 4, 0),
+	PLL_35XX_RATE(1400000000, 175, 3, 0),
+	PLL_35XX_RATE(1300000000, 325, 6, 0),
+	PLL_35XX_RATE(1200000000, 200, 2, 1),
+	PLL_35XX_RATE(1100000000, 275, 3, 1),
+	PLL_35XX_RATE(1000000000, 250, 3, 1),
+	PLL_35XX_RATE(900000000, 150, 2, 1),
+	PLL_35XX_RATE(800000000, 200, 3, 1),
+	PLL_35XX_RATE(700000000, 175, 3, 1),
+	PLL_35XX_RATE(600000000, 200, 2, 2),
+	PLL_35XX_RATE(500000000, 250, 3, 2),
+	PLL_35XX_RATE(400000000, 200, 3, 2),
+	PLL_35XX_RATE(300000000, 400, 4, 3),
+	PLL_35XX_RATE(200000000, 200, 3, 3),
+};
+
+static const struct samsung_pll_rate_table kpll_24mhz_tbl[] = {
+	/* sorted in descending order */
+	/* PLL_35XX_RATE(rate, m, p, s) */
+	PLL_35XX_RATE(1300000000, 325, 6, 0),
+	PLL_35XX_RATE(1200000000, 200, 2, 1),
+	PLL_35XX_RATE(1100000000, 275, 3, 1),
+	PLL_35XX_RATE(1000000000, 250, 3, 1),
+	PLL_35XX_RATE(900000000, 150, 2, 1),
+	PLL_35XX_RATE(800000000, 200, 3, 1),
+	PLL_35XX_RATE(700000000, 175, 3, 1),
+	PLL_35XX_RATE(600000000, 200, 2, 2),
+	PLL_35XX_RATE(500000000, 250, 3, 2),
+	PLL_35XX_RATE(400000000, 200, 3, 2),
+	PLL_35XX_RATE(300000000, 400, 4, 3),
+	PLL_35XX_RATE(200000000, 200, 3, 3),
+};
+
 static const struct samsung_pll_rate_table epll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_36XX_RATE(rate, m, p, s, k) */
@@ -787,8 +828,6 @@ void __init exynos5420_clk_init(struct device_node *np)
 			ARRAY_SIZE(exynos5420_fixed_rate_ext_clks),
 			ext_clk_match);
 
-	apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
-			reg_base, reg_base + 0x100, NULL, 0);
 	bpll = samsung_clk_register_pll35xx("fout_bpll", "fin_pll",
 			reg_base + 0x20010, reg_base + 0x20110, NULL, 0);
 	cpll = samsung_clk_register_pll35xx("fout_cpll", "fin_pll",
@@ -803,33 +842,35 @@ void __init exynos5420_clk_init(struct device_node *np)
 			reg_base + 0x10090, reg_base + 0x10180, NULL, 0);
 	spll = samsung_clk_register_pll35xx("fout_spll", "fin_pll",
 			reg_base + 0x10070, reg_base + 0x10160, NULL, 0);
-	kpll = samsung_clk_register_pll35xx("fout_kpll", "fin_pll",
-			reg_base + 0x28000, reg_base + 0x28100, NULL, 0);
 
 	fin_pll_rate = _get_rate("fin_pll");
 	if (fin_pll_rate == (24 * MHZ)) {
+		apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
+			reg_base, reg_base + 0x100, apll_24mhz_tbl,
+			ARRAY_SIZE(apll_24mhz_tbl));
+		kpll = samsung_clk_register_pll35xx("fout_kpll", "fin_pll",
+			reg_base + 0x28000, reg_base + 0x28100, kpll_24mhz_tbl,
+			ARRAY_SIZE(kpll_24mhz_tbl));
 		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-				reg_base + 0x10040, reg_base + 0x10130,
-				epll_24mhz_tbl, ARRAY_SIZE(epll_24mhz_tbl));
-	} else {
-		pr_warn("Exynos5420: valid epll rate_table missing for\n"
-			"parent fin_pll:%lu hz\n", fin_pll_rate);
-		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
-				reg_base + 0x10040, reg_base + 0x10130,
-				NULL, 0);
-	}
-	samsung_clk_add_lookup(epll, fout_epll);
-
-	if (fin_pll_rate == (24 * MHZ)) {
+			reg_base + 0x10040, reg_base + 0x10130, epll_24mhz_tbl,
+			ARRAY_SIZE(epll_24mhz_tbl));
 		vpll = samsung_clk_register_pll35xx("fout_vpll", "fin_pll",
 			reg_base + 0x10080, reg_base + 0x10170, vpll_24mhz_tbl,
 			ARRAY_SIZE(vpll_24mhz_tbl));
 	} else {
-		pr_warn("Exynos5420: valid vpll rate_table missing for\n"
+		pr_warn("Exynos5420: valid pll rate_tables missing for\n"
 			"parent fin_pll:%lu hz\n", fin_pll_rate);
+		apll = samsung_clk_register_pll35xx("fout_apll", "fin_pll",
+			reg_base, reg_base + 0x100, NULL, 0);
+		kpll = samsung_clk_register_pll35xx("fout_kpll", "fin_pll",
+			reg_base + 0x28000, reg_base + 0x28100, NULL, 0);
+		epll = samsung_clk_register_pll36xx("fout_epll", "fin_pll",
+			reg_base + 0x10040, reg_base + 0x10130, NULL, 0);
 		vpll = samsung_clk_register_pll35xx("fout_vpll", "fin_pll",
 			reg_base + 0x10080, reg_base + 0x10170, NULL, 0);
 	}
+
+	samsung_clk_add_lookup(epll, fout_epll);
 	samsung_clk_add_lookup(vpll, fout_vpll);
 
 	samsung_clk_register_fixed_rate(exynos5420_fixed_rate_clks,
