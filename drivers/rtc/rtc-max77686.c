@@ -18,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/pm_dark_resume.h>
 #include <linux/mfd/max77686-private.h>
 
 #define DRIVER_NAME "rtc-max77686"
@@ -54,6 +55,7 @@ struct max77686_rtc_info {
 	struct i2c_client	*rtc;
 	struct rtc_device	*rtc_dev;
 	struct mutex		lock;
+	struct dev_dark_resume	dark_resume;
 	int virq;
 	int rtc_24hr_mode;
 };
@@ -490,6 +492,9 @@ static int __devinit max77686_rtc_probe(struct platform_device *pdev)
 		goto err_rtc;
 	}
 
+	dev_dark_resume_init(&pdev->dev, &info->dark_resume, max77686->irq,
+			NULL);
+
 	return 0;
 err_rtc:
 	kfree(info);
@@ -501,6 +506,7 @@ static int __devexit max77686_rtc_remove(struct platform_device *pdev)
 	struct max77686_rtc_info *info = platform_get_drvdata(pdev);
 
 	if (info) {
+		dev_dark_resume_remove(&pdev->dev);
 		free_irq(info->virq, info);
 		rtc_device_unregister(info->rtc_dev);
 		kfree(info);
