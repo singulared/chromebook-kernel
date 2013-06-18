@@ -509,9 +509,20 @@ struct spi_transfer {
 	u8		bits_per_word;
 	u16		delay_usecs;
 	u32		speed_hz;
+	unsigned int	flags;
+#define SPI_TRANSFER_SW_CS_CNTRL	(1<<0)
+#define SPI_TRANSFER_SW_CS_CNTRL_CLAIM	((1<<1) | SPI_TRANSFER_SW_CS_CNTRL)
+#define SPI_TRANSFER_SW_CS_CNTRL_RELEASE ((1<<2) | SPI_TRANSFER_SW_CS_CNTRL)
 
 	struct list_head transfer_list;
 };
+
+#define SPI_CS_HW_CTRL(_f)	\
+(!((_f & SPI_TRANSFER_SW_CS_CNTRL) == SPI_TRANSFER_SW_CS_CNTRL))
+#define SPI_CS_SW_CLAIM(_f)	\
+((_f & SPI_TRANSFER_SW_CS_CNTRL_CLAIM) == SPI_TRANSFER_SW_CS_CNTRL_CLAIM)
+#define SPI_CS_SW_RELEASE(_f)	\
+((_f & SPI_TRANSFER_SW_CS_CNTRL_RELEASE) == SPI_TRANSFER_SW_CS_CNTRL_RELEASE)
 
 /**
  * struct spi_message - one multi-segment SPI transaction
