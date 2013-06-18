@@ -41,6 +41,9 @@ static inline int bL_switch_request(unsigned int cpu,
 
 #ifdef CONFIG_BL_SWITCHER
 
+void bL_switch_request_detach(unsigned int cpu,
+			      bL_switch_completion_handler completer);
+
 int bL_switcher_register_notifier(struct notifier_block *nb);
 int bL_switcher_unregister_notifier(struct notifier_block *nb);
 
@@ -56,6 +59,9 @@ bool bL_switcher_get_enabled(void);
 void bL_switcher_put_enabled(void);
 
 #else
+static void bL_switch_request_detach(unsigned int cpu,
+				     bL_switch_completion_handler completer) { }
+
 static inline int bL_switcher_register_notifier(struct notifier_block *nb)
 {
 	return 0;
