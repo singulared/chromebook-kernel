@@ -125,9 +125,23 @@ ENTRY(cpu_v7_do_resume)
 	mcr	p15, 0, r1, c2, c0, 0	@ TTB 0
 	mcr	p15, 0, r7, c2, c0, 1	@ TTB 1
 	mcr	p15, 0, r11, c2, c0, 2	@ TTB control register
-	mrc	p15, 0, r4, c1, c0, 1	@ Read Auxiliary control register
-	teq	r4, r9			@ Is it already set?
-	mcrne	p15, 0, r9, c1, c0, 1	@ No, so write it
+
+	/*
+	 * Insert dummy load while setting SMP bit. This is as per the
+	 * ARM errata 799270. In addition to this, the ACTLR register
+	 * that was saved during the CPU suspend is not restored as is
+	 * since the ACTLR register bit definitions are different for
+	 * A15 and A7. But since the SMP bit location in ACTLR register
+	 * is same for both A15 and A7, only this bit is set explicitly.
+	 */
+	mov	r6, #0x40
+	mrc	p15, 0, r9, c1, c0, 1
+	orr	r9, r9, #(1 << 6)
+	ldr	r4, __dummy
+	and	r4, r4, #0
+	orr	r9, r9, r4
+	mcr	p15, 0, r6, c1, c0, 1
+
 	mcr	p15, 0, r10, c1, c0, 2	@ Co-processor access control
 	ldr	r4, =PRRR		@ PRRR
 	ldr	r5, =NMRR		@ NMRR
@@ -138,6 +152,9 @@ ENTRY(cpu_v7_do_resume)
 	mov	r0, r8			@ control register
 	b	cpu_resume_mmu
 ENDPROC(cpu_v7_do_resume)
+
+__dummy:
+	.space 4
 #endif
 
 	__CPUINIT
