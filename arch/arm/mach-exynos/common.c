@@ -912,6 +912,20 @@ static inline int exynos5_irq_to_gpio(unsigned int irq)
 	return -EINVAL;
 }
 
+unsigned int exynos_eint_pend(void)
+{
+	unsigned int eint_pend;
+
+	eint_pend = __raw_readl(EINT_PEND(exynos_eint_base, 0)) & 0xff;
+	eint_pend |= (__raw_readl(EINT_PEND(exynos_eint_base, 8)) & 0xff) << 8;
+	eint_pend |= (__raw_readl(EINT_PEND(exynos_eint_base, 16)) & 0xff)
+		<< 16;
+	eint_pend |= (__raw_readl(EINT_PEND(exynos_eint_base, 24)) & 0xff)
+		<< 24;
+
+	return eint_pend;
+}
+
 static unsigned int exynos4_eint0_15_src_int[16] = {
 	EXYNOS4_IRQ_EINT0,
 	EXYNOS4_IRQ_EINT1,

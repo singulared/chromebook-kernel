@@ -19,6 +19,8 @@
 #include <linux/io.h>
 #include <linux/err.h>
 #include <linux/clk.h>
+#include <linux/list.h>
+#include <linux/pm_dark_resume.h>
 
 #include <asm/cacheflush.h>
 #include <asm/hardware/cache-l2x0.h>
@@ -35,6 +37,8 @@
 #include <mach/regs-pmu.h>
 #include <mach/pm-core.h>
 #include <mach/pmu.h>
+
+#include "common.h"
 
 static struct sleep_save exynos4_set_clksrc[] = {
 	{ .reg = EXYNOS4_CLKSRC_MASK_TOP		, .val = 0x00000001, },
@@ -251,6 +255,91 @@ static __init int exynos_pm_drvinit(void)
 }
 arch_initcall(exynos_pm_drvinit);
 
+unsigned int saved_eint_pend;
+
+static int irq_to_wksrc_bit(int irq)
+{
+	int eint_bit;
+
+	switch (irq) {
+	case EXYNOS5_IRQ_RTC_ALARM:
+		return S5P_WAKEUP_STAT_RTCALARM;
+	case EXYNOS5_IRQ_RTC_TIC:
+		return S5P_WAKEUP_STAT_RTCTICK;
+	/*
+	 * TODO(dbasehore): add support for C2C reset and HDMI CEC interrupts
+	 * when the irqs for those are figured out. These interrupts are not
+	 * used for dark resume though, so it's not really an issue.
+	 */
+	default:
+		eint_bit = IRQ_EINT_BIT(irq);
+		if (eint_bit >= 0 && eint_bit < 32)
+			return S5P_WAKEUP_STAT_EINT;
+	}
+	return -EINVAL;
+}
+
+/*
+ * exynos_dark_resume_check - See if any of the dark resume sources resumed the
+ * system
+ * @list list of the dark resume sources. If one of these resumed the system,
+ * this function will return true.
+ */
+static bool exynos_dark_resume_check(struct list_head *list)
+{
+	unsigned int active_eints = saved_eint_pend;
+	unsigned int eint_bit, wake_bit, wakeup;
+	struct dev_dark_resume *dark_resume;
+	bool found_dark_resume = false;
+
+	/*
+	 * We want to make sure that a dark resume source woke up the system,
+	 * and not anything else. So whenever we find a dark resume source
+	 * that's active, clear it from the variable containing the register
+	 * value. This way, we only return true when we found an active dark
+	 * resume source and if the variable for the wakeup register is 0.
+	 */
+	wakeup = __raw_readl(S5P_WAKEUP_STAT) & S5P_WAKEUP_STAT_WKSRC_MASK;
+	list_for_each_entry(dark_resume, list, list_node) {
+		wake_bit = irq_to_wksrc_bit(dark_resume->irq);
+		if (!(wake_bit & wakeup))
+			continue;
+		if (wake_bit == S5P_WAKEUP_STAT_EINT) {
+			eint_bit = IRQ_EINT_BIT(dark_resume->irq);
+			if (active_eints & (1 << eint_bit))
+				found_dark_resume = true;
+			active_eints &= ~(1 << eint_bit);
+		} else {
+			wakeup &= ~wake_bit;
+			found_dark_resume = true;
+		}
+	}
+
+	/*
+	 * If we handled all of the external interrupts, clear its bit from the
+	 * wakeup register value.
+	 */
+	if (!active_eints)
+		wakeup &= ~S5P_WAKEUP_STAT_EINT;
+
+	/*
+	 * Only return true if all of the wakeup sources were dark resume
+	 * sources.
+	 */
+	return found_dark_resume && !wakeup;
+}
+
+static struct pm_dark_resume_ops exynos_dark_resume_ops = {
+	.check = exynos_dark_resume_check,
+};
+
+static __init int exynos_dark_resume_init(void)
+{
+	pm_dark_resume_register_ops(&exynos_dark_resume_ops);
+	return 0;
+}
+device_initcall(exynos_dark_resume_init);
+
 static int exynos_pm_suspend(void)
 {
 	unsigned long tmp;
@@ -345,6 +434,8 @@ early_wakeup:
 
 	/* Clear SLEEP mode set in INFORM1 */
 	__raw_writel(0x0, S5P_INFORM1);
+
+	saved_eint_pend = exynos_eint_pend();
 
 	return;
 }
