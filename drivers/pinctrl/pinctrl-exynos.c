@@ -884,7 +884,7 @@ static struct samsung_pin_bank exynos5420_pin_banks3[] = {
 
 /* pin banks of exynos5420 pin-controller 4 */
 static struct samsung_pin_bank exynos5420_pin_banks4[] = {
-	EXYNOS_PIN_BANK_EINTG(8, 0x000, "gpz", 0x00),
+	EXYNOS_PIN_BANK_EINTG(7, 0x000, "gpz", 0x00),
 };
 
 /*
