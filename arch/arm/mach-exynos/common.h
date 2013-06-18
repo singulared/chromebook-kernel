@@ -69,6 +69,7 @@ void exynos4212_register_clocks(void);
 #endif
 
 extern struct smp_operations exynos_smp_ops;
+extern bool exynos_smp_init(void);
 
 extern void exynos_cpu_die(unsigned int cpu);
 

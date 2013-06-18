@@ -25,6 +25,7 @@
 #include <asm/hardware/gic.h>
 #include <asm/smp_plat.h>
 #include <asm/smp_scu.h>
+#include <asm/mcpm.h>
 
 #include <mach/hardware.h>
 #include <mach/regs-clock.h>
@@ -241,6 +242,17 @@ static void __init exynos_smp_prepare_cpus(unsigned int max_cpus)
 	for (i = 1; i < max_cpus; ++i)
 		__raw_writel(virt_to_phys(exynos4_secondary_startup),
 					cpu_boot_reg(cpu_logical_map(i)));
+}
+
+bool __init exynos_smp_init(void)
+{
+#ifdef CONFIG_MCPM
+	if (soc_is_exynos5420()) {
+		mcpm_smp_set_ops();
+		return true;
+	}
+#endif
+	return false;
 }
 
 struct smp_operations exynos_smp_ops __initdata = {

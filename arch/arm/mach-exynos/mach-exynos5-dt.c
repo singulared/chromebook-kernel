@@ -416,6 +416,7 @@ DT_MACHINE_START(EXYNOS5_DT, "SAMSUNG EXYNOS5 (Flattened Device Tree)")
 	/* Maintainer: Kukjin Kim <kgene.kim@samsung.com> */
 	.init_irq	= exynos5_init_irq,
 	.smp		= smp_ops(exynos_smp_ops),
+	.smp_init	= smp_init_ops(exynos_smp_init),
 	.map_io		= exynos5_dt_map_io,
 	.handle_irq	= gic_handle_irq,
 	.init_machine	= exynos5_dt_machine_init,
