@@ -557,4 +557,111 @@
 			io-channels = <&adc 6>;
 		};
 	};
+
+	pinctrl@13400000 {
+		gpy7: gpy7 {
+			powerdown-settings = <3 3 3 3 3 3 6 2>;
+		};
+	};
+	pinctrl@13410000 {
+		gpc0: gpc0 {
+			powerdown-settings = <6 2 2 2 2 2 2 3>;
+		};
+		gpc1: gpc1 {
+			powerdown-settings = <6 2 3 2 2 2 2 3>;
+		};
+		gpc2: gpc2 {
+			powerdown-settings = <6 2 2 2 2 2 2>;
+		};
+		gpc3: gpc3 {
+			powerdown-settings = <2 2 2 2>;
+		};
+		gpc4: gpc4 {
+			powerdown-settings = <2 3>;
+		};
+		gpd1: gpd1 {
+			powerdown-settings = <2 6 6 6 2 2 2 2>;
+		};
+		gpy0: gpy0 {
+			powerdown-settings = <2 2 2 2 2 2>;
+		};
+		gpy1: gpy1 {
+			powerdown-settings = <2 2 2 2>;
+		};
+		gpy2: gpy2 {
+			powerdown-settings = <2 2 2 2 2 2>;
+		};
+		gpy3: gpy3 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpy4: gpy4 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpy5: gpy5 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpy6: gpy6 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+	};
+	pinctrl@14000000 {
+		gpe0: gpe0 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpe1: gpe1 {
+			powerdown-settings = <3 3>;
+		};
+		gpf0: gpf0 {
+			powerdown-settings = <3 3 3 3 3 3>;
+		};
+		gpf1: gpf1 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpg0: gpg0 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpg1: gpg1 {
+			powerdown-settings = <3 3 3 3 3 3 3 3>;
+		};
+		gpg2: gpg2 {
+			powerdown-settings = <3 1>;
+		};
+		gpj4: gpj4 {
+			powerdown-settings = <3 3 6 6>;
+		};
+	};
+	pinctrl@14010000 {
+		gpa0: gpa0 {
+			powerdown-settings = <3 3 3 3 3 3 2 2>;
+		};
+		gpa1: gpa1 {
+			powerdown-settings = <3 3 3 3 3 3>;
+		};
+		gpa2: gpa2 {
+			powerdown-settings = <2 2 3 3 6 6 1 6>;
+		};
+		gpb0: gpb0 {
+			powerdown-settings = <3 3 3 3 3>;
+		};
+		gpb1: gpb1 {
+			powerdown-settings = <3 6 6 1 6>;
+		};
+		gpb2: gpb2 {
+			powerdown-settings = <3 3 2 2>;
+		};
+		gpb3: gpb3 {
+			powerdown-settings = <3 3 3 3 2 2 2 2>;
+		};
+		gpb4: gpb4 {
+			powerdown-settings = <2 2>;
+		};
+		gph0: gph0 {
+			powerdown-settings = <3 3 6 6 6 6 6 5>;
+		};
+	};
+	pinctrl@03860000 {
+		gpz: gpz {
+			powerdown-settings = <6 3 6 3 1 3 3>;
+		};
+	};
 };
