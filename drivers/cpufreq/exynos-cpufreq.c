@@ -259,6 +259,11 @@ static int __init exynos_cpufreq_init(void)
 {
 	int ret = -EINVAL;
 
+#ifdef CONFIG_ARM_EXYNOS_IKS_CORE
+	if (soc_is_exynos5420())
+		return exynos_iks_cpufreq_init();
+#endif
+
 	exynos_info = kzalloc(sizeof(struct exynos_dvfs_info), GFP_KERNEL);
 	if (!exynos_info)
 		return -ENOMEM;
