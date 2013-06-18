@@ -698,6 +698,10 @@ static int __init exynos_pmu_init(void)
 		value |= EXYNOS5_SKIP_DEACTIVATE_ACEACP_IN_PWDN;
 		__raw_writel(value, EXYNOS5420_ARM_COMMON_OPTION);
 
+		value = __raw_readl(EXYNOS5420_KFC_COMMON_OPTION);
+		value |= EXYNOS5_SKIP_DEACTIVATE_ACEACP_IN_PWDN;
+		__raw_writel(value, EXYNOS5420_KFC_COMMON_OPTION);
+
 		/*
 		 * This setting is to reduce suspend/resume time.
 		 */
