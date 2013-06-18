@@ -147,6 +147,15 @@ ENTRY(cpu_v7_do_resume)
 	ldr	r5, =NMRR		@ NMRR
 	mcr	p15, 0, r4, c10, c2, 0	@ write PRRR
 	mcr	p15, 0, r5, c10, c2, 1	@ write NMRR
+
+	/* Flush caches after CP15 access */
+	mrc	p15, 0, r6, c0, c0, 5
+	ubfx	r6, r6, #8, #4
+	teq	r6, #0
+	mrceq	p15, 0, r6, c1, c0, 1
+	biceq	r6, r6, #(0x3 << 13)
+	mcreq	p15, 0, r6, c1, c0, 1
+
 	isb
 	dsb
 	mov	r0, r8			@ control register
