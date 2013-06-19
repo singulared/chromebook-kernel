@@ -149,9 +149,8 @@ intel_attach_panel_gamma_property(struct drm_connector *connector)
 }
 
 static const struct drm_prop_enum_list broadcast_rgb_names[] = {
-	{ INTEL_BROADCAST_RGB_AUTO, "Automatic" },
-	{ INTEL_BROADCAST_RGB_FULL, "Full" },
-	{ INTEL_BROADCAST_RGB_LIMITED, "Limited 16:235" },
+	{ 0, "Full" },
+	{ 1, "Limited 16:235" },
 };
 
 void

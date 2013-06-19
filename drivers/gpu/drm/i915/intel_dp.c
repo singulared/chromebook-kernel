@@ -743,18 +743,6 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	return false;
 
 found:
-	if (intel_dp->color_range_auto) {
-		/*
-		 * See:
-		 * CEA-861-E - 5.1 Default Encoding Parameters
-		 * VESA DisplayPort Ver.1.2a - 5.1.1.1 Video Colorimetry
-		 */
-		if (bpp != 18 && drm_mode_cea_vic(adjusted_mode) > 1)
-			intel_dp->color_range = DP_COLOR_RANGE_16_235;
-		else
-			intel_dp->color_range = 0;
-	}
-
 	if (intel_dp->color_range)
 		pipe_config->limited_color_range = true;
 
@@ -2386,21 +2374,10 @@ intel_dp_set_property(struct drm_connector *connector,
 	}
 
 	if (property == dev_priv->broadcast_rgb_property) {
-		switch (val) {
-		case INTEL_BROADCAST_RGB_AUTO:
-			intel_dp->color_range_auto = true;
-			break;
-		case INTEL_BROADCAST_RGB_FULL:
-			intel_dp->color_range_auto = false;
-			intel_dp->color_range = 0;
-			break;
-		case INTEL_BROADCAST_RGB_LIMITED:
-			intel_dp->color_range_auto = false;
-			intel_dp->color_range = DP_COLOR_RANGE_16_235;
-			break;
-		default:
-			return -EINVAL;
-		}
+		if (val == !!intel_dp->color_range)
+			return 0;
+
+		intel_dp->color_range = val ? DP_COLOR_RANGE_16_235 : 0;
 		goto done;
 	}
 
@@ -2558,7 +2535,6 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connect
 
 	intel_attach_force_audio_property(connector);
 	intel_attach_broadcast_rgb_property(connector);
-	intel_dp->color_range_auto = true;
 
 	if (is_edp(intel_dp)) {
 		drm_mode_create_scaling_mode_property(connector->dev);

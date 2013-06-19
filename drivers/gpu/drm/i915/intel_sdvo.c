@@ -103,7 +103,6 @@ struct intel_sdvo {
 	 * It is only valid when using TMDS encoding and 8 bit per color mode.
 	 */
 	uint32_t color_range;
-	bool color_range_auto;
 
 	/**
 	 * This is set if we're going to treat the device as TV-out.
@@ -1078,15 +1077,6 @@ static bool intel_sdvo_compute_config(struct intel_encoder *encoder,
 		intel_sdvo_get_pixel_multiplier(adjusted_mode);
 	adjusted_mode->clock *= pipe_config->pixel_multiplier;
 
-	if (intel_sdvo->color_range_auto) {
-		/* See CEA-861-E - 5.1 Default Encoding Parameters */
-		if (intel_sdvo->has_hdmi_monitor &&
-		    drm_mode_cea_vic(adjusted_mode) > 1)
-			intel_sdvo->color_range = SDVO_COLOR_RANGE_16_235;
-		else
-			intel_sdvo->color_range = 0;
-	}
-
 	if (intel_sdvo->color_range)
 		pipe_config->limited_color_range = true;
 
@@ -1927,21 +1917,10 @@ intel_sdvo_set_property(struct drm_connector *connector,
 	}
 
 	if (property == dev_priv->broadcast_rgb_property) {
-		switch (val) {
-		case INTEL_BROADCAST_RGB_AUTO:
-			intel_sdvo->color_range_auto = true;
-			break;
-		case INTEL_BROADCAST_RGB_FULL:
-			intel_sdvo->color_range_auto = false;
-			intel_sdvo->color_range = 0;
-			break;
-		case INTEL_BROADCAST_RGB_LIMITED:
-			intel_sdvo->color_range_auto = false;
-			intel_sdvo->color_range = SDVO_COLOR_RANGE_16_235;
-			break;
-		default:
-			return -EINVAL;
-		}
+		if (val == !!intel_sdvo->color_range)
+			return 0;
+
+		intel_sdvo->color_range = val ? SDVO_COLOR_RANGE_16_235 : 0;
 		goto done;
 	}
 
@@ -2236,16 +2215,13 @@ intel_sdvo_connector_init(struct intel_sdvo_connector *connector,
 }
 
 static void
-intel_sdvo_add_hdmi_properties(struct intel_sdvo *intel_sdvo,
-			       struct intel_sdvo_connector *connector)
+intel_sdvo_add_hdmi_properties(struct intel_sdvo_connector *connector)
 {
 	struct drm_device *dev = connector->base.base.dev;
 
 	intel_attach_force_audio_property(&connector->base.base);
-	if (INTEL_INFO(dev)->gen >= 4 && IS_MOBILE(dev)) {
+	if (INTEL_INFO(dev)->gen >= 4 && IS_MOBILE(dev))
 		intel_attach_broadcast_rgb_property(&connector->base.base);
-		intel_sdvo->color_range_auto = true;
-	}
 }
 
 static bool
@@ -2293,7 +2269,7 @@ intel_sdvo_dvi_init(struct intel_sdvo *intel_sdvo, int device)
 
 	intel_sdvo_connector_init(intel_sdvo_connector, intel_sdvo);
 	if (intel_sdvo->is_hdmi)
-		intel_sdvo_add_hdmi_properties(intel_sdvo, intel_sdvo_connector);
+		intel_sdvo_add_hdmi_properties(intel_sdvo_connector);
 
 	return true;
 }
