@@ -767,8 +767,13 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		slot->clock = ios->clock;
 	}
 
-	if (drv_data && drv_data->set_ios)
+	if (drv_data && drv_data->set_ios) {
 		drv_data->set_ios(slot->host, ios);
+
+		/* Reset the min/max in case the set_ios() changed bus_hz */
+		mmc->f_min = DIV_ROUND_UP(slot->host->bus_hz, 510);
+		mmc->f_max = slot->host->bus_hz;
+	}
 
 	/* Slot specific timing and width adjustment */
 	dw_mci_setup_bus(slot, false);
