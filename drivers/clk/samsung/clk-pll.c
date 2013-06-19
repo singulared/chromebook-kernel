@@ -176,6 +176,7 @@ struct clk * __init samsung_clk_register_pll35xx(const char *name,
 	struct samsung_clk_pll *pll;
 	struct clk *clk;
 	struct clk_init_data init;
+	int ret;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll) {
@@ -204,10 +205,16 @@ struct clk * __init samsung_clk_register_pll35xx(const char *name,
 		pr_err("%s: failed to register pll clock %s\n", __func__,
 				name);
 		kfree(pll);
+		return clk;
 	}
 
-	if (clk_register_clkdev(clk, name, NULL))
+	ret = clk_register_clkdev(clk, name, NULL);
+	if (ret) {
 		pr_err("%s: failed to register lookup for %s", __func__, name);
+		kfree(pll);
+		clk_unregister(clk);
+		clk = ERR_PTR(ret);
+	}
 
 	return clk;
 }
@@ -327,6 +334,7 @@ struct clk * __init samsung_clk_register_pll36xx(const char *name,
 	struct samsung_clk_pll *pll;
 	struct clk *clk;
 	struct clk_init_data init;
+	int ret;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll) {
@@ -355,10 +363,16 @@ struct clk * __init samsung_clk_register_pll36xx(const char *name,
 		pr_err("%s: failed to register pll clock %s\n", __func__,
 				name);
 		kfree(pll);
+		return clk;
 	}
 
-	if (clk_register_clkdev(clk, name, NULL))
+	ret = clk_register_clkdev(clk, name, NULL);
+	if (ret) {
 		pr_err("%s: failed to register lookup for %s", __func__, name);
+		kfree(pll);
+		clk_unregister(clk);
+		clk = ERR_PTR(ret);
+	}
 
 	return clk;
 }
@@ -414,6 +428,7 @@ struct clk * __init samsung_clk_register_pll45xx(const char *name,
 	struct samsung_clk_pll45xx *pll;
 	struct clk *clk;
 	struct clk_init_data init;
+	int ret;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll) {
@@ -436,10 +451,16 @@ struct clk * __init samsung_clk_register_pll45xx(const char *name,
 		pr_err("%s: failed to register pll clock %s\n", __func__,
 				name);
 		kfree(pll);
+		return clk;
 	}
 
-	if (clk_register_clkdev(clk, name, NULL))
+	ret = clk_register_clkdev(clk, name, NULL);
+	if (ret) {
 		pr_err("%s: failed to register lookup for %s", __func__, name);
+		kfree(pll);
+		clk_unregister(clk);
+		clk = ERR_PTR(ret);
+	}
 
 	return clk;
 }
@@ -501,6 +522,7 @@ struct clk * __init samsung_clk_register_pll46xx(const char *name,
 	struct samsung_clk_pll46xx *pll;
 	struct clk *clk;
 	struct clk_init_data init;
+	int ret;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll) {
@@ -523,10 +545,16 @@ struct clk * __init samsung_clk_register_pll46xx(const char *name,
 		pr_err("%s: failed to register pll clock %s\n", __func__,
 				name);
 		kfree(pll);
+		return clk;
 	}
 
-	if (clk_register_clkdev(clk, name, NULL))
+	ret = clk_register_clkdev(clk, name, NULL);
+	if (ret) {
 		pr_err("%s: failed to register lookup for %s", __func__, name);
+		kfree(pll);
+		clk_unregister(clk);
+		clk = ERR_PTR(ret);
+	}
 
 	return clk;
 }
@@ -584,6 +612,7 @@ struct clk * __init samsung_clk_register_pll2550x(const char *name,
 	struct samsung_clk_pll2550x *pll;
 	struct clk *clk;
 	struct clk_init_data init;
+	int ret;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll) {
@@ -606,10 +635,16 @@ struct clk * __init samsung_clk_register_pll2550x(const char *name,
 		pr_err("%s: failed to register pll clock %s\n", __func__,
 				name);
 		kfree(pll);
+		return clk;
 	}
 
-	if (clk_register_clkdev(clk, name, NULL))
+	ret = clk_register_clkdev(clk, name, NULL);
+	if (ret) {
 		pr_err("%s: failed to register lookup for %s", __func__, name);
+		kfree(pll);
+		clk_unregister(clk);
+		clk = ERR_PTR(ret);
+	}
 
 	return clk;
 }
