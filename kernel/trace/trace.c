@@ -4957,6 +4957,13 @@ static __init int tracer_init_debugfs(void)
 	trace_create_file("tracing_on", 0644, d_tracer,
 			    &global_trace, &rb_simple_fops);
 
+	/* OJN: Provide the legacy name since ureadahead currently relies
+	 * on it. We'll fix userspace separately and this can be dropped
+	 * in the future.
+	 */
+	trace_create_file("tracing_enabled", 0644, d_tracer,
+			    &global_trace, &rb_simple_fops);
+
 #ifdef CONFIG_DYNAMIC_FTRACE
 	trace_create_file("dyn_ftrace_total_info", 0444, d_tracer,
 			&ftrace_update_tot_cnt, &tracing_dyn_info_fops);
