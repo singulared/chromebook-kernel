@@ -1562,7 +1562,6 @@ void kbasep_js_job_check_deref_cores(kbase_device *kbdev, struct kbase_jd_atom *
 mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int js, s8 *submit_count)
 {
 	kbasep_js_device_data *js_devdata;
-	mali_bool tried_to_dequeue_jobs_but_failed = MALI_FALSE;
 	mali_bool cores_ready;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
@@ -1581,7 +1580,7 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 			mali_bool has_job = MALI_FALSE;
 
 			/* Dequeue a job that matches the requirements */
-			has_job = kbasep_js_policy_dequeue_job_irq(kbdev, js, &dequeued_atom);
+			has_job = kbasep_js_policy_dequeue_job(kbdev, js, &dequeued_atom);
 
 			if (has_job != MALI_FALSE) {
 				/* NOTE: since the runpool_irq lock is currently held and acts across
@@ -1620,7 +1619,6 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 
 				++(*submit_count);
 			} else {
-				tried_to_dequeue_jobs_but_failed = MALI_TRUE;
 				/* No more jobs - stop submitting for this slot */
 				break;
 			}
@@ -1629,19 +1627,17 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 
 	/* Indicate whether a retry in submission should be tried on a different
 	 * dequeue function. These are the reasons why it *must* happen:
-	 *
-	 * - kbasep_js_policy_dequeue_job_irq() couldn't get any jobs. In this case,
-	 *   kbasep_js_policy_dequeue_job() might be able to get jobs (must be done
-	 *   outside of IRQ)
-	 * - kbasep_js_policy_dequeue_job_irq() got some jobs, but failed to get a
-	 *   job in the last call to it. Again, kbasep_js_policy_dequeue_job()
-	 *   might be able to get jobs.
 	 * - the KBASE_JS_MAX_JOB_SUBMIT_PER_SLOT_PER_IRQ threshold was reached
 	 *   and new scheduling must be performed outside of IRQ mode.
 	 *
 	 * Failure to indicate this correctly could stop further jobs being processed.
 	 *
 	 * However, we do not _need_ to indicate a retry for the following:
+	 * - kbasep_js_policy_dequeue_job() couldn't get a job. In which case,
+	 *   there's no point re-trying outside of IRQ, because the result will be
+	 *   the same until job dependencies are resolved, or user-space provides
+	 *   more jobs. In both those cases, we try to run jobs anyway, so
+	 *   processing does not stop.
 	 * - kbasep_jm_is_submit_slots_free() was MALI_FALSE, indicating jobs were
 	 *   already running. When those jobs complete, that will still cause events
 	 *   that cause us to resume job submission.
@@ -1649,7 +1645,7 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 	 *   Ctx Attribute handling. That _can_ change outside of IRQ context, but
 	 *   is handled explicitly by kbasep_js_runpool_release_ctx_and_katom_retained_state().
 	 */
-	return (mali_bool) (tried_to_dequeue_jobs_but_failed || *submit_count >= KBASE_JS_MAX_JOB_SUBMIT_PER_SLOT_PER_IRQ);
+	return (mali_bool) (*submit_count >= KBASE_JS_MAX_JOB_SUBMIT_PER_SLOT_PER_IRQ);
 }
 
 void kbasep_js_try_run_next_job_on_slot_nolock(kbase_device *kbdev, int js)

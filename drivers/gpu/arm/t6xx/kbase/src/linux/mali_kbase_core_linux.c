@@ -992,17 +992,10 @@ static irqreturn_t kbase_job_irq_handler(int irq, void *data)
 	val = kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_STATUS), NULL);
 
 #ifdef CONFIG_MALI_DEBUG
-	if ( val && kbdev->pm.job_irq_mask == 0)
+	if (!kbdev->pm.driver_ready_for_irqs)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
 #endif /* CONFIG_MALI_DEBUG */
-
-	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
-	 * spurious IRQs being processed before the driver is ready to receive them.
-	 */
-
-	val &= kbdev->pm.job_irq_mask;
-
 	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
 
 	if (!val)
@@ -1034,17 +1027,10 @@ static irqreturn_t kbase_mmu_irq_handler(int irq, void *data)
 	val = kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_STATUS), NULL);
 
 #ifdef CONFIG_MALI_DEBUG
-	if ( val && kbdev->pm.mmu_irq_mask == 0)
+	if (!kbdev->pm.driver_ready_for_irqs)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
 #endif /* CONFIG_MALI_DEBUG */
-
-	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
-	 * spurious IRQs being processed before the driver is ready to receive them.
-	 */
-
-	val &= kbdev->pm.mmu_irq_mask;
-
 	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
 
 	if (!val)
@@ -1074,17 +1060,10 @@ static irqreturn_t kbase_gpu_irq_handler(int irq, void *data)
 	val = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_STATUS), NULL);
 
 #ifdef CONFIG_MALI_DEBUG
-	if ( val && kbdev->pm.gpu_irq_mask == 0)
+	if (!kbdev->pm.driver_ready_for_irqs)
 		dev_dbg(kbdev->osdev.dev, "%s: irq %d irqstatus 0x%x before driver is ready\n",
 				__func__, irq, val );
 #endif /* CONFIG_MALI_DEBUG */
-
-	/* Prevent IRQs from reaching the driver if we have not enabled them, this is to prevent
-	 * spurious IRQs being processed before the driver is ready to receive them.
-	 */
-
-	val &= kbdev->pm.gpu_irq_mask;
-
 	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
 
 	if (!val)

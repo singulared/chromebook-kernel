@@ -381,10 +381,9 @@ void kbasep_js_runpool_release_ctx_and_katom_retained_state(kbase_device *kbdev,
  * The following locks must be held by the caller:
  * - kbasep_js_device_data::runpool_irq::lock
  *
- * @return truthful (i.e. != MALI_FALSE) if there was space to submit in the
- * GPU, but we couldn't get a job from the Run Pool. This may be because the
- * Run Pool needs maintenence outside of IRQ context. Therefore, this indicates
- * that submission should be retried from a work-queue, by using
+ * @return truthful (i.e. != MALI_FALSE) if too many jobs were submitted from
+ * IRQ. Therefore, this indicates that submission should be retried from a
+ * work-queue, by using
  * kbasep_js_try_run_next_job_on_slot_nolock()/kbase_js_try_run_jobs_on_slot().
  * @return MALI_FALSE if submission had no problems: the GPU is either already
  * full of jobs in the HEAD and NEXT registers, or we were able to get enough

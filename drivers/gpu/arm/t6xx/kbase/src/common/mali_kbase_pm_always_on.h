@@ -23,61 +23,43 @@
 #ifndef MALI_KBASE_PM_ALWAYS_ON_H
 #define MALI_KBASE_PM_ALWAYS_ON_H
 
-/** The states that the always_on policy can enter.
+/**
+ * The "Always on" power management policy has the following
+ * characteristics:
+ * - When KBase indicates that the GPU will be powered up, but we don't yet
+ *   know which Job Chains are to be run:
+ *  - All Shader Cores are powered up, regardless of whether or not they will
+ *    be needed later.
+ * - When KBase indicates that a set of Shader Cores are needed to submit the
+ *   currently queued Job Chains:
+ *  - All Shader Cores are kept powered, regardless of whether or not they will
+ *    be needed
+ * - When KBase indicates that the GPU need not be powered:
+ *  - The Shader Cores are kept powered, regardless of whether or not they will
+ *    be needed. The GPU itself is also kept powered, even though it is not
+ *    needed.
  *
- * The diagram below should the states that the always_on policy can enter and the transitions that can occur between
- * the states:
+ * This policy is automatically overridden during system suspend: the desired
+ * core state is ignored, and the cores are forced off regardless of what the
+ * policy requests. After resuming from suspend, new changes to the desired
+ * core state made by the policy are honored.
  *
- * @dot
- * digraph always_on_states {
- *      node [fontsize=10];
- *      edge [fontsize=10];
- *
- *      POWERING_UP     [label="STATE_POWERING_UP"
- *                      URL="\ref kbasep_pm_always_on_state.KBASEP_PM_ALWAYS_ON_STATE_POWERING_UP"];
- *      POWERING_DOWN   [label="STATE_POWERING_DOWN"
- *                      URL="\ref kbasep_pm_always_on_state.KBASEP_PM_ALWAYS_ON_STATE_POWERING_DOWN"];
- *      POWERED_UP      [label="STATE_POWERED_UP"
- *                      URL="\ref kbasep_pm_always_on_state.KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP"];
- *      POWERED_DOWN    [label="STATE_POWERED_DOWN"
- *                      URL="\ref kbasep_pm_always_on_state.KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN"];
- *      CHANGING_POLICY [label="STATE_CHANGING_POLICY"
- *                      URL="\ref kbasep_pm_always_on_state.KBASEP_PM_ALWAYS_ON_STATE_CHANGING_POLICY"];
- *
- *      init            [label="init"                   URL="\ref KBASE_PM_EVENT_INIT"];
- *      change_policy   [label="change_policy"          URL="\ref kbase_pm_change_policy"];
- *
- *      init -> POWERING_UP [ label = "Policy init" ];
- *
- *      POWERING_UP -> POWERED_UP [label = "Power state change" URL="\ref KBASE_PM_EVENT_STATE_CHANGED"];
- *      POWERING_DOWN -> POWERED_DOWN [label = "Power state change" URL="\ref KBASE_PM_EVENT_STATE_CHANGED"];
- *      CHANGING_POLICY -> change_policy [label = "Power state change" URL="\ref KBASE_PM_EVENT_STATE_CHANGED"];
- *
- *      POWERED_UP -> POWERING_DOWN [label = "Suspend" URL="\ref KBASE_PM_EVENT_SUSPEND"];
- *
- *      POWERED_DOWN -> POWERING_UP [label = "Resume" URL="\ref KBASE_PM_EVENT_RESUME"];
- *
- *      POWERING_UP -> CHANGING_POLICY [label = "Change policy" URL="\ref KBASE_PM_EVENT_CHANGE_POLICY"];
- *      POWERING_DOWN -> CHANGING_POLICY [label = "Change policy" URL="\ref KBASE_PM_EVENT_CHANGE_POLICY"];
- *      POWERED_UP -> change_policy [label = "Change policy" URL="\ref KBASE_PM_EVENT_CHANGE_POLICY"];
- *      POWERED_DOWN -> change_policy [label = "Change policy" URL="\ref KBASE_PM_EVENT_CHANGE_POLICY"];
- * }
- * @enddot
+ * @note:
+ * - KBase indicates the GPU will be powered up when it has a User Process that
+ *   has just started to submit Job Chains.
+ * - KBase indicates the GPU need not be powered when all the Job Chains from
+ *   User Processes have finished, and it is waiting for a User Process to
+ *   submit some more Job Chains.
  */
-typedef enum kbasep_pm_always_on_state {
-	KBASEP_PM_ALWAYS_ON_STATE_POWERING_UP,	    /**< The GPU is powering up */
-	KBASEP_PM_ALWAYS_ON_STATE_POWERING_DOWN,    /**< The GPU is powering down */
-	KBASEP_PM_ALWAYS_ON_STATE_POWERED_UP,	    /**< The GPU is powered up and jobs can execute */
-	KBASEP_PM_ALWAYS_ON_STATE_POWERED_DOWN,	    /**< The GPU is powered down and the system can suspend */
-	KBASEP_PM_ALWAYS_ON_STATE_CHANGING_POLICY   /**< The power policy is about to change */
-} kbasep_pm_always_on_state;
 
-/** Private structure for policy instance data.
+/**
+ * Private structure for policy instance data.
  *
  * This contains data that is private to the particular power policy that is active.
  */
 typedef struct kbasep_pm_policy_always_on {
-	kbasep_pm_always_on_state state;  /**< The current state of the policy */
+	/** No state needed - just have a dummy variable here */
+	int dummy;
 } kbasep_pm_policy_always_on;
 
 #endif

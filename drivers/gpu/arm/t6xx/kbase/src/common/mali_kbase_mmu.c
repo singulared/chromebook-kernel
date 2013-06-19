@@ -947,10 +947,6 @@ static void bus_fault_worker(struct work_struct *data)
 	 * NOTE: NULL can be returned here if we're gracefully handling a spurious interrupt */
 	kctx = kbasep_js_runpool_lookup_ctx_noretain(kbdev, as_no);
 
-	/* switch to UNMAPPED mode, will abort all jobs and stop any hw counter dumping */
-	/* AS transaction begin */
-	mutex_lock(&kbdev->as[as_no].transaction_mutex);
-
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8245)) {
 		/* Due to H/W issue 8245 we need to reset the GPU after using UNMAPPED mode.
 		 * We start the reset before switching to UNMAPPED to ensure that unrelated jobs
@@ -960,7 +956,12 @@ static void bus_fault_worker(struct work_struct *data)
 		reset_status = kbase_prepare_to_reset_gpu(kbdev);
 	}
 
+	/* NOTE: If GPU already powered off for suspend, we don't need to switch to unmapped */
 	if (!kbase_pm_context_active_handle_suspend(kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
+		/* switch to UNMAPPED mode, will abort all jobs and stop any hw counter dumping */
+		/* AS transaction begin */
+		mutex_lock(&kbdev->as[as_no].transaction_mutex);
+
 		reg = kbase_reg_read(kbdev, MMU_AS_REG(as_no, ASn_TRANSTAB_LO), kctx);
 		reg &= ~3;
 		kbase_reg_write(kbdev, MMU_AS_REG(as_no, ASn_TRANSTAB_LO), reg, kctx);
@@ -972,9 +973,6 @@ static void bus_fault_worker(struct work_struct *data)
 
 		mmu_mask_reenable(kbdev, kctx, faulting_as);
 		kbase_pm_context_idle(kbdev);
-	} else {
-		/* GPU already powered off for suspend, don't handle */
-		mutex_unlock(&kbdev->as[as_no].transaction_mutex);
 	}
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8245) && reset_status)

@@ -42,10 +42,15 @@ typedef enum kbase_pm_policy_id {
 
 /** The types of core in a GPU.
  *
- * These enumerated values are used in calls to @ref kbase_pm_invoke_power_up, @ref kbase_pm_invoke_power_down, @ref
- * kbase_pm_get_present_cores, @ref kbase_pm_get_active_cores, @ref kbase_pm_get_trans_cores, @ref
- * kbase_pm_get_ready_cores. The specify which type of core should be acted on.
- * These values are set in a manner that allows @ref core_type_to_reg function to be simpler and more efficient.
+ * These enumerated values are used in calls to:
+ * - @ref kbase_pm_get_present_cores
+ * - @ref kbase_pm_get_active_cores
+ * - @ref kbase_pm_get_trans_cores
+ * - @ref kbase_pm_get_ready_cores.
+ *
+ * They specify which type of core should be acted on.  These values are set in
+ * a manner that allows @ref core_type_to_reg function to be simpler and more
+ * efficient.
  */
 typedef enum kbase_pm_core_type {
 	KBASE_PM_CORE_L3 = L3_PRESENT_LO,	    /**< The L3 cache */
@@ -76,8 +81,8 @@ mali_error kbase_pm_powerup(struct kbase_device *kbdev);
  * Halt the power management framework.
  * Should ensure that no new interrupts are generated,
  * but allow any currently running interrupt handlers to complete successfully.
- * No event can make the pm system turn on the GPU after this function returns.
- * The active policy is sent @ref KBASE_PM_EVENT_SYSTEM_SUSPEND.
+ * The GPU is forced off by the time this function returns, regardless of
+ * whether or not the active power policy asks for the GPU to be powered off.
  *
  * @param kbdev     The kbase device structure for the device (must be a valid pointer)
  */
@@ -92,104 +97,17 @@ void kbase_pm_halt(struct kbase_device *kbdev);
  */
 void kbase_pm_term(struct kbase_device *kbdev);
 
-/** Events that can be sent to a power policy.
- *
- * Power policies are expected to handle all these events, although they may choose to take no action.
- *
- * @note IMPORTANT: Any modifications to this MUST be synced-up with the array
- * kbase_pm_mergable_events[] in mali_kbase_pm.c
- */
-typedef enum kbase_pm_event {
-	/* helper for tests */
-	KBASEP_PM_EVENT_FIRST,
-
-	/** Initialize the power policy.
-	 *
-	 * This event is sent immediately after the @ref kbase_pm_policy.init function of the policy returns.
-	 *
-	 * The policy may decide to transition the cores to its 'normal' state (e.g. an always on policy would turn all
-	 * the cores on). The policy should assume that the GPU is in active use (i.e. as if the @ref
-	 * KBASE_PM_EVENT_GPU_ACTIVE event had been received), if this is not the case then @ref KBASE_PM_EVENT_GPU_IDLE
-	 * will be called after this event has been handled.
-	 */
-	KBASE_PM_EVENT_POLICY_INIT = KBASEP_PM_EVENT_FIRST,
-	/** The power state of the device has changed.
-	 *
-	 * This event is sent when the GPU raises an interrupt to announce that a power transition has finished. Because
-	 * there may be multiple power transitions the power policy must interrogate the state of the GPU to check whether
-	 * all expected transitions have finished. If the GPU has just turned on or off then the policy must call @ref
-	 * kbase_pm_power_up_done or @ref kbase_pm_power_down_done as appropriate.
-	 */
-	KBASE_PM_EVENT_GPU_STATE_CHANGED,
-	/** The GPU is becoming active.
-	 *
-	 * This event is sent when the first context is about to use the GPU.
-	 *
-	 * If the core is turned off then this event must cause the core to turn on. This is done asynchronously and the
-	 * policy must call the function kbase_pm_power_up_done to signal that the core is turned on sufficiently to allow
-	 * register access.
-	 */
-	KBASE_PM_EVENT_GPU_ACTIVE,
-	/** The GPU is becoming idle.
-	 *
-	 * This event is sent when the last context has finished using the GPU.
-	 *
-	 * The power policy may turn the GPU off entirely (e.g. turn the clocks or power off).
-	 */
-	KBASE_PM_EVENT_GPU_IDLE,
-	/** The system has requested a change of power policy.
-	 *
-	 * The current policy receives this message when a request to change policy occurs. It must ensure that all active
-	 * power transitions are completed and then call the @ref kbase_pm_change_policy function.
-	 *
-	 * This event is only delivered when the policy has been informed that the GPU is 'active' (the power management
-	 * code internally increments the context active counter during a policy change).
-	 */
-	KBASE_PM_EVENT_POLICY_CHANGE,
-	/** The system is requesting to suspend the GPU.
-	 *
-	 * The power policy should ensure that the GPU is shut down sufficiently for the system to suspend the device.
-	 * Once the GPU is ready the policy should call @ref kbase_pm_power_down_done.
-	 */
-	KBASE_PM_EVENT_SYSTEM_SUSPEND,
-	/** The system is requesting to resume the GPU.
-	 *
-	 * The power policy should restore the GPU to the state it was before the previous
-	 * @ref KBASE_PM_EVENT_SYSTEM_SUSPEND event. If the GPU is being powered up then it should call
-	 * @ref kbase_pm_power_transitioning before changing the state and @ref kbase_pm_power_up_done when
-	 * the transition is complete.
-	 */
-	KBASE_PM_EVENT_SYSTEM_RESUME,
-	/** The job scheduler is requesting to power up/down cores.
-	 *
-	 * This event is sent when:
-	 * - powered down cores are needed to complete a job
-	 * - powered up cores are not needed anymore
-	 */
-	KBASE_PM_EVENT_CHANGE_GPU_STATE,
-
-	/* helpers for tests */
-	KBASEP_PM_EVENT_LAST = KBASE_PM_EVENT_CHANGE_GPU_STATE,
-	KBASEP_PM_EVENT_INVALID
-} kbase_pm_event;
-
-/** Bitmask of kbase_pm_event codes.
- *
- * Must be large enough to fit 1 << KBASEP_PM_EVENT_LAST */
-typedef u8 kbase_pm_event_bitmask;
-
-extern kbase_pm_event_bitmask kbase_pm_mergable_events[];
 
 /** Flags that give information about Power Policies */
 enum {
-	/** This policy does not power up/down cores and L2/L3 caches individually,
-	 * outside of KBASE_PM_EVENT_GPU_IDLE and KBASE_PM_EVENT_GPU_ACTIVE events.
-	 * That is, the policy guarantees all cores/L2/L3 caches will be powered
-	 * after a KBASE_PM_EVENT_GPU_ACTIVE event.
+	/**
+	 * This policy would like the GPU powered whenever the OS is not
+	 * suspended, even if no contexts are using it.
 	 *
-	 * Hence, it does not need to be sent KBASE_PM_EVENT_CHANGE_GPU_STATE
-	 * events.  */
-	KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS = (1u << 0)
+	 * Otherwise, the default behavior is to power down the GPU entirely when
+	 * no contexts are using it.
+	 */
+	KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED = (1u << 0),
 };
 
 typedef u32 kbase_pm_policy_flags;
@@ -199,6 +117,61 @@ typedef union kbase_pm_policy_data {
 	kbasep_pm_policy_demand demand;
 	kbasep_pm_policy_coarse_demand coarse_demand;
 } kbase_pm_policy_data;
+
+
+/**
+ * Set of function IDs that the policy implements for determining what the state
+ * of the cores should be.
+ *
+ *
+ * The functions must be IRQ-safe. kbase_device::pm::power_change_lock (an
+ * IRQ-spinlock) will be held by the caller.
+ */
+typedef enum {
+	/*
+	 * ID of the function used to determine the core state for running/about to
+	 * run atoms. It must meet or exceed the requirements of:
+	 * - (kbdev->shader_needed_bitmap | kbdev->shader_inuse_bitmap)
+	 * - (kbdev->tiler_needed_bitmap | kbdev->tiler_inuse_bitmap)
+	 *
+	 * Note that these bitmaps are generally zero when no atoms are running
+	 * (which will be the case on GPU Active/Idle). The exception is in the
+	 * instrumentation case (hence why the core bitmap requirements must be met
+	 * at all times).
+	 */
+	KBASE_PM_POLICY_FUNC_ATOM_CORE_STATE,
+	/*
+	 * ID of the function used to determine the core state when the GPU goes
+	 * active. This usually indicates the first new atom is soon to be run, but
+	 * we don't know which atom yet.
+	 */
+	KBASE_PM_POLICY_FUNC_ON_ACTIVE_CORE_STATE,
+	/*
+	 * ID of the function used to determine the core state when the GPU goes
+	 * idle. This usually indicates that all current atoms have finished.
+	 *
+	 * If KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED is not set in the policy, then
+	 * this must set the cores to be all inactive - even if
+	 * [shader|tiler]_[needed|inuse]_bitmap have bits set.
+	 */
+	KBASE_PM_POLICY_FUNC_ON_IDLE_CORE_STATE,
+
+	/* Must be the last enum, can't be used as a function ID. */
+	KBASE_PM_POLICY_FUNC_COUNT
+} kbase_pm_policy_func;
+
+/**
+ * Type of a function called when the shader cores state must be updated.
+ *
+ * Functions of this type will update the desired_xxx_state variables.
+ *
+ * The functions must be IRQ-safe. kbdev->pm.power_change_lock (an
+ * IRQ-spinlock) will be held by the caller.
+ *
+ * @param kbdev     The kbase device structure for the device (must be a
+ *                  valid pointer)
+ */
+typedef void (kbase_pm_core_state_func)(struct kbase_device *kbdev);
 
 /** Power policy structure.
  *
@@ -211,28 +184,42 @@ typedef struct kbase_pm_policy {
 
 	/** Function called when the policy is selected
 	 *
-	 * This should initialize the kbdev->pm.policy_data pointer to the policy's data structure. It should not attempt
-	 * to make any changes to hardware state.
+	 * This should initialize the kbdev->pm.policy_data pointer to the policy's
+	 * data structure. It should not attempt to make any changes to hardware
+	 * state. In particular, GPU interrupts might be disabled when this is
+	 * called.
 	 *
-	 * It is undefined what state the cores are in when the function is called, however no power transitions should be
-	 * occurring.
+	 * It is undefined what state the cores are in when the function is called,
+	 * and they may be transitioning
 	 *
-	 * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+	 * kbdev->pm.lock will be held by the caller.
+	 *
+	 * @param kbdev     The kbase device structure for the device (must be a
+	 *                  valid pointer)
 	 */
 	void (*init) (struct kbase_device *kbdev);
 	/** Function called when the policy is unselected.
 	 *
 	 * This should free any data allocated with \c init
 	 *
-	 * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+	 * kbdev->pm.lock will be held by the caller.
+	 *
+	 * @param kbdev     The kbase device structure for the device (must be a
+	 *                  valid pointer)
 	 */
 	void (*term) (struct kbase_device *kbdev);
-	/** Function called when there is an event to process
+
+	/** Functions called when the shader cores state must be updated under
+	 * the different situations listed in @ref kbase_pm_policy_func
 	 *
-	 * @param kbdev     The kbase device structure for the device (must be a valid pointer)
-	 * @param event     The event to process
+	 * The functions must be IRQ-safe. kbdev->pm.power_change_lock (an
+	 * IRQ-spinlock) will be held by the caller.
+	 *
+	 * @param kbdev     The kbase device structure for the device (must be a
+	 *                  valid pointer)
 	 */
-	void (*event) (struct kbase_device *kbdev, kbase_pm_event event);
+	kbase_pm_core_state_func *core_state_func[KBASE_PM_POLICY_FUNC_COUNT];
+
 	/** Field indicating flags for this policy */
 	kbase_pm_policy_flags flags;
 	/** Field indicating an ID for this policy. This is not necessarily the
@@ -272,48 +259,34 @@ typedef enum kbase_pm_dvfs_action {
 	KBASE_PM_DVFS_CLOCK_DOWN    /**< The clock frequency should be decreased if possible */
 } kbase_pm_dvfs_action;
 
-/** A value for an atomic @ref kbase_pm_device_data::work_active,
- * which tracks whether the work unit has been enqueued.
- */
-typedef enum kbase_pm_work_active_state {
-	KBASE_PM_WORK_ACTIVE_STATE_INACTIVE = 0x00u,	/**< There are no work units enqueued and @ref kbase_pm_worker is not running. */
-	KBASE_PM_WORK_ACTIVE_STATE_ENQUEUED = 0x01u,	/**< There is a work unit enqueued, but @ref kbase_pm_worker is not running. */
-	KBASE_PM_WORK_ACTIVE_STATE_PROCESSING = 0x02u,	/**< @ref kbase_pm_worker is running. */
-	KBASE_PM_WORK_ACTIVE_STATE_PENDING_EVT = 0x03u	/**< Processing and there's an event outstanding.
-								@ref kbase_pm_worker is running, but @ref kbase_pm_device_data::pending_events
-								has been updated since it started so
-								it should recheck the list of pending events before exiting. */
-} kbase_pm_work_active_state;
-
 /** Data stored per device for power management.
  *
  * This structure contains data for the power management framework. There is one instance of this structure per device
  * in the system.
  */
 typedef struct kbase_pm_device_data {
-	/** The policy that is currently actively controlling the power state. */
+	/** The lock protecting Power Management structures accessed
+	 * outside of IRQ.
+	 *
+	 * This lock must also be held whenever the GPU is being powered on or off.
+	 */
+	struct mutex lock;
+	/** The policy that is currently actively controlling the power state.
+	 *
+	 * @note: During an IRQ, this can be NULL when the policy is being changed
+	 * with kbase_pm_set_policy(). The change is protected under
+	 * kbase_device::pm::power_change_lock. Direct access to this from IRQ
+	 * context must therefore check for NULL. If NULL, then
+	 * kbase_pm_set_policy() will re-issue the policy functions that would've
+	 * been done under IRQ.
+	 */
 	const kbase_pm_policy *current_policy;
-	/** The policy that the system is transitioning to. */
-	const kbase_pm_policy *new_policy;
 	/** The data needed for the current policy. This is considered private to the policy. */
 	kbase_pm_policy_data policy_data;
-	/** The workqueue that the policy callbacks are executed on. */
-	struct workqueue_struct *workqueue;
-	/** A bit mask of events that are waiting to be delivered to the active policy. */
-	atomic_t pending_events;
-	/** The work unit that is enqueued onto the workqueue. */
-	struct work_struct work;
-	/** An atomic which tracks whether the work unit has been enqueued.
-	 * For list of possible values please refer to @ref kbase_pm_work_active_state.
-	 */
-	atomic_t work_active;
 
-	/** Power state and a queue to wait for changes */
-#define PM_POWER_STATE_OFF   1
-#define PM_POWER_STATE_TRANS 2
-#define PM_POWER_STATE_ON    3
-	int power_state;
-	wait_queue_head_t power_state_wait;
+	/** Waiting for reset and a queue to wait for changes */
+	mali_bool reset_done;
+	wait_queue_head_t reset_done_wait;
 
 	/** Wait queue for whether the l2 cache has been powered as requested */
 	wait_queue_head_t l2_powered_wait;
@@ -322,15 +295,10 @@ typedef struct kbase_pm_device_data {
 	 * Zero indicates that some (or all) are not powered */
 	int l2_powered;
 
-	int no_outstanding_event;
-	wait_queue_head_t no_outstanding_event_wait;
-
 	/** The reference count of active contexts on this device. */
 	int active_count;
 	/** Flag indicating suspending/suspended */
 	mali_bool suspending;
-	/** Lock to protect active_count and suspending */
-	spinlock_t active_count_lock;
 	/* Wait queue set when active_count == 0 */
 	wait_queue_head_t zero_active_count_wait;
 
@@ -365,18 +333,24 @@ typedef struct kbase_pm_device_data {
 	 */
 	spinlock_t power_change_lock;
 
-	/** This flag is set iff the GPU is powered as requested by the desired_xxx_state variables */
-	atomic_t gpu_in_desired_state;
+	/** This flag is set iff the GPU is powered as requested by the
+	 * desired_xxx_state variables */
+	mali_bool gpu_in_desired_state;
+	/* Wait queue set when gpu_in_desired_state != 0 */
+	wait_queue_head_t gpu_in_desired_state_wait;
 
 	/** Set to true when the GPU is powered and register accesses are possible, false otherwise */
 	mali_bool gpu_powered;
 
-	/** IRQ masks to allow filtering of spurious IRQs received before the driver can handle them */
-	u32 gpu_irq_mask;
-	u32 mmu_irq_mask;
-	u32 job_irq_mask;
+#ifdef CONFIG_MALI_DEBUG
+	/** Debug state indicating whether sufficient initialization of the driver
+	 * has occurred to handle IRQs */
+	mali_bool driver_ready_for_irqs;
+#endif /* CONFIG_MALI_DEBUG */
 
-	/** Spinlock that must be held when writing gpu_powered and irq masks */
+	/** Spinlock that must be held when:
+	 * - writing gpu_powered
+	 * - accessing driver_ready_for_irqs (in CONFIG_MALI_DEBUG builds) */
 	spinlock_t gpu_powered_lock;
 
 	/** Time in milliseconds between each dvfs sample */
@@ -455,15 +429,6 @@ void kbase_pm_set_policy(struct kbase_device *kbdev, const kbase_pm_policy *poli
  */
 int kbase_pm_list_policies(const kbase_pm_policy * const **policies);
 
-/** The current policy is ready to change to the new policy
- *
- * The current policy must ensure that all cores have finished transitioning before calling this function.
- * The new policy is sent an @ref KBASE_PM_EVENT_POLICY_INIT event.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_change_policy(struct kbase_device *kbdev);
-
 /** The GPU is idle.
  *
  * The OS may choose to turn off idle devices
@@ -479,38 +444,6 @@ void kbase_pm_dev_idle(struct kbase_device *kbdev);
  * @param kbdev     The kbase device structure for the device (must be a valid pointer)
  */
 void kbase_pm_dev_activate(struct kbase_device *kbdev);
-
-/** Send an event to the active power policy.
- *
- * The event is queued for sending to the active power policy. The event is merged with the current queue by the @ref
- * kbasep_pm_merge_event function which may decide to drop events.
- *
- * Note that this function may be called in an atomic context on Linux which implies that it must not sleep.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- * @param event     The event that should be queued
- */
-void kbase_pm_send_event(struct kbase_device *kbdev, kbase_pm_event event);
-
-/** Turn one or more cores on.
- *
- * This function is called by the active power policy to turn one or more cores on.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- * @param type      The type of core (see the @ref kbase_pm_core_type enumeration)
- * @param cores     A bitmask of cores to turn on
- */
-void kbase_pm_invoke_power_up(struct kbase_device *kbdev, kbase_pm_core_type type, u64 cores);
-
-/** Turn one or more cores off.
- *
- * This function is called by the active power policy to turn one or more core off.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- * @param type      The type of core (see the @ref kbase_pm_core_type enumeration)
- * @param cores     A bitmask of cores to turn off
- */
-void kbase_pm_invoke_power_down(struct kbase_device *kbdev, kbase_pm_core_type type, u64 cores);
 
 /** Get details of the cores that are present in the device.
  *
@@ -560,20 +493,6 @@ u64 kbase_pm_get_trans_cores(struct kbase_device *kbdev, kbase_pm_core_type type
  */
 u64 kbase_pm_get_ready_cores(struct kbase_device *kbdev, kbase_pm_core_type type);
 
-/** Return whether the power manager is active
- *
- * This function will return true when there are cores (of any time) that are currently transitioning between power
- * states.
- *
- * It can be used on receipt of the @ref KBASE_PM_EVENT_GPU_STATE_CHANGED message to determine whether the requested power
- * transitions have completely finished or not.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- *
- * @return true when there are cores transitioning between power states, false otherwise
- */
-mali_bool kbase_pm_get_pwr_active(struct kbase_device *kbdev);
-
 /** Turn the clock for the device on, and enable device interrupts.
  *
  * This function can be used by a power policy to turn the clock for the GPU on. It should be modified during
@@ -602,8 +521,9 @@ void kbase_pm_enable_interrupts(struct kbase_device *kbdev);
 
 /** Disable interrupts on the device.
  *
- * This prevents interrupt delivery to the CPU so no further @ref KBASE_PM_EVENT_GPU_STATE_CHANGED messages will be
- * received until @ref kbase_pm_enable_interrupts or kbase_pm_clock_on() is called.
+ * This prevents delivery of Power Management interrupts to the CPU so that
+ * kbase_pm_check_transitions_nolock() will not be called from the IRQ handler
+ * until @ref kbase_pm_enable_interrupts or kbase_pm_clock_on() is called.
  *
  * Interrupts are also disabled after a call to kbase_pm_clock_off().
  *
@@ -624,25 +544,6 @@ void kbase_pm_disable_interrupts(struct kbase_device *kbdev);
  */
 mali_error kbase_pm_init_hw(struct kbase_device *kbdev, mali_bool enable_irqs );
 
-/** Inform the power management system that the power state of the device is transitioning.
- *
- * This function must be called by the active power policy before transitioning the core between an 'off state' and an
- * 'on state'. It resets the wait queues that are waited on by @ref kbase_pm_wait_for_power_up and @ref
- * kbase_pm_wait_for_power_down.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_power_transitioning(struct kbase_device *kbdev);
-
-/** The GPU has been powered up successfully.
- *
- * This function must be called by the active power policy when the GPU has been powered up successfully. It signals
- * to the rest of the system that jobs can start being submitted to the device.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_power_up_done(struct kbase_device *kbdev);
-
 /** The GPU has been reset successfully.
  *
  * This function must be called by the GPU interrupt handler when the RESET_COMPLETED bit is set. It signals to the
@@ -651,35 +552,6 @@ void kbase_pm_power_up_done(struct kbase_device *kbdev);
  * @param kbdev     The kbase device structure for the device (must be a valid pointer)
  */
 void kbase_pm_reset_done(struct kbase_device *kbdev);
-
-/** The GPU has been powered down successfully.
- *
- * This function must be called by the active power policy when the GPU has been powered down successfully. It signals
- * to the rest of the system that a system suspend can now take place.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_power_down_done(struct kbase_device *kbdev);
-
-/** Wait for the power policy to signal power up.
- *
- * This function waits for the power policy to signal power up by calling @ref kbase_pm_power_up_done. After the power
- * policy has signalled this the function will return immediately until the power policy calls @ref
- * kbase_pm_power_transitioning.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_wait_for_power_up(struct kbase_device *kbdev);
-
-/** Wait for the power policy to signal power down.
- *
- * This function waits for the power policy to signal power down by calling @ref kbase_pm_power_down_done. After the
- * power policy has signalled this the function will return immediately until the power policy calls @ref
- * kbase_pm_power_transitioning.
- *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
- */
-void kbase_pm_wait_for_power_down(struct kbase_device *kbdev);
 
 /** Increment the count of active contexts.
  *
@@ -747,9 +619,70 @@ void kbase_pm_context_idle(struct kbase_device *kbdev);
  * hardware to see if any power transitions can be made at this time to make the hardware state closer to the state
  * desired by the power policy.
  *
+ * The return value can be used to check whether all the desired cores are
+ * available, and so whether it's worth submitting a job (e.g. from a Power
+ * Management IRQ).
+ *
+ * Note that this still returns MALI_TRUE when desired_xx_state has no
+ * cores. That is: of the no cores desired, none were <em>un</em>available. In
+ * this case, the caller may still need to try submitting jobs. This is because
+ * the Core Availability Policy might have taken us to an intermediate state
+ * where no cores are powered, before powering on more cores (e.g. for core
+ * rotation)
+ *
+ * The caller must hold kbase_device::pm::power_change_lock
+ *
+ * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ * @return          non-zero when all desired cores are available. That is,
+ *                  it's worthwhile for the caller to submit a job.
+ * @return          MALI_FALSE otherwise
+ */
+mali_bool kbase_pm_check_transitions_nolock(struct kbase_device *kbdev);
+
+/** Synchronous and locking variant of kbase_pm_check_transitions_nolock()
+ *
+ * On returning, the desired state at the time of the call will have been met.
+ *
+ * @note There is nothing to stop the core being switched off by calls to
+ * kbase_pm_release_cores() or kbase_pm_unrequest_cores(). Therefore, the
+ * caller must have already made a call to
+ * kbase_pm_request_cores()/kbase_pm_request_cores_sync() previously.
+ *
+ * The usual use-case for this is to ensure cores are 'READY' after performing
+ * a GPU Reset.
+ *
+ * Unlike kbase_pm_check_transitions_nolock(), the caller must not hold
+ * kbase_device::pm::power_change_lock, because this function will take that
+ * lock itself.
+ *
  * @param kbdev     The kbase device structure for the device (must be a valid pointer)
  */
-void kbase_pm_check_transitions(struct kbase_device *kbdev);
+void kbase_pm_check_transitions_sync(struct kbase_device *kbdev);
+
+/** Variant of kbase_pm_update_cores_state() where the caller must hold
+ * kbase_device::pm::power_change_lock
+ *
+ * @param kbdev       The kbase device structure for the device (must be a valid
+ *                    pointer)
+ * @param policy_func The ID of the policy function to call, see
+ *                    @ref kbase_pm_policy_func
+ */
+void kbase_pm_update_cores_state_nolock(struct kbase_device *kbdev, kbase_pm_policy_func policy_func);
+
+/** Update the desired state of shader cores from the Power Policy, and begin
+ * any power transitions.
+ *
+ * This function will update the desired_xx_state members of
+ * kbase_pm_device_data by calling into the current Power Policy. It will then
+ * begin power transitions to make the hardware acheive the desired shader core
+ * state.
+ *
+ * @param kbdev       The kbase device structure for the device (must be a valid
+ *                    pointer)
+ * @param policy_func The ID of the policy function to call, see
+ *                    @ref kbase_pm_policy_func
+ */
+void kbase_pm_update_cores_state(struct kbase_device *kbdev, kbase_pm_policy_func policy_func);
 
 /** Read the bitmasks of present cores.
  *
@@ -759,6 +692,23 @@ void kbase_pm_check_transitions(struct kbase_device *kbdev);
  */
 void kbasep_pm_read_present_cores(struct kbase_device *kbdev);
 
+/** Synchronous variant of kbase_pm_request_cores()
+ *
+ * When this function returns, the @a shader_cores and @a tiler_cores will be
+ * in the READY state.
+ *
+ * This is safe variant of kbase_pm_check_transitions_sync(): it handles the
+ * work of ensuring the requested cores will remain powered until a matching
+ * call to kbase_pm_unrequest_cores()/kbase_pm_release_cores() (as appropriate)
+ * is made.
+ *
+ * @param kbdev         The kbase device structure for the device
+ * @param shader_cores  A bitmask of shader cores which are necessary for the job
+ * @param tiler_cores   A bitmask of tiler cores which are necessary for the job
+ */
+
+mali_error kbase_pm_request_cores_sync(struct kbase_device *kbdev, u64 shader_cores, u64 tiler_cores);
+
 /** Mark one or more cores as being required for jobs to be submitted.
  *
  * This function is called by the job scheduler to mark one or both cores
@@ -767,11 +717,10 @@ void kbasep_pm_read_present_cores(struct kbase_device *kbdev);
  * The cores requested are reference counted and a subsequent call to @ref kbase_pm_register_inuse_cores or
  * @ref kbase_pm_unrequest_cores should be made to dereference the cores as being 'needed'.
  *
- * The current running policy is sent an @ref KBASE_PM_EVENT_CHANGE_GPU_STATE if power up of requested core is
- * required.
-
- * The policy is expected to make these cores available at some point in the future,
- * but may take an arbitrary length of time to reach this state.
+ * The active power policy will meet or exceed the requirements of the
+ * requested cores in the system. Any core transitions needed will be begun
+ * immediately, but they might not complete/the cores might not be available
+ * until a Power Management IRQ.
  *
  * @param kbdev         The kbase device structure for the device
  * @param shader_cores  A bitmask of shader cores which are necessary for the job
@@ -786,8 +735,9 @@ mali_error kbase_pm_request_cores(struct kbase_device *kbdev, u64 shader_cores, 
  * This function undoes the effect of @ref kbase_pm_request_cores. It should be used when a job is not
  * going to be submitted to the hardware (e.g. the job is cancelled before it is enqueued).
  *
- * The current running policy is sent an @ref KBASE_PM_EVENT_CHANGE_GPU_STATE if power down of requested core
- * is required.
+ * The active power policy will meet or exceed the requirements of the
+ * requested cores in the system. Any core transitions needed will be begun
+ * immediately, but they might not complete until a Power Management IRQ.
  *
  * The policy may use this as an indication that it can power down cores.
  *
@@ -1044,22 +994,4 @@ mali_bool kbase_pm_metrics_is_active(struct kbase_device *kbdev);
 
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation);
 #endif
-
-/** Get a bitmask of mergable events for a particular event
- *
- * The set of mergable events are those that will be cancelled by @a event.
- *
- * Note that this does not always cancel @a event itself (e.g. fo
- * KBASE_PM_EVENT_POLICY_INIT)
- *
- * @param event  The event whose merable events will be obtained
- * @return       Bitmask of events that can be merged, where the bit index
- *               corresponds to the kbase_pm_event value.
- */
-static INLINE int kbase_pm_get_mergable_events(kbase_pm_event event)
-{
-	KBASE_DEBUG_ASSERT(KBASEP_PM_EVENT_FIRST <= event && event <= KBASEP_PM_EVENT_LAST);
-	return (int)((unsigned int)kbase_pm_mergable_events[event]);
-}
-
 #endif				/* _KBASE_PM_H_ */

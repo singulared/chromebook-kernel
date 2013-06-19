@@ -1429,17 +1429,6 @@ mali_bool kbasep_js_policy_dequeue_job(kbase_device *kbdev,
 	return MALI_FALSE;
 }
 
-mali_bool kbasep_js_policy_dequeue_job_irq(kbase_device *kbdev,
-					   int job_slot_idx,
-					   kbase_jd_atom ** const katom_ptr)
-{
-	/* IRQ and non-IRQ variants of this are the same (though, the IRQ variant could be made faster) */
-
-	/* KBASE_TRACE_ADD_SLOT( kbdev, JS_POLICY_DEQUEUE_JOB_IRQ, NULL, NULL, 0u,
-	   job_slot_idx); */
-	return kbasep_js_policy_dequeue_job(kbdev, job_slot_idx, katom_ptr);
-}
-
 void kbasep_js_policy_enqueue_job(kbasep_js_policy *js_policy, kbase_jd_atom *katom)
 {
 	kbasep_js_policy_cfs_job *job_info;

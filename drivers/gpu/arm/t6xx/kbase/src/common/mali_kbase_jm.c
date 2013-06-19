@@ -949,6 +949,8 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 	kbdev = container_of(data, kbase_device, reset_work);
 
 	KBASE_DEBUG_ASSERT(kbdev);
+	js_devdata = &kbdev->js_data;
+
 	KBASE_TRACE_ADD(kbdev, JM_BEGIN_RESET_WORKER, NULL, NULL, 0u, 0);
 
 	/* Make sure the timer has completed - this cannot be done from interrupt context,
@@ -963,7 +965,9 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 		return;
 	}
 
-	js_devdata = &kbdev->js_data;
+	mutex_lock(&kbdev->pm.lock);
+	/* We hold the pm lock, so there ought to be a current policy */
+	KBASE_DEBUG_ASSERT(kbdev->pm.current_policy);
 
 	/* All slot have been soft-stopped and we've waited SOFT_STOP_RESET_TIMEOUT for the slots to clear, at this point
 	 * we assume that anything that is still left on the GPU is stuck there and we'll kill it when we reset the GPU */
@@ -1000,11 +1004,8 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 
 	/* Reset the GPU */
-	kbase_pm_power_transitioning(kbdev);
 	kbase_pm_init_hw(kbdev, MALI_TRUE);
-	/* IRQs were re-enabled by kbase_pm_init_hw */
-
-	kbase_pm_power_transitioning(kbdev);
+	/* IRQs were re-enabled by kbase_pm_init_hw, and GPU is still powered */
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 	/* Restore the HW counters setup */
@@ -1074,14 +1075,6 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 	}
 	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 
-	/* Re-init the power policy. Note that this does not re-enable interrupts,
-	 * because the call to kbase_pm_clock_on() will do nothing (due to
-	 * pm.gpu_powered == MALI_TRUE by this point) */
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_POLICY_INIT);
-
-	/* Wait for the policy to power up the GPU */
-	kbase_pm_wait_for_power_up(kbdev);
-
 	/* Complete any jobs that were still on the GPU */
 	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
 	for (i = 0; i < kbdev->gpu_props.num_job_slots; i++) {
@@ -1113,6 +1106,15 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 	wake_up(&kbdev->reset_wait);
 	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Reset complete");
 
+	/* Find out what cores are required now */
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	kbdev->pm.current_policy->core_state_func[KBASE_PM_POLICY_FUNC_ATOM_CORE_STATE](kbdev);
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+	/* Synchronously request and wait for those cores, because if
+	 * instrumentation is enabled it would need them immediately. */
+	kbase_pm_check_transitions_sync(kbdev);
+
 	/* Try submitting some jobs to restart processing */
 	if (js_devdata->nr_user_contexts_running > 0) {
 		KBASE_TRACE_ADD(kbdev, JM_SUBMIT_AFTER_RESET, NULL, NULL, 0u, 0);
@@ -1122,6 +1124,7 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 	}
 	mutex_unlock(&js_devdata->runpool_mutex);
+	mutex_unlock(&kbdev->pm.lock);
 
 	kbase_pm_context_idle(kbdev);
 	KBASE_TRACE_ADD(kbdev, JM_END_RESET_WORKER, NULL, NULL, 0u, 0);

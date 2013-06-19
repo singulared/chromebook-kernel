@@ -459,6 +459,60 @@ typedef struct kbase_trace {
 	u8 flags;
 } kbase_trace;
 
+/** Event IDs for the power management framework.
+ *
+ * Any of these events might be missed, so they should not be relied upon to
+ * find the precise state of the GPU at a particular time in the
+ * trace. Overall, we should get a high percentage of these events for
+ * statisical purposes, and so a few missing should not be a problem */
+typedef enum kbase_timeline_pm_event {
+	/* helper for tests */
+	KBASEP_TIMELINE_PM_EVENT_FIRST,
+
+	/** Event reserved for backwards compatibility with 'init' events */
+	KBASE_TIMELINE_PM_EVENT_RESERVED_0 = KBASEP_TIMELINE_PM_EVENT_FIRST,
+
+	/** The power state of the device has changed.
+	 *
+	 * Specifically, the device has reached a desired or available state.
+	 */
+	KBASE_TIMELINE_PM_EVENT_GPU_STATE_CHANGED,
+
+	/** The GPU is becoming active.
+	 *
+	 * This event is sent when the first context is about to use the GPU.
+	 */
+	KBASE_TIMELINE_PM_EVENT_GPU_ACTIVE,
+
+	/** The GPU is becoming idle.
+	 *
+	 * This event is sent when the last context has finished using the GPU.
+	 */
+	KBASE_TIMELINE_PM_EVENT_GPU_IDLE,
+
+	/** Event reserved for backwards compatibility with 'policy_change'
+	 * events */
+	KBASE_TIMELINE_PM_EVENT_RESERVED_4,
+
+	/** Event reserved for backwards compatibility with 'system_suspend'
+	 * events */
+	KBASE_TIMELINE_PM_EVENT_RESERVED_5,
+
+	/** Event reserved for backwards compatibility with 'system_resume'
+	 * events */
+	KBASE_TIMELINE_PM_EVENT_RESERVED_6,
+
+	/** The job scheduler is requesting to power up/down cores.
+	 *
+	 * This event is sent when:
+	 * - powered down cores are needed to complete a job
+	 * - powered up cores are not needed anymore
+	 */
+	KBASE_TIMELINE_PM_EVENT_CHANGE_GPU_STATE,
+
+	KBASEP_TIMELINE_PM_EVENT_LAST = KBASE_TIMELINE_PM_EVENT_CHANGE_GPU_STATE,
+} kbase_timeline_pm_event;
+
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 typedef struct kbase_trace_kctx_timeline {
 	atomic_t jd_atoms_in_flight;
@@ -477,7 +531,7 @@ typedef struct kbase_trace_kbdev_timeline {
 	u8 slot_atoms_submitted[BASE_JM_SUBMIT_SLOTS];
 
 	/* Last UID for each PM event */
-	atomic_t pm_event_uid[KBASEP_PM_EVENT_LAST+1];
+	atomic_t pm_event_uid[KBASEP_TIMELINE_PM_EVENT_LAST+1];
 	/* Counter for generating PM event UIDs */
 	atomic_t pm_event_uid_counter;
 } kbase_trace_kbdev_timeline;
@@ -518,8 +572,9 @@ struct kbase_device {
 	 *
 	 * pm.power_change_lock should be held when accessing these members.
 	 *
-	 * kbase_pm_check_transitions should be called when bits are cleared to
-	 * update the power management system and allow transitions to occur. */
+	 * kbase_pm_check_transitions_nolock() should be called when bits are
+	 * cleared to update the power management system and allow transitions to
+	 * occur. */
 	u64 shader_inuse_bitmap;
 	u64 tiler_inuse_bitmap;
 

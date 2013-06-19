@@ -65,22 +65,33 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	kbasep_js_device_data *js_devdata;
 	u32 irq_mask;
 	int ret;
+	u64 shader_cores_needed;
+	u64 tiler_cores_needed;
 
 	KBASE_DEBUG_ASSERT(NULL != kctx);
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
 	KBASE_DEBUG_ASSERT(NULL != setup);
 	KBASE_DEBUG_ASSERT(NULL == kbdev->hwcnt.suspended_kctx);
 
+	shader_cores_needed = kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER);
+	tiler_cores_needed = kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_TILER);
+
 	js_devdata = &kbdev->js_data;
 
 	/* alignment failure */
 	if ((setup->dump_buffer == 0ULL) || (setup->dump_buffer & (2048 - 1)))
-		goto out;
+		goto out_err;
 
 	/* Mark the context as active so the GPU is kept turned on */
 	/* A suspend won't happen here, because we're in a syscall from a userspace
 	 * thread. */
 	kbase_pm_context_active(kbdev);
+
+	/* Request the cores early on synchronously - we'll release them on any errors
+	 * (e.g. instrumentation already active) */
+	if (MALI_ERROR_NONE != kbase_pm_request_cores_sync(kbdev, shader_cores_needed, tiler_cores_needed)) {
+		goto out_pm_context_idle;
+	}
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 
@@ -94,14 +105,7 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	if (kbdev->hwcnt.state != KBASE_INSTR_STATE_DISABLED) {
 		/* Instrumentation is already enabled */
 		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		kbase_pm_context_idle(kbdev);
-		goto out;
-	}
-
-	if (MALI_ERROR_NONE != kbase_pm_request_cores(kbdev, kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER), kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_TILER))) {
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		kbase_pm_context_idle(kbdev);
-		goto out;
+		goto out_unrequest_cores;
 	}
 
 	/* Enable interrupt */
@@ -173,8 +177,12 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	err = MALI_ERROR_NONE;
 
 	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "HW counters dumping set-up for context %p", kctx);
-
- out:
+	return err;
+ out_unrequest_cores:
+	kbase_pm_unrequest_cores(kbdev, shader_cores_needed, tiler_cores_needed);
+ out_pm_context_idle:
+	kbase_pm_context_idle(kbdev);
+ out_err:
 	return err;
 }
 

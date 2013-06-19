@@ -18,16 +18,6 @@
 #if !defined(_KBASE_TRACE_TIMELINE_H)
 #define _KBASE_TRACE_TIMELINE_H
 
-/* This must be defined regardless of whether it's used */
-typedef struct kbase_timeline_pm_send_event_data
-{
-	kbase_pm_event event;
-#ifdef CONFIG_MALI_TRACE_TIMELINE
-	int mergable_event_uid[KBASEP_PM_EVENT_LAST+1];
-#endif /* CONFIG_MALI_TRACE_TIMELINE */
-} kbase_timeline_pm_send_event_data;
-
-
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 
 typedef enum
@@ -236,18 +226,15 @@ void kbase_timeline_job_slot_done(kbase_device *kbdev, kbase_context *kctx,
                                   kbasep_js_atom_done_code done_code);
 
 
-/** Prepare for tracing a subsequent a pm send/merge event */
-void kbase_timeline_pm_prepare_send_event(kbase_device *kbdev,
-                                          kbase_timeline_pm_send_event_data *data,
-                                          kbase_pm_event event);
+/** Trace a pm event starting */
+void kbase_timeline_pm_send_event(kbase_device *kbdev,
+                                  kbase_timeline_pm_event event_sent);
 
-/** Trace a pm send/merge of events */
-void kbase_timeline_pm_send_or_merge_event(kbase_device *kbdev,
-                                  kbase_timeline_pm_send_event_data *data,
-                                  int old_events, int new_events);
+/** Trace a pm event finishing */
+void kbase_timeline_pm_check_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event);
 
-/** Trace a kbase_pm_worker handling an event */
-void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_pm_event event);
+/** Check whether a pm event was present, and if so trace finishing it */
+void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event);
 
 
 #else
@@ -291,19 +278,15 @@ static INLINE void kbase_timeline_job_slot_done(kbase_device *kbdev, kbase_conte
 	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
 }
 
-static INLINE void kbase_timeline_pm_prepare_send_event(kbase_device *kbdev,
-                                          kbase_timeline_pm_send_event_data *data,
-                                          kbase_pm_event event)
+static INLINE void kbase_timeline_pm_send_event(kbase_device *kbdev, kbase_timeline_pm_event event_sent)
 {
 }
 
-static INLINE void kbase_timeline_pm_send_or_merge_event(kbase_device *kbdev,
-                                  kbase_timeline_pm_send_event_data *data,
-                                  int old_events, int new_events)
+static INLINE void kbase_timeline_pm_check_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event)
 {
 }
 
-static INLINE void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_pm_event event)
+static INLINE void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event)
 {
 }
 

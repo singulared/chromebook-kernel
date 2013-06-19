@@ -48,50 +48,6 @@ static const kbase_pm_policy *const policy_list[] = {
  */
 #define POLICY_COUNT (sizeof(policy_list)/sizeof(*policy_list))
 
-kbase_pm_event_bitmask kbase_pm_mergable_events[] = {
-	/* KBASE_PM_EVENT_POLICY_INIT : All other events get merged with it */
-	(1 << KBASE_PM_EVENT_GPU_STATE_CHANGED) | (1 << KBASE_PM_EVENT_GPU_ACTIVE)
-	| (1 << KBASE_PM_EVENT_GPU_IDLE) | (1 << KBASE_PM_EVENT_POLICY_CHANGE)
-	| (1 << KBASE_PM_EVENT_SYSTEM_SUSPEND) | (1 << KBASE_PM_EVENT_SYSTEM_RESUME)
-	| (1 << KBASE_PM_EVENT_CHANGE_GPU_STATE),
-
-	/* KBASE_PM_EVENT_GPU_STATE_CHANGED */
-	0,
-	/* KBASE_PM_EVENT_GPU_ACTIVE */
-	(1 << KBASE_PM_EVENT_GPU_IDLE),
-
-	/* KBASE_PM_EVENT_GPU_IDLE */
-	(1 << KBASE_PM_EVENT_GPU_ACTIVE),
-
-	/* KBASE_PM_EVENT_POLICY_CHANGE */
-	0,
-
-	/* KBASE_PM_EVENT_SYSTEM_SUSPEND */
-	(1 << KBASE_PM_EVENT_SYSTEM_RESUME),
-
-	/* KBASE_PM_EVENT_SYSTEM_RESUME */
-	(1 << KBASE_PM_EVENT_SYSTEM_SUSPEND),
-
-	/* KBASE_PM_EVENT_CHANGE_GPU_STATE */
-	0
-};
-
-/** Build-time assertions
- *
- * If ANY of these fail, then you MUST:
- * - Check that kbase_pm_mergable_events[] is properly synced up with the
- *   kbase_pm_event enum in mali_kbase_pm.h
- * - Check that the kbase_pm_event_bitmask typedef is large enough to fit
- *   1 << KBASEP_PM_EVENT_LAST
- *
- * This is non-static to avoid object-compilation warning. */
-void kbasep_pm_build_checks(void)
-{
-	BUILD_BUG_ON(KBASEP_PM_EVENT_FIRST != 0);
-	BUILD_BUG_ON(ARRAY_SIZE(kbase_pm_mergable_events) != KBASEP_PM_EVENT_LAST+1);
-	BUILD_BUG_ON(sizeof(kbase_pm_mergable_events[0])*8 < KBASEP_PM_EVENT_LAST+1);
-}
-
 void kbase_pm_register_access_enable(kbase_device *kbdev)
 {
 	kbase_pm_callback_conf *callbacks;
@@ -119,13 +75,15 @@ mali_error kbase_pm_init(kbase_device *kbdev)
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
+	mutex_init(&kbdev->pm.lock);
+
 	kbdev->pm.gpu_powered = MALI_FALSE;
 	kbdev->pm.suspending = MALI_FALSE;
-	kbdev->pm.gpu_irq_mask = 0;
-	kbdev->pm.mmu_irq_mask = 0;
-	kbdev->pm.job_irq_mask = 0;
-
-	atomic_set(&kbdev->pm.gpu_in_desired_state, MALI_TRUE);
+#ifdef CONFIG_MALI_DEBUG
+	kbdev->pm.driver_ready_for_irqs = MALI_FALSE;
+#endif /* CONFIG_MALI_DEBUG */
+	kbdev->pm.gpu_in_desired_state = MALI_TRUE;
+	init_waitqueue_head(&kbdev->pm.gpu_in_desired_state_wait);
 
 	callbacks = (kbase_pm_callback_conf *) kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS);
 	if (callbacks) {
@@ -154,31 +112,143 @@ mali_error kbase_pm_init(kbase_device *kbdev)
 	init_waitqueue_head(&kbdev->pm.l2_powered_wait);
 	kbdev->pm.l2_powered = 0;
 
-	init_waitqueue_head(&kbdev->pm.power_state_wait);
-	kbdev->pm.power_state = PM_POWER_STATE_TRANS;
-
-	init_waitqueue_head(&kbdev->pm.no_outstanding_event_wait);
-	kbdev->pm.no_outstanding_event = 1;
+	init_waitqueue_head(&kbdev->pm.reset_done_wait);
+	kbdev->pm.reset_done = MALI_FALSE;
 
 	init_waitqueue_head(&kbdev->pm.zero_active_count_wait);
 	kbdev->pm.active_count = 0;
 
-	kbdev->pm.workqueue = alloc_workqueue("kbase_pm", WQ_NON_REENTRANT | WQ_HIGHPRI | WQ_MEM_RECLAIM, 1);
-	if (NULL == kbdev->pm.workqueue)
-		goto workq_fail;
-
 	spin_lock_init(&kbdev->pm.power_change_lock);
-	spin_lock_init(&kbdev->pm.active_count_lock);
 	spin_lock_init(&kbdev->pm.gpu_cycle_counter_requests_lock);
 	spin_lock_init(&kbdev->pm.gpu_powered_lock);
 	return MALI_ERROR_NONE;
-
- workq_fail:
-	kbasep_pm_metrics_term(kbdev);
-	return MALI_ERROR_FUNCTION_FAILED;
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_init)
+
+/**
+ * Core state function that clears all desired states.
+ */
+STATIC void kbasep_pm_core_state_func_clearall(struct kbase_device *kbdev)
+{
+	kbdev->pm.desired_shader_state = 0u;
+	kbdev->pm.desired_tiler_state = 0u;
+}
+
+/**
+ * Set the new desired state from the given core_state_func, and then start
+ * transitioning cores if the desired state changed.
+ */
+STATIC void kbasep_pm_set_desired_and_update_state(struct kbase_device *kbdev,
+                                                   kbase_pm_core_state_func *core_state_func)
+{
+	u64 prev_shader_state = kbdev->pm.desired_shader_state;
+	u64 prev_tiler_state = kbdev->pm.desired_tiler_state;
+	lockdep_assert_held(&kbdev->pm.power_change_lock);
+
+	core_state_func(kbdev);
+
+	/* Optimize out redundant state transitions: only transition when we
+	 * have something to do */
+	if (prev_shader_state != kbdev->pm.desired_shader_state
+		|| prev_tiler_state != kbdev->pm.desired_tiler_state) {
+		mali_bool cores_are_available;
+		if (prev_shader_state != kbdev->pm.desired_shader_state)
+			KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_DESIRED, NULL, NULL, 0u, (u32) kbdev->pm.desired_shader_state);
+		if (prev_tiler_state != kbdev->pm.desired_tiler_state)
+			KBASE_TRACE_ADD(kbdev, PM_CORES_CHANGE_DESIRED_TILER, NULL, NULL, 0u, (u32) kbdev->pm.desired_tiler_state);
+		cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
+		/* Don't need 'cores_are_available', because we don't return anything */
+		CSTD_UNUSED(cores_are_available);
+	}
+}
+
+void kbase_pm_update_cores_state_nolock(struct kbase_device *kbdev, kbase_pm_policy_func policy_func)
+{
+	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	KBASE_DEBUG_ASSERT(0 <= policy_func && policy_func < KBASE_PM_POLICY_FUNC_COUNT);
+	/* NOTE: if there isn't a current policy, kbase_pm_set_policy() will retry
+	 * the core_state_func[policy_func] and kbase_pm_check_transitions_nolock()
+	 * calls anyway */
+
+	if (kbdev->pm.current_policy)
+		kbasep_pm_set_desired_and_update_state(kbdev,
+		                                       kbdev->pm.current_policy->core_state_func[policy_func]);
+}
+
+void kbase_pm_update_cores_state(struct kbase_device *kbdev, kbase_pm_policy_func policy_func)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	kbase_pm_update_cores_state_nolock(kbdev, policy_func);
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+}
+
+/**
+ * Power on the GPU, and optionally the cores too
+ *
+ * If the GPU or cores are already switched on, then the state of those on
+ * component(s) are not modified.
+ */
+STATIC void kbase_pm_do_poweron(kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->pm.lock);
+
+	/* Turn clocks and interrupts on - no-op if we haven't done a previous
+	 * kbase_pm_clock_off() */
+	kbase_pm_clock_on(kbdev);
+
+	/* Turn on any cores the policy needs */
+	kbase_pm_update_cores_state(kbdev, KBASE_PM_POLICY_FUNC_ON_ACTIVE_CORE_STATE);
+
+	/* NOTE: We don't wait to reach the desired state, since running atoms
+	 * will wait for that state to be reached anyway */
+}
+
+/**
+ * Power off the GPU and/or any cores requested by the Power Policy
+ *
+ * When KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED is not set in poweroff_flags,
+ * this forces both the cores and the GPU off - regardless of whether the
+ * policy has this flag set.
+ *
+ * If the GPU or cores are already switched off, then the state off those off
+ * component(s) are not modified.
+ */
+STATIC void kbase_pm_do_poweroff(kbase_device *kbdev, kbase_pm_policy_flags poweroff_flags)
+{
+	lockdep_assert_held(&kbdev->pm.lock);
+	KBASE_DEBUG_ASSERT( !(poweroff_flags &
+	                      ~(kbase_pm_policy_flags)(KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED)));
+
+	/* NOTE: We won't wait to reach the core's desired state, even if we're
+	 * powering off the GPU itself too. It's safe to cut the power whilst
+	 * they're transitioning to off, because the cores should be idle and all
+	 * cache flushes should already have occurred */
+
+	if ((poweroff_flags & KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED)) {
+		/* Keep the GPU powered, but turn off any cores the policy doesn't need */
+		kbase_pm_update_cores_state(kbdev, KBASE_PM_POLICY_FUNC_ON_IDLE_CORE_STATE);
+
+		/* Consume any change-state events */
+		kbase_timeline_pm_check_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_STATE_CHANGED);
+	} else {
+		/* The GPU must be powered off; regardless of what the policy says, we
+		 * must power off cores and the GPU */
+		unsigned long flags;
+
+		spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+		/* Force off the cores */
+		kbasep_pm_set_desired_and_update_state(kbdev,
+		                                       &kbasep_pm_core_state_func_clearall);
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+		/* Consume any change-state events */
+		kbase_timeline_pm_check_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_STATE_CHANGED);
+		/* Disable interrupts and turn the clock off */
+		kbase_pm_clock_off(kbdev);
+	}
+}
 
 mali_error kbase_pm_powerup(kbase_device *kbdev)
 {
@@ -186,21 +256,21 @@ mali_error kbase_pm_powerup(kbase_device *kbdev)
 	mali_error ret;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
+
+	mutex_lock(&kbdev->pm.lock);
+
 	/* A suspend won't happen during startup/insmod */
 	KBASE_DEBUG_ASSERT(!kbase_pm_is_suspending(kbdev));
+
 	/* Power up the GPU, don't enable IRQs as we are not ready to receive them. */
 	ret = kbase_pm_init_hw(kbdev, MALI_FALSE );
 	if (ret != MALI_ERROR_NONE)
 		return ret;
 
-	kbase_pm_power_transitioning(kbdev);
-
 	kbasep_pm_read_present_cores(kbdev);
 
 	/* Pretend the GPU is active to prevent a power policy turning the GPU cores off */
-	spin_lock_irqsave(&kbdev->pm.active_count_lock, flags);
 	kbdev->pm.active_count = 1;
-	spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
 
 	spin_lock_irqsave(&kbdev->pm.gpu_cycle_counter_requests_lock, flags);
 	/* Ensure cycle counter is off */
@@ -208,69 +278,30 @@ mali_error kbase_pm_powerup(kbase_device *kbdev)
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_COMMAND), GPU_COMMAND_CYCLE_COUNT_STOP, NULL);
 	spin_unlock_irqrestore(&kbdev->pm.gpu_cycle_counter_requests_lock, flags);
 
-	atomic_set(&kbdev->pm.pending_events, 0);
-
-	atomic_set(&kbdev->pm.work_active, KBASE_PM_WORK_ACTIVE_STATE_INACTIVE);
-
-	kbdev->pm.new_policy = NULL;
 	kbdev->pm.current_policy = policy_list[0];
 	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_INIT, NULL, NULL, 0u, kbdev->pm.current_policy->id);
 
-	/* We are ready to receive IRQ's now as power policy is set up, so enable them now. */
-	kbase_pm_enable_interrupts(kbdev);
-
 	kbdev->pm.current_policy->init(kbdev);
 
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_POLICY_INIT);
+	/* We are ready to receive IRQ's now as power policy is set up, so enable them now. */
+#ifdef CONFIG_MALI_DEBUG
+	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
+	kbdev->pm.driver_ready_for_irqs = MALI_TRUE;
+	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
+#endif
+	kbase_pm_enable_interrupts(kbdev);
 
-	/* Idle the GPU */
+	/* Turn on the GPU and any cores needed by the policy */
+	kbase_pm_do_poweron(kbdev);
+	mutex_unlock(&kbdev->pm.lock);
+
+	/* Idle the GPU and/or cores, if the policy wants it to */
 	kbase_pm_context_idle(kbdev);
 
 	return MALI_ERROR_NONE;
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_powerup)
-
-void kbase_pm_power_transitioning(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-	kbdev->pm.power_state = PM_POWER_STATE_TRANS;
-	wake_up(&kbdev->pm.power_state_wait);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_power_transitioning)
-
-void kbase_pm_power_up_done(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-	kbdev->pm.power_state = PM_POWER_STATE_ON;
-	wake_up(&kbdev->pm.power_state_wait);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_power_up_done)
-
-void kbase_pm_reset_done(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-	kbdev->pm.power_state = PM_POWER_STATE_ON;
-	wake_up(&kbdev->pm.power_state_wait);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_reset_done)
-
-void kbase_pm_power_down_done(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-	kbdev->pm.power_state = PM_POWER_STATE_OFF;
-	wake_up(&kbdev->pm.power_state_wait);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_power_down_done)
-
-static void kbase_pm_wait_for_no_outstanding_events(kbase_device *kbdev)
-{
-	wait_event(kbdev->pm.no_outstanding_event_wait, kbdev->pm.no_outstanding_event == 1);
-}
 
 void kbase_pm_context_active(kbase_device *kbdev)
 {
@@ -279,12 +310,20 @@ void kbase_pm_context_active(kbase_device *kbdev)
 
 int kbase_pm_context_active_handle_suspend(kbase_device *kbdev, kbase_pm_suspend_handler suspend_handler)
 {
-	unsigned long flags;
 	int c;
+	int old_count;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
-	spin_lock_irqsave(&kbdev->pm.active_count_lock, flags);
+	/* Trace timeline information about how long it took to handle the decision
+	 * to powerup. Sometimes the event might be missed due to reading the count
+	 * outside of mutex, but this is necessary to get the trace timing
+	 * correct. */
+	old_count = kbdev->pm.active_count;
+	if (old_count == 0)
+		kbase_timeline_pm_send_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_ACTIVE);
+
+	mutex_lock(&kbdev->pm.lock);
 	if (kbase_pm_is_suspending(kbdev))
 	{
 		switch (suspend_handler) {
@@ -293,7 +332,9 @@ int kbase_pm_context_active_handle_suspend(kbase_device *kbdev, kbase_pm_suspend
 				break;
 			/* FALLTHROUGH */
 		case KBASE_PM_SUSPEND_HANDLER_DONT_INCREASE:
-			spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
+			mutex_unlock(&kbdev->pm.lock);
+			if (old_count == 0)
+				kbase_timeline_pm_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_ACTIVE);
 			return 1;
 
 		case KBASE_PM_SUSPEND_HANDLER_NOT_POSSIBLE:
@@ -304,20 +345,22 @@ int kbase_pm_context_active_handle_suspend(kbase_device *kbdev, kbase_pm_suspend
 		}
 	}
 	c = ++kbdev->pm.active_count;
-	spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
 
 	KBASE_TRACE_ADD_REFCOUNT(kbdev, PM_CONTEXT_ACTIVE, NULL, NULL, 0u, c);
 
+	/* Trace the event being handled */
+	if (old_count == 0)
+		kbase_timeline_pm_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_ACTIVE);
+
 	if (c == 1) {
-		/* First context active */
-		kbase_pm_send_event(kbdev, KBASE_PM_EVENT_GPU_ACTIVE);
+		/* First context active: Power on the GPU and any cores requested by
+		 * the policy */
+		kbase_pm_do_poweron(kbdev);
 
 		kbasep_pm_record_gpu_active(kbdev);
 	}
-	/* Synchronise with the power policy to ensure that the event has been noticed */
-	kbase_pm_wait_for_no_outstanding_events(kbdev);
 
-	kbase_pm_wait_for_power_up(kbdev);
+	mutex_unlock(&kbdev->pm.lock);
 	return 0;
 }
 
@@ -325,12 +368,20 @@ KBASE_EXPORT_TEST_API(kbase_pm_context_active)
 
 void kbase_pm_context_idle(kbase_device *kbdev)
 {
-	unsigned long flags;
 	int c;
+	int old_count;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
-	spin_lock_irqsave(&kbdev->pm.active_count_lock, flags);
+	/* Trace timeline information about how long it took to handle the decision
+	 * to powerdown. Sometimes the event might be missed due to reading the
+	 * count outside of mutex, but this is necessary to get the trace timing
+	 * correct. */
+	old_count = kbdev->pm.active_count;
+	if (old_count == 0)
+		kbase_timeline_pm_send_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_IDLE);
+
+	mutex_lock(&kbdev->pm.lock);
 
 	c = --kbdev->pm.active_count;
 
@@ -338,21 +389,27 @@ void kbase_pm_context_idle(kbase_device *kbdev)
 
 	KBASE_DEBUG_ASSERT(c >= 0);
 
-	if (c == 0) {
-		/* Last context has gone idle */
-		kbase_pm_send_event(kbdev, KBASE_PM_EVENT_GPU_IDLE);
+	/* Trace the event being handled */
+	if (old_count == 0)
+		kbase_timeline_pm_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_IDLE);
 
+	if (c == 0) {
+		kbase_pm_policy_flags poweroff_flags = kbdev->pm.current_policy->flags &
+		                                       KBASE_PM_POLICY_FLAG_KEEP_GPU_POWERED;
+
+		/* Last context has gone idle */
 		kbasep_pm_record_gpu_idle(kbdev);
 
-		/* Wake up anyone waiting for this to become 0 (e.g. suspend) */
+		/* Powerdown only what the policy wishes to powerdown */
+		kbase_pm_do_poweroff(kbdev, poweroff_flags);
+
+		/* Wake up anyone waiting for this to become 0 (e.g. suspend). The
+		 * waiters must synchronize with us by locking the pm.lock after
+		 * waiting */
 		wake_up(&kbdev->pm.zero_active_count_wait);
 	}
 
-	/* We must wait for the above functions to finish (in the case c==0) before releasing the lock otherwise there is
-	 * a race with another thread calling kbase_pm_context_active - in this case the IDLE message could be sent
-	 * *after* the ACTIVE message causing the policy and metrics systems to become confused
-	 */
-	spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
+	mutex_unlock(&kbdev->pm.lock);
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_context_idle)
@@ -361,58 +418,34 @@ void kbase_pm_halt(kbase_device *kbdev)
 {
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
+	mutex_lock(&kbdev->pm.lock);
 	if (kbdev->pm.current_policy != NULL) {
-		/* Turn the GPU off */
-		kbase_pm_send_event(kbdev, KBASE_PM_EVENT_SYSTEM_SUSPEND);
-		/* Wait for the policy to acknowledge */
-		kbase_pm_wait_for_power_down(kbdev);
+		/* Turn the GPU off and all the cores, regardless of whether or not the
+		 * policy keeps them on */
+		kbase_pm_do_poweroff(kbdev, 0u);
 	}
+	mutex_unlock(&kbdev->pm.lock);
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_halt)
 
 void kbase_pm_term(kbase_device *kbdev)
 {
-	unsigned long flags;
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	KBASE_DEBUG_ASSERT(kbdev->pm.active_count == 0);
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_cycle_counter_requests == 0);
-
-	/* Destroy the workqueue - this ensures that all messages have been processed */
-	destroy_workqueue(kbdev->pm.workqueue);
 
 	if (kbdev->pm.current_policy != NULL) {
 		/* Free any resources the policy allocated */
 		KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_TERM, NULL, NULL, 0u, kbdev->pm.current_policy->id);
 		kbdev->pm.current_policy->term(kbdev);
 	}
-	/* Synchronise with other threads */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 
 	/* Shut down the metrics subsystem */
 	kbasep_pm_metrics_term(kbdev);
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_term)
-
-void kbase_pm_wait_for_power_up(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-
-	wait_event(kbdev->pm.power_state_wait, kbdev->pm.power_state == PM_POWER_STATE_ON);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_wait_for_power_up)
-
-void kbase_pm_wait_for_power_down(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-
-	wait_event(kbdev->pm.power_state_wait, kbdev->pm.power_state == PM_POWER_STATE_OFF);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_wait_for_power_down)
 
 int kbase_pm_list_policies(const kbase_pm_policy * const **list)
 {
@@ -437,210 +470,62 @@ KBASE_EXPORT_TEST_API(kbase_pm_get_policy)
 
 void kbase_pm_set_policy(kbase_device *kbdev, const kbase_pm_policy *new_policy)
 {
+	const kbase_pm_policy * old_policy;
+	unsigned long flags;
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	KBASE_DEBUG_ASSERT(new_policy != NULL);
 
-	if (kbdev->pm.new_policy) {
-		/* A policy change is already outstanding */
-		KBASE_TRACE_ADD(kbdev, PM_SET_POLICY, NULL, NULL, 0u, -1);
-		return;
-	}
 	KBASE_TRACE_ADD(kbdev, PM_SET_POLICY, NULL, NULL, 0u, new_policy->id);
+
 	/* During a policy change we pretend the GPU is active */
 	/* A suspend won't happen here, because we're in a syscall from a userspace thread */
 	kbase_pm_context_active(kbdev);
 
-	kbdev->pm.new_policy = new_policy;
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_POLICY_CHANGE);
+	mutex_lock(&kbdev->pm.lock);
+
+	/* Remove the policy to prevent IRQ handlers from working on it */
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	old_policy = kbdev->pm.current_policy;
+	kbdev->pm.current_policy = NULL;
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_TERM, NULL, NULL, 0u, old_policy->id);
+	old_policy->term(kbdev);
+
+	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_INIT, NULL, NULL, 0u, new_policy->id);
+	new_policy->init(kbdev);
+
+	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	kbdev->pm.current_policy = new_policy;
+	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+	/* Force the GPU on, and optionally any cores if the new policy requires them */
+	kbase_pm_do_poweron(kbdev);
+
+	/* If any core power state changes were previously attempted, but couldn't
+	 * be made because the policy was changing (current_policy was NULL), then
+	 * re-try them here. KBASE_PM_POLICY_FUNC_ATOM_CORE_STATE is the only one
+	 * that can happen, because a) we've done kbase_pm_context_active() above,
+	 * and b) we hold kbdev->pm.lock */
+	kbase_pm_update_cores_state(kbdev, KBASE_PM_POLICY_FUNC_ATOM_CORE_STATE);
+
+	mutex_unlock(&kbdev->pm.lock);
+
+	/* Now the policy change is finished, we release our fake context active reference */
+	kbase_pm_context_idle(kbdev);
 }
 
 KBASE_EXPORT_TEST_API(kbase_pm_set_policy)
 
-void kbase_pm_change_policy(kbase_device *kbdev)
-{
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-
-	KBASE_TRACE_ADD(kbdev, PM_CHANGE_POLICY, NULL, NULL, 0u, kbdev->pm.current_policy->id | (kbdev->pm.new_policy->id << 16));
-
-	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_TERM, NULL, NULL, 0u, kbdev->pm.current_policy->id);
-	kbdev->pm.current_policy->term(kbdev);
-	kbdev->pm.current_policy = kbdev->pm.new_policy;
-	KBASE_TRACE_ADD(kbdev, PM_CURRENT_POLICY_INIT, NULL, NULL, 0u, kbdev->pm.current_policy->id);
-	kbdev->pm.current_policy->init(kbdev);
-
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_POLICY_INIT);
-
-	/* Changing policy might have occurred during an update to the core desired
-	 * states, but the KBASE_PM_EVENT_CHANGE_GPU_STATE event could've been
-	 * optimized out if the previous policy had
-	 * KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS set.
-	 *
-	 * In any case, we issue a KBASE_PM_EVENT_CHANGE_GPU_STATE just in case. */
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_CHANGE_GPU_STATE);
-
-	/* Now the policy change is finished, we release our fake context active reference */
-	kbase_pm_context_idle(kbdev);
-
-	kbdev->pm.new_policy = NULL;
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_change_policy)
-
-/** Callback for the power management work queue.
- *
- * This function is called on the power management work queue and is responsible for delivering events to the active
- * power policy. It manipulates the @ref kbase_pm_device_data.work_active field of @ref kbase_pm_device_data to track
- * whether all events have been consumed.
- *
- * @param data      A pointer to the @c pm.work field of the @ref kbase_device struct
- */
-STATIC void kbase_pm_worker(struct work_struct *data)
-{
-	kbase_device *kbdev = container_of(data, kbase_device, pm.work);
-	int pending_events;
-	int old_value;
-	int i;
-
-	do {
-		atomic_set(&kbdev->pm.work_active, KBASE_PM_WORK_ACTIVE_STATE_PROCESSING);
-
-		/* Atomically read and clear the bit mask */
-		pending_events = atomic_read(&kbdev->pm.pending_events);
-
-		do {
-			old_value = pending_events;
-			pending_events = atomic_cmpxchg(&kbdev->pm.pending_events, old_value, 0);
-		} while (old_value != pending_events);
-
-		for (i = 0; pending_events; i++) {
-			if (pending_events & (1 << i)) {
-				KBASE_TRACE_ADD(kbdev, PM_HANDLE_EVENT, NULL, NULL, 0u, i);
-				kbase_timeline_pm_handle_event(kbdev, (kbase_pm_event)i);
-				kbdev->pm.current_policy->event(kbdev, (kbase_pm_event) i);
-
-				pending_events &= ~(1 << i);
-			}
-		}
-		i = atomic_cmpxchg(&kbdev->pm.work_active, KBASE_PM_WORK_ACTIVE_STATE_PROCESSING, KBASE_PM_WORK_ACTIVE_STATE_INACTIVE);
-	} while (i == KBASE_PM_WORK_ACTIVE_STATE_PENDING_EVT);
-	kbdev->pm.no_outstanding_event = 1;
-	wake_up(&kbdev->pm.no_outstanding_event_wait);
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_worker)
-
-/** Merge an event into the list of events to deliver.
- *
- * This ensures that if, for example, a GPU_IDLE is immediately followed by a GPU_ACTIVE then instead of delivering
- * both messages to the policy the GPU_IDLE is simply discarded.
- *
- * In particular in the sequence GPU_IDLE, GPU_ACTIVE, GPU_IDLE the resultant message is GPU_IDLE and not (GPU_IDLE
- * and GPU_ACTIVE).
- *
- * @param old_events    The bit mask of events that were previously pending
- * @param new_event     The event that should be merged into old_events
- *
- * @return The combination of old_events and the new event
- */
-STATIC int kbasep_pm_merge_event(int old_events, kbase_pm_event new_event)
-{
-	int mergable_events = kbase_pm_get_mergable_events(new_event);
-	/* Special case policy initialisation: ignore any pending old_events,
-	 * but still have the INIT event set */
-	if (new_event == KBASE_PM_EVENT_POLICY_INIT)
-		return (old_events & ~mergable_events) | (1 << KBASE_PM_EVENT_POLICY_INIT);
-
-	/* If any mergable events are present, then remove them and don't set the
-	 * new_event */
-	if (old_events & mergable_events)
-		return old_events & ~mergable_events;
-
-	/* Otherwise, the event is either not mergable, or didn't have an old
-	 * event to merge with */
-	return old_events | (1 << new_event);
-}
-
-KBASE_EXPORT_TEST_API(kbasep_pm_merge_event)
-
-void kbase_pm_send_event(kbase_device *kbdev, kbase_pm_event event)
-{
-	int pending_events;
-	int work_active;
-	int old_value, new_value;
-	kbase_timeline_pm_send_event_data timeline_data;
-
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-
-	if ((kbdev->pm.current_policy->flags & KBASE_PM_POLICY_FLAG_NO_CORE_TRANSITIONS)
-	    && event == KBASE_PM_EVENT_CHANGE_GPU_STATE) {
-		/* Optimize out event sending when the policy doesn't transition individual cores */
-		return;
-	}
-
-	KBASE_TRACE_ADD(kbdev, PM_SEND_EVENT, NULL, NULL, 0u, event);
-
-	kbase_timeline_pm_prepare_send_event(kbdev, &timeline_data, event);
-	pending_events = atomic_read(&kbdev->pm.pending_events);
-
-	/* Atomically OR the new event into the pending_events bit mask */
-	do {
-		old_value = pending_events;
-		new_value = kbasep_pm_merge_event(pending_events, event);
-		if (old_value == new_value) {
-			/* Event already pending */
-			kbase_timeline_pm_send_or_merge_event(kbdev, &timeline_data, old_value, new_value);
-			return;
-		}
-		pending_events = atomic_cmpxchg(&kbdev->pm.pending_events, old_value, new_value);
-	} while (old_value != pending_events);
-
-	kbase_timeline_pm_send_or_merge_event(kbdev, &timeline_data, old_value, new_value);
-
-	work_active = atomic_read(&kbdev->pm.work_active);
-	do {
-		old_value = work_active;
-		switch (old_value) {
-		case KBASE_PM_WORK_ACTIVE_STATE_INACTIVE:
-			/* Need to enqueue an event */
-			new_value = KBASE_PM_WORK_ACTIVE_STATE_ENQUEUED;
-			break;
-		case KBASE_PM_WORK_ACTIVE_STATE_ENQUEUED:
-			/* Event already queued */
-			return;
-		case KBASE_PM_WORK_ACTIVE_STATE_PROCESSING:
-			/* Event being processed, we need to ensure it checks for another event */
-			new_value = KBASE_PM_WORK_ACTIVE_STATE_PENDING_EVT;
-			break;
-		case KBASE_PM_WORK_ACTIVE_STATE_PENDING_EVT:
-			/* Event being processed, but another check for events is going to happen */
-			return;
-		default:
-			KBASE_DEBUG_ASSERT(0);
-		}
-		work_active = atomic_cmpxchg(&kbdev->pm.work_active, old_value, new_value);
-	} while (old_value != work_active);
-
-	if (old_value == KBASE_PM_WORK_ACTIVE_STATE_INACTIVE) {
-		KBASE_TRACE_ADD(kbdev, PM_ACTIVATE_WORKER, NULL, NULL, 0u, 0u);
-		kbdev->pm.no_outstanding_event = 0;
-		KBASE_DEBUG_ASSERT(0 == object_is_on_stack(&kbdev->pm.work));
-		INIT_WORK(&kbdev->pm.work, kbase_pm_worker);
-		queue_work(kbdev->pm.workqueue, &kbdev->pm.work);
-	}
-}
-
-KBASE_EXPORT_TEST_API(kbase_pm_send_event)
-
 void kbase_pm_suspend(struct kbase_device *kbdev)
 {
 	int nr_keep_gpu_powered_ctxs;
-	unsigned long flags;
 	KBASE_DEBUG_ASSERT(kbdev);
 
-	spin_lock_irqsave(&kbdev->pm.active_count_lock, flags);
+	mutex_lock(&kbdev->pm.lock);
 	KBASE_DEBUG_ASSERT(!kbase_pm_is_suspending(kbdev));
 	kbdev->pm.suspending = MALI_TRUE;
-	spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
+	mutex_unlock(&kbdev->pm.lock);
 
 	/* From now on, the active count will drop towards zero. Sometimes, it'll
 	 * go up briefly before going down again. However, once it reaches zero it
@@ -665,38 +550,29 @@ void kbase_pm_suspend(struct kbase_device *kbdev)
 	 * reaches zero. */
 	wait_event(kbdev->pm.zero_active_count_wait, kbdev->pm.active_count == 0);
 
-	/* Wait for the idle event and any other queued events to reach the power policy */
-	kbase_pm_wait_for_no_outstanding_events(kbdev);
 
-	/* Send the suspend event to the power policy, only after the PM active
-	 * count reaches zero (otherwise, we risk turning it off prematurely) */
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_SYSTEM_SUSPEND);
+	/* NOTE: We synchronize with anything that was just finishing a
+	 * kbase_pm_context_idle() call by locking the pm.lock below */
 
-	/* Wait for event to be submitted */
-	kbase_pm_wait_for_no_outstanding_events(kbdev);
-
-	/* Wait for the policy to suspend the device */
-	kbase_pm_wait_for_power_down(kbdev);
+	/* Force power off the GPU and all cores (regardless of policy), only after
+	 * the PM active count reaches zero (otherwise, we risk turning it off
+	 * prematurely) */
+	mutex_lock(&kbdev->pm.lock);
+	kbase_pm_do_poweroff(kbdev, 0u);
+	mutex_unlock(&kbdev->pm.lock);
 }
 
 void kbase_pm_resume(struct kbase_device *kbdev)
 {
 	int nr_keep_gpu_powered_ctxs;
-	unsigned long flags;
-
-	/* Send the event to the power policy */
-	kbase_pm_send_event(kbdev, KBASE_PM_EVENT_SYSTEM_RESUME);
-
-	/* Wait for event to be submitted */
-	kbase_pm_wait_for_no_outstanding_events(kbdev);
-
-	/* Wait for the policy to resume the device */
-	kbase_pm_wait_for_power_up(kbdev);
 
 	/* MUST happen before any pm_context_active calls occur */
-	spin_lock_irqsave(&kbdev->pm.active_count_lock, flags);
+	mutex_lock(&kbdev->pm.lock);
 	kbdev->pm.suspending = MALI_FALSE;
-	spin_unlock_irqrestore(&kbdev->pm.active_count_lock, flags);
+	mutex_unlock(&kbdev->pm.lock);
+
+	/* Initial active call, to power on the GPU/cores if needed */
+	kbase_pm_context_active(kbdev);
 
 	/* Restore the keep_gpu_powered calls */
 	for (nr_keep_gpu_powered_ctxs = atomic_read(&kbdev->keep_gpu_powered_count);
@@ -716,4 +592,7 @@ void kbase_pm_resume(struct kbase_device *kbdev)
 	 * atoms */
 	kbasep_js_resume(kbdev);
 
+	/* Matching idle call, to power off the GPU/cores if we didn't actually
+	 * need it and the policy doesn't want it on */
+	kbase_pm_context_idle(kbdev);
 }

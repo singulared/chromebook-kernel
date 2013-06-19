@@ -172,7 +172,7 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 	for (i = 0; i < BASE_JM_SUBMIT_SLOTS; ++i)
 		kbdev->timeline.slot_atoms_submitted[i] = 0;
 
-	for (i = 0; i <= KBASEP_PM_EVENT_LAST; ++i)
+	for (i = 0; i <= KBASEP_TIMELINE_PM_EVENT_LAST; ++i)
 		atomic_set(&kbdev->timeline.pm_event_uid[i], 0);
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
@@ -370,8 +370,44 @@ void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)
 	 * further power transitions and we don't want to miss the interrupt raised to notify us that these further
 	 * transitions have finished.
 	 */
-	if (val & POWER_CHANGED_ALL)
-		kbase_pm_check_transitions(kbdev);
+	if (val & POWER_CHANGED_ALL) {
+		mali_bool cores_are_available;
+		unsigned long flags;
+
+		spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+		cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+
+		if (cores_are_available) {
+			/* Fast-path Job Scheduling on PM IRQ */
+			int js;
+			/* Log timelining information that a change in state has completed */
+			kbase_timeline_pm_handle_event(kbdev, KBASE_TIMELINE_PM_EVENT_GPU_STATE_CHANGED);
+
+			spin_lock_irqsave(&kbdev->js_data.runpool_irq.lock, flags);
+			/* A simplified check to ensure the last context hasn't exited
+			 * after dropping the PM lock whilst doing a PM IRQ: any bits set
+			 * in 'submit_allowed' indicate that we have a context in the
+			 * runpool (which can't leave whilst we hold this lock). It is
+			 * sometimes zero even when we have a context in the runpool, but
+			 * that's no problem because we'll be unable to submit jobs
+			 * anyway */
+			if (kbdev->js_data.runpool_irq.submit_allowed)
+				for (js = 0; js < kbdev->gpu_props.num_job_slots; ++js) {
+					mali_bool needs_retry;
+					s8 submitted_count = 0;
+					needs_retry = kbasep_js_try_run_next_job_on_slot_irq_nolock(kbdev, js, &submitted_count);
+					/* Don't need to retry outside of IRQ context - this can
+					 * only happen if we submitted too many in one IRQ, such
+					 * that they were completing faster than we could
+					 * submit. In this case, a job IRQ will fire to cause more
+					 * work to be submitted in some way */
+					CSTD_UNUSED(needs_retry);
+				}
+			spin_unlock_irqrestore(&kbdev->js_data.runpool_irq.lock, flags);
+		}
+	}
+	KBASE_TRACE_ADD(kbdev, CORE_GPU_IRQ_DONE, NULL, NULL, 0u, val);
 }
 
 /*

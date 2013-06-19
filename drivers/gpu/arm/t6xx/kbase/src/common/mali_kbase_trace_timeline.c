@@ -111,77 +111,41 @@ void kbase_timeline_job_slot_done(kbase_device *kbdev, kbase_context *kctx,
 	KBASE_TIMELINE_ATOMS_SUBMITTED(kctx, js, kbdev->timeline.slot_atoms_submitted[js]);
 }
 
-void kbase_timeline_pm_prepare_send_event(kbase_device *kbdev,
-                                          kbase_timeline_pm_send_event_data *data,
-                                          kbase_pm_event event)
+void kbase_timeline_pm_send_event(kbase_device *kbdev, kbase_timeline_pm_event event_sent)
 {
-	int mergable_bitmask = kbase_pm_get_mergable_events(event);
+	int uid = 0;
+	int old_uid;
 
-	data->event = event;
-	while (mergable_bitmask) {
-		int idx;
-		idx = fls(mergable_bitmask) - 1;
+	/* If a producer already exists for the event, try to use their UID (multiple-producers) */
+	uid = atomic_read(&kbdev->timeline.pm_event_uid[event_sent]);
+	old_uid = uid;
 
-		/* Store the UIDs of any events that are mergable with this one */
-		data->mergable_event_uid[idx] = atomic_read(&kbdev->timeline.pm_event_uid[idx]);
+	/* Get a new non-zero UID if we don't have one yet */
+	while (!uid)
+		uid = atomic_inc_return(&kbdev->timeline.pm_event_uid_counter);
 
-		mergable_bitmask &= ~(1 << idx);
-	}
+	/* Try to use this UID */
+	if ( old_uid != atomic_cmpxchg(&kbdev->timeline.pm_event_uid[event_sent], old_uid, uid))
+		/* If it changed, raced with another producer: we've lost this UID */
+		uid = 0;
+
+	KBASE_TIMELINE_PM_SEND_EVENT(kbdev, event_sent, uid);
 }
 
-void kbase_timeline_pm_send_or_merge_event(kbase_device *kbdev,
-                                           kbase_timeline_pm_send_event_data *data,
-                                           int old_events, int new_events)
+void kbase_timeline_pm_check_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event)
 {
-	int merged_events = old_events & ~new_events;
-	kbase_pm_event event_sent = data->event;
-	int event_sent_bitmask = 1 << event_sent;
-	int uid;
-	/* Consume any events that were merged */
-	while (merged_events) {
-		int idx;
-		idx = fls(merged_events) - 1;
+	int uid = atomic_read(&kbdev->timeline.pm_event_uid[event]);
 
-		/* Store the UIDs of any events that are mergable with this one */
-		uid = data->mergable_event_uid[idx];
-
-		/* Grab the merged event's UID, and clear it */
-		if (uid != atomic_cmpxchg(&kbdev->timeline.pm_event_uid[idx], uid, 0))
+	if (uid != 0) {
+		if (uid != atomic_cmpxchg(&kbdev->timeline.pm_event_uid[event], uid, 0))
 			/* If it changed, raced with another consumer: we've lost this UID */
 			uid = 0;
 
-		KBASE_TIMELINE_PM_HANDLE_EVENT(kbdev, idx, uid);
-
-		merged_events &= ~(1 << idx);
+		KBASE_TIMELINE_PM_HANDLE_EVENT(kbdev, event, uid);
 	}
-	/* Produce the new event, if it wasn't merged away */
-	if (new_events & event_sent_bitmask) {
-		int old_uid = 0;
-		uid = 0;
-		/* Work out which UID to use */
-		if (old_events & event_sent_bitmask) {
-			/* A producer already exists for the event, try to use their UID (multiple-producers) */
-			uid = atomic_read(&kbdev->timeline.pm_event_uid[event_sent]);
-			old_uid = uid;
-		}
-
-		/* Get a new non-zero UID if we don't have one yet */
-		while (!uid)
-			uid = atomic_inc_return(&kbdev->timeline.pm_event_uid_counter);
-
-		/* Try to use this UID */
-		if ( old_uid != atomic_cmpxchg(&kbdev->timeline.pm_event_uid[event_sent], old_uid, uid))
-			/* If it changed, raced with another producer: we've lost this UID */
-			uid = 0;
-
-		KBASE_TIMELINE_PM_SEND_EVENT(kbdev, event_sent, uid);
-	}
-
-	CSTD_UNUSED(data);
 }
 
-
-void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_pm_event event)
+void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event)
 {
 	int uid = atomic_read(&kbdev->timeline.pm_event_uid[event]);
 
@@ -191,6 +155,5 @@ void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_pm_event event)
 
 	KBASE_TIMELINE_PM_HANDLE_EVENT(kbdev, event, uid);
 }
-
 
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
