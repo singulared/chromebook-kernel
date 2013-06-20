@@ -163,6 +163,7 @@ clock which they consume.
   aclk300_disp1		420
   fimd1			421
   smmu_fimd1		422
+  aclk400_disp1		423
 
   aclk166		430
   mixer			431

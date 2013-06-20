@@ -120,7 +120,7 @@ enum exynos5420_clks {
 	smmu_mscl2,
 	aclk333 = 400, mfc, smmu_mfcl, smmu_mfcr,
 	aclk200_disp1 = 410, dsim1, dp1, hdmi,
-	aclk300_disp1 = 420, fimd1,
+	aclk300_disp1 = 420, fimd1, smmu_fimd1, aclk400_disp1,
 	aclk166 = 430, mixer,
 	aclk266 = 440, rotator, mdma1, smmu_rotator, smmu_mdma1,
 	aclk300_jpeg = 450, jpeg, jpeg2, smmu_jpeg,
@@ -282,7 +282,9 @@ PNAME(mout_sw_aclk300_gscl_p)	= { "dout_aclk300_gscl", "sclk_spll"};
 PNAME(mout_user_aclk300_gscl_p)	= { "fin_pll", "mout_sw_aclk300_gscl" };
 
 PNAME(mout_sw_aclk300_disp1_p)	= { "dout_aclk300_disp1", "sclk_spll"};
+PNAME(mout_sw_aclk400_disp1_p)	= { "dout_aclk400_disp1", "sclk_spll"};
 PNAME(mout_user_aclk300_disp1_p) = { "fin_pll", "mout_sw_aclk300_disp1" };
+PNAME(mout_user_aclk400_disp1_p) = { "fin_pll", "mout_sw_aclk400_disp1" };
 
 PNAME(mout_sw_aclk300_jpeg_p) = { "dout_aclk300_jpeg", "sclk_spll"};
 PNAME(mout_user_aclk300_jpeg_p)	= { "fin_pll", "mout_sw_aclk300_jpeg" };
@@ -437,6 +439,12 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 							SRC_TOP12, 24, 1),
 	MUX(none, "mout_user_aclk300_disp1", mout_user_aclk300_disp1_p,
 							SRC_TOP5, 24, 1),
+	MUX_A(none, "mout_aclk400_disp1", mout_group1_p, SRC_TOP2, 4, 2,
+							"aclk400_disp1"),
+	MUX(none, "mout_sw_aclk400_disp1", mout_sw_aclk400_disp1_p,
+							SRC_TOP12, 4, 1),
+	MUX(none, "mout_user_aclk400_disp1", mout_user_aclk400_disp1_p,
+							SRC_TOP5, 0, 1),
 	MUX_A(none, "mout_aclk300_jpeg", mout_group1_p, SRC_TOP2, 20, 2,
 							"aclk300_jpeg"),
 	MUX(none, "mout_sw_aclk300_jpeg", mout_sw_aclk300_jpeg_p,
@@ -530,6 +538,8 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 					DIV_TOP2, 20, 3, "aclk300_jpeg_d"),
 	DIV_A(none, "dout_aclk300_disp1", "mout_aclk300_disp1",
 					DIV_TOP2, 24, 3, "aclk300_disp1_d"),
+	DIV_A(none, "dout_aclk400_disp1", "mout_aclk400_disp1", DIV_TOP2,
+						4, 3, "aclk400_disp1_d"),
 	DIV_A(none, "dout_aclk300_gscl", "mout_aclk300_gscl", DIV_TOP2, 28, 3,
 							"aclk300_gscl_d"),
 	DIV(none, "dout_uart0", "mout_uart0", DIV_PERIC0, 8, 4),
@@ -714,7 +724,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(gscl1, "gscl1", "aclk300_gscl", GATE_IP_GSCL0, 1, 0, 0),
 	GATE(clk_3aa, "clk_3aa", "aclk300_gscl", GATE_IP_GSCL0, 2, 0, 0),
 
-	GATE(fimd1, "fimd1", "aclk300_disp1", GATE_IP_DISP1, 0, 0, 0),
+	GATE(fimd1, "fimd1", "aclk400_disp1", GATE_IP_DISP1, 0, 0, 0),
 	GATE(dsim1, "dsim1", "aclk200_disp1", GATE_IP_DISP1, 3, 0, 0),
 	GATE(dp1, "dp1", "aclk200_disp1", GATE_IP_DISP1, 4, 0, 0),
 	GATE(mixer, "mixer", "aclk166", GATE_IP_DISP1, 5, 0, 0),
