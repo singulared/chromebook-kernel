@@ -1943,7 +1943,7 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 	}
 
-	if (host->pdata->quirks & DW_MCI_QUIRK_BYPASS_SMU)
+	if (host->pdata->quirks & DW_MCI_QUIRK_BYPASS_SMU && drv_data)
 		drv_data->cfg_smu(host);
 
 	if (host->pdata->quirks & DW_MCI_QUIRK_HIGHSPEED)
