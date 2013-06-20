@@ -1228,6 +1228,13 @@ static const struct usb_device_id cdc_devs[] = {
 	  .driver_info = (unsigned long) &wwan_info,
 	},
 
+	/* Temporarily prevent the cdc_ncm driver from being associated with
+	 * Huawei modems. See crosbug.com/p/20334 for details.
+	 *
+	 * TODO(benchan): Revert this change once shill can identify and ignore
+	 * a Huawei PPP dongle that is associated with the cdc_ncm driver.
+	 */
+#if 0
 	/* Huawei NCM devices disguised as vendor specific */
 	{ USB_VENDOR_AND_INTERFACE_INFO(0x12d1, 0xff, 0x02, 0x16),
 	  .driver_info = (unsigned long)&wwan_info,
@@ -1238,6 +1245,7 @@ static const struct usb_device_id cdc_devs[] = {
 	{ USB_VENDOR_AND_INTERFACE_INFO(0x12d1, 0xff, 0x02, 0x76),
 	  .driver_info = (unsigned long)&wwan_info,
 	},
+#endif
 
 	/* Infineon(now Intel) HSPA Modem platform */
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x1519, 0x0443,
