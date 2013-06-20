@@ -943,6 +943,8 @@ static void mixer_poweron(struct mixer_context *ctx)
 	if (ctx->powered)
 		return;
 
+	pm_runtime_get_sync(ctx->dev);
+
 	clk_prepare_enable(res->mixer);
 	if (ctx->vp_enabled) {
 		clk_prepare_enable(res->vp);
@@ -982,6 +984,8 @@ static void mixer_poweroff(struct mixer_context *ctx)
 		clk_disable_unprepare(res->sclk_mixer);
 	}
 
+	pm_runtime_put_sync(ctx->dev);
+
 	ctx->powered = false;
 }
 
@@ -993,14 +997,12 @@ static void mixer_dpms(void *ctx, int mode)
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
-		if (pm_runtime_suspended(mixer_ctx->dev))
-			pm_runtime_get_sync(mixer_ctx->dev);
+		mixer_poweron(mixer_ctx);
 		break;
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
 	case DRM_MODE_DPMS_OFF:
-		if (!pm_runtime_suspended(mixer_ctx->dev))
-			pm_runtime_put_sync(mixer_ctx->dev);
+		mixer_poweroff(mixer_ctx);
 		break;
 	default:
 		DRM_DEBUG_KMS("unknown dpms mode: %d\n", mode);
@@ -1301,6 +1303,13 @@ static int mixer_probe(struct platform_device *pdev)
 	mixer_manager.ctx = ctx;
 	exynos_drm_manager_register(&mixer_manager);
 
+	/*
+	 * We need to runtime pm to enable/disable sysmmu since it is a child of
+	 * this driver. Ideally, this would hang off the drm driver's runtime
+	 * operations, but we're not quite there yet.
+	 *
+	 * Tracked in crbug.com/264312
+	 */
 	pm_runtime_enable(dev);
 
 	return 0;
@@ -1320,89 +1329,10 @@ static int mixer_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
-static int mixer_suspend(struct device *dev)
-{
-	struct mixer_context *ctx = get_mixer_context(dev);
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
-	if (pm_runtime_suspended(dev)) {
-		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
-			__func__);
-		return 0;
-	}
-
-	mixer_poweroff(ctx);
-
-	return 0;
-}
-
-static int mixer_resume(struct device *dev)
-{
-	struct mixer_context *ctx = get_mixer_context(dev);
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
-	if (pm_runtime_suspended(dev)) {
-		/* dpms callback should resume the mixer. */
-		DRM_DEBUG_KMS("%s: already runtime-suspended.\n",
-		__func__);
-		return 0;
-	}
-
-	mixer_poweron(ctx);
-
-	/* Restore the vblank interrupts to whichever state DRM wants them. */
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-		mixer_enable_vblank(ctx);
-
-	/*
-	 * in case of dpms on(standby), mixer_apply function will
-	 * be called by encoder's dpms callback to update mixer's
-	 * registers but in case of sleep wakeup, it's not.
-	 * so mixer_apply function should be called here.
-	 */
-	mixer_apply(ctx);
-
-	return 0;
-}
-#endif
-
-#ifdef CONFIG_PM_RUNTIME
-static int mixer_runtime_suspend(struct device *dev)
-{
-	struct mixer_context *ctx = get_mixer_context(dev);
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
-	mixer_poweroff(ctx);
-
-	return 0;
-}
-
-static int mixer_runtime_resume(struct device *dev)
-{
-	struct mixer_context *ctx = get_mixer_context(dev);
-
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
-	mixer_poweron(ctx);
-
-	return 0;
-}
-#endif
-
-static const struct dev_pm_ops mixer_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mixer_suspend, mixer_resume)
-	SET_RUNTIME_PM_OPS(mixer_runtime_suspend, mixer_runtime_resume, NULL)
-};
-
 struct platform_driver mixer_driver = {
 	.driver = {
 		.name = "exynos-mixer",
 		.owner = THIS_MODULE,
-		.pm = &mixer_pm_ops,
 		.of_match_table = mixer_match_types,
 	},
 	.probe = mixer_probe,

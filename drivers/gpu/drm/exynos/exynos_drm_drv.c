@@ -37,6 +37,7 @@
 #include <linux/i2c.h>
 #include <linux/kds.h>
 #include <linux/of_i2c.h>
+#include <linux/pm_runtime.h>
 
 #include <drm/bridge/ptn3460.h>
 #include <drm/bridge/ps8622.h>
@@ -92,6 +93,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		return -ENOMEM;
 	}
 
+	dev_set_drvdata(dev->dev, dev);
 	dev->dev_private = (void *)private;
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
@@ -256,6 +258,41 @@ static int exynos_drm_unload(struct drm_device *dev)
 	return 0;
 }
 
+static int exynos_drm_suspend(struct drm_device *dev, pm_message_t state)
+{
+	struct drm_connector *connector;
+
+	mutex_lock(&dev->mode_config.mutex);
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		int old_dpms = connector->dpms;
+
+		if (connector->funcs->dpms)
+			connector->funcs->dpms(connector, DRM_MODE_DPMS_OFF);
+
+		/* Set the old mode back to the connector for resume */
+		connector->dpms = old_dpms;
+	}
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return 0;
+}
+
+static int exynos_drm_resume(struct drm_device *dev)
+{
+	struct drm_connector *connector;
+
+	mutex_lock(&dev->mode_config.mutex);
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (connector->funcs->dpms)
+			connector->funcs->dpms(connector, connector->dpms);
+	}
+
+	drm_helper_resume_force_mode(dev);
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return 0;
+}
+
 static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv;
@@ -373,6 +410,8 @@ static struct drm_driver exynos_drm_driver = {
 					DRIVER_GEM | DRIVER_PRIME,
 	.load			= exynos_drm_load,
 	.unload			= exynos_drm_unload,
+	.suspend		= exynos_drm_suspend,
+	.resume			= exynos_drm_resume,
 	.open			= exynos_drm_open,
 	.preclose		= exynos_drm_preclose,
 	.lastclose		= exynos_drm_lastclose,
@@ -409,6 +448,9 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	exynos_drm_driver.num_ioctls = DRM_ARRAY_SIZE(exynos_ioctls);
 
+	pm_runtime_enable(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
+
 	return drm_platform_init(&exynos_drm_driver, pdev);
 }
 
@@ -421,12 +463,67 @@ static int exynos_drm_platform_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int exynos_drm_sys_suspend(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	pm_message_t message;
+
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	message.event = PM_EVENT_SUSPEND;
+	return exynos_drm_suspend(drm_dev, message);
+}
+
+static int exynos_drm_sys_resume(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	return exynos_drm_resume(drm_dev);
+}
+#endif
+
+#ifdef CONFIG_PM_RUNTIME
+static int exynos_drm_runtime_suspend(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	pm_message_t message;
+
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	message.event = PM_EVENT_SUSPEND;
+	return exynos_drm_suspend(drm_dev, message);
+}
+
+static int exynos_drm_runtime_resume(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+
+	if (!pm_runtime_suspended(dev))
+		return 0;
+
+	return exynos_drm_resume(drm_dev);
+}
+#endif
+
+static const struct dev_pm_ops exynos_drm_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(exynos_drm_sys_suspend, exynos_drm_sys_resume)
+	SET_RUNTIME_PM_OPS(exynos_drm_runtime_suspend,
+			exynos_drm_runtime_resume, NULL)
+};
+
 static struct platform_driver exynos_drm_platform_driver = {
 	.probe		= exynos_drm_platform_probe,
 	.remove		= exynos_drm_platform_remove,
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "exynos-drm",
+		.pm	= &exynos_drm_pm_ops,
 	},
 };
 
