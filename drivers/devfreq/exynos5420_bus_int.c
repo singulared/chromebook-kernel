@@ -285,6 +285,17 @@ struct int_clk_info aclk_300_disp1[] = {
 	{LV_6, 120000, D_PLL},
 };
 
+struct int_clk_info aclk_400_disp1[] = {
+	/* Level, Freq, Parent_Pll */
+	{LV_0, 300000, D_PLL},
+	{LV_1, 300000, D_PLL},
+	{LV_2, 300000, D_PLL},
+	{LV_3, 300000, D_PLL},
+	{LV_4, 200000, D_PLL},
+	{LV_5, 200000, D_PLL},
+	{LV_6, 120000, D_PLL},
+};
+
 struct int_clk_info aclk_300_jpeg[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 300000, D_PLL},
@@ -335,8 +346,6 @@ EXYNOS5_INT_PM_CLK(aclk_400_wcore, "aclk400_wcore",
 			"aclk400_wcore_d", aclk_400_wcore);
 EXYNOS5_INT_PM_CLK(aclk_200_fsys2, "aclk200_fsys2",
 			"aclk200_fsys2_d", aclk_200_fsys2);
-EXYNOS5_INT_PM_CLK(aclk_200_disp1, "aclk200_disp1",
-			"aclk200_d", aclk_200_disp1);
 EXYNOS5_INT_PM_CLK(aclk_400_mscl, "aclk400_mscl",
 			"aclk400_mscl_d", aclk_400_mscl);
 EXYNOS5_INT_PM_CLK(aclk_400_isp, "aclk400_isp",
@@ -363,6 +372,9 @@ EXYNOS5_INT_PM_CLK(aclk_266_g2d, "aclk266_g2d",
 			"aclk266_g2d_d", aclk_266_g2d);
 EXYNOS5_INT_PM_CLK(aclk_333_g2d, "aclk333_g2d",
 			"aclk333_g2d_d", aclk_333_g2d);
+EXYNOS5_INT_PM_CLK(aclk_400_disp1, "aclk400_disp1",
+			"aclk400_disp1_d", aclk_400_disp1);
+
 
 static struct int_pm_clks *exynos5_int_pm_clks[] = {
 	&int_pm_clks_aclk_200_fsys,
@@ -370,7 +382,6 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 	&int_pm_clks_aclk_100_noc,
 	&int_pm_clks_aclk_400_wcore,
 	&int_pm_clks_aclk_200_fsys2,
-	&int_pm_clks_aclk_200_disp1,
 	&int_pm_clks_aclk_400_mscl,
 	&int_pm_clks_aclk_400_isp,
 	&int_pm_clks_aclk_333,
@@ -384,6 +395,7 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 	&int_pm_clks_aclk_300_jpeg,
 	&int_pm_clks_aclk_266_g2d,
 	&int_pm_clks_aclk_333_g2d,
+	&int_pm_clks_aclk_400_disp1,
 };
 
 static struct clk *exynos5_change_pll(struct busfreq_data_int *data,
