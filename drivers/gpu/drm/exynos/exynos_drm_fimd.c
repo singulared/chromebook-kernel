@@ -319,9 +319,6 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	if (ctx->suspended)
-		return;
-
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
 
@@ -329,6 +326,12 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 		return;
 
 	win_data = &ctx->win_data[win];
+
+	/* If suspended, enable this on resume */
+	if (ctx->suspended) {
+		win_data->resume = true;
+		return;
+	}
 
 	/*
 	 * SHADOWCON register is used for enabling timing.
@@ -505,35 +508,6 @@ static void fimd_mgr_remove(void *in_ctx)
 
 	if (is_drm_iommu_supported(ctx->drm_dev))
 		drm_iommu_detach_device(ctx->drm_dev, ctx->dev);
-}
-
-static void fimd_dpms(void *in_ctx, int mode)
-{
-	struct fimd_context *ctx = in_ctx;
-
-	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
-
-	switch (mode) {
-	case DRM_MODE_DPMS_ON:
-		/*
-		 * enable fimd hardware only if suspended status.
-		 *
-		 * P.S. fimd_dpms function would be called at booting time so
-		 * clk_enable could be called double time.
-		 */
-		if (ctx->suspended)
-			pm_runtime_get_sync(ctx->dev);
-		break;
-	case DRM_MODE_DPMS_STANDBY:
-	case DRM_MODE_DPMS_SUSPEND:
-	case DRM_MODE_DPMS_OFF:
-		if (!ctx->suspended)
-			pm_runtime_put_sync(ctx->dev);
-		break;
-	default:
-		DRM_DEBUG_KMS("unspecified mode %d\n", mode);
-		break;
-	}
 }
 
 static u32 fimd_calc_clkdiv(struct fimd_context *ctx,
@@ -726,6 +700,131 @@ static void fimd_wait_for_vblank(struct fimd_context *ctx)
 	drm_vblank_put(ctx->drm_dev, ctx->pipe);
 }
 
+static void fimd_window_suspend(struct fimd_context *ctx)
+{
+	struct fimd_win_data *win_data;
+	int i;
+
+	for (i = 0; i < FIMD_WIN_NR; i++) {
+		win_data = &ctx->win_data[i];
+		win_data->resume = win_data->enabled;
+		if (win_data->enabled)
+			fimd_win_disable(ctx, i);
+	}
+	fimd_wait_for_vblank(ctx);
+}
+
+static void fimd_window_resume(struct fimd_context *ctx)
+{
+	struct fimd_win_data *win_data;
+	int i;
+
+	for (i = 0; i < FIMD_WIN_NR; i++) {
+		win_data = &ctx->win_data[i];
+		win_data->enabled = win_data->resume;
+	}
+}
+
+static int fimd_poweron(struct fimd_context *ctx)
+{
+	int ret;
+
+	if (!ctx->suspended)
+		return 0;
+
+	ctx->suspended = false;
+
+	ret = clk_prepare_enable(ctx->bus_clk);
+	if (ret < 0) {
+		DRM_ERROR("Failed to prepare_enable the bus clk [%d]\n", ret);
+		goto bus_clk_err;
+	}
+
+	ret = clk_prepare_enable(ctx->lcd_clk);
+	if  (ret < 0) {
+		DRM_ERROR("Failed to prepare_enable the lcd clk [%d]\n", ret);
+		goto lcd_clk_err;
+	}
+
+	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
+
+	/*
+	 * Restore the vblank interrupts to whichever state DRM
+	 * wants them.
+	 */
+	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe]) {
+		ret = fimd_enable_vblank(ctx);
+		if (ret) {
+			DRM_ERROR("Failed to re-enable vblank [%d]\n", ret);
+			goto enable_vblank_err;
+		}
+	}
+
+	fimd_window_resume(ctx);
+	return 0;
+
+enable_vblank_err:
+	writel(0, ctx->regs + DPCLKCON);
+	clk_disable_unprepare(ctx->lcd_clk);
+lcd_clk_err:
+	clk_disable_unprepare(ctx->bus_clk);
+bus_clk_err:
+	ctx->suspended = true;
+	return ret;
+}
+
+static int fimd_poweroff(struct fimd_context *ctx)
+{
+	if (ctx->suspended)
+		return 0;
+
+	/*
+	 * We need to make sure that all windows are disabled before we
+	 * suspend that connector. Otherwise we might try to scan from
+	 * a destroyed buffer later.
+	 */
+	fimd_window_suspend(ctx);
+
+	fimd_disable_vblank(ctx);
+
+	writel(0, ctx->regs + DPCLKCON);
+
+	clk_disable_unprepare(ctx->lcd_clk);
+	clk_disable_unprepare(ctx->bus_clk);
+
+	ctx->suspended = true;
+	return 0;
+}
+
+static void fimd_dpms(void *in_ctx, int mode)
+{
+	struct fimd_context *ctx = in_ctx;
+
+	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
+
+	switch (mode) {
+	case DRM_MODE_DPMS_ON:
+		/*
+		 * enable fimd hardware only if suspended status.
+		 *
+		 * P.S. fimd_dpms function would be called at booting time so
+		 * clk_enable could be called double time.
+		 */
+		if (ctx->suspended)
+			pm_runtime_get_sync(ctx->dev);
+		break;
+	case DRM_MODE_DPMS_STANDBY:
+	case DRM_MODE_DPMS_SUSPEND:
+	case DRM_MODE_DPMS_OFF:
+		if (!ctx->suspended)
+			pm_runtime_put_sync(ctx->dev);
+		break;
+	default:
+		DRM_DEBUG_KMS("unspecified mode %d\n", mode);
+		break;
+	}
+}
+
 static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.initialize = fimd_mgr_initialize,
 	.remove = fimd_mgr_remove,
@@ -791,86 +890,6 @@ static void fimd_clear_win(struct fimd_context *ctx, int win)
 	val = readl(ctx->regs + SHADOWCON);
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
-}
-
-static int fimd_clock(struct fimd_context *ctx, bool enable)
-{
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	if (enable) {
-		int ret;
-
-		ret = clk_prepare_enable(ctx->bus_clk);
-		if (ret < 0)
-			return ret;
-
-		ret = clk_prepare_enable(ctx->lcd_clk);
-		if  (ret < 0) {
-			clk_disable_unprepare(ctx->bus_clk);
-			return ret;
-		}
-	} else {
-		clk_disable_unprepare(ctx->lcd_clk);
-		clk_disable_unprepare(ctx->bus_clk);
-	}
-
-	return 0;
-}
-
-static void fimd_window_suspend(struct fimd_context *ctx)
-{
-	struct fimd_win_data *win_data;
-	int i;
-
-	for (i = 0; i < FIMD_WIN_NR; i++) {
-		win_data = &ctx->win_data[i];
-		if (win_data->enabled) {
-			win_data->resume = win_data->enabled;
-			fimd_win_disable(ctx, i);
-		}
-	}
-	fimd_wait_for_vblank(ctx);
-}
-
-static void fimd_window_resume(struct fimd_context *ctx)
-{
-	struct fimd_win_data *win_data;
-	int i;
-
-	for (i = 0; i < FIMD_WIN_NR; i++) {
-		win_data = &ctx->win_data[i];
-		win_data->enabled = win_data->resume;
-		win_data->resume = false;
-	}
-}
-
-static int fimd_activate(struct fimd_context *ctx, bool enable)
-{
-	if (enable && ctx->suspended) {
-		int ret;
-
-		ret = fimd_clock(ctx, true);
-		if (ret < 0)
-			return ret;
-
-		ctx->suspended = false;
-
-		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
-
-		fimd_window_resume(ctx);
-	} else if (!enable && !ctx->suspended) {
-		/*
-		 * We need to make sure that all windows are disabled before we
-		 * suspend that connector. Otherwise we might try to scan from
-		 * a destroyed buffer later.
-		 */
-		fimd_window_suspend(ctx);
-
-		fimd_clock(ctx, false);
-		ctx->suspended = true;
-	}
-
-	return 0;
 }
 
 static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
@@ -1053,7 +1072,7 @@ static int fimd_suspend(struct device *dev)
 	if (dp_dev)
 		exynos_dp_suspend(dp_dev);
 
-	return fimd_activate(ctx, false);
+	return fimd_poweroff(ctx);
 }
 
 static int fimd_resume(struct device *dev)
@@ -1069,7 +1088,7 @@ static int fimd_resume(struct device *dev)
 	if (pm_runtime_suspended(dev))
 		return 0;
 
-	ret = fimd_activate(ctx, true);
+	ret = fimd_poweron(ctx);
 	if (ret < 0)
 		return ret;
 
@@ -1080,16 +1099,6 @@ static int fimd_resume(struct device *dev)
 	 * so fimd_apply function should be called at here.
 	 */
 	fimd_apply(ctx);
-
-	/*
-	 * Restore the vblank interrupts to whichever state DRM
-	 * wants them.
-	 */
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-		fimd_enable_vblank(ctx);
-
-	if (dp_dev)
-		exynos_dp_resume(dp_dev);
 
 	return 0;
 }
@@ -1105,7 +1114,7 @@ static int fimd_runtime_suspend(struct device *dev)
 	if (dp_dev)
 		exynos_dp_suspend(dp_dev);
 
-	return fimd_activate(ctx, false);
+	return fimd_poweroff(ctx);
 }
 
 static int fimd_runtime_resume(struct device *dev)
@@ -1115,7 +1124,7 @@ static int fimd_runtime_resume(struct device *dev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	ret = fimd_activate(ctx, true);
+	ret = fimd_poweron(ctx);
 	if (ret)
 		return ret;
 
