@@ -181,7 +181,7 @@ typedef struct kbase_uk_tmem_set_size {
 	u32 size;
 	/* OUT */
 	u32 actual_size;
-	u32 result_subcode;
+	base_backing_threshold_status result_subcode;
 	u32 padding;
 } kbase_uk_tmem_set_size;
 
@@ -192,7 +192,7 @@ typedef struct kbase_uk_tmem_resize {
 	s32 delta;
 	/* OUT */
 	u32 actual_size;
-	u32 result_subcode;
+	base_backing_threshold_status result_subcode;
 	u32 padding;
 } kbase_uk_tmem_resize;
 
