@@ -53,25 +53,27 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	void __iomem *base;
 	u32 timeout, pwr;
 	char *op;
-	u32 tmp = 0;
+	u32 tmp[2];
 
 	pd = container_of(domain, struct exynos_pm_domain, pd);
 	base = pd->base;
 
 	/*
-	 * TODO: It is found that the CLK SRC register gets modified when
-	 * we power off the pd of gsc/mfc/isp/disp1. This happens only after
-	 * the system is suspended and resumed and not before that. The
-	 * following fix is a temporary workaround which will be removed
-	 * once the exact issue is found and fixed in the hardware.
+	 * After SYS_PWR_REG is set to 0 while suspending, when mfc/gsc pd
+	 * is power gated hardware automatically supplies low clock frequency
+	 * to the blocks(Low Power Interface).
+	 * Hardware changes the MUX selection as OSC to mfc/gsc
+	 * So these register are saved and restored
 	 * The CLK_SRC register is different for exynos5250 and 5420.
 	 */
 	if (!power_on) {
 		/*  save clock source register */
 		if (soc_is_exynos5250())
-			tmp = __raw_readl(EXYNOS5_CLKSRC_TOP3);
-		if (soc_is_exynos5420())
-			tmp = __raw_readl(EXYNOS5420_CLKSRC_TOP4);
+			tmp[0] = __raw_readl(EXYNOS5_CLKSRC_TOP3);
+		else if (soc_is_exynos5420()) {
+			tmp[0] = __raw_readl(EXYNOS5420_CLKSRC_TOP4);
+			tmp[1] = __raw_readl(EXYNOS5420_CLKSRC_TOP5);
+		}
 	}
 
 	pwr = power_on ? S5P_INT_LOCAL_PWR_EN : 0;
@@ -94,9 +96,11 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	if (!power_on) {
 		/*  restore clock source register */
 		if (soc_is_exynos5250())
-			__raw_writel(tmp, EXYNOS5_CLKSRC_TOP3);
-		if (soc_is_exynos5420())
-			__raw_writel(tmp, EXYNOS5420_CLKSRC_TOP4);
+			__raw_writel(tmp[0], EXYNOS5_CLKSRC_TOP3);
+		else if (soc_is_exynos5420()) {
+			__raw_writel(tmp[0], EXYNOS5420_CLKSRC_TOP4);
+			__raw_writel(tmp[1], EXYNOS5420_CLKSRC_TOP5);
+		}
 	}
 
 	return 0;
