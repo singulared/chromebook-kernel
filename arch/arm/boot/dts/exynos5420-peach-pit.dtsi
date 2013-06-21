@@ -1076,7 +1076,7 @@
 	};
 	pinctrl@13410000 {
 		gpc0: gpc0 {
-			powerdown-settings = <6 2 2 2 2 2 2 3>;
+			powerdown-settings = <6 2 5 2 2 2 2 3>;
 		};
 		gpc1: gpc1 {
 			powerdown-settings = <6 2 3 2 2 2 2 3>;
