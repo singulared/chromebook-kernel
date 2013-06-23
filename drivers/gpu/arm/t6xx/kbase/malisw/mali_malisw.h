@@ -2,11 +2,14 @@
  *
  * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
  *
- * This program is free software and is provided to you under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
+ * This program is free software and is provided to you under the terms of the
+ * GNU General Public License version 2 as published by the Free Software
+ * Foundation, and any use by you of this program is subject to the terms
+ * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained from Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * A copy of the licence is included with the program, and can also be obtained
+ * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA  02110-1301, USA.
  *
  */
 
@@ -14,9 +17,6 @@
 
 #ifndef _MALISW_H_
 #define _MALISW_H_
-
-#define MALI_MODULE_MALISW_MAJOR 2
-#define MALI_MODULE_MALISW_MINOR 4
 
 /**
  * @file mali_malisw.h
@@ -31,7 +31,6 @@
 #include <stddef.h>
 
 #include "mali_stdtypes.h"
-#include "mali_version_macros.h"
 
 /** @brief Gets the container object when given a pointer to a member of an object. */
 #define CONTAINER_OF(ptr, type, member) ((type *)((char *)(ptr) - offsetof(type,member)))

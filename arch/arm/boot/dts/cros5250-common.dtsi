@@ -431,14 +431,6 @@
 		regulator-boot-on;
 		regulator-always-on;
 	};
-	max98095-en {
-		compatible = "regulator-fixed";
-		regulator-name = "codec-en";
-		gpio = <&gpx1 7 0 0 0>;
-		enable-active-high;
-		regulator-boot-on;
-		regulator-always-on;
-	};
 
 	// NB: these are manually enabled in platform code
 	wifi-en {

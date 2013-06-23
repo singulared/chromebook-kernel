@@ -610,7 +610,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 		exclusive = 1;
 	kds = &exynos_gem_obj->base.export_dma_buf->kds;
 	kds_callback_init(&callback, 1, &cpu_acquire_kds_cb_fn);
-	ret = kds_async_waitall(&rset, KDS_FLAG_LOCKED_WAIT, &callback,
+	ret = kds_async_waitall(&rset, &callback,
 		&completion, NULL, 1, &exclusive, &kds);
 	mutex_unlock(&dev->struct_mutex);
 

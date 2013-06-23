@@ -24,11 +24,6 @@
 		status = "disabled";
 	};
 
-	rtc {
-		/* disable Exynos RTC as we are using s5m PMIC RTC */
-		status = "disabled";
-	};
-
 	gpio-keys {
 		compatible = "gpio-keys";
 
@@ -97,6 +92,7 @@
 		tpm {
 			compatible = "infineon,slb9645tt";
 			reg = <0x20>;
+			powered-while-suspended;
 		};
 	};
 
@@ -337,6 +333,13 @@
 					VFET3 {
 						tps65090-control-reg = <0x11>;
 						regulator-name = "wwan_r";
+						regulator-min-microvolt = <3300000>;
+						regulator-max-microvolt = <3300000>;
+						regulator-always-on;
+					};
+					VFET5 {
+						tps65090-control-reg = <0x13>;
+						regulator-name = "cam";
 						regulator-min-microvolt = <3300000>;
 						regulator-max-microvolt = <3300000>;
 						regulator-always-on;

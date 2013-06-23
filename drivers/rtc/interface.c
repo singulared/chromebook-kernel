@@ -591,6 +591,7 @@ void rtc_update_irq(struct rtc_device *rtc,
 {
 	pm_stay_awake(rtc->dev.parent);
 	schedule_work(&rtc->irqwork);
+	dev_info(&rtc->dev, "rtc update irq triggered\n");
 }
 EXPORT_SYMBOL_GPL(rtc_update_irq);
 

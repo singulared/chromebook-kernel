@@ -231,7 +231,6 @@ struct s5p_mfc_variant {
 	unsigned int port_num;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
-	char	*mclk_name;
 	char	*fw_name;
 };
 
@@ -438,7 +437,7 @@ struct s5p_mfc_enc_params {
 	u32 rc_framerate_num;
 	u32 rc_framerate_denom;
 
-	union {
+	struct {
 		struct s5p_mfc_h264_enc_params h264;
 		struct s5p_mfc_mpeg4_enc_params mpeg4;
 	} codec;

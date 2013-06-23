@@ -331,4 +331,13 @@
 			clock-enable-gpio = <&gpy1 1 1 0 3>;
 		};
 	};
+
+	max98095-en {
+		compatible = "regulator-fixed";
+		regulator-name = "codec-en";
+		gpio = <&gpx1 7 0 0 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+	};
 };

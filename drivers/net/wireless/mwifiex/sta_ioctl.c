@@ -177,6 +177,9 @@ int mwifiex_fill_new_bss_desc(struct mwifiex_private *priv,
 	else
 		bss_desc->bss_mode = NL80211_IFTYPE_STATION;
 
+	if (bss_desc->cap_info_bitmap & WLAN_CAPABILITY_SPECTRUM_MGMT)
+		bss_desc->sensed_11h = true;
+
 	return mwifiex_update_bss_desc_with_ie(priv->adapter, bss_desc);
 }
 
@@ -265,9 +268,20 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 		if (ret)
 			goto done;
 
+		if (bss_desc == NULL)
+			goto done;
+
 		ret = mwifiex_check_network_compatibility(priv, bss_desc);
 		if (ret)
 			goto done;
+
+		if (mwifiex_11h_get_csa_closed_channel(priv) ==
+							(u8)bss_desc->channel) {
+			dev_err(adapter->dev,
+				"Attempt to reconnect on csa closed chan(%d)\n",
+				bss_desc->channel);
+			goto done;
+		}
 
 		dev_dbg(adapter->dev, "info: SSID found in scan list ... "
 				      "associating...\n");

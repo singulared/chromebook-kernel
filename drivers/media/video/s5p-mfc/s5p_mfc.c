@@ -250,12 +250,10 @@ static void s5p_mfc_handle_frame_copy_time(struct s5p_mfc_ctx *ctx)
 	src_buf = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
 	list_for_each_entry(dst_buf, &ctx->dst_queue, list) {
 		if (vb2_dma_contig_plane_dma_addr(dst_buf->b, 0) == dec_y_addr) {
-			memcpy(&dst_buf->b->v4l2_buf.timecode,
-				&src_buf->b->v4l2_buf.timecode,
-				sizeof(struct v4l2_timecode));
-			memcpy(&dst_buf->b->v4l2_buf.timestamp,
-				&src_buf->b->v4l2_buf.timestamp,
-				sizeof(struct timeval));
+			dst_buf->b->v4l2_buf.timecode =
+						src_buf->b->v4l2_buf.timecode;
+			dst_buf->b->v4l2_buf.timestamp =
+						src_buf->b->v4l2_buf.timestamp;
 			switch (frame_type) {
 			case S5P_FIMV_DECODE_FRAME_I_FRAME:
 				dst_buf->b->v4l2_buf.flags |=
@@ -393,6 +391,8 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		} else {
 			mfc_debug(2, "MFC needs next buffer\n");
 			ctx->consumed_stream = 0;
+			if (src_buf->flags & MFC_BUF_FLAG_EOS)
+				ctx->state = MFCINST_FINISHING;
 			list_del(&src_buf->list);
 			ctx->src_queue_cnt--;
 			if (s5p_mfc_hw_call(dev->mfc_ops, err_dec, err) > 0)
@@ -569,7 +569,7 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx,
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
 
-	mfc_debug(2, "Stream completed");
+	mfc_debug(2, "Stream completed\n");
 
 	s5p_mfc_clear_int_flags(dev);
 	ctx->int_type = reason;
@@ -1069,7 +1069,7 @@ static void iommu_deinit(struct device *mfc_l, struct device *mfc_r)
 #else
 static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 {
-	unsigned int mem_info[2];
+	unsigned int mem_info[2] = { };
 
 	of_property_read_u32_array(dev->plat_dev->dev.of_node,
 			"samsung,mfc-l", mem_info, 2);
@@ -1435,7 +1435,6 @@ static struct s5p_mfc_variant mfc_drvdata_v5 = {
 	.port_num	= MFC_NUM_PORTS,
 	.buf_size	= &buf_size_v5,
 	.buf_align	= &mfc_buf_align_v5,
-	.mclk_name	= "sclk_mfc",
 	.fw_name	= "s5p-mfc.fw",
 };
 
@@ -1462,7 +1461,6 @@ static struct s5p_mfc_variant mfc_drvdata_v6 = {
 	.port_num	= MFC_NUM_PORTS_V6,
 	.buf_size	= &buf_size_v6,
 	.buf_align	= &mfc_buf_align_v6,
-	.mclk_name      = "aclk_333",
 	.fw_name        = "s5p-mfc-v6.fw",
 };
 
