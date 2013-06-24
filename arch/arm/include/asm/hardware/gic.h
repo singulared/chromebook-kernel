@@ -41,6 +41,7 @@ struct device_node;
 extern struct irq_chip gic_arch_extn;
 int gic_get_cpu_id(unsigned int cpu);
 void gic_migrate_target(unsigned int new_cpu_id);
+unsigned long gic_get_sgir_physaddr(void);
 
 void gic_init_bases(unsigned int, int, void __iomem *, void __iomem *,
 		    u32 offset, struct device_node *);
