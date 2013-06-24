@@ -768,44 +768,22 @@ out:
 static int fimd_calc_clkdiv(struct fimd_context *ctx,
 			    struct fb_videomode *timing)
 {
-	unsigned long clk = clk_get_rate(ctx->lcd_clk);
-	u32 retrace;
+	unsigned long ideal_clk;
 	u32 clkdiv;
-	u32 best_framerate = 0;
-	u32 framerate;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	retrace = timing->left_margin + timing->hsync_len +
-				timing->right_margin + timing->xres;
-	retrace *= timing->upper_margin + timing->vsync_len +
-				timing->lower_margin + timing->yres;
-
-	/* default framerate is 60Hz */
 	if (!timing->refresh)
 		timing->refresh = 60;
 
-	clk /= retrace;
+	ideal_clk = timing->left_margin + timing->hsync_len +
+				timing->right_margin + timing->xres;
+	ideal_clk *= timing->upper_margin + timing->vsync_len +
+				timing->lower_margin + timing->yres;
+	ideal_clk *= timing->refresh;
 
-	for (clkdiv = 1; clkdiv < 0x100; clkdiv++) {
-		int tmp;
+	/* Find the clock divider value that gets us closest to ideal_clk */
+	clkdiv = DIV_ROUND_CLOSEST(clk_get_rate(ctx->lcd_clk), ideal_clk);
 
-		/* get best framerate */
-		framerate = clk / clkdiv;
-		tmp = timing->refresh - framerate;
-		if (tmp < 0) {
-			best_framerate = framerate;
-			continue;
-		} else {
-			if (!best_framerate)
-				best_framerate = framerate;
-			else if (tmp < (best_framerate - framerate))
-				best_framerate = framerate;
-			break;
-		}
-	}
-
-	return clkdiv;
+	return (clkdiv < 0x100) ? clkdiv : 0xff;
 }
 
 static void fimd_clear_win(struct fimd_context *ctx, int win)
