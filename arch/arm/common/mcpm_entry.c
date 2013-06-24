@@ -153,6 +153,13 @@ void __mcpm_cpu_down(unsigned int cpu, unsigned int cluster)
 	dsb_sev();
 }
 
+bool __mcpm_is_cpu_down(unsigned int cpu, unsigned int cluster)
+{
+	sync_cache_r(&mcpm_sync.clusters[cluster].cpus[cpu].cpu);
+	return (mcpm_sync.clusters[cluster].cpus[cpu].cpu == CPU_DOWN) ?
+			true : false;
+}
+
 /*
  * __mcpm_outbound_leave_critical: Leave the cluster teardown critical section.
  * @state: the final state of the cluster:
