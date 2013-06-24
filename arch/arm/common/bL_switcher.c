@@ -32,6 +32,7 @@
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/moduleparam.h>
+#include <linux/of.h>
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
@@ -783,6 +784,17 @@ core_param(no_bL_switcher, no_bL_switcher, bool, 0644);
 static int __init bL_switcher_init(void)
 {
 	int ret;
+	struct device_node *dn;
+
+	/*
+	 * We don't want to set up the bL switcher if the machine doesn't
+	 * support bL, so use the presence of a CCI to indicate whether or
+	 * not bL is supported on this device.
+	 */
+	dn = of_find_compatible_node(NULL, NULL, "arm,cci-400");
+	if (!dn)
+		return 0;
+	of_node_put(dn);
 
 	if (MAX_NR_CLUSTERS != 2) {
 		pr_err("%s: only dual cluster systems are supported\n",
