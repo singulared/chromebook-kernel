@@ -832,8 +832,8 @@
 		compatible = "samsung,mfc-v7";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
-		clocks = <&clock 401>, <&clock 400>;
-		clock-names = "mfc", "aclk_333";
+		clocks = <&clock 401>;
+		clock-names = "mfc";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
