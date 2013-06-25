@@ -1107,7 +1107,7 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 }
 
 #ifdef CONFIG_EXYNOS_IOMMU
-void s5p_mfc_cleanup_memdevs_iommu()
+void s5p_mfc_cleanup_memdevs_iommu(void)
 {
 	if (mapping) {
 		s5p_mfc_clock_on();
