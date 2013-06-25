@@ -861,12 +861,21 @@
 		samsung,power-domain = <&mfc_pd>;
 	};
 
-	sysmmu-fimd1 {
-		mmuname = "fimd1";
+	sysmmu-fimd1m0 {
+		mmuname = "fimd1m0";
 		reg = <0x14640000 0x1000>;
 		compatible = "samsung,exynos-sysmmu";
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
+		mmu-master = <&fimd>;
+	};
+
+	sysmmu-fimd1m1 {
+		mmuname = "fimd1m1";
+		reg = <0x14680000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <3 0>;
 		mmu-master = <&fimd>;
 	};
 
