@@ -17,4 +17,8 @@
 
 	compatible = "google,pit-rev2", "google,pit-rev1", "google,pit",
 		"google,peach", "samsung,exynos5420";
+
+	sysmmu-fimd1m1 {
+		status = "disabled";
+	};
 };
