@@ -1,5 +1,5 @@
 /*
- * SAMSUNG SMDK5420 EVT1 board device tree source
+ * SAMSUNG SMDK5420 EVT0 board device tree source
  *
  * Copyright (c) 2013 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -13,8 +13,8 @@
 #include "exynos5420.dtsi"
 
 / {
-	model = "SAMSUNG SMDK5420 EVT1 board based on EXYNOS5420";
-	compatible = "samsung,smdk5420", "samsung,exynos5420";
+	model = "SAMSUNG SMDK5420 EVT0 board based on EXYNOS5420";
+	compatible = "samsung,smdk5420-evt0", "samsung,exynos5420";
 
 	chosen {
 		bootargs = "console=ttySAC3,115200";
@@ -57,7 +57,6 @@
 		broken-cd;
 		bypass-smu;
 		supports-highspeed;
-		supports-hs200-mode; /* 200 Mhz */
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		samsung,dw-mshc-ciu-div = <3>;
@@ -358,5 +357,9 @@
 			compatible = "samsung,exynos4210-hdmiddc";
 			reg = <0x50>;
 		};
+	};
+
+	sysmmu-fimd1m1 {
+		status = "disabled";
 	};
 };
