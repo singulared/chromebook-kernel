@@ -647,27 +647,12 @@ static int __init exynos_pmu_init(void)
 		pr_info("EXYNOS4x12 PMU Initialize\n");
 	} else if (soc_is_exynos5250()) {
 		exynos5250_disable_isp();
-		/*
-		 * When SYS_WDTRESET is set, watchdog timer reset request
-		 * is ignored by power management unit.
-		 */
-		value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
-		value &= ~EXYNOS5_SYS_WDTRESET;
-		__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
-
-		value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
-		value &= ~EXYNOS5_SYS_WDTRESET;
-		__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
 
 		exynos_pmu_config = exynos5250_pmu_config;
 		pm_power_off = exynos5_power_off;
 		pr_info("EXYNOS5250 PMU Initialize\n");
 	} else if (soc_is_exynos5420()) {
 		__raw_writel(0xfffff, EXYNOS5_XXTI_DURATION3);
-
-		/* Mask and disable watchdog timer reset request */
-		__raw_writel(0xffffffff, EXYNOS5_AUTO_WDTRESET_DISABLE);
-		__raw_writel(0xffffffff, EXYNOS5_MASK_WDTRESET_REQUEST);
 
 		/* Enable USE_STANDBY_WFI for all CORE */
 		__raw_writel(EXYNOS5420_USE_STANDBY_WFI_ALL,
