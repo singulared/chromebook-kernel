@@ -29,6 +29,17 @@
 #include "drm_crtc.h"
 #include "drm_crtc_helper.h"
 
+/* The power sequence times (in ms) for T8, T9, T10, T11, T12, T13, T15 */
+static const u32 power_seq_timing_bounds[7][4] = {
+	{10, 20, 30, 40},
+	{100, 200, 250, 300},
+	{10, 15, 20, 25},
+	{5, 10, 15, 20},
+	{100, 200, 250, 300},
+	{10, 20, 30, 40},
+	{600, 700, 800, 1000}
+};
+
 struct ps8622_bridge {
 	struct drm_bridge bridge;
 
@@ -40,6 +51,9 @@ struct ps8622_bridge {
 
 	int gpio_slp_n;
 	int gpio_rst_n;
+
+	u32 power_seq_values[7];
+	u8 power_seq_regs[2];
 
 	bool enabled;
 };
@@ -142,6 +156,10 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 						  * revision '01' */
 	err |= ps8622_set(cl, 0x01, 0xcb, 0x05); /* DPCD40B, Initial Code minor
 						  * revision '05' */
+	err |= ps8622_set(cl, 0x01, 0xce,
+			bridge->power_seq_regs[0]); /* DPCD40E, Pwr sequence */
+	err |= ps8622_set(cl, 0x01, 0xcf,
+			bridge->power_seq_regs[1]); /* DPCD40F, Pwr sequence */
 	err |= ps8622_set(cl, 0x01, 0xa5, 0xa0); /* DPCD720, internal PWM */
 	err |= ps8622_set(cl, 0x01, 0xa7, bridge->bl->props.brightness);
 						 /* FFh for 100% brightness,
@@ -189,6 +207,14 @@ static void ps8622_power_up(struct ps8622_bridge *bridge)
 	if (ret)
 		DRM_ERROR("Failed to send config to bridge (%d)\n", ret);
 
+	/*
+	 * This delay waits for the PS8622 to properly sequence power up which
+	 * is the sum total of T8 + T9 + T10 + T11 + 10ms cushion
+	 */
+	msleep(bridge->power_seq_values[0] + bridge->power_seq_values[1] +
+			bridge->power_seq_values[2] +
+			bridge->power_seq_values[3] + 10);
+
 	bridge->enabled = true;
 }
 
@@ -199,16 +225,25 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 
 	bridge->enabled = false;
 
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 1);
-
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 0);
 
-	if (bridge->lcd_fet)
-		regulator_disable(bridge->lcd_fet);
+	/*
+	 * This delay waits for the PS8622 to properly sequence power up which
+	 * is the sum total of T12 + T13 + 10ms cushion
+	 */
+	msleep(bridge->power_seq_values[4] +
+			bridge->power_seq_values[5] + 10);
+
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_set_value(bridge->gpio_rst_n, 1);
+
 	if (bridge->bck_fet)
 		regulator_disable(bridge->bck_fet);
+
+	if (bridge->lcd_fet)
+		regulator_disable(bridge->lcd_fet);
+
 	if (bridge->v12)
 		regulator_disable(bridge->v12);
 }
@@ -283,6 +318,31 @@ struct drm_bridge_funcs ps8622_bridge_funcs = {
 	.destroy = ps8622_destroy,
 };
 
+static int ps8622_parse_power_sequence(struct ps8622_bridge *bridge)
+{
+	int i, j;
+	u32 *times = bridge->power_seq_values;
+	u16 val = 0;
+
+	for (i = 0; i < ARRAY_SIZE(power_seq_timing_bounds); i++) {
+		for (j = 0; j < ARRAY_SIZE(power_seq_timing_bounds[i]); j++) {
+			if (times[i] <= power_seq_timing_bounds[i][j]) {
+				val |= j << (i * 2);
+				break;
+			}
+		}
+		if (j == ARRAY_SIZE(power_seq_timing_bounds[i])) {
+			DRM_ERROR("Out of bounds timing value %d (%d)\n",
+					i, times[i]);
+			return -EINVAL;
+		}
+	}
+	bridge->power_seq_regs[0] = val & 0xFF;
+	bridge->power_seq_regs[1] = (1 << 7) | ((val >> 8) & 0xFF);
+
+	return 0;
+}
+
 int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 		struct device_node *node)
 {
@@ -332,6 +392,16 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 			goto err_gpio;
 	}
 
+	ret = of_property_read_u32_array(node, "power-seq-timing",
+			bridge->power_seq_values,
+			ARRAY_SIZE(bridge->power_seq_values));
+	if (ret)
+		goto err_power_seq;
+
+	ret = ps8622_parse_power_sequence(bridge);
+	if (ret)
+		goto err_power_seq;
+
 	bridge->bl = backlight_device_register("ps8622-backlight", dev->dev,
 			bridge, &ps8622_backlight_ops, NULL);
 	if (IS_ERR(bridge->bl)) {
@@ -359,6 +429,7 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 err:
 	if (bridge->bl)
 		backlight_device_unregister(bridge->bl);
+err_power_seq:
 	if (gpio_is_valid(bridge->gpio_rst_n))
 		gpio_free(bridge->gpio_rst_n);
 err_gpio:
