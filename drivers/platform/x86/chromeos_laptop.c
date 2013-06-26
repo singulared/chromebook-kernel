@@ -385,7 +385,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Falco - Light Sensor",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Falco"),
 		},
 		.callback = setup_isl29023_als_i2c1,
@@ -393,7 +393,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Peppy - Light Sensor",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Peppy"),
 		},
 		.callback = setup_isl29023_als_i2c1,
@@ -401,7 +401,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Slippy - Light Sensor",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Slippy"),
 		},
 		.callback = setup_isl29023_als_i2c1,
@@ -409,7 +409,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Falco - Touchpad",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Falco"),
 		},
 		.callback = setup_cyapa_i2c0_tp,
@@ -417,7 +417,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Peppy - Touchpad",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Peppy"),
 		},
 		.callback = setup_cyapa_i2c0_tp,
@@ -425,7 +425,7 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 	{
 		.ident = "Slippy - Touchpad",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
+			DMI_MATCH(DMI_BIOS_VENDOR, "coreboot"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Slippy"),
 		},
 		.callback = setup_cyapa_i2c0_tp,
