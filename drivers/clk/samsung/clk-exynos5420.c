@@ -120,7 +120,7 @@ enum exynos5420_clks {
 	smmu_mscl2,
 	aclk333 = 400, mfc, smmu_mfcl, smmu_mfcr,
 	aclk200_disp1 = 410, dsim1, dp1, hdmi,
-	aclk300_disp1 = 420, fimd1, smmu_fimd1, aclk400_disp1,
+	aclk300_disp1 = 420, fimd1, smmu_fimd1m0, smmu_fimd1m1, aclk400_disp1,
 	aclk166 = 430, mixer,
 	aclk266 = 440, rotator, mdma1, smmu_rotator, smmu_mdma1,
 	aclk300_jpeg = 450, jpeg, jpeg2, smmu_jpeg,
@@ -744,6 +744,8 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(usbd300, "usbd300", "aclk200_fsys", GATE_IP_FSYS, 19, 0, 0),
 	GATE(usbd301, "usbd301", "aclk200_fsys", GATE_IP_FSYS, 20, 0, 0),
 	GATE(smmu_tv, "smmu_tv", "aclk200_disp1", GATE_IP_DISP1, 9, 0, 0),
+	GATE(smmu_fimd1m0, "smmu_fimd1m0", "fimd1", GATE_IP_DISP1, 7, 0, 0),
+	GATE(smmu_fimd1m1, "smmu_fimd1m1", "fimd1", GATE_IP_DISP1, 8, 0, 0),
 };
 
 static __initdata struct of_device_id ext_clk_match[] = {
