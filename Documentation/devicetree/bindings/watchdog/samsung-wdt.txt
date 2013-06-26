@@ -7,5 +7,21 @@ occured.
 Required properties:
 - compatible : should be "samsung,s3c2410-wdt"
 - reg : base physical address of the controller and length of memory mapped
-	region.
+	region and the optional addresses and length of memory mapped regions
+	of PMU registers for masking/unmasking WDT.
 - interrupts : interrupt number to the cpu.
+
+Optional properties:
+- reset-mask-bit: bit number in the PMU registers to program mask/unmask WDT.
+
+Example:
+
+watchdog {
+                compatible = "samsung,s3c2410-wdt";
+                reg = <0x101D0000 0x100>, <0x10040408 0x4>, <0x1004040c 0x4>;
+                interrupts = <0 42 0>;
+                clocks = <&clock 316>;
+                clock-names = "watchdog";
+                status = "disabled";
+                reset-mask-bit = <0>;
+        };
