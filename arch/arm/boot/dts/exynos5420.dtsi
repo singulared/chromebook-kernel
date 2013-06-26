@@ -233,11 +233,12 @@
 
 	watchdog {
 		compatible = "samsung,s3c2410-wdt";
-		reg = <0x101D0000 0x100>;
+		reg = <0x101D0000 0x100>, <0x10040408 0x4>, <0x1004040c 0x4>;
 		interrupts = <0 42 0>;
 		clocks = <&clock 316>;
 		clock-names = "watchdog";
 		status = "disabled";
+		reset-mask-bit = <0>;
 	};
 
 	rtc {
