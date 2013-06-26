@@ -4833,6 +4833,15 @@ static void ironlake_init_pch_refclk(struct drm_device *dev)
 		POSTING_READ(PCH_DREF_CONTROL);
 		udelay(200);
 	}
+
+	/*
+	 * On resume, the PPT PCH doesn't seem to work right away, and
+	 * sometimes ignores register read/writes until it's completely up.
+	 * Waiting 30ms seems to be long enough to avoid this.
+	 */
+	if (dev_priv->pch_id == INTEL_PCH_PPT_DEVICE_ID_TYPE)
+		msleep(30);
+
 }
 
 /* Sequence to enable CLKOUT_DP for FDI usage and configure PCH FDI I/O. */
