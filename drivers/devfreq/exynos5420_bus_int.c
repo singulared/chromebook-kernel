@@ -587,7 +587,6 @@ static int exynos5_int_bus_get_dev_status(struct device *dev,
 
 #if defined(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)
 static struct devfreq_simple_ondemand_data exynos5_int_governor_data = {
-	.pm_qos_class		= PM_QOS_DEVICE_THROUGHPUT,
 	.upthreshold		= 15,
 };
 #endif
