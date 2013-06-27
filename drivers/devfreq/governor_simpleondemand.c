@@ -122,7 +122,7 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	*freq = (unsigned long) b;
 
 	/* compare calculated freq and pm_qos_min */
-	if (data && data->pm_qos_min)
+	if (data->pm_qos_min)
 		*freq = max(data->pm_qos_min, (unsigned int)*freq);
 
 	if (df->min_freq && *freq < df->min_freq)
