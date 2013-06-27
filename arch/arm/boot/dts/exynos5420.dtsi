@@ -868,6 +868,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
 		mmu-master = <&fimd>;
+		clocks = <&clock 422>;
+		clock-names = "sysmmu";
 	};
 
 	sysmmu-fimd1m1 {
@@ -877,6 +879,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <3 0>;
 		mmu-master = <&fimd>;
+		clocks = <&clock 423>;
+		clock-names = "sysmmu";
 	};
 
 	sysmmu-tv {
