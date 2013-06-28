@@ -147,7 +147,6 @@ typedef struct kbasep_debug_assert_cb {
 	} while (MALI_FALSE)
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
 
-#ifdef CONFIG_MALI_DEBUG
 #define KBASE_DEBUG_PRINT_WARN(module, format, ...) \
 	do { \
 		pr_warn("Mali<WARN, %s>: " \
@@ -155,9 +154,6 @@ typedef struct kbasep_debug_assert_cb {
 				kbasep_debug_module_to_str(module), \
 				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
 	} while (MALI_FALSE)
-#else
-#define KBASE_DEBUG_PRINT_WARN(module, ...) CSTD_NOP()
-#endif
 
 #define KBASE_DEBUG_PRINT_ERROR(module, format, ...) \
 	do { \
