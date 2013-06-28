@@ -91,23 +91,20 @@ typedef struct kbasep_debug_assert_cb {
 #endif
 
 /**
- * @def KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)
+ * @def KBASEP_DEBUG_ASSERT_OUT(format, ...)
  * @brief (Private) system printing function associated to the @see KBASE_DEBUG_ASSERT_MSG event.
- * @param trace location in the code from where the message is printed
- * @param function function from where the message is printed
- * @param ... Format string followed by format arguments.
- * @note function parameter cannot be concatenated with other strings
+ * @param format Message to display on assert.
+ * @param ... format arguments
  */
-/* Select the correct system output function*/
 #ifdef CONFIG_MALI_DEBUG
-#define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)\
+#define KBASEP_DEBUG_ASSERT_OUT(format, ...) \
 	do { \
-		pr_err("Mali<ASSERT>: %s%s ", trace, function);\
-		pr_err(__VA_ARGS__);\
-		pr_err("\n");\
+		pr_err("Mali<ASSERT>: " \
+				KBASEP_DEBUG_PRINT_TRACE"%s " format "\n", \
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 #else
-#define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...) CSTD_NOP()
+#define KBASEP_DEBUG_ASSERT_OUT(format, ...) CSTD_NOP()
 #endif
 
 #ifdef CONFIG_MALI_DEBUG
@@ -134,45 +131,40 @@ typedef struct kbasep_debug_assert_cb {
  * @note This macro does nothing if the flag @see KBASE_DEBUG_DISABLE_ASSERTS is set to 1
  *
  * @param expr Boolean expression
- * @param ...  Message to display when @a expr is false, as a format string followed by format arguments.
+ * @param format  Message to display when @a expr is false, as a format string.
+ * @param ...  format arguments
  */
 #if KBASE_DEBUG_DISABLE_ASSERTS
-#define KBASE_DEBUG_ASSERT_MSG(expr, ...) CSTD_NOP()
+#define KBASE_DEBUG_ASSERT_MSG(expr, format, ...) CSTD_NOP()
 #else
-#define KBASE_DEBUG_ASSERT_MSG(expr, ...) \
+#define KBASE_DEBUG_ASSERT_MSG(expr, format, ...) \
 	do { \
 		if (MALI_FALSE == (expr)) { \
-			KBASEP_DEBUG_ASSERT_OUT(KBASEP_DEBUG_PRINT_TRACE, \
-					KBASEP_DEBUG_PRINT_FUNCTION, \
-					__VA_ARGS__);\
+			KBASEP_DEBUG_ASSERT_OUT(format, ##__VA_ARGS__); \
 			KBASE_CALL_ASSERT_HOOK();\
-			BUG();\
+			BUG(); \
 		} \
 	} while (MALI_FALSE)
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
 
 #ifdef CONFIG_MALI_DEBUG
-#define KBASE_DEBUG_PRINT_WARN(module, ...)\
-	do {\
-		pr_warn("Mali<WARN, %s>: %s%s ", \
+#define KBASE_DEBUG_PRINT_WARN(module, format, ...) \
+	do { \
+		pr_warn("Mali<WARN, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
 				kbasep_debug_module_to_str(module), \
-				KBASEP_DEBUG_PRINT_TRACE, \
-				KBASEP_DEBUG_PRINT_FUNCTION);\
-		pr_warn(__VA_ARGS__);\
-		pr_warn("\n");\
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 #else
 #define KBASE_DEBUG_PRINT_WARN(module, ...) CSTD_NOP()
 #endif
 
-#define KBASE_DEBUG_PRINT_ERROR(module, ...)\
-	do {\
-		pr_err("Mali<ERROR, %s>: %s%s ", \
+#define KBASE_DEBUG_PRINT_ERROR(module, format, ...) \
+	do { \
+		pr_err("Mali<ERROR, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
 				kbasep_debug_module_to_str(module), \
-				KBASEP_DEBUG_PRINT_TRACE, \
-				KBASEP_DEBUG_PRINT_FUNCTION);\
-		pr_err(__VA_ARGS__);\
-		pr_err("\n");\
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 
 #if KBASE_DEBUG_DISABLE_INFO
@@ -180,29 +172,22 @@ typedef struct kbasep_debug_assert_cb {
 #else
 #define KBASE_DEBUG_PRINT_INFO(module, format, ...)\
 	do {\
-		pr_info("Mali<INFO, %s>: %s%s ", \
+		pr_info("Mali<INFO, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
 				kbasep_debug_module_to_str(module), \
-				KBASEP_DEBUG_PRINT_TRACE, \
-				KBASEP_DEBUG_PRINT_FUNCTION);\
-		pr_info(__VA_ARGS__);\
-		pr_info("\n");\
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 #endif
 
-#define KBASE_DEBUG_PRINT_RAW(module, ...)\
-	do {\
-		printk(__VA_ARGS__);\
-		printk("\n");\
+#define KBASE_DEBUG_PRINT_RAW_LEVEL(level, module, format, ...) do { \
+		printk(level format "\n", ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 
-#define KBASE_DEBUG_PRINT_RAW_LEVEL(level, module, ...)\
-	do {\
-		printk(level __VA_ARGS__);\
-		printk(level "\n");\
-	} while (MALI_FALSE)
+#define KBASE_DEBUG_PRINT_RAW(module, format, ...) \
+	KBASE_DEBUG_PRINT_RAW_LEVEL("", module, format, ##__VA_ARGS__)
 
-#define KBASE_DEBUG_PRINT(module, ...) \
-	KBASE_DEBUG_PRINT_RAW(module, __VA_ARGS__)
+#define KBASE_DEBUG_PRINT(module, format, ...) \
+	KBASE_DEBUG_PRINT_RAW(module, format, ##__VA_ARGS__)
 
 /**
  * @def KBASE_DEBUG_CODE( X )
