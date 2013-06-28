@@ -20,10 +20,10 @@
 
 #include <linux/bug.h>
 
-/** @brief If equals to 0, a trace containing the file, line, and function will be displayed before each message. */
+/** @brief If 0, the current file:line is displayed before each message. */
 #define KBASE_DEBUG_SKIP_TRACE 0
 
-/** @brief If different from 0, the trace will only contain the file and line. */
+/** @brief If 0, the current function is displayed before each message. */
 #define KBASE_DEBUG_SKIP_FUNCTION_NAME 0
 
 /** @brief Disable the asserts tests if set to 1. Default is to disable the asserts in release. */
@@ -63,13 +63,19 @@ typedef struct kbasep_debug_assert_cb {
  */
 #if KBASE_DEBUG_SKIP_TRACE == 0
 #define KBASEP_DEBUG_PRINT_TRACE __FILE__ ":" CSTD_STR2(__LINE__) ":"
+#else
+#define KBASEP_DEBUG_PRINT_TRACE ""
+#endif
+
+/**
+ * @def KBASEP_DEBUG_PRINT_FUNCTION
+ * @brief Private macro containing the format of the trace to display before every message
+ * @sa KBASE_DEBUG_SKIP_TRACE, KBASE_DEBUG_SKIP_FUNCTION_NAME
+ */
 #if KBASE_DEBUG_SKIP_FUNCTION_NAME == 0
 #define KBASEP_DEBUG_PRINT_FUNCTION CSTD_FUNC
 #else
 #define KBASEP_DEBUG_PRINT_FUNCTION ""
-#endif
-#else
-#define KBASEP_DEBUG_PRINT_TRACE ""
 #endif
 
 /**
