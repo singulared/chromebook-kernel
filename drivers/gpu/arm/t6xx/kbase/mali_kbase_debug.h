@@ -21,7 +21,7 @@
 #include <linux/bug.h>
 
 /** @brief If 0, the current file:line is displayed before each message. */
-#define KBASE_DEBUG_SKIP_TRACE 0
+#define KBASE_DEBUG_SKIP_TRACE 1
 
 /** @brief If 0, the current function is displayed before each message. */
 #define KBASE_DEBUG_SKIP_FUNCTION_NAME 0
