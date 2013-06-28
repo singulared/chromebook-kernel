@@ -197,14 +197,25 @@ static bool is_sysmmu_active(struct sysmmu_drvdata *data)
 	return data->activations > 0;
 }
 
-static void sysmmu_block(void __iomem *sfrbase)
-{
-	__raw_writel(CTRL_BLOCK, sfrbase + REG_MMU_CTRL);
-}
-
 static void sysmmu_unblock(void __iomem *sfrbase)
 {
 	__raw_writel(CTRL_ENABLE, sfrbase + REG_MMU_CTRL);
+}
+
+static bool sysmmu_block(void __iomem *sfrbase)
+{
+	int i = 120;
+
+	__raw_writel(CTRL_BLOCK, sfrbase + REG_MMU_CTRL);
+	while ((i > 0) && !(__raw_readl(sfrbase + REG_MMU_STATUS) & 1))
+		--i;
+
+	if (!(__raw_readl(sfrbase + REG_MMU_STATUS) & 1)) {
+		sysmmu_unblock(sfrbase);
+		return false;
+	}
+	return true;
+
 }
 
 static void __sysmmu_tlb_invalidate(void __iomem *sfrbase)
@@ -462,9 +473,11 @@ static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
 	if (is_sysmmu_active(data)) {
 		int i;
 		for (i = 0; i < data->nsfrs; i++) {
-			sysmmu_block(data->sfrbases[i]);
-			__sysmmu_tlb_invalidate_entry(data->sfrbases[i], iova);
-			sysmmu_unblock(data->sfrbases[i]);
+			if (sysmmu_block(data->sfrbases[i])) {
+				__sysmmu_tlb_invalidate_entry(
+						data->sfrbases[i], iova);
+				sysmmu_unblock(data->sfrbases[i]);
+			}
 		}
 	} else {
 		dev_dbg(data->sysmmu,
