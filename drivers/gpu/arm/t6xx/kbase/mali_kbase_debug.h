@@ -62,8 +62,7 @@ typedef struct kbasep_debug_assert_cb {
  * @sa KBASE_DEBUG_SKIP_TRACE, KBASE_DEBUG_SKIP_FUNCTION_NAME
  */
 #if KBASE_DEBUG_SKIP_TRACE == 0
-#define KBASEP_DEBUG_PRINT_TRACE \
-		"In file: " __FILE__ " line: " CSTD_STR2(__LINE__)
+#define KBASEP_DEBUG_PRINT_TRACE __FILE__ ":" CSTD_STR2(__LINE__) ":"
 #if KBASE_DEBUG_SKIP_FUNCTION_NAME == 0
 #define KBASEP_DEBUG_PRINT_FUNCTION CSTD_FUNC
 #else
@@ -85,7 +84,7 @@ typedef struct kbasep_debug_assert_cb {
 #ifdef CONFIG_MALI_DEBUG
 #define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)\
 	do { \
-		pr_err("Mali<ASSERT>: %s function:%s ", trace, function);\
+		pr_err("Mali<ASSERT>: %s%s ", trace, function);\
 		pr_err(__VA_ARGS__);\
 		pr_err("\n");\
 	} while (MALI_FALSE)
@@ -137,7 +136,7 @@ typedef struct kbasep_debug_assert_cb {
 #ifdef CONFIG_MALI_DEBUG
 #define KBASE_DEBUG_PRINT_WARN(module, ...)\
 	do {\
-		pr_warn("Mali<WARN, %s>: %s function:%s ", \
+		pr_warn("Mali<WARN, %s>: %s%s ", \
 				kbasep_debug_module_to_str(module), \
 				KBASEP_DEBUG_PRINT_TRACE, \
 				KBASEP_DEBUG_PRINT_FUNCTION);\
@@ -150,7 +149,7 @@ typedef struct kbasep_debug_assert_cb {
 
 #define KBASE_DEBUG_PRINT_ERROR(module, ...)\
 	do {\
-		pr_err("Mali<ERROR, %s>: %s function:%s ", \
+		pr_err("Mali<ERROR, %s>: %s%s ", \
 				kbasep_debug_module_to_str(module), \
 				KBASEP_DEBUG_PRINT_TRACE, \
 				KBASEP_DEBUG_PRINT_FUNCTION);\
