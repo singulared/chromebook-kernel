@@ -697,7 +697,6 @@ static struct notifier_block exynos5_int_reboot_notifier = {
 static void exynos5_int_remove_clocks(struct busfreq_data_int *data)
 {
 	struct int_pm_clks *int_clk;
-	struct clk *temp_clk;
 
 	list_for_each_entry(int_clk, &data->list, node) {
 		clk_put(int_clk->clk);
@@ -712,7 +711,7 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct exynos_devfreq_platdata *pdata;
 	int err = 0;
-	int nr_clk, i;
+	int nr_clk;
 	struct clk *tmp_clk, *tmp_parent_clk;
 	struct int_pm_clks *int_clk;
 
