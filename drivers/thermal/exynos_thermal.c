@@ -85,6 +85,10 @@
 #define EXYNOS_TRIMINFO_RELOAD		0x1
 #define EXYNOS_TMU_CLEAR_RISE_INT	0x111
 #define EXYNOS_TMU_CLEAR_FALL_INT	(0x111 << 12)
+
+/* Register bit change for EXYNOS5420 */
+#define EXYNOS5420_TMU_CLEAR_FALL_INT	(0x111 << 16)
+
 #define EXYNOS_TMU_HWTRIG_ENABLE	(1 << 31)
 #define EXYNOS_MUX_ADDR_VALUE		6
 #define EXYNOS_MUX_ADDR_SHIFT		20
@@ -657,7 +661,7 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		goto out;
 	}
 
-	if (data->soc == SOC_ARCH_EXYNOS) {
+	if (data->soc >= SOC_ARCH_EXYNOS) {
 		__raw_writel(EXYNOS_TRIMINFO_RELOAD,
 				data->base + EXYNOS_TMU_TRIMINFO_CON);
 	}
@@ -694,7 +698,7 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 
 		writel(EXYNOS4210_TMU_INTCLEAR_VAL,
 			data->base + EXYNOS_TMU_REG_INTCLEAR);
-	} else if (data->soc == SOC_ARCH_EXYNOS) {
+	} else if (data->soc >= SOC_ARCH_EXYNOS) {
 		/*
 		 * thd_temp_{rise,fall} are nonzero on resume. Don't compute
 		 * again.
@@ -737,7 +741,7 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 	con = pdata->reference_voltage << EXYNOS_TMU_REF_VOLTAGE_SHIFT |
 		pdata->gain << EXYNOS_TMU_GAIN_SHIFT;
 
-	if (data->soc == SOC_ARCH_EXYNOS) {
+	if (data->soc >= SOC_ARCH_EXYNOS) {
 		con |= pdata->noise_cancel_mode << EXYNOS_TMU_TRIP_MODE_SHIFT;
 		con |= EXYNOS_MUX_ADDR_VALUE << EXYNOS_MUX_ADDR_SHIFT;
 
@@ -761,7 +765,7 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 	writel(interrupt_en, data->base + EXYNOS_TMU_REG_INTEN);
 	writel(con, data->base + EXYNOS_TMU_REG_CONTROL);
 
-	if (data->soc == SOC_ARCH_EXYNOS) {
+	if (data->soc >= SOC_ARCH_EXYNOS) {
 		/* enable overtemp HW poweroff.
 		 * Enable this *after* thresholds have been set.
 		 */
@@ -802,6 +806,10 @@ static void exynos_tmu_work(struct work_struct *work)
 	if (data->soc == SOC_ARCH_EXYNOS)
 		writel(EXYNOS_TMU_CLEAR_RISE_INT |
 				EXYNOS_TMU_CLEAR_FALL_INT,
+				data->base + EXYNOS_TMU_REG_INTCLEAR);
+	else if (data->soc == SOC_ARCH_EXYNOS5420)
+		writel(EXYNOS_TMU_CLEAR_RISE_INT |
+				EXYNOS5420_TMU_CLEAR_FALL_INT,
 				data->base + EXYNOS_TMU_REG_INTCLEAR);
 	else
 		writel(EXYNOS4210_TMU_INTCLEAR_VAL,
@@ -883,8 +891,36 @@ static struct exynos_tmu_platform_data const exynos_default_tmu_data = {
 	.type = SOC_ARCH_EXYNOS,
 };
 #define EXYNOS_TMU_DRV_DATA (&exynos_default_tmu_data)
+static struct exynos_tmu_platform_data const exynos5420_default_tmu_data = {
+	.trigger_levels[0] = 85,	/* slow e.g. 800Mhz */
+	.trigger_levels[1] = 103,	/* very slow e.g. 200Mhz */
+	.trigger_levels[2] = 108,	/* kernel issues shutdown */
+	.trigger_levels[3] = 110,	/* HW poweroff trigger */
+	.threshold_falling = 10,
+	.trigger_level0_en = 1,
+	.trigger_level1_en = 1,
+	.trigger_level2_en = 1,
+	.trigger_level3_en = 0,		/* HW Trig is enabled differently */
+	.gain = 8,
+	.reference_voltage = 16,
+	.noise_cancel_mode = 4,
+	.cal_type = TYPE_ONE_POINT_TRIMMING,
+	.efuse_value = 55,
+	.freq_tab[0] = {
+		.freq_clip_max = 800 * 1000,
+		.temp_level = 85,
+	},
+	.freq_tab[1] = {
+		.freq_clip_max = 200 * 1000,
+		.temp_level = 103,
+	},
+	.freq_tab_count = 2,
+	.type = SOC_ARCH_EXYNOS5420,
+};
+#define EXYNOS5420_TMU_DRV_DATA (&exynos5420_default_tmu_data)
 #else
 #define EXYNOS_TMU_DRV_DATA (NULL)
+#define EXYNOS5420_TMU_DRV_DATA (NULL)
 #endif
 
 #ifdef CONFIG_OF
@@ -899,7 +935,7 @@ static const struct of_device_id exynos_tmu_match[] = {
 	},
 	{
 		.compatible = "samsung,exynos5420-tmu",
-		.data = (void *)EXYNOS_TMU_DRV_DATA,
+		.data = (void *)EXYNOS5420_TMU_DRV_DATA,
 	},
 	{},
 };
@@ -919,7 +955,7 @@ static struct platform_device_id exynos_tmu_driver_ids[] = {
 	},
 	{
 		.name		= "exynos5420-tmu",
-		.driver_data    = (kernel_ulong_t)EXYNOS_TMU_DRV_DATA,
+		.driver_data    = (kernel_ulong_t)EXYNOS5420_TMU_DRV_DATA,
 	},
 	{ },
 };
@@ -990,7 +1026,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (pdata->type == SOC_ARCH_EXYNOS ||
+	if (pdata->type >= SOC_ARCH_EXYNOS ||
 				pdata->type == SOC_ARCH_EXYNOS4210)
 		data->soc = pdata->type;
 	else {
