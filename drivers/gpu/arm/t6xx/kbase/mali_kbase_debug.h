@@ -35,6 +35,18 @@
 #endif
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
 
+/**
+ * @brief If 1, disable INFO messages.
+ * @note If this is not disabled then Android boot times out.
+ */
+#ifndef KBASE_DEBUG_DISABLE_INFO
+#ifdef CONFIG_MALI_DEBUG
+#define KBASE_DEBUG_DISABLE_INFO 0
+#else
+#define KBASE_DEBUG_DISABLE_INFO 1
+#endif
+#endif
+
 typedef enum {
 	KBASE_UNKNOWN = 0, /**< @brief Unknown module */
 	KBASE_MMU,	   /**< @brief ID of Base MMU */
@@ -163,8 +175,19 @@ typedef struct kbasep_debug_assert_cb {
 		pr_err("\n");\
 	} while (MALI_FALSE)
 
-/*If this is not disabled then Android boot times out*/
-#define KBASE_DEBUG_PRINT_INFO(module, ...) CSTD_NOP()
+#if KBASE_DEBUG_DISABLE_INFO
+#define KBASE_DEBUG_PRINT_INFO(module, format, ...) CSTD_NOP()
+#else
+#define KBASE_DEBUG_PRINT_INFO(module, format, ...)\
+	do {\
+		pr_info("Mali<INFO, %s>: %s%s ", \
+				kbasep_debug_module_to_str(module), \
+				KBASEP_DEBUG_PRINT_TRACE, \
+				KBASEP_DEBUG_PRINT_FUNCTION);\
+		pr_info(__VA_ARGS__);\
+		pr_info("\n");\
+	} while (MALI_FALSE)
+#endif
 
 #define KBASE_DEBUG_PRINT_RAW(module, ...)\
 	do {\
