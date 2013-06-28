@@ -533,13 +533,13 @@ static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
-static void anx7808_update_infoframes(struct anx7808_data *anx7808)
+static void anx7808_update_infoframes(struct anx7808_data *anx7808, bool force)
 {
 	uint8_t status6;
 
 	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &status6);
 
-	if (status6 & NEW_AVI) {
+	if (status6 & NEW_AVI || force) {
 		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
 		anx7808_write_reg(anx7808, SP_TX_AVI_TYPE, SP_TX_AVI_KTYPE);
 		anx7808_write_reg(anx7808, SP_TX_AVI_VER, SP_TX_AVI_KVER);
@@ -551,7 +551,7 @@ static void anx7808_update_infoframes(struct anx7808_data *anx7808)
 		anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, NEW_AVI);
 	}
 
-	if (status6 & NEW_AUD) {
+	if (status6 & NEW_AUD || force) {
 		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
 		anx7808_write_reg(anx7808, SP_TX_AUD_TYPE, SP_TX_AUD_KTYPE);
 		anx7808_write_reg(anx7808, SP_TX_AUD_VER, SP_TX_AUD_KVER);
@@ -617,9 +617,12 @@ static void anx7808_play_video(struct work_struct *work)
 
 		case STATE_DP_OK:
 			anx7808_config_dp_output(anx7808);
+			anx7808_update_infoframes(anx7808, true);
 			state = STATE_PLAY;
+
 		case STATE_PLAY:
-			anx7808_update_infoframes(anx7808);
+			anx7808_update_infoframes(anx7808, false);
+
 		default:
 			break;
 		}
