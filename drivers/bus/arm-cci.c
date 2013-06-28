@@ -403,7 +403,7 @@ static const struct of_device_id arm_cci_ctrl_if_matches[] = {
 static int __init cci_probe(void)
 {
 	struct cci_nb_ports const *cci_config;
-	int ret, i, nb_ace = 0, nb_ace_lite = 0;
+	int ret, i, nb_ace = 0, nb_ace_lite = 0, this_cpu;
 	struct device_node *np, *cp;
 	struct resource res;
 	const char *match_str;
@@ -492,6 +492,15 @@ static int __init cci_probe(void)
 	sync_cache_w(&ports);
 	sync_cache_w(&cpu_port);
 	__sync_cache_range_w(ports, sizeof(*ports) * nb_cci_ports);
+
+	/*
+	 * Enable the CCI port for this CPU since the firmware may not
+	 * have done it for us.
+	 */
+	this_cpu = smp_processor_id();
+	if (cpu_port_is_valid(&cpu_port[this_cpu]))
+		cci_port_control(cpu_port[this_cpu].port, true);
+
 	pr_info("ARM CCI driver probed\n");
 	return 0;
 
