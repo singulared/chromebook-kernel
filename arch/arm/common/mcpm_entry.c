@@ -116,12 +116,12 @@ void mcpm_cpu_suspend(u64 expected_residency)
 	BUG();
 }
 
-int mcpm_cpu_powered_up(void)
+int mcpm_cpu_powered_up(bool switched)
 {
 	if (!platform_ops)
 		return -EUNATCH;
 	if (platform_ops->powered_up)
-		platform_ops->powered_up();
+		platform_ops->powered_up(switched);
 	return 0;
 }
 

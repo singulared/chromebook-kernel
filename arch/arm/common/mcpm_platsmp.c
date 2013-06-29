@@ -47,7 +47,7 @@ static int __cpuinit mcpm_boot_secondary(unsigned int cpu, struct task_struct *i
 
 static void __cpuinit mcpm_secondary_init(unsigned int cpu)
 {
-	mcpm_cpu_powered_up();
+	mcpm_cpu_powered_up(false);
 	gic_secondary_init(0);
 }
 

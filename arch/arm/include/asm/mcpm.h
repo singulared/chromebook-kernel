@@ -114,13 +114,16 @@ void mcpm_cpu_suspend(u64 expected_residency);
 /**
  * mcpm_cpu_powered_up - housekeeping workafter a CPU has been powered up
  *
+ * @switched: true if the CPU was powered up because of a switch, false
+ *	      otherwise.
+ *
  * This lets the platform specific backend code perform needed housekeeping
  * work.  This must be called by the newly activated CPU as soon as it is
  * fully operational in kernel space, before it enables interrupts.
  *
  * If the operation cannot be performed then an error code is returned.
  */
-int mcpm_cpu_powered_up(void);
+int mcpm_cpu_powered_up(bool switched);
 
 /*
  * Platform specific methods used in the implementation of the above API.
@@ -129,7 +132,7 @@ struct mcpm_platform_ops {
 	int (*power_up)(unsigned int cpu, unsigned int cluster);
 	void (*power_down)(void);
 	void (*suspend)(u64);
-	void (*powered_up)(void);
+	void (*powered_up)(bool switched);
 };
 
 /**

@@ -262,7 +262,7 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	pr_debug("after switch: CPU %d in cluster %d\n", cpuid, clusterid);
 	BUG_ON(clusterid != ib_cluster);
 
-	mcpm_cpu_powered_up();
+	mcpm_cpu_powered_up(true);
 
 	ret = cpu_pm_exit();
 
