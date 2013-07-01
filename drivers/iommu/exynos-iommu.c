@@ -477,6 +477,10 @@ static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
 				__sysmmu_tlb_invalidate_entry(
 						data->sfrbases[i], iova);
 				sysmmu_unblock(data->sfrbases[i]);
+			} else {
+				dev_err(dev,
+					"%s failed due to blocking timeout\n",
+					__func__);
 			}
 		}
 	} else {
