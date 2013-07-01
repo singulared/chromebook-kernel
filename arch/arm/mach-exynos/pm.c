@@ -52,8 +52,8 @@ static struct sleep_save exynos4_set_clksrc[] = {
 static struct sleep_save exynos5420_set_clksrc[] = {
 	{ .reg = EXYNOS5420_CLKSRC_MASK_CPERI,		.val = 0xffffffff, },
 	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP0,		.val = 0x11111111, },
-	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP1,		.val = 0x11100111, },
-	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP2,		.val = 0x11111100, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP1,		.val = 0x11101111, },
+	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP2,		.val = 0x11111110, },
 	{ .reg = EXYNOS5420_CLKSRC_MASK_TOP7,		.val = 0x00111100, },
 	{ .reg = EXYNOS5420_CLKSRC_MASK_DISP10,		.val = 0x11111110, },
 	{ .reg = EXYNOS5420_CLKSRC_MASK_MAU,		.val = 0x10000000, },
