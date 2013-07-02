@@ -87,6 +87,10 @@ static struct sleep_save exynos5420_sys_save[] = {
 	SAVE_ITEM(EXYNOS5_SYS_DISP1_BLK_CFG),
 };
 
+static struct sleep_save exynos5420_cpustate_save[] = {
+	SAVE_ITEM(EXYNOS5420_VA_CPU_STATE),
+};
+
 static struct sleep_save exynos_core_save[] = {
 	/* SROM side */
 	SAVE_ITEM(S5P_SROM_BW),
@@ -107,6 +111,13 @@ static int exynos_cpu_suspend(unsigned long arg)
 #ifdef CONFIG_CACHE_L2X0
 	outer_flush_all();
 #endif
+	/*
+	 * Clear IRAM register for cpu state so that primary CPU does
+	 * not enter low power start in U-Boot.
+	 * This is specific to exynos5420 SoC only.
+	 */
+	if (soc_is_exynos5420())
+		__raw_writel(0x0, EXYNOS5420_VA_CPU_STATE);
 
 	if (soc_is_exynos5250() || soc_is_exynos5420())
 		flush_cache_all();
@@ -143,9 +154,19 @@ static void exynos_pm_prepare(void)
 		tmp = __raw_readl(EXYNOS5_JPEG_MEM_OPTION);
 		tmp &= ~EXYNOS5_OPTION_USE_RETENTION;
 		__raw_writel(tmp, EXYNOS5_JPEG_MEM_OPTION);
-	} else if (soc_is_exynos5420())
+	} else if (soc_is_exynos5420()) {
 		s3c_pm_do_save(exynos5420_sys_save,
 					ARRAY_SIZE(exynos5420_sys_save));
+		/*
+		 * The cpu state needs to be saved and restored so that the
+		 * secondary CPUs will enter low power start. Though the U-Boot
+		 * is setting the cpu state with low power flag, the kernel
+		 * needs to restore it back in case, the primary cpu fails to
+		 * suspend for any reason
+		 */
+		s3c_pm_do_save(exynos5420_cpustate_save,
+			ARRAY_SIZE(exynos5420_cpustate_save));
+	}
 
 	/* Set value of power down register for sleep mode */
 
@@ -344,9 +365,14 @@ static void exynos_pm_resume(void)
 {
 	unsigned long tmp;
 
-	if (soc_is_exynos5420())
+	if (soc_is_exynos5420()) {
+		/* Restore the IRAM register cpu state */
+		s3c_pm_do_restore(exynos5420_cpustate_save,
+			ARRAY_SIZE(exynos5420_cpustate_save));
+
 		__raw_writel(EXYNOS5420_USE_STANDBY_WFI_ALL,
 			S5P_CENTRAL_SEQ_OPTION);
+	}
 
 	/*
 	 * If PMU failed while entering sleep mode, WFI will be
