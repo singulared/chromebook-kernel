@@ -30,6 +30,7 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/sd.h>
 #include <linux/mmc/sdio.h>
 #include <linux/mmc/dw_mmc.h>
 #include <linux/bitops.h>
@@ -241,10 +242,13 @@ static void dw_mci_set_timeout(struct dw_mci *host)
 	mci_writel(host, TMOUT, 0xffffffff);
 }
 
+static void mci_send_cmd(struct dw_mci_slot *slot, u32 cmd, u32 arg);
+
 static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 {
 	struct mmc_data	*data;
 	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
 	const struct dw_mci_drv_data *drv_data = slot->host->drv_data;
 	u32 cmdr;
 	cmd->error = -EINPROGRESS;
@@ -260,6 +264,32 @@ static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 	else
 		if (cmd->opcode != MMC_SEND_STATUS && cmd->data)
 			cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
+
+	if (cmd->opcode == SD_SWITCH_VOLTAGE) {
+		u32 clk_en_a;
+
+		/* Special bit makes CMD11 not die */
+		cmdr |= SDMMC_CMD_VOLT_SWITCH;
+
+		/* Change state to continue to handle CMD11 weirdness */
+		WARN_ON(slot->host->state != STATE_SENDING_CMD);
+		slot->host->state = STATE_SENDING_CMD11;
+
+		/*
+		 * We need to disable clock stop while doing voltage switch
+		 * according to 7.4.1.2 Voltage Switch Normal Scenario.
+		 *
+		 * It's assumed that by the next time the CLKENA is updated
+		 * (when we set the clock next) that the voltage change will
+		 * be over, so we don't bother setting any bits to synchronize
+		 * with dw_mci_setup_bus().
+		 */
+		clk_en_a = mci_readl(host, CLKENA);
+		clk_en_a &= ~(SDMMC_CLKEN_LOW_PWR << slot->id);
+		mci_writel(host, CLKENA, clk_en_a);
+		mci_send_cmd(slot, SDMMC_CMD_UPD_CLK |
+			     SDMMC_CMD_PRV_DAT_WAIT, 0);
+	}
 
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		/* We expect a response, so set this bit */
@@ -790,11 +820,15 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 	unsigned int clock = slot->clock;
 	u32 div;
 	u32 clk_en_a;
+	u32 sdmmc_cmd_bits = SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT;
+
+	/* We must continue to set bit 28 in CMD until the change is complete */
+	if (host->state == STATE_WAITING_CMD11_DONE)
+		sdmmc_cmd_bits |= SDMMC_CMD_VOLT_SWITCH;
 
 	if (!clock) {
 		mci_writel(host, CLKENA, 0);
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 	} else if (clock != host->current_speed || force_clkinit) {
 		div = host->bus_hz / clock;
 		if (host->bus_hz % clock && host->bus_hz > clock)
@@ -818,15 +852,13 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 		mci_writel(host, CLKSRC, 0);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 
 		/* set clock to desired speed */
 		mci_writel(host, CLKDIV, div);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 
 		/* enable clock; only low power if no SDIO */
 		clk_en_a = SDMMC_CLKEN_ENABLE << slot->id;
@@ -835,8 +867,7 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 		mci_writel(host, CLKENA, clk_en_a);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 
 		/* keep the clock with reflecting clock dividor */
 		slot->__clk_old = clock << div;
@@ -914,6 +945,17 @@ static void dw_mci_queue_request(struct dw_mci *host, struct dw_mci_slot *slot,
 
 	slot->mrq = mrq;
 
+	if (host->state == STATE_WAITING_CMD11_DONE) {
+		dev_warn(&slot->mmc->class_dev,
+			 "Voltage change didn't complete\n");
+		/*
+		 * this case isn't expected to happen, so we can
+		 * either crash here or just try to continue on
+		 * in the closest possible state
+		 */
+		host->state = STATE_IDLE;
+	}
+
 	if (host->state == STATE_IDLE) {
 		host->state = STATE_SENDING_CMD;
 		dw_mci_start_request(host, slot);
@@ -990,6 +1032,9 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	/* Slot specific timing and width adjustment */
 	dw_mci_setup_bus(slot, false);
 
+	if (slot->host->state == STATE_WAITING_CMD11_DONE && ios->clock != 0)
+		slot->host->state = STATE_IDLE;
+
 	switch (ios->power_mode) {
 	case MMC_POWER_UP:
 		set_bit(DW_MMC_CARD_NEED_INIT, &slot->flags);
@@ -1034,6 +1079,66 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	default:
 		break;
 	}
+}
+
+static int dw_mci_card_busy(struct mmc_host *mmc)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	u32 status;
+
+	/*
+	 * Check the busy bit which is low when DAT[3:0]
+	 * (the data lines) are 0000
+	 */
+	status = mci_readl(slot->host, STATUS);
+
+	return !!(status & SDMMC_STATUS_BUSY);
+}
+
+static int dw_mci_switch_voltage(struct mmc_host *mmc, struct mmc_ios *ios)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
+	u32 uhs;
+	u32 v18 = SDMMC_UHS_18V << slot->id;
+	int min_uv, max_uv;
+	int ret;
+
+	/*
+	 * Program the voltage.  Note that some instances of dw_mmc may use
+	 * the UHS_REG for this.  For other instances (like exynos) the UHS_REG
+	 * does no harm but you need to set the regulator directly.  Try both.
+	 */
+	uhs = mci_readl(host, UHS_REG);
+	if (ios->signal_voltage == MMC_SIGNAL_VOLTAGE_330) {
+		min_uv = 2700000;
+		max_uv = 3600000;
+		uhs &= ~v18;
+	} else {
+		min_uv = 1700000;
+		max_uv = 1950000;
+		uhs |= v18;
+	}
+	if (host->vqmmc) {
+		ret = regulator_set_voltage(host->vqmmc, min_uv, max_uv);
+
+		/*
+		 * Only complain if regulator claims that it's not in the 1.8V
+		 * range.  This avoids a bunch of errors in the case that
+		 * we've got a fixed 1.8V regulator but the core SD code still
+		 * thinks it ought to try to switch to 3.3 and then back to 1.8
+		 */
+		if (ret) {
+			int cur_voltage = regulator_get_voltage(host->vqmmc);
+			if (cur_voltage < 1700000 || cur_voltage > 1950000)
+				dev_warn(&mmc->class_dev,
+					 "Regulator set error %d: %d - %d\n",
+					 ret, min_uv, max_uv);
+		}
+	}
+	mci_writel(host, UHS_REG, uhs);
+
+	return 0;
 }
 
 static int dw_mci_get_ro(struct mmc_host *mmc)
@@ -1178,6 +1283,8 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
 	.init_card		= dw_mci_init_card,
 	.execute_tuning		= dw_mci_execute_tuning,
+	.card_busy		= dw_mci_card_busy,
+	.start_signal_voltage_switch = dw_mci_switch_voltage,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
@@ -1201,7 +1308,11 @@ static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
 		dw_mci_start_request(host, slot);
 	} else {
 		dev_vdbg(host->dev, "list empty\n");
-		host->state = STATE_IDLE;
+
+		if (host->state == STATE_SENDING_CMD11)
+			host->state = STATE_WAITING_CMD11_DONE;
+		else
+			host->state = STATE_IDLE;
 	}
 
 	spin_unlock(&host->lock);
@@ -1312,8 +1423,10 @@ static void dw_mci_tasklet_func(unsigned long priv)
 
 		switch (state) {
 		case STATE_IDLE:
+		case STATE_WAITING_CMD11_DONE:
 			break;
 
+		case STATE_SENDING_CMD11:
 		case STATE_SENDING_CMD:
 			if (!test_and_clear_bit(EVENT_CMD_COMPLETE,
 						&host->pending_events))
@@ -1868,6 +1981,15 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 	}
 
 	if (pending) {
+		/* Check volt switch first, since it can look like an error */
+		if ((host->state == STATE_SENDING_CMD11) &&
+		    (pending & SDMMC_INT_VOLT_SWITCH)) {
+			mci_writel(host, RINTSTS, SDMMC_INT_VOLT_SWITCH);
+			pending &= ~SDMMC_INT_VOLT_SWITCH;
+			dw_mci_cmd_interrupt(host,
+					     pending | SDMMC_INT_CMD_DONE);
+		}
+
 		if (pending & DW_MCI_CMD_ERROR_FLAGS) {
 			mci_writel(host, RINTSTS, DW_MCI_CMD_ERROR_FLAGS);
 			host->cmd_status = pending;
@@ -1981,7 +2103,9 @@ static void dw_mci_work_routine_card(struct work_struct *work)
 
 					switch (host->state) {
 					case STATE_IDLE:
+					case STATE_WAITING_CMD11_DONE:
 						break;
+					case STATE_SENDING_CMD11:
 					case STATE_SENDING_CMD:
 						mrq->cmd->error = -ENOMEDIUM;
 						if (!mrq->data)
