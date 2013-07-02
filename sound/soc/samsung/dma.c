@@ -177,8 +177,10 @@ static int dma_hw_params(struct snd_pcm_substream *substream,
 		dma_info.dt_dmach_prop = prtd->params->dma_prop;
 		prtd->params->ch = prtd->params->ops->request(
 				prtd->params->channel, &dma_info);
-		if (!prtd->params->ch)
+		if (!prtd->params->ch) {
+			prtd->params = NULL;
 			return -EBUSY;
+		}
 	}
 
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
