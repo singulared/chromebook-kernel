@@ -149,6 +149,9 @@
 #define SDMMC_GET_VERID(x)		((x) & 0xFFFF)
 /* Card read threshold */
 #define SDMMC_SET_RD_THLD(v, x)		(((v) & 0x1FFF) << 16 | (x))
+/* Ultra High Speed register define (SDMMC_UHS_REG) */
+#define SDMMC_UHS_DDR_MODE		BIT(16)
+#define SDMMC_UHS_18V			BIT(0)
 
 /* Register access macros */
 #define mci_readl(dev, reg)			\

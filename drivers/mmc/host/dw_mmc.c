@@ -971,9 +971,9 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	/* DDR mode set */
 	if (ios->timing == MMC_TIMING_UHS_DDR50)
-		regs |= ((0x1 << slot->id) << 16);
+		regs |= (SDMMC_UHS_DDR_MODE << slot->id);
 	else
-		regs &= ~((0x1 << slot->id) << 16);
+		regs &= ~(SDMMC_UHS_DDR_MODE << slot->id);
 
 	mci_writel(slot->host, UHS_REG, regs);
 	slot->host->timing = ios->timing;
