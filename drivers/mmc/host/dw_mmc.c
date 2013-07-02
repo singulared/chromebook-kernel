@@ -29,6 +29,7 @@
 #include <linux/irq.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/sd.h>
 #include <linux/mmc/dw_mmc.h>
 #include <linux/bitops.h>
 #include <linux/regulator/consumer.h>
@@ -197,6 +198,8 @@ err:
 }
 #endif /* defined(CONFIG_DEBUG_FS) */
 
+static void dw_mci_disable_low_power(struct dw_mci_slot *slot);
+
 static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 {
 	struct mmc_data	*data;
@@ -211,6 +214,21 @@ static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 		cmdr |= SDMMC_CMD_STOP;
 	else
 		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
+
+	if (cmd->opcode == SD_SWITCH_VOLTAGE) {
+		/* Special bit makes CMD11 not die */
+		cmdr |= SDMMC_CMD_VOLT_SWITCH;
+
+		/* Change state to continue to handle CMD11 weirdness */
+		WARN_ON(slot->host->state != STATE_SENDING_CMD);
+		slot->host->state = STATE_SENDING_CMD11;
+
+		/*
+		 * We need to disable clock stop while doing voltage switch
+		 * according to 7.4.1.2 Voltage Switch Normal Scenario.
+		 */
+		dw_mci_disable_low_power(slot);
+	}
 
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		/* We expect a response, so set this bit */
@@ -592,8 +610,16 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 	struct dw_mci *host = slot->host;
 	u32 div;
 	u32 clk_en_a;
+	u32 sdmmc_cmd_bits = SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT;
 
-	if (slot->clock != host->current_speed || force_clkinit) {
+	/* We must continue to set bit 28 in CMD until the change is complete */
+	if (host->state == STATE_WAITING_CMD11_DONE)
+		sdmmc_cmd_bits |= SDMMC_CMD_VOLT_SWITCH;
+
+	if (slot->clock == 0) {
+		mci_writel(host, CLKENA, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
+	} else if (slot->clock != host->current_speed || force_clkinit) {
 		div = host->bus_hz / slot->clock;
 		if (host->bus_hz % slot->clock && host->bus_hz > slot->clock)
 			/*
@@ -614,15 +640,13 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 		mci_writel(host, CLKSRC, 0);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 
 		/* set clock to desired speed */
 		mci_writel(host, CLKDIV, div);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 
 		/* enable clock; only low power if no SDIO */
 		clk_en_a = SDMMC_CLKEN_ENABLE << slot->id;
@@ -631,11 +655,9 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 		mci_writel(host, CLKENA, clk_en_a);
 
 		/* inform CIU */
-		mci_send_cmd(slot,
-			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
-
-		host->current_speed = slot->clock;
+		mci_send_cmd(slot, sdmmc_cmd_bits, 0);
 	}
+	host->current_speed = slot->clock;
 
 	/* Set the current slot bus width */
 	mci_writel(host, CTYPE, (slot->ctype << slot->id));
@@ -703,6 +725,17 @@ static void dw_mci_queue_request(struct dw_mci *host, struct dw_mci_slot *slot,
 
 	slot->mrq = mrq;
 
+	if (host->state == STATE_WAITING_CMD11_DONE) {
+		dev_warn(&slot->mmc->class_dev,
+			 "Voltage change didn't complete\n");
+		/*
+		 * this case isn't expected to happen, so we can
+		 * either crash here or just try to continue on
+		 * in the closest possible state
+		 */
+		host->state = STATE_IDLE;
+	}
+
 	if (host->state == STATE_IDLE) {
 		host->state = STATE_SENDING_CMD;
 		dw_mci_start_request(host, slot);
@@ -765,7 +798,7 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	mci_writel(slot->host, UHS_REG, regs);
 
-	if (ios->clock) {
+	if (ios->clock || slot->host->state == STATE_WAITING_CMD11_DONE) {
 		/*
 		 * Use mirror of ios->clock to prevent race with mmc
 		 * core ios update when finding the minimum.
@@ -783,6 +816,9 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	/* Slot specific timing and width adjustment */
 	dw_mci_setup_bus(slot, false);
+
+	if (slot->host->state == STATE_WAITING_CMD11_DONE && ios->clock != 0)
+		slot->host->state = STATE_IDLE;
 
 	switch (ios->power_mode) {
 	case MMC_POWER_UP:
@@ -828,6 +864,25 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	default:
 		break;
 	}
+}
+
+static int dw_mci_card_busy(struct mmc_host *mmc)
+{
+	struct dw_mci_slot *slot = mmc_priv(mmc);
+	u32 status;
+
+	/* Check whether DAT[3:0] is 0000 */
+	status = mci_readl(slot->host, STATUS);
+
+	return !!(status & (1 << 9));
+}
+
+static int dw_mci_switch_voltage(struct mmc_host *mmc, struct mmc_ios *ios)
+{
+	/* TODO: sonnyrao: restore this function's implementation */
+	/* this just returns success as we're only supporting UHS */
+	/* for the wifi bus which is already at 1.8v */
+	return 0;
 }
 
 static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
@@ -946,6 +1001,8 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.get_cd			= dw_mci_get_cd,
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
 	.execute_tuning		= dw_mci_execute_tuning,
+	.card_busy		= dw_mci_card_busy,
+	.start_signal_voltage_switch = dw_mci_switch_voltage,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
@@ -969,7 +1026,11 @@ static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
 		dw_mci_start_request(host, slot);
 	} else {
 		dev_vdbg(host->dev, "list empty\n");
-		host->state = STATE_IDLE;
+
+		if (host->state == STATE_SENDING_CMD11)
+			host->state = STATE_WAITING_CMD11_DONE;
+		else
+			host->state = STATE_IDLE;
 	}
 
 	spin_unlock(&host->lock);
@@ -1038,8 +1099,10 @@ static void dw_mci_tasklet_func(unsigned long priv)
 
 		switch (state) {
 		case STATE_IDLE:
+		case STATE_WAITING_CMD11_DONE:
 			break;
 
+		case STATE_SENDING_CMD11:
 		case STATE_SENDING_CMD:
 			if (!test_and_clear_bit(EVENT_CMD_COMPLETE,
 						&host->pending_events))
@@ -1656,6 +1719,15 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 				pending |= SDMMC_INT_DATA_OVER;
 		}
 
+		/* Check volt switch first, since it can look like an error */
+		if ((host->state == STATE_SENDING_CMD11) &&
+		    (pending & SDMMC_INT_VOLT_SWITCH)) {
+			mci_writel(host, RINTSTS, SDMMC_INT_VOLT_SWITCH);
+			pending &= ~SDMMC_INT_VOLT_SWITCH;
+			dw_mci_cmd_interrupt(host,
+					     pending | SDMMC_INT_CMD_DONE);
+		}
+
 		if (pending & DW_MCI_CMD_ERROR_FLAGS) {
 			mci_writel(host, RINTSTS, DW_MCI_CMD_ERROR_FLAGS);
 			host->cmd_status = pending;
@@ -1770,7 +1842,9 @@ static void dw_mci_work_routine_card(struct work_struct *work)
 
 					switch (host->state) {
 					case STATE_IDLE:
+					case STATE_WAITING_CMD11_DONE:
 						break;
+					case STATE_SENDING_CMD11:
 					case STATE_SENDING_CMD:
 						mrq->cmd->error = -ENOMEDIUM;
 						if (!mrq->data)
