@@ -2286,6 +2286,12 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "enable-sdio-wakeup", NULL))
 		pdata->pm_caps |= MMC_PM_WAKE_SDIO_IRQ;
 
+	if (of_find_property(np, "supports-sdr104-mode", NULL))
+		pdata->caps |= MMC_CAP_UHS_SDR104;
+
+	if (of_find_property(np, "supports-sdr50-mode", NULL))
+		pdata->caps |= MMC_CAP_UHS_SDR50;
+
 	if (of_find_property(np, "supports-hs200-mode", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200;
 

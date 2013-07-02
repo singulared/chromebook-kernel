@@ -66,6 +66,10 @@ Optional properties:
 
 * supports-highspeed: Enables support for high speed cards (upto 50MHz)
 
+* supports-sdr50-mode: Enables support for SDR50 mode cards
+
+* supports-sdr104-mode: Enables support for SDR104 mode cards
+
 * broken-cd: as documented in mmc core bindings.
 
 * vmmc-supply: The phandle to the regulator to use for vmmc.  If this is
