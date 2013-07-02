@@ -2431,6 +2431,12 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "supports-highspeed", NULL))
 		pdata->caps |= MMC_CAP_SD_HIGHSPEED | MMC_CAP_MMC_HIGHSPEED;
 
+	if (of_find_property(np, "supports-sdr104-mode", NULL))
+		pdata->caps |= MMC_CAP_UHS_SDR104;
+
+	if (of_find_property(np, "supports-sdr50-mode", NULL))
+		pdata->caps |= MMC_CAP_UHS_SDR50;
+
 	if (of_find_property(np, "caps2-mmc-hs200-1_8v", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200_1_8V_SDR;
 

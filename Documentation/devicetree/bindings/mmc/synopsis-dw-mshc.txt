@@ -69,6 +69,10 @@ Optional properties:
 
 * supports-highspeed: Enables support for high speed cards (upto 50MHz)
 
+* supports-sdr50-mode: Enables support for SDR50 mode cards
+
+* supports-sdr104-mode: Enables support for SDR104 mode cards
+
 * caps2-mmc-hs200-1_8v: Supports mmc HS200 SDR 1.8V mode
 
 * caps2-mmc-hs200-1_2v: Supports mmc HS200 SDR 1.2V mode
