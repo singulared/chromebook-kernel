@@ -446,12 +446,6 @@
 		reg = <0x10042480 0x20>;
 	};
 
-	dis_irq_isparm_pd: pd@100424A0 {
-		compatible = "samsung,exynos4210-pd";
-		/* Docs say reserved - http://crosbug.com/p/20126 */
-		reg = <0x100424A0 0x20>;
-	};
-
 	xusbxti_pd: pd@10043400 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10043400 0x20>;
