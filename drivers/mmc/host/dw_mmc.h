@@ -46,7 +46,6 @@
 #define SDMMC_VERID		0x06c
 #define SDMMC_HCON		0x070
 #define SDMMC_UHS_REG		0x074
-#define SDMMC_UHS_DDR_MODE		0x1
 #define SDMMC_BMOD		0x080
 #define SDMMC_PLDMND		0x084
 #define SDMMC_DBADDR		0x088
@@ -148,6 +147,9 @@
 #define SDMMC_IDMAC_SWRESET		BIT(0)
 /* Version ID register define */
 #define SDMMC_GET_VERID(x)		((x) & 0xFFFF)
+/* Ultra High Speed register define (SDMMC_UHS_REG) */
+#define SDMMC_UHS_DDR_MODE		BIT(16)
+#define SDMMC_UHS_18V			BIT(0)
 
 /* Register access macros */
 #define mci_readl(dev, reg)			\
