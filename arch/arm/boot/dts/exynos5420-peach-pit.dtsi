@@ -344,6 +344,7 @@
 		status = "okay";
 		num-slots = <1>;
 		supports-highspeed;
+		supports-sdr50-mode;
 		keep-power-in-suspend;
 		/* non-removable NOT set so mwifiex driver can use reset trick */
 		broken-cd;
