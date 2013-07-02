@@ -52,9 +52,20 @@ void exynos5420_set_abb(struct asv_info *asv_inform)
 
 	switch (asv_inform->asv_type) {
 	case ID_ARM:
-	case ID_KFC:
-		target_reg = EXYNOS5420_BB_CON0;
+		target_reg = EXYNOS5420_BIAS_CON_ARM;
 		target_value = arm_asv_abb_info[asv_inform->result_asv_grp];
+		break;
+	case ID_KFC:
+		target_reg = EXYNOS5420_BIAS_CON_KFC;
+		target_value = kfc_asv_abb_info[asv_inform->result_asv_grp];
+		break;
+	case ID_INT:
+		target_reg = EXYNOS5420_BIAS_CON_INT;
+		target_value = int_asv_abb_info[asv_inform->result_asv_grp];
+		break;
+	case ID_G3D:
+		target_reg = EXYNOS5420_BIAS_CON_G3D;
+		target_value = g3d_asv_abb_info[asv_inform->result_asv_grp];
 		break;
 	default:
 		return;
@@ -92,6 +103,7 @@ static unsigned int exynos5420_set_asv_info(struct asv_info *asv_inform,
 	unsigned int i;
 	unsigned int target_asv_grp_nr = asv_inform->result_asv_grp;
 	unsigned int level = asv_inform->dvfs_level_nr;
+	unsigned int (*asv_volt_info)[ARM_ASV_GRP_NR + 1];
 
 	exynos5420_set_abb(asv_inform);
 
@@ -108,20 +120,28 @@ static unsigned int exynos5420_set_asv_info(struct asv_info *asv_inform,
 		goto out2;
 	}
 
-	if (asv_inform->asv_type == ID_ARM) {
-		for (i = 0; i < level; i++) {
-			asv_inform->asv_volt[i].asv_freq =
-						arm_asv_volt_info[i][0];
-			asv_inform->asv_volt[i].asv_value =
-				arm_asv_volt_info[i][target_asv_grp_nr + 1];
-		}
-	} else if (asv_inform->asv_type == ID_KFC) {
-		for (i = 0; i < level; i++) {
-			asv_inform->asv_volt[i].asv_freq =
-						kfc_asv_volt_info[i][0];
-			asv_inform->asv_volt[i].asv_value =
-				kfc_asv_volt_info[i][target_asv_grp_nr + 1];
-		}
+	switch (asv_inform->asv_type) {
+	case ID_ARM:
+		asv_volt_info = arm_asv_volt_info;
+		break;
+	case ID_KFC:
+		asv_volt_info = kfc_asv_volt_info;
+		break;
+	case ID_G3D:
+		asv_volt_info = g3d_asv_volt_info;
+		break;
+	case ID_INT:
+		asv_volt_info = int_asv_volt_info;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	for (i = 0; i < level; i++) {
+		asv_inform->asv_volt[i].asv_freq =
+					asv_volt_info[i][0];
+		asv_inform->asv_volt[i].asv_value =
+					asv_volt_info[i][target_asv_grp_nr + 1];
 	}
 
 	if (show_value) {
@@ -149,6 +169,16 @@ struct asv_ops exynos5420_asv_ops_kfc = {
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
+static struct asv_ops exynos5420_asv_ops_g3d = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
+static struct asv_ops exynos5420_asv_ops_int = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
 struct asv_info exynos5420_asv_member[] = {
 	{
 		.asv_type	= ID_ARM,
@@ -164,6 +194,20 @@ struct asv_info exynos5420_asv_member[] = {
 		.asv_group_nr	= ASV_GRP_NR(KFC),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(KFC),
 		.max_volt_value = MAX_VOLT(KFC),
+	}, {
+		.asv_type	= ID_INT,
+		.name		= "VDD_INT",
+		.ops		= &exynos5420_asv_ops_int,
+		.asv_group_nr	= ASV_GRP_NR(INT),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(INT),
+		.max_volt_value = MAX_VOLT(INT),
+	}, {
+		.asv_type	= ID_G3D,
+		.name		= "VDD_G3D",
+		.ops		= &exynos5420_asv_ops_g3d,
+		.asv_group_nr	= ASV_GRP_NR(G3D),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D),
+		.max_volt_value = MAX_VOLT(G3D),
 	},
 };
 
