@@ -809,11 +809,12 @@ static const struct samsung_pll_rate_table epll_24mhz_tbl[] = {
 static struct samsung_pll_rate_table vpll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_35XX_RATE(rate, m, p, s) */
-	PLL_35XX_RATE(600000000, 400, 4, 2),
-	PLL_35XX_RATE(500000000, 250, 3, 2), /* not in UM? */
-	PLL_35XX_RATE(400000000, 200, 3, 2),
-	PLL_35XX_RATE(300000000, 400, 4, 3),
-	PLL_35XX_RATE(200000000, 200, 3, 3),
+	PLL_35XX_RATE(533000000, 533, 6, 2),
+	PLL_35XX_RATE(480000000, 160, 2, 2),
+	PLL_35XX_RATE(420000000, 140, 2, 2),
+	PLL_35XX_RATE(350000000, 175, 3, 2),
+	PLL_35XX_RATE(266000000, 266, 3, 3),
+	PLL_35XX_RATE(177000000, 118, 2, 3),
 	PLL_35XX_RATE(100000000, 200, 3, 4),
 };
 
