@@ -214,19 +214,10 @@ out:
 
 int exynos5420_init_asv(struct asv_common *asv_info)
 {
-	struct clk *clk_chipid;
 	unsigned int chip_id3_value;
 	unsigned int chip_id4_value;
 
 	pr_debug("EXYNOS5420: Adaptive Supply Voltage init\n");
-
-	/* Lot ID Check */
-	clk_chipid = clk_get(NULL, "chipid_apbif");
-	if (IS_ERR(clk_chipid)) {
-		pr_err("EXYNOS5420 ASV : cannot find chipid clock!\n");
-		return -EINVAL;
-	}
-	clk_prepare_enable(clk_chipid);
 
 	is_special_lot = exynos5420_check_lot_id(asv_info);
 	if (is_special_lot)
@@ -247,7 +238,6 @@ int exynos5420_init_asv(struct asv_common *asv_info)
 				asv_info->ids_value, asv_info->hpm_value);
 
 set_asv_info:
-	clk_disable_unprepare(clk_chipid);
 	asv_info->register_asv_member = exynos5420_register_asv_member;
 	return 0;
 }

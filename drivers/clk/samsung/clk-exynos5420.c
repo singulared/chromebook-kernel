@@ -652,9 +652,8 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(i2c9, "i2c9", "aclk66_peric", GATE_IP_PERIC, 30, 0, 0),
 	GATE(i2c10, "i2c10", "aclk66_peric", GATE_IP_PERIC, 31, 0, 0),
 
-	/* TODO(arjun.kv@samsung.com): Remove alias and fix ASV */
-	GATE_A(chipid, "chipid", "aclk66", GATE_IP_PERIS, 0, 0, 0,
-	       "chipid_apbif"),
+	GATE(chipid, "chipid", "aclk66", GATE_IP_PERIS,
+						0, CLK_IGNORE_UNUSED, 0),
 
 	/* SPI */
 	GATE(spi0, "spi0", "aclk66_peric", GATE_BUS_PERIC, 19, 0, 0),
