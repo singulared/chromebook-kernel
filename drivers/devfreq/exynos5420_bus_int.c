@@ -25,6 +25,7 @@
 
 #include <mach/regs-clock.h>
 #include <mach/devfreq.h>
+#include <mach/asv-exynos.h>
 
 #include <plat/pll.h>
 #include <plat/clock.h>
@@ -605,8 +606,11 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	unsigned int asv_volt;
 
 	for (i = 0; i < ARRAY_SIZE(int_bus_opp_list); i++) {
+#ifdef CONFIG_ARM_EXYNOS5420_ASV
+		asv_volt = get_match_volt(ID_INT, int_bus_opp_list[i].freq);
+#else
 		asv_volt = int_bus_opp_list[i].volt;
-
+#endif
 		pr_debug("INT %luKhz ASV is %duV\n",
 					int_bus_opp_list[i].freq, asv_volt);
 		ret = opp_add(data->dev, int_bus_opp_list[i].freq, asv_volt);
