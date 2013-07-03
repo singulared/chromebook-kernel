@@ -49,6 +49,7 @@ ENTRY(v7_invalidate_l1)
 ENDPROC(v7_invalidate_l1)
 
 ENTRY(tegra_secondary_startup)
-        bl      v7_invalidate_l1
+        check_cpu_part_num 0xc09, r8, r9
+        bleq    v7_invalidate_l1
         b       secondary_startup
 ENDPROC(tegra_secondary_startup)
