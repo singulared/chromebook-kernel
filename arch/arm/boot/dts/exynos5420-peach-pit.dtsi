@@ -165,6 +165,20 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <3>;
 		};
+
+		usb3_vbus0_en: usb3-vbus0-en {
+			samsung,pins = "gph0-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		usb3_vbus1_en: usb3-vbus1-en {
+			samsung,pins = "gph0-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	gpio-keys {
@@ -506,6 +520,9 @@
 	/* dw usb3_0 */
 	usb@12000000 {
 		status = "okay";
+		samsung,vbus-gpio = <&gph0 0 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_vbus0_en>;
 	};
 
 	/* ehci */
@@ -521,6 +538,9 @@
 	/* dw usb3_1 */
 	usb@12400000 {
 		status = "okay";
+		samsung,vbus-gpio = <&gph0 1 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_vbus1_en>;
 	};
 
 	usb2_phy: usbphy@12130000 {
@@ -1167,7 +1187,7 @@
 			powerdown-settings = <2 2>;
 		};
 		gph0: gph0 {
-			powerdown-settings = <3 3 6 6 6 6 6 5>;
+			powerdown-settings = <6 6 6 6 6 6 6 5>;
 		};
 	};
 	pinctrl@03860000 {
