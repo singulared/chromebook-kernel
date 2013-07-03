@@ -700,7 +700,7 @@
 					regulator-min-microvolt = <1800000>;
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
-					regulator-op-mode = <2>;
+					regulator-op-mode = <0>;
 				};
 				ldo21_reg: LDO21 {
 					regulator-name = "ldo_21";
@@ -1096,7 +1096,7 @@
 	};
 	pinctrl@13410000 {
 		gpc0: gpc0 {
-			powerdown-settings = <6 2 5 2 2 2 2 3>;
+			powerdown-settings = <6 3 5 3 3 3 3 3>;
 		};
 		gpc1: gpc1 {
 			powerdown-settings = <6 2 3 2 2 2 2 3>;
@@ -1105,7 +1105,7 @@
 			powerdown-settings = <6 2 2 2 2 2 2>;
 		};
 		gpc3: gpc3 {
-			powerdown-settings = <2 2 2 2>;
+			powerdown-settings = <3 3 3 3>;
 		};
 		gpc4: gpc4 {
 			powerdown-settings = <2 3>;
