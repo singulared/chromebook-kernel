@@ -245,6 +245,9 @@ struct dw_mci_tuning_data {
  * @prepare_command: handle CMD register extensions.
  * @set_ios: handle bus specific extensions.
  * @parse_dt: parse implementation specific device tree properties.
+ * @execute_tuning: "auto-tune" Clock-In parameters
+ * @suspend_noirq: called late in the suspend process
+ * @resume_noirq: called early in the resume process
  *
  * Provide controller implementation specific extensions. The usage of this
  * data structure is fully optional and usage of each member in this structure
@@ -259,5 +262,7 @@ struct dw_mci_drv_data {
 	int		(*parse_dt)(struct dw_mci *host);
 	int		(*execute_tuning)(struct dw_mci_slot *slot, u32 opcode,
 					struct dw_mci_tuning_data *tuning_data);
+	int		(*suspend_noirq)(struct dw_mci *host);
+	int		(*resume_noirq)(struct dw_mci *host);
 };
 #endif /* _DW_MMC_H_ */
