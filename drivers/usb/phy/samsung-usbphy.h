@@ -16,6 +16,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/mutex.h>
 #include <linux/usb/phy.h>
 
 /* Register definitions */
@@ -314,7 +315,7 @@ struct samsung_usbphy_drvdata {
  * @phy_type: Samsung SoCs specific phy types:	#HOST
  *						#DEVICE
  * @phy_usage: usage count for phy
- * @lock: lock for phy operations
+ * @mutex: mutex for phy operations (usb2phy must sleep, so no spinlock!)
  * @hsic_reset_gpio: Active low GPIO that resets connected HSIC device
  * @channel: Channel number of controller in multi controller scenerio.
  */
@@ -330,7 +331,7 @@ struct samsung_usbphy {
 	const struct samsung_usbphy_drvdata *drv_data;
 	enum samsung_usb_phy_type phy_type;
 	atomic_t	phy_usage;
-	spinlock_t	lock;
+	struct mutex	mutex;
 	int		hsic_reset_gpio;
 	int		channel;
 };

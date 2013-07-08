@@ -246,7 +246,6 @@ static void samsung_exynos5_usb3phy_disable(struct samsung_usbphy *sphy)
 static int samsung_usb3phy_init(struct usb_phy *phy)
 {
 	struct samsung_usbphy *sphy;
-	unsigned long flags;
 	int ret = 0;
 
 	sphy = phy_to_sphy(phy);
@@ -258,7 +257,7 @@ static int samsung_usb3phy_init(struct usb_phy *phy)
 		return ret;
 	}
 
-	spin_lock_irqsave(&sphy->lock, flags);
+	mutex_lock(&sphy->mutex);
 
 	/* setting default phy-type for USB 3.0 */
 	samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
@@ -269,7 +268,7 @@ static int samsung_usb3phy_init(struct usb_phy *phy)
 	/* Initialize usb phy registers */
 	samsung_exynos5_usb3phy_enable(sphy);
 
-	spin_unlock_irqrestore(&sphy->lock, flags);
+	mutex_unlock(&sphy->mutex);
 
 	/* Disable the phy clock */
 	clk_disable_unprepare(sphy->clk);
@@ -283,7 +282,6 @@ static int samsung_usb3phy_init(struct usb_phy *phy)
 static void samsung_usb3phy_shutdown(struct usb_phy *phy)
 {
 	struct samsung_usbphy *sphy;
-	unsigned long flags;
 
 	sphy = phy_to_sphy(phy);
 
@@ -292,7 +290,7 @@ static void samsung_usb3phy_shutdown(struct usb_phy *phy)
 		return;
 	}
 
-	spin_lock_irqsave(&sphy->lock, flags);
+	mutex_lock(&sphy->mutex);
 
 	/* setting default phy-type for USB 3.0 */
 	samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
@@ -303,7 +301,7 @@ static void samsung_usb3phy_shutdown(struct usb_phy *phy)
 	/* Enable phy isolation */
 	samsung_usbphy_set_isolation(sphy, true);
 
-	spin_unlock_irqrestore(&sphy->lock, flags);
+	mutex_unlock(&sphy->mutex);
 
 	clk_disable_unprepare(sphy->clk);
 }
@@ -365,7 +363,7 @@ static int samsung_usb3phy_probe(struct platform_device *pdev)
 	sphy->drv_data		= samsung_usbphy_get_driver_data(pdev);
 	sphy->ref_clk_freq	= samsung_usbphy_get_refclk_freq(sphy);
 
-	spin_lock_init(&sphy->lock);
+	mutex_init(&sphy->mutex);
 
 	platform_set_drvdata(pdev, sphy);
 

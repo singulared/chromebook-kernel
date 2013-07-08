@@ -256,7 +256,6 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 {
 	struct samsung_usbphy *sphy;
 	struct usb_bus *host = NULL;
-	unsigned long flags;
 	int ret = 0;
 
 	sphy = phy_to_sphy(phy);
@@ -270,7 +269,7 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 		return ret;
 	}
 
-	spin_lock_irqsave(&sphy->lock, flags);
+	mutex_lock(&sphy->mutex);
 
 	if (host) {
 		/* setting default phy-type for USB 2.0 */
@@ -306,7 +305,7 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 		break;
 	}
 
-	spin_unlock_irqrestore(&sphy->lock, flags);
+	mutex_unlock(&sphy->mutex);
 
 	/* Disable the phy clock */
 	clk_disable_unprepare(sphy->clk);
@@ -321,7 +320,6 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 {
 	struct samsung_usbphy *sphy;
 	struct usb_bus *host = NULL;
-	unsigned long flags;
 
 	sphy = phy_to_sphy(phy);
 
@@ -332,7 +330,7 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 		return;
 	}
 
-	spin_lock_irqsave(&sphy->lock, flags);
+	mutex_lock(&sphy->mutex);
 
 	if (host) {
 		/* setting default phy-type for USB 2.0 */
@@ -365,7 +363,7 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 	else
 		samsung_usbphy_set_isolation(sphy, true);
 
-	spin_unlock_irqrestore(&sphy->lock, flags);
+	mutex_unlock(&sphy->mutex);
 
 	clk_disable_unprepare(sphy->clk);
 }
@@ -443,7 +441,7 @@ static int samsung_usb2phy_probe(struct platform_device *pdev)
 	sphy->phy.otg->phy	= &sphy->phy;
 	sphy->phy.otg->set_host = samsung_usb2phy_set_host;
 
-	spin_lock_init(&sphy->lock);
+	mutex_init(&sphy->mutex);
 
 	platform_set_drvdata(pdev, sphy);
 
