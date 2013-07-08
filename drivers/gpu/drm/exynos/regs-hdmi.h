@@ -578,6 +578,17 @@
 #define HDMI_TG_VACT_ST4_H		HDMI_TG_BASE(0x0074)
 #define HDMI_TG_3D			HDMI_TG_BASE(0x00F0)
 
+/* HDMI PHY Registers Offsets*/
+
+#define HDMIPHY_POWER			(0x74 >> 2)
+#define HDMIPHY_MODE_SET_DONE		(0x7C >> 2)
+
+/* HDMI PHY Values */
+#define HDMI_PHY_POWER_ON		0x80
+#define HDMI_PHY_POWER_OFF		0xFF
+#define HDMI_PHY_DISABLE_MODE_SET	0x80
+#define HDMI_PHY_ENABLE_MODE_SET	0x00
+
 #define PMU_HDMI_PHY_CONTROL_MASK	(1 << 0)
 #define PMU_HDMI_PHY_ENABLE		(1)
 #define PMU_HDMI_PHY_DISABLE		(0)

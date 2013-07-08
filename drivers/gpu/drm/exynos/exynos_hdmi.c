@@ -1559,7 +1559,8 @@ static void hdmiphy_conf_reset(struct hdmi_context *hdata)
 	clk_set_parent(hdata->res.mout_hdmi, hdata->res.sclk_pixel);
 	clk_prepare_enable(hdata->res.sclk_hdmi);
 
-	hdmiphy_reg_writeb(hdata, 0x1f, 0x00);
+	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_ENABLE_MODE_SET);
 
 	if (hdata->version == HDMI_VER_EXYNOS4210)
 		reg = HDMI_4210_PHY_RSTOUT;
@@ -1577,18 +1578,40 @@ static void hdmiphy_poweron(struct hdmi_context *hdata)
 {
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (hdata->version != HDMI_VER_EXYNOS4210)
-		hdmi_reg_writemask(hdata, HDMI_PHY_CON_0, 0,
-			HDMI_PHY_POWER_OFF_EN);
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		return;
+
+	/* For PHY Mode Setting */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_ENABLE_MODE_SET);
+	/* Phy Power On */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_POWER,
+						HDMI_PHY_POWER_ON);
+	/* For PHY Mode Setting */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_DISABLE_MODE_SET);
+	/* PHY SW Reset */
+	hdmiphy_conf_reset(hdata);
 }
 
 static void hdmiphy_poweroff(struct hdmi_context *hdata)
 {
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
-	if (hdata->version != HDMI_VER_EXYNOS4210)
-		hdmi_reg_writemask(hdata, HDMI_PHY_CON_0, ~0,
-			HDMI_PHY_POWER_OFF_EN);
+	if (hdata->version == HDMI_VER_EXYNOS4210)
+		return;
+
+	/* PHY SW Reset */
+	hdmiphy_conf_reset(hdata);
+	/* For PHY Mode Setting */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_ENABLE_MODE_SET);
+	/* PHY Power Off */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_POWER,
+						HDMI_PHY_POWER_OFF);
+	/* For PHY Mode Setting */
+	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_DISABLE_MODE_SET);
 }
 
 static void hdmiphy_conf_apply(struct hdmi_context *hdata)
@@ -1623,7 +1646,8 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 
 	usleep_range(10000, 12000);
 
-	ret = hdmiphy_reg_writeb(hdata, 0x1f, 0x80);
+	ret = hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
+						HDMI_PHY_DISABLE_MODE_SET);
 	if (ret < 0) {
 		DRM_ERROR("failed to enable hdmiphy\n");
 		return;
@@ -1913,9 +1937,11 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 		return;
 
 	regulator_bulk_enable(res->regul_count, res->regul_bulk);
+	/* HDMI PHY Enable */
 	hdmi_phy_pow_ctrl_reg_writemask(hdata, PMU_HDMI_PHY_ENABLE,
 		PMU_HDMI_PHY_CONTROL_MASK);
 
+	/* HDMI PHY Enable and Power-On */
 	hdmiphy_poweron(hdata);
 
 	hdata->powered = true;
@@ -1930,10 +1956,14 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	if (!hdata->powered)
 		return;
 
+	/* HDMI System Disable */
+	hdmi_reg_writemask(hdata, HDMI_CON_0, 0, HDMI_EN);
+
 	hdmiphy_poweroff(hdata);
 
 	cancel_delayed_work_sync(&hdata->hotplug_work);
 
+	/* HDMI PHY Disable */
 	hdmi_phy_pow_ctrl_reg_writemask(hdata, PMU_HDMI_PHY_DISABLE,
 		PMU_HDMI_PHY_CONTROL_MASK);
 	regulator_bulk_disable(res->regul_count, res->regul_bulk);
