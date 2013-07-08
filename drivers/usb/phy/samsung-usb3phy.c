@@ -24,7 +24,6 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/usb/samsung_usb_phy.h>
 #include <linux/platform_data/samsung-usbphy.h>
 
 #include "samsung-usbphy.h"
@@ -259,9 +258,6 @@ static int samsung_usb3phy_init(struct usb_phy *phy)
 
 	mutex_lock(&sphy->mutex);
 
-	/* setting default phy-type for USB 3.0 */
-	samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
-
 	/* Disable phy isolation */
 	samsung_usbphy_set_isolation(sphy, false);
 
@@ -291,9 +287,6 @@ static void samsung_usb3phy_shutdown(struct usb_phy *phy)
 	}
 
 	mutex_lock(&sphy->mutex);
-
-	/* setting default phy-type for USB 3.0 */
-	samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
 
 	/* De-initialize usb phy registers */
 	samsung_exynos5_usb3phy_disable(sphy);
@@ -376,8 +369,8 @@ static int samsung_usb3phy_remove(struct platform_device *pdev)
 
 	usb_remove_phy(&sphy->phy);
 
-	if (sphy->pmuregs)
-		iounmap(sphy->pmuregs);
+	if (sphy->pmureg)
+		iounmap(sphy->pmureg);
 	if (sphy->sysreg)
 		iounmap(sphy->sysreg);
 
@@ -386,14 +379,12 @@ static int samsung_usb3phy_remove(struct platform_device *pdev)
 
 static struct samsung_usbphy_drvdata usb3phy_exynos5 = {
 	.cpu_type		= TYPE_EXYNOS5250,
-	.devphy_en_mask		= EXYNOS_USBPHY_ENABLE,
+	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
 };
 
 static struct samsung_usbphy_drvdata usb3phy_exynos5420 = {
 	.cpu_type		= TYPE_EXYNOS5420,
-	.devphy_en_mask		= EXYNOS_USBPHY_ENABLE,
-	.hostphy_reg_offset	= EXYNOS5420_USBHOST_PHY_CTRL_OFFSET,
-	.dev1_phy_reg_offset	= EXYNOS5420_USBDEV1_PHY_CTRL_OFFSET,
+	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
 };
 
 #ifdef CONFIG_OF

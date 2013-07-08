@@ -745,7 +745,7 @@
 		ranges;
 
 		usbphy-sys {
-			reg = <0x10040704 0xc>;
+			reg = <0x10040704 0x4>;
 		};
 	};
 
@@ -776,7 +776,7 @@
 		ranges;
 
 		usbphy-sys {
-			reg = <0x10040704 0xc>,
+			reg = <0x1004070c 0x4>,
 			      <0x10050230 0x4>;
 		};
 	};
@@ -808,7 +808,7 @@
 		ranges;
 
 		usbphy-sys {
-			reg = <0x10040704 0xc>;
+			reg = <0x10040708 0x4>;
 		};
 	};
 

@@ -538,7 +538,7 @@
 
 		usbphy-sys {
 			      /* USB device and host PHY_CONTROL registers */
-			reg = <0x10040704 0x8>;
+			reg = <0x10040704 0x4>;
 		};
 	};
 
@@ -553,7 +553,7 @@
 
 		usbphy-sys {
 			      /* USB device and host PHY_CONTROL registers */
-			reg = <0x10040704 0x8>,
+			reg = <0x10040708 0x4>,
 			      /* USB2.0 PHY configuration register */
 			      <0x10050230 0x4>;
 		};

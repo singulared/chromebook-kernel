@@ -18,7 +18,6 @@
 #include <linux/of_gpio.h>
 #include <linux/platform_data/usb-ehci-s5p.h>
 #include <linux/usb/phy.h>
-#include <linux/usb/samsung_usb_phy.h>
 #include <plat/usb-phy.h>
 
 #define EHCI_INSNREG00(base)			(base + 0x90)
@@ -77,7 +76,7 @@ static void s5p_ehci_phy_enable(struct s5p_ehci_hcd *s5p_ehci)
 	if (s5p_ehci->phy)
 		usb_phy_init(s5p_ehci->phy);
 	else if (s5p_ehci->pdata->phy_init)
-		s5p_ehci->pdata->phy_init(pdev, USB_PHY_TYPE_HOST);
+		s5p_ehci->pdata->phy_init(pdev, S5P_USB_PHY_HOST);
 }
 
 static void s5p_ehci_phy_disable(struct s5p_ehci_hcd *s5p_ehci)
@@ -87,7 +86,7 @@ static void s5p_ehci_phy_disable(struct s5p_ehci_hcd *s5p_ehci)
 	if (s5p_ehci->phy)
 		usb_phy_shutdown(s5p_ehci->phy);
 	else if (s5p_ehci->pdata->phy_exit)
-		s5p_ehci->pdata->phy_exit(pdev, USB_PHY_TYPE_HOST);
+		s5p_ehci->pdata->phy_exit(pdev, S5P_USB_PHY_HOST);
 }
 
 static void s5p_setup_vbus_gpio(struct platform_device *pdev)

@@ -28,7 +28,6 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_gpio.h>
-#include <linux/usb/samsung_usb_phy.h>
 
 #include "samsung-usbphy.h"
 
@@ -49,9 +48,9 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 		return -ENODEV;
 	}
 
-	sphy->pmuregs = of_iomap(usbphy_sys, 0);
+	sphy->pmureg = of_iomap(usbphy_sys, 0);
 
-	if (sphy->pmuregs == NULL) {
+	if (sphy->pmureg == NULL) {
 		dev_err(sphy->dev, "Can't get usb-phy pmu control register\n");
 		goto err0;
 	}
@@ -102,38 +101,29 @@ void samsung_usbphy_set_isolation(struct samsung_usbphy *sphy, bool on)
 	u32 reg_val;
 	u32 en_mask = 0;
 
-	if (!sphy->pmuregs) {
+	if (!sphy->pmureg) {
 		dev_warn(sphy->dev, "Can't set pmu isolation\n");
 		return;
 	}
+
+	reg = sphy->pmureg;
+	en_mask = sphy->drv_data->phy_en_mask;
 
 	switch (sphy->drv_data->cpu_type) {
 	case TYPE_S3C64XX:
 		/*
 		 * Do nothing: We will add here once S3C64xx goes for DT support
 		 */
-		break;
+		return;
 	case TYPE_EXYNOS4210:
 		/*
-		 * Fall through since exynos4210 and exynos5250 have similar
-		 * register architecture: two separate registers for host and
-		 * device phy control with enable bit at position 0.
+		 * Exynos4 uses different registers for the HOST and DEVICE part
+		 * of the PHY, so add an offset here if needed and fall through.
 		 */
+		if (sphy->phy.otg->host)
+			reg += EXYNOS4_USBPHY_HOST_OFFSET;
 	case TYPE_EXYNOS5250:
 	case TYPE_EXYNOS5420:
-		if (sphy->phy_type == USB_PHY_TYPE_DEVICE) {
-			if (sphy->channel == 1)
-				reg = sphy->pmuregs +
-					sphy->drv_data->dev1_phy_reg_offset;
-			else
-				reg = sphy->pmuregs +
-					sphy->drv_data->dev0_phy_reg_offset;
-			en_mask = sphy->drv_data->devphy_en_mask;
-		} else if (sphy->phy_type == USB_PHY_TYPE_HOST) {
-			reg = sphy->pmuregs +
-				sphy->drv_data->hostphy_reg_offset;
-			en_mask = sphy->drv_data->hostphy_en_mask;
-		}
 		break;
 	default:
 		dev_err(sphy->dev, "Invalid SoC type\n");
@@ -155,7 +145,7 @@ EXPORT_SYMBOL_GPL(samsung_usbphy_set_isolation);
 /*
  * Configure the mode of working of usb-phy here: HOST/DEVICE.
  */
-void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy)
+void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy, bool device_mode)
 {
 	u32 reg;
 
@@ -166,30 +156,14 @@ void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy)
 
 	reg = readl(sphy->sysreg);
 
-	if (sphy->phy_type == USB_PHY_TYPE_DEVICE)
+	if (device_mode)
 		reg &= ~EXYNOS_USB20PHY_CFG_HOST_LINK;
-	else if (sphy->phy_type == USB_PHY_TYPE_HOST)
+	else
 		reg |= EXYNOS_USB20PHY_CFG_HOST_LINK;
 
 	writel(reg, sphy->sysreg);
 }
 EXPORT_SYMBOL_GPL(samsung_usbphy_cfg_sel);
-
-/*
- * PHYs are different for USB Device and USB Host.
- * This make sure that correct PHY type is selected before
- * any operation on PHY.
- */
-int samsung_usbphy_set_type(struct usb_phy *phy,
-				enum samsung_usb_phy_type phy_type)
-{
-	struct samsung_usbphy *sphy = phy_to_sphy(phy);
-
-	sphy->phy_type = phy_type;
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(samsung_usbphy_set_type);
 
 /*
  * Returns reference clock frequency selection value

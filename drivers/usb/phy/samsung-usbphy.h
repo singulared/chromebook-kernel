@@ -17,6 +17,7 @@
  */
 
 #include <linux/mutex.h>
+#include <linux/usb/otg.h>
 #include <linux/usb/phy.h>
 
 /* Register definitions */
@@ -257,9 +258,7 @@
 #define KHZ (1000)
 #endif
 
-#define EXYNOS_USBHOST_PHY_CTRL_OFFSET		(0x4)
-#define EXYNOS5420_USBDEV1_PHY_CTRL_OFFSET	(0x4)
-#define EXYNOS5420_USBHOST_PHY_CTRL_OFFSET	(0x8)
+#define EXYNOS4_USBPHY_HOST_OFFSET		(0x4)
 #define S3C64XX_USBPHY_ENABLE			(0x1 << 16)
 #define EXYNOS_USBPHY_ENABLE			(0x1 << 0)
 #define EXYNOS_USB20PHY_CFG_HOST_LINK		(0x1 << 0)
@@ -274,31 +273,15 @@ enum samsung_cpu_type {
 /*
  * struct samsung_usbphy_drvdata - driver data for various SoC variants
  * @cpu_type: machine identifier
- * @devphy_en_mask: device phy enable mask for PHY CONTROL register
- * @hostphy_en_mask: host phy enable mask for PHY CONTROL register
- * @dev0_phy_reg_offset: offset to DEVICE_0 PHY CONTROL register from
- *		       mapped address of system controller.
- * @dev1_phy_reg_offset: offset to DEVICE_1 PHY CONTROL register from
- *		       mapped address of system controller (valid in case
- *		       of multiple device type PHY controllers).
- * @hostphy_reg_offset: offset to HOST PHY CONTROL register from
- *		       mapped address of system controller.
+ * @phy_en_mask: phy enable mask for PHY CONTROL register
  *
- *	Here we have a separate mask for device type phy.
- *	Having different masks for host and device type phy helps
- *	in setting independent masks in case of SoCs like S5PV210,
- *	in which PHY0 and PHY1 enable bits belong to same register
- *	placed at position 0 and 1 respectively.
- *	Although for newer SoCs like exynos these bits belong to
- *	different registers altogether placed at position 0.
+ *	Here we have a mask for the phy control bit. This is required for SoCs
+ *	like S5PV210, in which different PHYs use different bits in the same
+ *	register.
  */
 struct samsung_usbphy_drvdata {
 	int cpu_type;
-	int devphy_en_mask;
-	int hostphy_en_mask;
-	u32 dev0_phy_reg_offset;
-	u32 dev1_phy_reg_offset;
-	u32 hostphy_reg_offset;
+	int phy_en_mask;
 };
 
 /*
@@ -308,12 +291,10 @@ struct samsung_usbphy_drvdata {
  * @dev: The parent device supplied to the probe function
  * @clk: usb phy clock
  * @regs: usb phy controller registers memory base
- * @pmuregs: USB device PHY_CONTROL register memory base
+ * @pmureg: USB PHY_CONTROL register address
  * @sysreg: USB2.0 PHY_CFG register memory base
  * @ref_clk_freq: reference clock frequency selection
  * @drv_data: driver data available for different SoCs
- * @phy_type: Samsung SoCs specific phy types:	#HOST
- *						#DEVICE
  * @phy_usage: usage count for phy
  * @mutex: mutex for phy operations (usb2phy must sleep, so no spinlock!)
  * @hsic_reset_gpio: Active low GPIO that resets connected HSIC device
@@ -325,11 +306,10 @@ struct samsung_usbphy {
 	struct device	*dev;
 	struct clk	*clk;
 	void __iomem	*regs;
-	void __iomem	*pmuregs;
+	void __iomem	*pmureg;
 	void __iomem	*sysreg;
 	int		ref_clk_freq;
 	const struct samsung_usbphy_drvdata *drv_data;
-	enum samsung_usb_phy_type phy_type;
 	atomic_t	phy_usage;
 	struct mutex	mutex;
 	int		hsic_reset_gpio;
@@ -356,7 +336,5 @@ static inline const struct samsung_usbphy_drvdata
 
 extern int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy);
 extern void samsung_usbphy_set_isolation(struct samsung_usbphy *sphy, bool on);
-extern void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy);
-extern int samsung_usbphy_set_type(struct usb_phy *phy,
-				enum samsung_usb_phy_type phy_type);
+extern void samsung_usbphy_cfg_sel(struct samsung_usbphy *sphy, bool dev_mode);
 extern int samsung_usbphy_get_refclk_freq(struct samsung_usbphy *sphy);

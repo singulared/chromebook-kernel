@@ -16,7 +16,6 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/usb-exynos.h>
 #include <linux/usb/phy.h>
-#include <linux/usb/samsung_usb_phy.h>
 #include <plat/usb-phy.h>
 
 struct exynos_ohci_hcd {
@@ -35,7 +34,7 @@ static void exynos_ohci_phy_enable(struct exynos_ohci_hcd *exynos_ohci)
 	if (exynos_ohci->phy)
 		usb_phy_init(exynos_ohci->phy);
 	else if (exynos_ohci->pdata->phy_init)
-		exynos_ohci->pdata->phy_init(pdev, USB_PHY_TYPE_HOST);
+		exynos_ohci->pdata->phy_init(pdev, S5P_USB_PHY_HOST);
 }
 
 static void exynos_ohci_phy_disable(struct exynos_ohci_hcd *exynos_ohci)
@@ -45,7 +44,7 @@ static void exynos_ohci_phy_disable(struct exynos_ohci_hcd *exynos_ohci)
 	if (exynos_ohci->phy)
 		usb_phy_shutdown(exynos_ohci->phy);
 	else if (exynos_ohci->pdata->phy_exit)
-		exynos_ohci->pdata->phy_exit(pdev, USB_PHY_TYPE_HOST);
+		exynos_ohci->pdata->phy_exit(pdev, S5P_USB_PHY_HOST);
 }
 
 static int ohci_exynos_reset(struct usb_hcd *hcd)

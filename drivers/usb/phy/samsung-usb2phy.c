@@ -27,8 +27,6 @@
 #include <linux/gpio.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/usb/otg.h>
-#include <linux/usb/samsung_usb_phy.h>
 #include <linux/platform_data/samsung-usbphy.h>
 
 #include "samsung-usbphy.h"
@@ -271,13 +269,13 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 
 	mutex_lock(&sphy->mutex);
 
+	/* Selecting Host/OTG mode; After reset USB2.0PHY_CFG: HOST */
 	if (host) {
-		/* setting default phy-type for USB 2.0 */
 		if (!strstr(dev_name(host->controller), "ehci") ||
 				!strstr(dev_name(host->controller), "ohci"))
-			samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_HOST);
+			samsung_usbphy_cfg_sel(sphy, false);
 	} else {
-		samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
+		samsung_usbphy_cfg_sel(sphy, true);
 	}
 
 	/* Disable phy isolation */
@@ -285,9 +283,6 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 		sphy->plat->pmu_isolation(false);
 	else
 		samsung_usbphy_set_isolation(sphy, false);
-
-	/* Selecting Host/OTG mode; After reset USB2.0PHY_CFG: HOST */
-	samsung_usbphy_cfg_sel(sphy);
 
 	/* Initialize usb phy registers */
 	switch (sphy->drv_data->cpu_type) {
@@ -331,15 +326,6 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 	}
 
 	mutex_lock(&sphy->mutex);
-
-	if (host) {
-		/* setting default phy-type for USB 2.0 */
-		if (!strstr(dev_name(host->controller), "ehci") ||
-				!strstr(dev_name(host->controller), "ohci"))
-			samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_HOST);
-	} else {
-		samsung_usbphy_set_type(&sphy->phy, USB_PHY_TYPE_DEVICE);
-	}
 
 	/* De-initialize usb phy registers */
 	switch (sphy->drv_data->cpu_type) {
@@ -454,8 +440,8 @@ static int samsung_usb2phy_remove(struct platform_device *pdev)
 
 	usb_remove_phy(&sphy->phy);
 
-	if (sphy->pmuregs)
-		iounmap(sphy->pmuregs);
+	if (sphy->pmureg)
+		iounmap(sphy->pmureg);
 	if (sphy->sysreg)
 		iounmap(sphy->sysreg);
 
@@ -464,25 +450,22 @@ static int samsung_usb2phy_remove(struct platform_device *pdev)
 
 static const struct samsung_usbphy_drvdata usb2phy_s3c64xx = {
 	.cpu_type		= TYPE_S3C64XX,
-	.devphy_en_mask		= S3C64XX_USBPHY_ENABLE,
+	.phy_en_mask		= S3C64XX_USBPHY_ENABLE,
 };
 
 static const struct samsung_usbphy_drvdata usb2phy_exynos4 = {
 	.cpu_type		= TYPE_EXYNOS4210,
-	.devphy_en_mask		= EXYNOS_USBPHY_ENABLE,
-	.hostphy_en_mask	= EXYNOS_USBPHY_ENABLE,
+	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
 };
 
 static struct samsung_usbphy_drvdata usb2phy_exynos5 = {
 	.cpu_type		= TYPE_EXYNOS5250,
-	.hostphy_en_mask	= EXYNOS_USBPHY_ENABLE,
-	.hostphy_reg_offset	= EXYNOS_USBHOST_PHY_CTRL_OFFSET,
+	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
 };
 
 static struct samsung_usbphy_drvdata usb2phy_exynos5420 = {
 	.cpu_type		= TYPE_EXYNOS5420,
-	.hostphy_en_mask	= EXYNOS_USBPHY_ENABLE,
-	.hostphy_reg_offset	= EXYNOS5420_USBHOST_PHY_CTRL_OFFSET,
+	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
 };
 
 #ifdef CONFIG_OF
