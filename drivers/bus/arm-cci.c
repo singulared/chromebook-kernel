@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/slab.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/cacheflush.h>
 #include <asm/smp_plat.h>
@@ -400,6 +401,20 @@ static const struct of_device_id arm_cci_ctrl_if_matches[] = {
 	{},
 };
 
+#ifdef CONFIG_PM_SLEEP
+static void cci_resume(void)
+{
+	int this_cpu = smp_processor_id();
+
+	if (cpu_port_is_valid(&cpu_port[this_cpu]))
+		cci_port_control(cpu_port[this_cpu].port, true);
+}
+
+static struct syscore_ops cci_syscore_ops = {
+	.resume		= cci_resume,
+};
+#endif
+
 static int __init cci_probe(void)
 {
 	struct cci_nb_ports const *cci_config;
@@ -500,6 +515,10 @@ static int __init cci_probe(void)
 	this_cpu = smp_processor_id();
 	if (cpu_port_is_valid(&cpu_port[this_cpu]))
 		cci_port_control(cpu_port[this_cpu].port, true);
+
+#ifdef CONFIG_PM_SLEEP
+	register_syscore_ops(&cci_syscore_ops);
+#endif
 
 	pr_info("ARM CCI driver probed\n");
 	return 0;
