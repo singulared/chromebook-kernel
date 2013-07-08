@@ -201,6 +201,8 @@ extern int dw_mci_resume(struct dw_mci *host);
  * @parse_dt: parse implementation specific device tree properties.
  * @cfg_smu: to configure security management unit
  * @execute_tuning: "auto-tune" Clock-In parameters
+ * @suspend_noirq: called late in the suspend process
+ * @resume_noirq: called early in the resume process
  *
  * Provide controller implementation specific extensions. The usage of this
  * data structure is fully optional and usage of each member in this structure
@@ -215,5 +217,7 @@ struct dw_mci_drv_data {
 	int		(*parse_dt)(struct dw_mci *host);
 	void		(*cfg_smu)(struct dw_mci *host);
 	int		(*execute_tuning)(struct dw_mci *host, u32 opcode);
+	int		(*suspend_noirq)(struct dw_mci *host);
+	int		(*resume_noirq)(struct dw_mci *host);
 };
 #endif /* _DW_MMC_H_ */
