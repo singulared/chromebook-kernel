@@ -34,6 +34,7 @@
 #define SDMMC_CLKSEL_TIMING(x, y, z)	(SDMMC_CLKSEL_CCLK_SAMPLE(x) |	\
 					SDMMC_CLKSEL_CCLK_DRIVE(y) |	\
 					SDMMC_CLKSEL_CCLK_DIVIDER(z))
+#define SDMMC_CLKSEL_WAKEUP_INT		BIT(11)
 
 #define SDMMC_CMD_USE_HOLD_REG		BIT(29)
 
@@ -175,6 +176,27 @@ static int dw_mci_exynos_setup_clock(struct dw_mci *host)
 		priv->ciu_div = EXYNOS4210_FIXED_CIU_CLK_DIV - 1;
 
 	host->bus_hz /= (priv->ciu_div + 1);
+
+	return 0;
+}
+
+/**
+ * dw_mci_exynos_resume_noirq - Exynos-specific resume code
+ *
+ * We have seen cases (at least on the exynos5420) where turning off the INT
+ * power rail during suspend will leave the WAKEUP_INT bit in the CLKSEL
+ * register asserted.  This bit is 1 to indicate that it fired and we can
+ * clear it by writing a 1 back.  Clear it to prevent interrupts from going off
+ * constantly.
+ */
+
+static int dw_mci_exynos_resume_noirq(struct dw_mci *host)
+{
+	u32 clksel;
+
+	clksel = mci_readl(host, CLKSEL);
+	if (clksel & SDMMC_CLKSEL_WAKEUP_INT)
+		mci_writel(host, CLKSEL, clksel);
 
 	return 0;
 }
@@ -450,6 +472,7 @@ static const struct dw_mci_drv_data exynos_drv_data = {
 	.caps			= exynos_dwmmc_caps,
 	.init			= dw_mci_exynos_priv_init,
 	.setup_clock		= dw_mci_exynos_setup_clock,
+	.resume_noirq		= dw_mci_exynos_resume_noirq,
 	.prepare_command	= dw_mci_exynos_prepare_command,
 	.set_ios		= dw_mci_exynos_set_ios,
 	.parse_dt		= dw_mci_exynos_parse_dt,
