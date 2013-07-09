@@ -927,8 +927,8 @@
 			wakeup-source;
 		};
 
-		trackpad@4a {
-			reg=<0x4a>;
+		trackpad@4b {
+			reg=<0x4b>;
 			compatible="atmel,atmel_mxt_tp";
 			interrupts=<1 0>;
 			interrupt-parent=<&gpx1>;
