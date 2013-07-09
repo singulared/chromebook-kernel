@@ -63,7 +63,6 @@ struct anx7808_data {
 	struct i2c_client *rx_p1;
 	struct delayed_work play_video;
 	struct workqueue_struct *wq;
-	enum dp_link_bw dp_supported_bw;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 };
@@ -429,10 +428,12 @@ static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 
 static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
 {
+	int err;
 	uint8_t status;
 
-	if (anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status))
-		return -EAGAIN;
+	err = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status);
+	if (err)
+		return err;
 	if (!(status & DOWN_STRM_HPD)) {
 		DRM_INFO("Waiting for downstream HPD.\n");
 		return -EAGAIN;
@@ -461,14 +462,13 @@ static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 
 static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 {
-	uint8_t dp_bw, status;
 	int err;
+	uint8_t dp_bw, status;
 
 	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
 	if (err)
 		return err;
-	anx7808->dp_supported_bw = (enum dp_link_bw)dp_bw;
-	switch (anx7808->dp_supported_bw) {
+	switch ((enum dp_link_bw)dp_bw) {
 	case BW_162G:
 	case BW_27G:
 	case BW_54G:
@@ -480,46 +480,18 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 		return -EAGAIN;
 	}
 
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, VIDEO_PD);
-	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN | VIDEO_MUTE);
-
-	msleep(20);
-
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
-	anx7808_write_reg(anx7808, SP_TX_SYS_CTRL2_REG, status);
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
-	if (status & CHA_STA) {
-		DRM_INFO("Waiting for DP clock: 0x%02x\n", status);
-		return -EAGAIN;
-	}
-
-	anx7808_set_bits(anx7808, SP_TX_SYS_CTRL3_REG, STRM_VALID);
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL3_REG, &status);
-	if (!(status & STRM_VALID)) {
-		DRM_INFO("Waiting for DP signal: 0x%02x\n", status);
-		return -EAGAIN;
-	}
-
-	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
-
-	anx7808_set_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
-	usleep_range(1000, 2000);
-	anx7808_clear_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
-
-	anx7808_set_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
-	usleep_range(1000, 2000);
-	anx7808_clear_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
-
-	if (anx7808->dp_manual_bw == 0)
-		dp_bw = (uint8_t)anx7808->dp_supported_bw;
-	else
+	if (anx7808->dp_manual_bw != 0)
 		dp_bw = (uint8_t)anx7808->dp_manual_bw;
 	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, dp_bw);
 	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG, SP_TX_LT_EN);
+	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 
-	anx7808_read_reg(anx7808, SP_TX_LT_CTRL_REG, &status);
-	if (status & 0x70) {
-		DRM_INFO("Waiting for DP link training: 0x%02x\n", status);
+	err = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &status);
+	if (err)
+		return err;
+	if ((status & LANE0_1_STATUS_SUCCESS) != LANE0_1_STATUS_SUCCESS) {
+		DRM_INFO("Waiting for DP Lane 0 to train: %02x\n", status);
 		return -EAGAIN;
 	}
 
