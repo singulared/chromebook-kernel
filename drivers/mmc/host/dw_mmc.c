@@ -2553,13 +2553,19 @@ int dw_mci_resume(struct dw_mci *host)
 		   DW_MCI_ERROR_FLAGS | SDMMC_INT_CD);
 	mci_writel(host, CTRL, SDMMC_CTRL_INT_ENABLE);
 
+	/*
+	 * Invalidate the 'current_speed' value since CLKDIV has come up in
+	 * default state and our cache is incorrect; set to something we know
+	 * slot->clock won't be.
+	 */
+	host->current_speed = ~0;
+
 	for (i = 0; i < host->num_slots; i++) {
 		struct dw_mci_slot *slot = host->slot[i];
 		if (!slot)
 			continue;
 		if (slot->mmc->pm_flags & MMC_PM_KEEP_POWER) {
 			dw_mci_set_ios(slot->mmc, &slot->mmc->ios);
-			dw_mci_setup_bus(slot, true);
 		}
 
 		ret = mmc_resume_host(host->slot[i]->mmc);
