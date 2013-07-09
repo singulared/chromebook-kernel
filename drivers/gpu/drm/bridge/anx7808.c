@@ -263,7 +263,43 @@ static int anx7808_aux_wait(struct anx7808_data *anx7808)
 }
 
 static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
-			    uint8_t cmd, uint8_t count, uint8_t *pBuf)
+			    uint8_t cmd, uint8_t count, uint8_t *buf)
+{
+	int i;
+	int err = 0;
+	int addrl = (addr >> 0) & 0xFF;
+	int addrm = (addr >> 8) & 0xFF;
+	int addrh = (addr >> 16) & 0x0F;
+
+	if (count > AUX_BUFFER_SIZE)
+		return -EINVAL;
+
+	err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_COUNT_REG, BUF_CLR);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_CTRL_REG,
+				 ((count - 1) << 4) | cmd | 0x01);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_15_8_REG, addrm);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_19_16_REG, addrh);
+	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
+	if (err)
+		return -EIO;
+	usleep_range(2000, 4000);
+
+	err = anx7808_aux_wait(anx7808);
+	if (err)
+		return err;
+
+	for (i = 0; i < count; i++)
+		err |= anx7808_read_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
+					buf + i);
+	if (err)
+		return -EIO;
+
+	return 0;
+}
+
+static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
+			     uint8_t cmd, uint8_t count, uint8_t *buf)
 {
 	int i;
 	int err = 0;
@@ -280,28 +316,27 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_15_8_REG, addrm);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_19_16_REG, addrh);
-	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
-	if (err)
-		return -EIO;
-	usleep_range(2000, 4000);
-
-	err = anx7808_aux_wait(anx7808);
-	if (err)
-		return err;
-
 	for (i = 0; i < count; i++)
-		err |= anx7808_read_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
-					pBuf + i);
+		err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
+					*(buf + i));
+	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
+
 	if (err)
 		return -EIO;
 
-	return 0;
+	return anx7808_aux_wait(anx7808);
 }
 
 static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
-				 uint8_t count, uint8_t *pBuf)
+				 uint8_t count, uint8_t *buf)
 {
-	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, pBuf);
+	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, buf);
+}
+
+static int anx7808_aux_dpcd_write(struct anx7808_data *anx7808, uint32_t addr,
+				  uint8_t count, uint8_t *buf)
+{
+	return anx7808_aux_write(anx7808, addr, AUX_DPCD, count, buf);
 }
 
 static void anx7808_set_hpd(struct anx7808_data *anx7808, bool enable)
@@ -536,6 +571,48 @@ static void anx7808_update_infoframes(struct anx7808_data *anx7808, bool force)
 	}
 }
 
+static void anx7808_update_audio(struct anx7808_data *anx7808)
+{
+	uint8_t c5, c6;
+	uint8_t force_audio[3] = {0x06, 0x85, 0x08};
+	uint8_t hdmi_enable = 1;
+	bool has_audio;
+
+	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS5_REG, &c5);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS5_REG, c5 & AUDIO_RCV);
+	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &c6);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, c6 & CTS_RCV);
+	has_audio = (c6 & CTS_RCV && c5 & AUDIO_RCV);
+	if (!has_audio)
+		return;
+
+	anx7808_clear_bits(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG,
+			   AUD_MUTE);
+
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL4, 0x05);
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL5, 0x00);
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL6, 0x00);
+
+	anx7808_clear_bits(anx7808, SP_TX_AUD_INTERFACE_CTRL0,
+			   AUD_INTERFACE_DISABLE);
+
+	anx7808_set_bits(anx7808, SP_TX_AUD_INTERFACE_CTRL2,
+			 M_AUD_ADJUST_ST);
+
+	anx7808_write_reg(anx7808, SP_TX_AUD_CH_NUM_REG5, 0);
+
+	anx7808_copy_regs(anx7808, HDMI_RX_AUD_IN_CH_STATUS1_REG,
+			  SP_TX_AUD_CH_STATUS_REG1, 5);
+
+	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
+	anx7808_aux_dpcd_write(anx7808, SINK_DEV_SEL, 3, force_audio);
+
+	/* enable audio */
+	anx7808_set_bits(anx7808, SP_TX_AUD_CTRL, AUD_EN);
+
+	return;
+}
+
 static int anx7808_check_polling_err(struct anx7808_data *anx7808)
 {
 	uint8_t tx_int_status;
@@ -590,10 +667,12 @@ static void anx7808_play_video(struct work_struct *work)
 		case STATE_DP_OK:
 			anx7808_config_dp_output(anx7808);
 			anx7808_update_infoframes(anx7808, true);
+			DRM_INFO("Video playback successful.\n");
 			state = STATE_PLAY;
 
 		case STATE_PLAY:
 			anx7808_update_infoframes(anx7808, false);
+			anx7808_update_audio(anx7808);
 
 		default:
 			break;
