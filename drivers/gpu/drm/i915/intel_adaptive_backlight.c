@@ -354,6 +354,8 @@ static void intel_link_set_backlight(struct drm_device *dev, u32 level)
 	u32 val;
 
 	dev_priv->backlight_level = level;
+	if (level > 0)
+		dev_priv->backlight_level_has_been_set = true;
 
 	if (dev_priv->adaptive_backlight_enabled)
 		level = level * dev_priv->backlight_correction_level >> 8;
@@ -379,8 +381,11 @@ static void intel_link_enable_backlight(struct drm_device *dev, enum pipe pipe)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	/* Increase the level from 0 */
-	if (dev_priv->backlight_level == 0)
+	/* Increase the level from 0 unless someone in userspace has requested a
+	 * nonzero level at least once already -- in that case, we assume that
+	 * they know what they're doing and will raise the level themselves. */
+	if (dev_priv->backlight_level == 0 &&
+		!dev_priv->backlight_level_has_been_set)
 		dev_priv->backlight_level = dev_priv->get_max_backlight(dev);
 
 	dev_priv->backlight_enabled = true;
