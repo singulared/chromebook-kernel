@@ -176,7 +176,7 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 
 	jc_head = katom->jc;
 	kctx = katom->kctx;
-
+	kbase_device_context_integrity_check(kctx, "kbase_job_done_slot dequeued atom");
 	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_JOB_DONE, kctx, katom, jc_head, s, completion_code);
 
 	if (completion_code != BASE_JD_EVENT_DONE && completion_code != BASE_JD_EVENT_STOPPED) {
@@ -590,6 +590,9 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 	u16 core_reqs;
 	kbasep_js_device_data *js_devdata;
 
+	if (kctx)
+		kbase_device_context_integrity_check(kctx, "kbasep_job_slot_soft_or_hard_stop enter");
+
 	KBASE_DEBUG_ASSERT(action == JSn_COMMAND_HARD_STOP || action == JSn_COMMAND_SOFT_STOP);
 	KBASE_DEBUG_ASSERT(kbdev);
 	js_devdata = &kbdev->js_data;
@@ -932,6 +935,8 @@ void kbase_job_slot_hardstop(kbase_context *kctx, int js, kbase_jd_atom *target_
 			kbase_reset_gpu_locked(kbdev);
 		}
 	}
+	if (kctx)
+		kbase_device_context_integrity_check(kctx, "kbasep_job_slot_soft_or_hard_stop exit");
 }
 
 void kbasep_reset_timeout_worker(struct work_struct *data)

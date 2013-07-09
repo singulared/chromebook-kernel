@@ -101,6 +101,7 @@ STATIC void kbase_cpu_vm_close(struct vm_area_struct *vma)
 	struct kbase_va_region *reg = vma->vm_private_data;
 	kbase_context *kctx = reg->kctx;
 	mali_error err;
+	kbase_device_context_integrity_check(kctx, "kbase_cpu_vm_close enter");
 
 	kbase_gpu_vm_lock(kctx);
 
@@ -109,6 +110,8 @@ STATIC void kbase_cpu_vm_close(struct vm_area_struct *vma)
 		kbase_mem_free_region(kctx, reg);
 
 	kbase_gpu_vm_unlock(kctx);
+
+	kbase_device_context_integrity_check(kctx, "kbase_cpu_vm_close exit");
 }
 
 KBASE_EXPORT_TEST_API(kbase_cpu_vm_close)
@@ -371,7 +374,7 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
 	void *kaddr = NULL;
 	u32 nr_pages;
 	int err = 0;
-
+	kbase_device_context_integrity_check(kctx, "kbase_mmap enter");
 	pr_debug("kbase_mmap\n");
 	nr_pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
 
@@ -497,7 +500,7 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
  out:
 	if (err)
 		pr_err("mmap failed %d\n", err);
-
+	kbase_device_context_integrity_check(kctx, "kbase_mmap exit");
 	return err;
 }
 

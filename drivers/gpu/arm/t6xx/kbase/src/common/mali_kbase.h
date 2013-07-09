@@ -146,6 +146,7 @@ void kbase_resume_suspended_soft_jobs(kbase_device *kbdev);
 void kbase_reg_write(kbase_device *kbdev, u16 offset, u32 value, kbase_context *kctx);
 u32 kbase_reg_read(kbase_device *kbdev, u16 offset, kbase_context *kctx);
 void kbase_device_trace_register_access(kbase_context *kctx, kbase_reg_access_type type, u16 reg_offset, u32 reg_value);
+void kbase_device_context_integrity_check(kbase_context *kctx, const char *msg, ...);
 void kbase_device_trace_buffer_install(kbase_context *kctx, u32 *tb, size_t size);
 void kbase_device_trace_buffer_uninstall(kbase_context *kctx);
 

@@ -684,7 +684,7 @@ void kbase_mmu_update(kbase_context *kctx)
 	 *
 	 * as_nr won't change because the caller has the runpool_irq lock */
 	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
-
+	kbase_device_context_integrity_check(kctx, "kbase_mmu_update enter");
 	pgd_high = sizeof(kctx->pgd) > 4 ? (kctx->pgd >> 32) : 0;
 
 	kbase_reg_write(kctx->kbdev, MMU_AS_REG(kctx->as_nr, ASn_TRANSTAB_LO), (kctx->pgd & ASn_TRANSTAB_ADDR_SPACE_MASK) | ASn_TRANSTAB_READ_INNER | ASn_TRANSTAB_ADRMODE_TABLE, kctx);
@@ -701,6 +701,7 @@ void kbase_mmu_update(kbase_context *kctx)
 	kbase_reg_write(kctx->kbdev, MMU_AS_REG(kctx->as_nr, ASn_MEMATTR_LO), memattr, kctx);
 	kbase_reg_write(kctx->kbdev, MMU_AS_REG(kctx->as_nr, ASn_MEMATTR_HI), memattr, kctx);
 	kbase_reg_write(kctx->kbdev, MMU_AS_REG(kctx->as_nr, ASn_COMMAND), ASn_COMMAND_UPDATE, kctx);
+	kbase_device_context_integrity_check(kctx, "kbase_mmu_update exit");
 }
 
 KBASE_EXPORT_TEST_API(kbase_mmu_update)
@@ -1144,12 +1145,17 @@ mali_error kbase_alloc_phy_pages_helper(struct kbase_va_region *reg, u32 nr_page
 	kctx = reg->kctx;
 	KBASE_DEBUG_ASSERT(kctx);
 
-	if (MALI_ERROR_NONE != kbase_mem_usage_request_pages(&kctx->usage, nr_pages_requested))
+	kbase_device_context_integrity_check(kctx, "kbase_alloc_phy_pages_helper enter");
+
+	if (MALI_ERROR_NONE != kbase_mem_usage_request_pages(&kctx->usage, nr_pages_requested)) {
+		kbase_device_context_integrity_check(kctx, "kbase_alloc_phy_pages_helper no mem 1");
 		return MALI_ERROR_OUT_OF_MEMORY;
+	}
 
 	if (MALI_ERROR_NONE != kbase_mem_usage_request_pages(&kctx->kbdev->memdev.usage, nr_pages_requested))
 	{
 		kbase_mem_usage_release_pages(&kctx->usage, nr_pages_requested);
+		kbase_device_context_integrity_check(kctx, "kbase_alloc_phy_pages_helper no mem 2");
 		return MALI_ERROR_OUT_OF_MEMORY;
 	}
 
@@ -1157,6 +1163,7 @@ mali_error kbase_alloc_phy_pages_helper(struct kbase_va_region *reg, u32 nr_page
 
 	if (MALI_ERROR_NONE != kbase_mem_allocator_alloc(&kctx->osalloc, nr_pages_requested, page_array + reg->nr_alloc_pages, reg->flags))
 	{
+		kbase_device_context_integrity_check(kctx, "kbase_alloc_phy_pages_helper alloc fail");
 		kbase_mem_usage_release_pages(&kctx->usage, nr_pages_requested);
 		kbase_mem_usage_release_pages(&kctx->kbdev->memdev.usage, nr_pages_requested);
 		return MALI_ERROR_OUT_OF_MEMORY;
@@ -1168,7 +1175,7 @@ mali_error kbase_alloc_phy_pages_helper(struct kbase_va_region *reg, u32 nr_page
 	{
 		kbase_process_page_usage_inc(reg->kctx, nr_pages_requested);
 	}
-
+	kbase_device_context_integrity_check(kctx, "kbase_alloc_phy_pages_helper exit");
 	return MALI_ERROR_NONE;
 
 }
@@ -1194,7 +1201,7 @@ void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages_to_f
 
 	kctx = reg->kctx;
 	KBASE_DEBUG_ASSERT(kctx);
-
+	kbase_device_context_integrity_check(kctx, "kbase_free_phy_pages_helper enter");
 	page_array = kbase_get_phy_pages(reg);
 
 	sync_back = ( reg->flags & KBASE_REG_CPU_CACHED ) ? MALI_TRUE : MALI_FALSE;
@@ -1209,6 +1216,7 @@ void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages_to_f
 
 	kbase_mem_usage_release_pages(&reg->kctx->usage, nr_pages_to_free);
 	kbase_mem_usage_release_pages(&reg->kctx->kbdev->memdev.usage, nr_pages_to_free);
+	kbase_device_context_integrity_check(kctx, "kbase_free_phy_pages_helper exit");
 }
 
 

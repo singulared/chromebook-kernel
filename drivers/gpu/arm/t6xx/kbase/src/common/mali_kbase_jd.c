@@ -123,7 +123,7 @@ static void kds_dep_clear(void *callback_parameter, void *callback_extra_paramet
 	KBASE_DEBUG_ASSERT(kbdev);
 
 	mutex_lock(&ctx->lock);
-
+	kbase_device_context_integrity_check(katom->kctx, "kds_dep_clear enter");
 	/* KDS resource has already been satisfied (e.g. due to zapping) */
 	if (katom->kds_dep_satisfied)
 		goto out;
@@ -146,6 +146,7 @@ static void kds_dep_clear(void *callback_parameter, void *callback_extra_paramet
 			kbasep_js_try_schedule_head_ctx(kbdev);
 	}
  out:
+	kbase_device_context_integrity_check(katom->kctx, "kds_dep_clear exit");
 	mutex_unlock(&ctx->lock);
 }
 
@@ -229,7 +230,9 @@ void kbase_jd_free_external_resources(kbase_jd_atom *katom)
 		 */
 
 		mutex_lock(&jctx->lock);
+		kbase_device_context_integrity_check(katom->kctx, "KDS waiter remove enter");
 		kbase_jd_kds_waiters_remove( katom );
+		kbase_device_context_integrity_check(katom->kctx, "KDS waiter remove exit");
 		mutex_unlock(&jctx->lock);
 
 		/* Release the kds resource or cancel if zapping */
@@ -554,7 +557,7 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 	INIT_LIST_HEAD(&runnable_jobs);
 
 	KBASE_DEBUG_ASSERT(katom->status != KBASE_JD_ATOM_STATE_UNUSED);
-
+	kbase_device_context_integrity_check(kctx, "jd_done_nolock enter");
 	/* This is needed in case an atom is failed due to being invalid, this
 	 * can happen *before* the jobs that the atom depends on have completed */
 	for (i = 0; i < 2; i++) {
@@ -617,6 +620,8 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 			kbase_jd_post_external_resources(katom);
 
 		kbase_event_post(kctx, katom);
+
+		kbase_device_context_integrity_check(kctx, "jd_done_nolock completed");
 
 		/* Decrement and check the TOTAL number of jobs. This includes
 		 * those not tracked by the scheduler: 'not ready to run' and
@@ -989,6 +994,9 @@ static void jd_done_worker(struct work_struct *data)
 	kctx = katom->kctx;
 	jctx = &kctx->jctx;
 	kbdev = kctx->kbdev;
+
+	kbase_device_context_integrity_check(katom->kctx, "jd_done_worker enter");
+
 	js_kctx_info = &kctx->jctx.sched_info;
 
 	js_devdata = &kbdev->js_data;
@@ -1100,6 +1108,8 @@ static void jd_done_worker(struct work_struct *data)
 	kbasep_js_runpool_release_ctx_and_katom_retained_state(kbdev, kctx, &katom_retained_state);
 
 	KBASE_TRACE_ADD(kbdev, JD_DONE_WORKER_END, kctx, NULL, cache_jc, 0);
+
+	kbase_device_context_integrity_check(katom->kctx, "jd_done_worker exit");
 }
 
 /**
@@ -1133,6 +1143,8 @@ static void jd_cancel_worker(struct work_struct *data)
 	jctx = &kctx->jctx;
 	js_kctx_info = &kctx->jctx.sched_info;
 
+	kbase_device_context_integrity_check(kctx, "jd_cancel_worker enter");
+
 	KBASE_TRACE_ADD(kbdev, JD_CANCEL_WORKER, kctx, katom, katom->jc, 0);
 
 	/* This only gets called on contexts that are scheduled out. Hence, we must
@@ -1161,6 +1173,7 @@ static void jd_cancel_worker(struct work_struct *data)
 	/* katom may have been freed now, do not use! */
 	mutex_unlock(&jctx->lock);
 
+	kbase_device_context_integrity_check(kctx, "jd_cancel_worker exit");
 }
 
 /**
