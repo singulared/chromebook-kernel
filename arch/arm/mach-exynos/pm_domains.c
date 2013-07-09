@@ -42,6 +42,7 @@ struct exynos_pm_domain {
 	struct clk *oscclk;
 	struct clk *clk[MAX_CLK_PER_DOMAIN];
 	struct clk *pclk[MAX_CLK_PER_DOMAIN];
+	u32 enable;
 };
 
 static struct gpd_timing_data dev_latencies = {
@@ -73,13 +74,13 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 		}
 	}
 
-	pwr = power_on ? S5P_INT_LOCAL_PWR_EN : 0;
+	pwr = power_on ? pd->enable : 0;
 	__raw_writel(pwr, base);
 
 	/* Wait max 1ms */
 	timeout = 10;
 
-	while ((__raw_readl(base + 0x4) & S5P_INT_LOCAL_PWR_EN)	!= pwr) {
+	while ((__raw_readl(base + 0x4) & pd->enable) != pwr) {
 		if (!timeout) {
 			op = (power_on) ? "enable" : "disable";
 			pr_err("Power domain %s %s failed\n", domain->name, op);
@@ -218,6 +219,9 @@ static __init int exynos_pm_dt_parse_domains(void)
 			return -ENOMEM;
 		}
 
+		if (of_property_read_u32(np, "enable", &pd->enable))
+			pd->enable = S5P_INT_LOCAL_PWR_EN;
+
 		pd->pd.name = kstrdup(np->name, GFP_KERNEL);
 		pd->name = pd->pd.name;
 		pd->base = of_iomap(np, 0);
@@ -248,7 +252,7 @@ static __init int exynos_pm_dt_parse_domains(void)
 no_clk:
 		platform_set_drvdata(pdev, pd);
 
-		on = __raw_readl(pd->base + 0x4) & S5P_INT_LOCAL_PWR_EN;
+		on = __raw_readl(pd->base + 0x4) & pd->enable;
 
 		pm_genpd_init(&pd->pd, NULL, !on);
 	}
@@ -305,6 +309,7 @@ static __init int exynos4_pm_init_power_domain(void)
 	for (idx = 0; idx < ARRAY_SIZE(exynos4_pm_domains); idx++) {
 		struct exynos_pm_domain *pd = exynos4_pm_domains[idx];
 		int on = __raw_readl(pd->base + 0x4) & S5P_INT_LOCAL_PWR_EN;
+		pd->enable = S5P_INT_LOCAL_PWR_EN;
 
 		pm_genpd_init(&pd->pd, NULL, !on);
 	}

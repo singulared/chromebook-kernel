@@ -16,6 +16,8 @@ Required Properties:
   - oscclk: oscillator clock.
   - clk(n): input clock to the devices in this power domain
   - pclk(n): parent clock of input clock to the devices in this power domain
+- enable: enable value of this register which is used to turn on the power
+    domain. If no enable is specificed, default value of 0x7 is used.
 
 Node of a device using power domains must have a samsung,power-domain property
 defined with a phandle to respective power domain.
@@ -32,6 +34,12 @@ Example:
 		reg = <0x10044060 0x20>;
 		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
 		clock-names = "oscclk", "pclk0", "clk0";
+	};
+
+	isparm_pd: pd@10042480 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10042480 0x20>;
+		enable = <0x1>;
 	};
 
 Example of the node using power domain:
