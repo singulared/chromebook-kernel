@@ -834,7 +834,7 @@ static int azx_corb_send_cmd(struct hda_bus *bus, u32 val)
 {
 	struct azx *chip = bus->private_data;
 	unsigned int addr = azx_command_addr(val);
-	unsigned int wp;
+	unsigned int wp, rp;
 
 	spin_lock_irq(&chip->reg_lock);
 
@@ -843,10 +843,17 @@ static int azx_corb_send_cmd(struct hda_bus *bus, u32 val)
 	if (wp == 0xffff) {
 		/* something wrong, controller likely turned to D3 */
 		spin_unlock_irq(&chip->reg_lock);
-		return -1;
+		return -EIO;
 	}
 	wp++;
 	wp %= ICH6_MAX_CORB_ENTRIES;
+
+	rp = azx_readw(chip, CORBRP);
+	if (wp == rp) {
+		/* oops, it's full */
+		spin_unlock_irq(&chip->reg_lock);
+		return -EAGAIN;
+	}
 
 	chip->rirb.cmds[addr]++;
 	chip->corb.buf[wp] = cpu_to_le32(val);
@@ -3358,6 +3365,9 @@ static void azx_check_snoop_available(struct azx *chip)
 		/* new ATI HDMI requires non-snoop */
 		snoop = false;
 		break;
+	case AZX_DRIVER_CTHDA:
+		snoop = false;
+		break;
 	}
 
 	if (snoop != chip->snoop) {
@@ -3820,6 +3830,11 @@ static DEFINE_PCI_DEVICE_TABLE(azx_ids) = {
 	/* Lynx Point */
 	{ PCI_DEVICE(0x8086, 0x8c20),
 	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
+	/* Wellsburg */
+	{ PCI_DEVICE(0x8086, 0x8d20),
+	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
+	{ PCI_DEVICE(0x8086, 0x8d21),
+	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
 	/* Lynx Point-LP */
 	{ PCI_DEVICE(0x8086, 0x9c20),
 	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
@@ -3827,6 +3842,8 @@ static DEFINE_PCI_DEVICE_TABLE(azx_ids) = {
 	{ PCI_DEVICE(0x8086, 0x9c21),
 	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_INTEL_PCH },
 	/* Haswell */
+	{ PCI_DEVICE(0x8086, 0x0a0c),
+	  .driver_data = AZX_DRIVER_SCH | AZX_DCAPS_INTEL_PCH },
 	{ PCI_DEVICE(0x8086, 0x0c0c),
 	  .driver_data = AZX_DRIVER_SCH | AZX_DCAPS_INTEL_PCH },
 	{ PCI_DEVICE(0x8086, 0x0d0c),

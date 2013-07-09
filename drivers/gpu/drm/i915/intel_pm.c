@@ -2882,7 +2882,6 @@ err_unpin:
 	i915_gem_object_unpin(ctx);
 err_unref:
 	drm_gem_object_unreference(&ctx->base);
-	mutex_unlock(&dev->struct_mutex);
 	return NULL;
 }
 
@@ -4668,6 +4667,9 @@ void intel_set_power_well(struct drm_device *dev, bool enable)
 	if (!IS_HASWELL(dev))
 		return;
 
+	if (!i915_disable_power_well && !enable)
+		return;
+
 	tmp = I915_READ(HSW_PWR_WELL_DRIVER);
 	is_enabled = tmp & HSW_PWR_WELL_STATE;
 	enable_requested = tmp & HSW_PWR_WELL_ENABLE;
@@ -4703,8 +4705,6 @@ void intel_init_power_well(struct drm_device *dev)
 	if (!IS_HASWELL(dev))
 		return;
 
-	mutex_lock(&dev->struct_mutex);
-
 	/* For now, we need the power well to be always enabled. */
 	intel_set_power_well(dev, true);
 
@@ -4712,8 +4712,6 @@ void intel_init_power_well(struct drm_device *dev)
 	 * the driver is in charge now. */
 	if (I915_READ(HSW_PWR_WELL_BIOS) & HSW_PWR_WELL_ENABLE)
 		I915_WRITE(HSW_PWR_WELL_BIOS, 0);
-
-	mutex_unlock(&dev->struct_mutex);
 }
 
 /* Set up chip specific power management-related functions */
