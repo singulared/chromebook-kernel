@@ -73,6 +73,12 @@ static void sync_inodes_one_sb(struct super_block *sb, void *arg)
 		sync_inodes_sb(sb);
 }
 
+static void writeback_inodes_one_sb(struct super_block *sb, void *arg)
+{
+	if (!(sb->s_flags & MS_RDONLY))
+		writeback_inodes_sb(sb, WB_REASON_SYNC);
+}
+
 static void sync_fs_one_sb(struct super_block *sb, void *arg)
 {
 	if (!(sb->s_flags & MS_RDONLY) && sb->s_op->sync_fs)
@@ -104,6 +110,7 @@ SYSCALL_DEFINE0(sync)
 	int nowait = 0, wait = 1;
 
 	wakeup_flusher_threads(0, WB_REASON_SYNC);
+	iterate_supers(writeback_inodes_one_sb, NULL);
 	iterate_supers(sync_inodes_one_sb, NULL);
 	iterate_supers(sync_fs_one_sb, &nowait);
 	iterate_supers(sync_fs_one_sb, &wait);
