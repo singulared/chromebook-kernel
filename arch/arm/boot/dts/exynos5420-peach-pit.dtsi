@@ -265,6 +265,7 @@
 		status = "okay";
 		num-slots = <1>;
 		supports-highspeed;
+		keep-power-in-suspend;
 		broken-cd;
 		bypass-smu;
 		fifo-depth = <0x40>;
