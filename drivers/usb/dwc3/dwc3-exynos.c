@@ -31,7 +31,6 @@ struct dwc3_exynos {
 	struct device		*dev;
 
 	struct clk		*clk;
-	int                     vbus_gpio;
 };
 
 static int dwc3_exynos_register_phys(struct dwc3_exynos *exynos)
@@ -94,21 +93,21 @@ static int dwc3_setup_vbus_gpio(struct platform_device *pdev)
 	int gpio;
 
 	if (!pdev->dev.of_node)
-		return -ENODEV;
+		return 0;
 
 	gpio = of_get_named_gpio(pdev->dev.of_node,
 				"samsung,vbus-gpio", 0);
 	if (!gpio_is_valid(gpio))
-		return -EINVAL;
-	dev_dbg(&pdev->dev, "vbus_gpio = %d\n", gpio);
+		return 0;
 
-	err = gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "dwc3_vbus_gpio");
+	err = gpio_request(gpio, "dwc3_vbus_gpio");
 	if (err) {
 		dev_err(&pdev->dev, "can't request dwc3 vbus gpio %d", gpio);
 		return err;
 	}
+	gpio_set_value(gpio, 1);
 
-	return gpio;
+	return err;
 }
 
 static int dwc3_exynos_remove_child(struct device *dev, void *unused)
@@ -145,9 +144,7 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 	if (!dev->dma_mask)
 		dev->dma_mask = &dwc3_exynos_dma_mask;
 
-	exynos->vbus_gpio = dwc3_setup_vbus_gpio(pdev);
-	if (!gpio_is_valid(exynos->vbus_gpio))
-		dev_warn(&pdev->dev, "Failed to setup vbus gpio\n");
+	dwc3_setup_vbus_gpio(pdev);
 
 	platform_set_drvdata(pdev, exynos);
 
@@ -217,18 +214,12 @@ static int dwc3_exynos_suspend(struct device *dev)
 
 	clk_disable(exynos->clk);
 
-	if (gpio_is_valid(exynos->vbus_gpio))
-		gpio_set_value(exynos->vbus_gpio, 0);
-
 	return 0;
 }
 
 static int dwc3_exynos_resume(struct device *dev)
 {
 	struct dwc3_exynos *exynos = dev_get_drvdata(dev);
-
-	if (gpio_is_valid(exynos->vbus_gpio))
-		gpio_set_value(exynos->vbus_gpio, 1);
 
 	clk_enable(exynos->clk);
 
