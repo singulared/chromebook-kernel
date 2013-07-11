@@ -73,7 +73,7 @@ struct int_bus_opp_table int_bus_opp_list[] = {
 	{LV_3, 333000,  950000, 0},
 	{LV_4, 222000,  900000, 0},
 	{LV_5, 111000,  850000, 0},
-	{LV_6,  83000,  800000, 0},
+	{LV_6,  83000,  850000, 0},
 };
 
 struct int_clk_info {
@@ -244,22 +244,22 @@ struct int_clk_info aclk_333_432_isp[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 432000, I_PLL},
 	{LV_1, 144000, I_PLL},
-	{LV_2,  54000, I_PLL},
-	{LV_3,  54000, I_PLL},
-	{LV_4,  54000, I_PLL},
-	{LV_5,  54000, I_PLL},
-	{LV_6,  54000, I_PLL},
+	{LV_2,   3000, I_PLL},
+	{LV_3,   3000, I_PLL},
+	{LV_4,   3000, I_PLL},
+	{LV_5,   3000, I_PLL},
+	{LV_6,   3000, I_PLL},
 };
 
 struct int_clk_info aclk_333_432_gscl[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 432000, I_PLL},
 	{LV_1, 432000, I_PLL},
-	{LV_2,  54000, I_PLL},
-	{LV_3,  54000, I_PLL},
-	{LV_4,  54000, I_PLL},
-	{LV_5,  54000, I_PLL},
-	{LV_6,  54000, I_PLL},
+	{LV_2,   3000, I_PLL},
+	{LV_3,   3000, I_PLL},
+	{LV_4,   3000, I_PLL},
+	{LV_5,   3000, I_PLL},
+	{LV_6,   3000, I_PLL},
 };
 
 /* TOP 2 */
@@ -619,7 +619,6 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	opp_disable(data->dev, 600000);
 	opp_disable(data->dev, 500000);
 	opp_disable(data->dev, 400000);
-	opp_disable(data->dev, 83000);
 	return 0;
 }
 
