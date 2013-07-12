@@ -269,28 +269,25 @@ static irqreturn_t s3c2410wdt_irq(int irqno, void *param)
 	return IRQ_HANDLED;
 }
 
-
-#ifdef CONFIG_CPU_FREQ
-
-static int s3c2410wdt_cpufreq_transition(struct notifier_block *nb,
-					  unsigned long val, void *data)
+static int wdt_clk_change(bool is_pre_rate_change)
 {
 	int ret;
 
 	if (!s3c2410wdt_is_running())
 		goto done;
 
-	if (val == CPUFREQ_PRECHANGE) {
+	if (is_pre_rate_change) {
 		/* To ensure that over the change we don't cause the
 		 * watchdog to trigger, we perform an keep-alive if
 		 * the watchdog is running.
 		 */
 
 		s3c2410wdt_keepalive(&s3c2410_wdd);
-	} else if (val == CPUFREQ_POSTCHANGE) {
+	} else {
 		s3c2410wdt_stop(&s3c2410_wdd);
 
-		ret = s3c2410wdt_set_heartbeat(&s3c2410_wdd, s3c2410_wdd.timeout);
+		ret = s3c2410wdt_set_heartbeat(&s3c2410_wdd,
+						s3c2410_wdd.timeout);
 
 		if (ret >= 0)
 			s3c2410wdt_start(&s3c2410_wdd);
@@ -301,10 +298,58 @@ static int s3c2410wdt_cpufreq_transition(struct notifier_block *nb,
 done:
 	return 0;
 
- err:
+err:
 	dev_err(wdt_dev, "cannot set new value for timeout %d\n",
 				s3c2410_wdd.timeout);
 	return ret;
+}
+
+#ifdef CONFIG_COMMON_CLK
+static int wdt_clk_notify(struct notifier_block *nb,
+				unsigned long action, void *wclk)
+{
+	if (action == PRE_RATE_CHANGE)
+		return wdt_clk_change(true);
+	else if (action == POST_RATE_CHANGE)
+		return wdt_clk_change(false);
+	return 0;
+}
+
+static struct notifier_block wdt_clk_nb = {
+	.notifier_call = wdt_clk_notify,
+};
+
+static inline int s3c2410wdt_clk_notify_register(void)
+{
+	return clk_notifier_register(wdt_clock, &wdt_clk_nb);
+}
+
+static inline int s3c2410wdt_clk_notify_unregister(void)
+{
+	return clk_notifier_unregister(wdt_clock, &wdt_clk_nb);
+}
+#else
+static inline int s3c2410wdt_clk_notify_register(void)
+{
+	return -EINVAL;
+}
+
+static inline int s3c2410wdt_clk_notify_unregister(void)
+{
+	return -EINVAL;
+}
+#endif
+
+#if defined(CONFIG_CPU_FREQ) && !defined(CONFIG_COMMON_CLK)
+
+static int s3c2410wdt_cpufreq_transition(struct notifier_block *nb,
+					  unsigned long val, void *data)
+{
+	if (val == CPUFREQ_PRECHANGE)
+		return wdt_clk_change(true);
+	else if (val == CPUFREQ_POSTCHANGE)
+		return wdt_clk_change(false);
+	return 0;
 }
 
 static struct notifier_block s3c2410wdt_cpufreq_transition_nb = {
@@ -408,10 +453,15 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(wdt_clock);
 
-	ret = s3c2410wdt_cpufreq_register();
-	if (ret < 0) {
-		pr_err("failed to register cpufreq\n");
-		goto err_clk;
+	/* WDT registers to CCF for clock change notifications first
+	 * and registers to cpufreq in case of CCF registration fails */
+
+	if (s3c2410wdt_clk_notify_register() != 0) {
+		ret = s3c2410wdt_cpufreq_register();
+		if (ret < 0) {
+			pr_err("failed to register cpufreq\n");
+			goto err_clk;
+		}
 	}
 
 	/* see if we can actually set the requested timer margin, and if
@@ -471,7 +521,8 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	free_irq(wdt_irq->start, pdev);
 
  err_cpufreq:
-	s3c2410wdt_cpufreq_deregister();
+	if (s3c2410wdt_clk_notify_unregister())
+		s3c2410wdt_cpufreq_deregister();
 
  err_clk:
 	clk_disable_unprepare(wdt_clock);
@@ -497,7 +548,8 @@ static int s3c2410wdt_remove(struct platform_device *dev)
 
 	free_irq(wdt_irq->start, dev);
 
-	s3c2410wdt_cpufreq_deregister();
+	if (s3c2410wdt_clk_notify_unregister())
+		s3c2410wdt_cpufreq_deregister();
 
 	clk_disable_unprepare(wdt_clock);
 	clk_put(wdt_clock);
