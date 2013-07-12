@@ -2335,7 +2335,7 @@ hsw_compute_linetime_wm(struct drm_device *dev, struct drm_crtc *crtc)
 	/* The WM are computed with base on how long it takes to fill a single
 	 * row at the given clock rate, multiplied by 8.
 	 * */
-	linetime = DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, mode->clock);
+	linetime = DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8, target_clock);
 	ips_linetime = DIV_ROUND_CLOSEST(mode->htotal * 1000 * 8,
 					 intel_ddi_get_cdclk_freq(dev_priv));
 
