@@ -347,15 +347,11 @@ static u32 intel_link_get_max_backlight(struct drm_device *dev)
 	return 255;
 }
 
-static void intel_link_set_backlight(struct drm_device *dev, u32 level)
+static void intel_link_actually_set_backlight(struct drm_device *dev, u32 level)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 hw_level;
 	u32 val;
-
-	dev_priv->backlight_level = level;
-	if (level > 0)
-		dev_priv->backlight_level_has_been_set = true;
 
 	if (dev_priv->adaptive_backlight_enabled)
 		level = level * dev_priv->backlight_correction_level >> 8;
@@ -369,12 +365,23 @@ static void intel_link_set_backlight(struct drm_device *dev, u32 level)
 	I915_WRITE(BLC_PWM_CPU_CTL, val | hw_level);
 }
 
+static void intel_link_set_backlight(struct drm_device *dev, u32 level)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	dev_priv->backlight_level = level;
+	if (level > 0)
+		dev_priv->backlight_level_has_been_set = true;
+	if (dev_priv->backlight_enabled)
+		intel_link_actually_set_backlight(dev, level);
+}
+
 static void intel_link_disable_backlight(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	dev_priv->backlight_enabled = false;
-	dev_priv->set_backlight(dev, 0);
+	intel_link_actually_set_backlight(dev, 0);
 }
 
 static void intel_link_enable_backlight(struct drm_device *dev, enum pipe pipe)
@@ -389,7 +396,7 @@ static void intel_link_enable_backlight(struct drm_device *dev, enum pipe pipe)
 		dev_priv->backlight_level = dev_priv->get_max_backlight(dev);
 
 	dev_priv->backlight_enabled = true;
-	dev_priv->set_backlight(dev, dev_priv->backlight_level);
+	intel_link_actually_set_backlight(dev, dev_priv->backlight_level);
 }
 
 void intel_adaptive_backlight_setup(struct drm_device *dev)
