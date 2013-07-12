@@ -13,9 +13,12 @@
  */
 
 #include <linux/clk.h>
+#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/of_gpio.h>
+#include <mach/regs-pmu.h>
+#include <mach/regs-usb-phy.h>
 #include <plat/ehci.h>
 #include <plat/usb-phy.h>
 
@@ -34,6 +37,41 @@ struct s5p_ehci_hcd {
 	struct clk *clk;
 	int vbus_gpio;
 };
+
+static int s5p_hub_control(
+	struct usb_hcd	*hcd,
+	u16		typeReq,
+	u16		wValue,
+	u16		wIndex,
+	char		*buf,
+	u16		wLength
+)
+{
+#ifdef CONFIG_USB_EHCI_S5P_HSIC_RESET
+	u32 hsic_ctrl;
+
+	/* Note, below qualified with wIndex == 2 as this port (HSIC0) is
+	 * the one which root hub sees disconnected and requires additional
+	 * reset of phy to resume operation successfully.
+	 */
+	if (typeReq == SetPortFeature && wValue == USB_PORT_FEAT_RESET &&
+	    wIndex == 2) {
+		hsic_ctrl = readl(EXYNOS5_PHY_HSIC_CTRL1);
+		hsic_ctrl |= HSIC_CTRL_PHYSWRST;
+		writel(hsic_ctrl, EXYNOS5_PHY_HSIC_CTRL1);
+		writel(hsic_ctrl, EXYNOS5_PHY_HSIC_CTRL2);
+		udelay(10);
+		hsic_ctrl &= ~(HSIC_CTRL_PHYSWRST);
+		writel(hsic_ctrl, EXYNOS5_PHY_HSIC_CTRL1);
+		writel(hsic_ctrl, EXYNOS5_PHY_HSIC_CTRL2);
+		udelay(200);
+		dev_info(hcd->self.controller,
+			 "%s:%d resetting HSIC port phys DONE\n",
+			 __func__, __LINE__);
+	}
+#endif
+	return ehci_hub_control(hcd, typeReq, wValue, wIndex, buf, wLength);
+}
 
 static const struct hc_driver s5p_ehci_hc_driver = {
 	.description		= hcd_name,
@@ -56,7 +94,7 @@ static const struct hc_driver s5p_ehci_hc_driver = {
 	.endpoint_reset		= ehci_endpoint_reset,
 
 	.hub_status_data	= ehci_hub_status_data,
-	.hub_control		= ehci_hub_control,
+	.hub_control		= s5p_hub_control,
 	.bus_suspend		= ehci_bus_suspend,
 	.bus_resume		= ehci_bus_resume,
 
