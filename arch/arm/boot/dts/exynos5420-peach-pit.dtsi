@@ -776,6 +776,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-op-mode = <1>;
+					regulator-ramp-delay = <12500>;
 				};
 				buck2_reg: BUCK2 {
 					regulator-name = "vdd_arm";
@@ -784,6 +785,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-op-mode = <1>;
+					regulator-ramp-delay = <12500>;
 				};
 				buck3_reg: BUCK3 {
 					regulator-name = "vdd_int";
@@ -792,6 +794,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-op-mode = <1>;
+					regulator-ramp-delay = <12500>;
 				};
 				buck4_reg: BUCK4 {
 					regulator-name = "vdd_g3d";
@@ -804,6 +807,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-op-mode = <1>;
+					regulator-ramp-delay = <12500>;
 				};
 				buck5_reg: BUCK5 {
 					regulator-name = "vdd_1v2";
@@ -824,6 +828,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					regulator-op-mode = <1>;
+					regulator-ramp-delay = <12500>;
 				};
 				buck7_reg: BUCK7 {
 					regulator-name = "vdd_1v35";
