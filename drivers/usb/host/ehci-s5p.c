@@ -13,12 +13,13 @@
  */
 
 #include <linux/clk.h>
+#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/of_gpio.h>
 #include <linux/platform_data/usb-ehci-s5p.h>
-#include <linux/usb/phy.h>
 #include <plat/usb-phy.h>
+#include "../phy/samsung-usbphy.h"
 
 #define EHCI_INSNREG00(base)			(base + 0x90)
 #define EHCI_INSNREG00_ENA_INCR16		(0x1 << 25)
@@ -37,6 +38,47 @@ struct s5p_ehci_hcd {
 	struct usb_otg *otg;
 	struct s5p_ehci_platdata *pdata;
 };
+
+static int s5p_hub_control(
+	struct usb_hcd	*hcd,
+	u16		typeReq,
+	u16		wValue,
+	u16		wIndex,
+	char		*buf,
+	u16		wLength
+)
+{
+#ifdef CONFIG_USB_EHCI_S5P_HSIC_RESET
+	u32 phyhsic;
+
+	/* Note, below qualified with wIndex == 2 as this port (HSIC0) is
+	 * the one which root hub sees disconnected and requires additional
+	 * reset of phy to resume operation successfully.
+	 */
+	if (typeReq == SetPortFeature && wValue == USB_PORT_FEAT_RESET &&
+	    wIndex == 2) {
+		struct samsung_usbphy *sphy;
+		void __iomem *regs;
+
+		sphy = phy_to_sphy(hcd->phy);
+		regs = sphy->regs;
+		phyhsic = readl(regs + EXYNOS5_PHY_HSIC_CTRL1);
+		phyhsic |= HSIC_CTRL_PHYSWRST;
+		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
+		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
+		udelay(10);
+		phyhsic &= ~(HSIC_CTRL_PHYSWRST);
+		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
+		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
+		udelay(200);
+		dev_info(hcd->self.controller,
+			 "%s:%d resetting HSIC port phys DONE\n",
+			 __func__, __LINE__);
+	}
+
+#endif
+	return ehci_hub_control(hcd, typeReq, wValue, wIndex, buf, wLength);
+}
 
 static const struct hc_driver s5p_ehci_hc_driver = {
 	.description		= hcd_name,
@@ -59,7 +101,7 @@ static const struct hc_driver s5p_ehci_hc_driver = {
 	.endpoint_reset		= ehci_endpoint_reset,
 
 	.hub_status_data	= ehci_hub_status_data,
-	.hub_control		= ehci_hub_control,
+	.hub_control		= s5p_hub_control,
 	.bus_suspend		= ehci_bus_suspend,
 	.bus_resume		= ehci_bus_resume,
 
@@ -200,6 +242,7 @@ static int s5p_ehci_probe(struct platform_device *pdev)
 		s5p_ehci->otg->set_host(s5p_ehci->otg, &s5p_ehci->hcd->self);
 
 	s5p_ehci_phy_enable(s5p_ehci);
+	hcd->phy = s5p_ehci->phy;
 
 	ehci = hcd_to_ehci(hcd);
 	ehci->caps = hcd->regs;
