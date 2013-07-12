@@ -495,10 +495,26 @@ static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 	return 0;
 }
 
+static int anx7808_check_dp_link(struct anx7808_data *anx7808)
+{
+	int err;
+	uint8_t status;
+
+	err = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &status);
+	if (err)
+		return err;
+	if ((status & LANE0_1_STATUS_SUCCESS) != LANE0_1_STATUS_SUCCESS) {
+		DRM_INFO("Waiting for DP Lane 0 to train: %02x\n", status);
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
 static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 {
 	int err;
-	uint8_t dp_bw, status;
+	uint8_t dp_bw;
 
 	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
 	if (err)
@@ -522,13 +538,9 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
 	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 
-	err = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &status);
+	err = anx7808_check_dp_link(anx7808);
 	if (err)
 		return err;
-	if ((status & LANE0_1_STATUS_SUCCESS) != LANE0_1_STATUS_SUCCESS) {
-		DRM_INFO("Waiting for DP Lane 0 to train: %02x\n", status);
-		return -EAGAIN;
-	}
 
 	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
 
@@ -673,6 +685,8 @@ static void anx7808_play_video(struct work_struct *work)
 		case STATE_PLAY:
 			anx7808_update_infoframes(anx7808, false);
 			anx7808_update_audio(anx7808);
+			if (anx7808_check_dp_link(anx7808))
+				state = STATE_HDMI_OK;
 
 		default:
 			break;
