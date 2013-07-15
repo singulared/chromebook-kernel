@@ -126,7 +126,7 @@ static int exynos_cpu_suspend(unsigned long arg)
 	 * Disable all interrupts.  eints will still be active during
 	 * suspend so its ok to mask everything here
 	 */
-	if (soc_is_exynos5250())
+	if (soc_is_exynos5250() || soc_is_exynos5420())
 		__raw_writel(0x0, S5P_VA_GIC_DIST + GIC_DIST_CTRL);
 
 	/* issue the standby signal into the pm unit. */
