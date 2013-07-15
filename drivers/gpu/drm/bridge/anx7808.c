@@ -474,6 +474,9 @@ static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
 	int err;
 	uint8_t status;
 
+	if (anx7808->ds_type != DOWNSTREAM_HDMI)
+		return 0;
+
 	err = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status);
 	if (err)
 		return err;
