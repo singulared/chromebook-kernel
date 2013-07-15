@@ -246,12 +246,11 @@ bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		struct drm_mode_set *mode_set = &fb_helper->crtc_info[i].mode_set;
 		struct drm_crtc *crtc = mode_set->crtc;
-		ret = crtc->funcs->set_config(mode_set);
 
 		if (!crtc->enabled)
 			continue;
 
-		ret = drm_crtc_helper_set_config(mode_set);
+		ret = crtc->funcs->set_config(mode_set);
 		if (ret)
 			error = true;
 	}
