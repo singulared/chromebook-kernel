@@ -782,7 +782,6 @@ bool intel_hdmi_compute_config(struct intel_encoder *encoder,
 {
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(&encoder->base);
 	struct drm_device *dev = encoder->base.dev;
-	struct drm_display_mode *adjusted_mode = &pipe_config->adjusted_mode;
 
 	if (intel_hdmi->color_range)
 		pipe_config->limited_color_range = true;
