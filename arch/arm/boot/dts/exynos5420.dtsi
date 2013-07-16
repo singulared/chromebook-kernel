@@ -923,7 +923,7 @@
 		#size-cells = <0>;
 
 		dptx-phy {
-			reg = <0x10040720>;
+			reg = <0x10040728>;
 			samsung,enable-mask = <1>;
 		};
 	};
