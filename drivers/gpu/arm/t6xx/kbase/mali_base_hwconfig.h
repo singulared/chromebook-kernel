@@ -249,6 +249,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p0_eac[] = {
 	BASE_HW_ISSUE_6787,
 	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
+	BASE_HW_ISSUE_8408,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_8975,
@@ -279,6 +280,7 @@ static const base_hw_issue base_hw_issues_t60x_r0p1[] = {
 	BASE_HW_ISSUE_6787,
 	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
+	BASE_HW_ISSUE_8408,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_8975,
@@ -307,9 +309,9 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 	BASE_HW_ISSUE_6787,
 	BASE_HW_ISSUE_7027,
 	BASE_HW_ISSUE_7393,
+	BASE_HW_ISSUE_8408,
 	BASE_HW_ISSUE_8564,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9010,
 	BASE_HW_ISSUE_9275,
 	BASE_HW_ISSUE_9435,
@@ -331,6 +333,7 @@ static const base_hw_issue base_hw_issues_t65x_r0p1[] = {
 /* Mali T62x r0p0 */
 static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
@@ -353,6 +356,7 @@ static const base_hw_issue base_hw_issues_t62x_r0p0[] = {
 /* Mali T67x r0p0 */
 static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
@@ -375,8 +379,8 @@ static const base_hw_issue base_hw_issues_t67x_r0p0[] = {
 /* Mali T62x r0p1 */
 static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
@@ -398,8 +402,8 @@ static const base_hw_issue base_hw_issues_t62x_r0p1[] = {
 /* Mali T67x r0p1 */
 static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10127,
 	BASE_HW_ISSUE_10327,
@@ -421,13 +425,12 @@ static const base_hw_issue base_hw_issues_t67x_r0p1[] = {
 /* Mali T62x r1p0 */
 static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
-	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
@@ -437,30 +440,17 @@ static const base_hw_issue base_hw_issues_t62x_r1p0[] = {
 /* Mali T67x r1p0 */
 static const base_hw_issue base_hw_issues_t67x_r1p0[] = {
 	BASE_HW_ISSUE_6402,
+	BASE_HW_ISSUE_7393,
 	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
 	BASE_HW_ISSUE_9435,
 	BASE_HW_ISSUE_10472,
 	BASE_HW_ISSUE_10649,
 	BASE_HW_ISSUE_10684,
-	BASE_HW_ISSUE_10817,
 	BASE_HW_ISSUE_10883,
 	BASE_HW_ISSUE_10931,
 	/* List of hardware issues must end with BASE_HW_ISSUE_END */
 	BASE_HW_ISSUE_END
 };
 
-/* Mali T75x r0p0 */
-static const base_hw_issue base_hw_issues_t75x_r0p0[] = {
-	BASE_HW_ISSUE_6402,
-	BASE_HW_ISSUE_8803,
-	BASE_HW_ISSUE_8975,
-	BASE_HW_ISSUE_9435,
-	BASE_HW_ISSUE_10649,
-	BASE_HW_ISSUE_10883,
-	BASE_HW_ISSUE_10931,
-	/* List of hardware issues must end with BASE_HW_ISSUE_END */
-	BASE_HW_ISSUE_END
-};
 
 #endif				/* _BASE_HWCONFIG_H_ */

@@ -37,8 +37,6 @@
  * of core requirements, which are used to decide how to schedule onto the
  * different job slots.
  *
- * Currently, one extra variant is supported: an NSS variant.
- *
  * Must be a power of 2 to keep the lookup math simple
  */
 #define KBASEP_JS_MAX_NR_CORE_REQ_VARIANTS_LOG2 3
@@ -73,7 +71,6 @@ typedef struct kbasep_js_policy_cfs {
 	/* Lookups per job slot against which core_req_variants match it */
 	u32 slot_to_variant_lookup_ss_state[KBASEP_JS_VARIANT_LOOKUP_WORDS_NEEDED];
 	u32 slot_to_variant_lookup_ss_allcore_state[KBASEP_JS_VARIANT_LOOKUP_WORDS_NEEDED];
-	u32 slot_to_variant_lookup_nss_state[KBASEP_JS_VARIANT_LOOKUP_WORDS_NEEDED];
 
 	/* The timer tick used for rescheduling jobs */
 	struct hrtimer scheduling_timer;

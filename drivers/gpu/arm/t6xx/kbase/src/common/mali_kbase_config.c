@@ -54,28 +54,27 @@
 #define DEFAULT_JS_SOFT_STOP_TICKS 1	/* Between 0.1 and 0.2s before soft-stop */
 
 /**
- * Default minimum number of scheduling ticks before Soft-Stoppable
- * (BASE_JD_REQ_NSS bit clear) jobs are hard-stopped
+ * Default minimum number of scheduling ticks before jobs are hard-stopped
  */
 #define DEFAULT_JS_HARD_STOP_TICKS_SS_HW_ISSUE_8408 12	/* 1.2s before hard-stop, for a certain GLES2 test at 128x128 (bound by combined vertex+tiler job) */
 #define DEFAULT_JS_HARD_STOP_TICKS_SS 2	/* Between 0.2 and 0.3s before hard-stop */
 
 /**
- * Default minimum number of scheduling ticks before Non-Soft-Stoppable
- * (BASE_JD_REQ_NSS bit set) jobs are hard-stopped
+ * Default minimum number of scheduling ticks before jobs are hard-stopped
+ * during dumping
  */
 #define DEFAULT_JS_HARD_STOP_TICKS_NSS 600	/* 60s @ 100ms tick */
 
 /**
  * Default minimum number of scheduling ticks before the GPU is reset
- * to clear a "stuck" Soft-Stoppable job
+ * to clear a "stuck" job
  */
 #define DEFAULT_JS_RESET_TICKS_SS_HW_ISSUE_8408 18	/* 1.8s before resetting GPU, for a certain GLES2 test at 128x128 (bound by combined vertex+tiler job) */
 #define DEFAULT_JS_RESET_TICKS_SS 3	/* 0.3-0.4s before GPU is reset */
 
 /**
  * Default minimum number of scheduling ticks before the GPU is reset
- * to clear a "stuck" Non-Soft-Stoppable job
+ * to clear a "stuck" job during dumping.
  */
 #define DEFAULT_JS_RESET_TICKS_NSS 601	/* 60.1s @ 100ms tick */
 

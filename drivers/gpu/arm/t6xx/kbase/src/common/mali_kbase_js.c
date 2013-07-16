@@ -649,8 +649,6 @@ void kbasep_js_kctx_term(kbase_context *kctx)
 		/* The caller must de-register all jobs before calling this */
 		KBASE_DEBUG_ASSERT(js_kctx_info->ctx.is_scheduled == MALI_FALSE);
 		KBASE_DEBUG_ASSERT(js_kctx_info->ctx.nr_jobs == 0);
-		/* Only certain Ctx Attributes will be zero (others can have a non-zero value for the life of the context) */
-		KBASE_DEBUG_ASSERT(kbasep_js_ctx_attr_count_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS) == 0);
 	}
 
 	if ((js_kctx_info->init_status & JS_KCTX_INIT_POLICY))
@@ -1386,84 +1384,107 @@ STATIC void kbasep_js_runpool_release_ctx_no_schedule(kbase_device *kbdev, kbase
  */
 STATIC mali_bool kbasep_js_job_check_ref_cores(kbase_device *kbdev, int js, kbase_jd_atom *katom)
 {
-	u64 tiler_affinity = 0;
 	/* The most recently checked affinity. Having this at this scope allows us
 	 * to guarantee that we've checked the affinity in this function call. */
 	u64 recently_chosen_affinity = 0;
+	mali_bool chosen_affinity = MALI_FALSE;
+	mali_bool retry;
 
-	if (katom->core_req & BASE_JD_REQ_T)
-		tiler_affinity = kbdev->tiler_present_bitmap;
+	do {
+		retry = MALI_FALSE;
 
-	/* NOTE: The following uses a number of FALLTHROUGHs to optimize the
-	 * calls to this function. Ending of the function is indicated by BREAK OUT */
-	switch (katom->coreref_state) {
-		/* State when job is first attempted to be run */
-	case KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED:
-		KBASE_DEBUG_ASSERT(katom->affinity == 0);
-		/* Compute affinity */
-		kbase_js_choose_affinity(&recently_chosen_affinity, kbdev, katom, js);
+		/* NOTE: The following uses a number of FALLTHROUGHs to optimize the
+		 * calls to this function. Ending of the function is indicated by BREAK OUT */
+		switch (katom->coreref_state) {
+			/* State when job is first attempted to be run */
+		case KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED:
+			KBASE_DEBUG_ASSERT(katom->affinity == 0);
 
-		/* Request the cores */
-		if (MALI_ERROR_NONE != kbase_pm_request_cores(kbdev, recently_chosen_affinity, tiler_affinity)) {
-			/* Failed to request cores, don't set the affinity so we try again and return */
-			KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REQUEST_CORES_FAILED, katom->kctx, katom, katom->jc, js, (u32) recently_chosen_affinity);
-			/* *** BREAK OUT: No state transition *** */
-			break;
-		}
-
-		katom->affinity = recently_chosen_affinity;
-		/* Proceed to next state */
-		katom->coreref_state = KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES;
-
-		/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
-
-	case KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES:
-		{
-			mali_bool cores_ready;
-			KBASE_DEBUG_ASSERT(katom->affinity != 0);
-
-			cores_ready = kbase_pm_register_inuse_cores(kbdev, katom->affinity, tiler_affinity);
-			if (!cores_ready) {
-				/* Stay in this state and return, to retry at this state later */
-				KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REGISTER_INUSE_FAILED, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+			/* Compute affinity */
+			if (MALI_FALSE == kbase_js_choose_affinity(&recently_chosen_affinity, kbdev, katom, js)) {
+				/* No cores are currently available */
 				/* *** BREAK OUT: No state transition *** */
 				break;
-			}
+			}		
+
+			chosen_affinity = MALI_TRUE;
+
+			/* Request the cores */
+			kbase_pm_request_cores(kbdev, katom->core_req & BASE_JD_REQ_T, recently_chosen_affinity);
+
+			katom->affinity = recently_chosen_affinity;
+
 			/* Proceed to next state */
-			katom->coreref_state = KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY;
-		}
+			katom->coreref_state = KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES;
 
-		/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
+			/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
 
-	case KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY:
-		KBASE_DEBUG_ASSERT(katom->affinity != 0);
+		case KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES:
+			{
+				kbase_pm_cores_ready cores_ready;
+				KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
 
-		/* Optimize out choosing the affinity twice in the same function call */
-		if (recently_chosen_affinity == 0) {
-			/* See if the affinity changed since a previous call. */
-			kbase_js_choose_affinity(&recently_chosen_affinity, kbdev, katom, js);
-		}
+				cores_ready = kbase_pm_register_inuse_cores(kbdev, katom->core_req & BASE_JD_REQ_T, katom->affinity);
+				if (cores_ready == KBASE_NEW_AFFINITY) {
+					/* Affinity no longer valid - return to previous state */
+					kbasep_js_job_check_deref_cores(kbdev, katom);
+					KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REGISTER_INUSE_FAILED, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+					/* *** BREAK OUT: Return to previous state, retry *** */
+					retry = MALI_TRUE;
+					break;
+				}
+				if (cores_ready == KBASE_CORES_NOT_READY) {
+					/* Stay in this state and return, to retry at this state later */
+					KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REGISTER_INUSE_FAILED, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+					/* *** BREAK OUT: No state transition *** */
+					break;
+				}
+				/* Proceed to next state */
+				katom->coreref_state = KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY;
+			}
 
-		/* Now see if this requires a different set of cores */
-		if (recently_chosen_affinity != katom->affinity) {
-			if (MALI_ERROR_NONE != kbase_pm_request_cores(kbdev, recently_chosen_affinity, tiler_affinity)) {
-				/* Failed to request cores, rollback the previous gained set
-				 * That also resets the state to NO_CORES_REQUESTED */
-				kbasep_js_job_check_deref_cores(kbdev, katom);
-				KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REQUEST_ON_RECHECK_FAILED, katom->kctx, katom, katom->jc, js, (u32) recently_chosen_affinity);
-				/* *** BREAK OUT: Transition to lower state *** */
-				break;
-			} else {
-				mali_bool cores_ready;
-				/* Register new cores whislt we still hold the old ones, to minimize power transitions */
-				cores_ready = kbase_pm_register_inuse_cores(kbdev, recently_chosen_affinity, tiler_affinity);
+			/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
+
+		case KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY:
+			KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
+
+			/* Optimize out choosing the affinity twice in the same function call */
+			if (chosen_affinity == MALI_FALSE) {
+				/* See if the affinity changed since a previous call. */
+				if (MALI_FALSE == kbase_js_choose_affinity(&recently_chosen_affinity, kbdev, katom, js)) {
+					/* No cores are currently available */
+					kbasep_js_job_check_deref_cores(kbdev, katom);
+					KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REQUEST_ON_RECHECK_FAILED, katom->kctx, katom, katom->jc, js, (u32) recently_chosen_affinity);
+					/* *** BREAK OUT: Transition to lower state *** */
+					break;
+				}		
+				chosen_affinity = MALI_TRUE;
+			}
+
+			/* Now see if this requires a different set of cores */
+			if (recently_chosen_affinity != katom->affinity) {
+				kbase_pm_cores_ready cores_ready;
+
+				kbase_pm_request_cores(kbdev, katom->core_req & BASE_JD_REQ_T, recently_chosen_affinity);
+
+				/* Register new cores whilst we still hold the old ones, to minimize power transitions */
+				cores_ready = kbase_pm_register_inuse_cores(kbdev, katom->core_req & BASE_JD_REQ_T, recently_chosen_affinity);
 				kbasep_js_job_check_deref_cores(kbdev, katom);
 
 				/* Fixup the state that was reduced by deref_cores: */
 				katom->coreref_state = KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY;
 				katom->affinity = recently_chosen_affinity;
+				if (cores_ready == KBASE_NEW_AFFINITY) {
+					/* Affinity no longer valid - return to previous state */
+					katom->coreref_state = KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES;
+					kbasep_js_job_check_deref_cores(kbdev, katom);
+					KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REGISTER_INUSE_FAILED, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+					/* *** BREAK OUT: Return to previous state, retry *** */
+					retry = MALI_TRUE;
+					break;
+				}
 				/* Now might be waiting for powerup again, with a new affinity */
-				if (!cores_ready) {
+				if (cores_ready == KBASE_CORES_NOT_READY) {
 					/* Return to previous state */
 					katom->coreref_state = KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES;
 					KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_REGISTER_ON_RECHECK_FAILED, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
@@ -1471,63 +1492,58 @@ STATIC mali_bool kbasep_js_job_check_ref_cores(kbase_device *kbdev, int js, kbas
 					break;
 				}
 			}
-		}
-		/* Proceed to next state */
-		katom->coreref_state = KBASE_ATOM_COREREF_STATE_CHECK_AFFINITY_VIOLATIONS;
+			/* Proceed to next state */
+			katom->coreref_state = KBASE_ATOM_COREREF_STATE_CHECK_AFFINITY_VIOLATIONS;
 
-		/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
-	case KBASE_ATOM_COREREF_STATE_CHECK_AFFINITY_VIOLATIONS:
-		KBASE_DEBUG_ASSERT(katom->affinity != 0);
-		KBASE_DEBUG_ASSERT(katom->affinity == recently_chosen_affinity);
+			/* ***FALLTHROUGH: TRANSITION TO HIGHER STATE*** */
+		case KBASE_ATOM_COREREF_STATE_CHECK_AFFINITY_VIOLATIONS:
+			KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
+			KBASE_DEBUG_ASSERT(katom->affinity == recently_chosen_affinity);
 
-		/* Note: this is where the caller must've taken the runpool_irq.lock */
+			/* Note: this is where the caller must've taken the runpool_irq.lock */
 
-		/* Check for affinity violations - if there are any, then we just ask
-		 * the caller to requeue and try again later */
-		if (kbase_js_affinity_would_violate(kbdev, js, katom->affinity) != MALI_FALSE) {
-			/* Cause a re-attempt to submit from this slot on the next job complete */
-			kbase_js_affinity_slot_blocked_an_atom(kbdev, js);
-			/* Return to previous state */
-			katom->coreref_state = KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY;
-			/* *** BREAK OUT: Transition to lower state *** */
-			KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_AFFINITY_WOULD_VIOLATE, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+			/* Check for affinity violations - if there are any, then we just ask
+			 * the caller to requeue and try again later */
+			if (kbase_js_affinity_would_violate(kbdev, js, katom->affinity) != MALI_FALSE) {
+				/* Cause a re-attempt to submit from this slot on the next job complete */
+				kbase_js_affinity_slot_blocked_an_atom(kbdev, js);
+				/* Return to previous state */
+				katom->coreref_state = KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY;
+				/* *** BREAK OUT: Transition to lower state *** */
+				KBASE_TRACE_ADD_SLOT_INFO(kbdev, JS_CORE_REF_AFFINITY_WOULD_VIOLATE, katom->kctx, katom, katom->jc, js, (u32) katom->affinity);
+				break;
+			}
+
+			/* No affinity violations would result, so the cores are ready */
+			katom->coreref_state = KBASE_ATOM_COREREF_STATE_READY;
+			/* *** BREAK OUT: Cores Ready *** */
+			break;
+
+		default:
+			KBASE_DEBUG_ASSERT_MSG(MALI_FALSE, "Unhandled kbase_atom_coreref_state %d", katom->coreref_state);
 			break;
 		}
-
-		/* No affinity violations would result, so the cores are ready */
-		katom->coreref_state = KBASE_ATOM_COREREF_STATE_READY;
-		/* *** BREAK OUT: Cores Ready *** */
-		break;
-
-	default:
-		KBASE_DEBUG_ASSERT_MSG(MALI_FALSE, "Unhandled kbase_atom_coreref_state %d", katom->coreref_state);
-		break;
-	}
+	} while (retry != MALI_FALSE);
 
 	return (katom->coreref_state == KBASE_ATOM_COREREF_STATE_READY);
 }
 
 void kbasep_js_job_check_deref_cores(kbase_device *kbdev, struct kbase_jd_atom *katom)
 {
-	u64 tiler_affinity = 0;
-
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	KBASE_DEBUG_ASSERT(katom != NULL);
-
-	if (katom->core_req & BASE_JD_REQ_T)
-		tiler_affinity = kbdev->tiler_present_bitmap;
 
 	switch (katom->coreref_state) {
 	case KBASE_ATOM_COREREF_STATE_READY:
 		/* State where atom was submitted to the HW - just proceed to power-down */
-		KBASE_DEBUG_ASSERT(katom->affinity != 0);
+		KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
 
 		/* *** FALLTHROUGH *** */
 
 	case KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY:
 		/* State where cores were registered */
-		KBASE_DEBUG_ASSERT(katom->affinity != 0);
-		kbase_pm_release_cores(kbdev, katom->affinity, tiler_affinity);
+		KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
+		kbase_pm_release_cores(kbdev, katom->core_req & BASE_JD_REQ_T, katom->affinity);
 
 		/* Note: We do not clear the state for kbase_js_affinity_slot_blocked_an_atom().
 		 * That is handled after finishing the job. This might be slightly
@@ -1538,8 +1554,8 @@ void kbasep_js_job_check_deref_cores(kbase_device *kbdev, struct kbase_jd_atom *
 
 	case KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES:
 		/* State where cores were requested, but not registered */
-		KBASE_DEBUG_ASSERT(katom->affinity != 0);
-		kbase_pm_unrequest_cores(kbdev, katom->affinity, tiler_affinity);
+		KBASE_DEBUG_ASSERT(katom->affinity != 0 || (katom->core_req & BASE_JD_REQ_T));
+		kbase_pm_unrequest_cores(kbdev, katom->core_req & BASE_JD_REQ_T, katom->affinity);
 		break;
 
 	case KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED:
@@ -1593,7 +1609,7 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 				/* Retain/power up the cores it needs, check if cores are ready */
 				cores_ready = kbasep_js_job_check_ref_cores(kbdev, js, dequeued_atom);
 
-				if (cores_ready != MALI_TRUE) {
+				if (cores_ready != MALI_TRUE && dequeued_atom->event_code != BASE_JD_EVENT_PM_EVENT) {
 					/* The job can't be submitted until the cores are ready, requeue the job */
 					kbasep_js_policy_enqueue_job(&kbdev->js_data.policy, dequeued_atom);
 					break;
@@ -1614,10 +1630,16 @@ mali_bool kbasep_js_try_run_next_job_on_slot_irq_nolock(kbase_device *kbdev, int
 				/* Check if this job needs the cycle counter enabled before submission */
 				kbasep_js_ref_permon_check_and_enable_cycle_counter(kbdev, dequeued_atom);
 
-				/* Submit the job */
-				kbase_job_submit_nolock(kbdev, dequeued_atom, js);
+				if (dequeued_atom->event_code == BASE_JD_EVENT_PM_EVENT) {
+					KBASE_DEBUG_PRINT_WARN(KBASE_PM, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
+					/* The job has failed due to the specified core group being unavailable */
+					kbase_jd_done(dequeued_atom, js, NULL, 0);
+				} else {
+					/* Submit the job */
+					kbase_job_submit_nolock(kbdev, dequeued_atom, js);
 
-				++(*submit_count);
+					++(*submit_count);
+				}
 			} else {
 				/* No more jobs - stop submitting for this slot */
 				break;
@@ -1685,7 +1707,7 @@ void kbasep_js_try_run_next_job_on_slot_nolock(kbase_device *kbdev, int js)
 					/* Retain/power up the cores it needs, check if cores are ready */
 					cores_ready = kbasep_js_job_check_ref_cores(kbdev, js, dequeued_atom);
 
-					if (cores_ready != MALI_TRUE) {
+					if (cores_ready != MALI_TRUE && dequeued_atom->event_code != BASE_JD_EVENT_PM_EVENT) {
 						/* The job can't be submitted until the cores are ready, requeue the job */
 						kbasep_js_policy_enqueue_job(&kbdev->js_data.policy, dequeued_atom);
 						break;
@@ -1705,8 +1727,14 @@ void kbasep_js_try_run_next_job_on_slot_nolock(kbase_device *kbdev, int js)
 					/* Check if this job needs the cycle counter enabled before submission */
 					kbasep_js_ref_permon_check_and_enable_cycle_counter(kbdev, dequeued_atom);
 
-					/* Submit the job */
-					kbase_job_submit_nolock(kbdev, dequeued_atom, js);
+					if (dequeued_atom->event_code == BASE_JD_EVENT_PM_EVENT) {
+						KBASE_DEBUG_PRINT_WARN(KBASE_PM, "Rejecting atom due to BASE_JD_EVENT_PM_EVENT\n");
+						/* The job has failed due to the specified core group being unavailable */
+						kbase_jd_done(dequeued_atom, js, NULL, 0);
+					} else {
+						/* Submit the job */
+						kbase_job_submit_nolock(kbdev, dequeued_atom, js);
+					}
 				}
 
 			} while (kbasep_jm_is_submit_slots_free(kbdev, js, NULL) != MALI_FALSE && has_job != MALI_FALSE);

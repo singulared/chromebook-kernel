@@ -93,12 +93,9 @@ static const kbasep_atom_req core_req_variants[] = {
 	 0},
 
 	{
-	 /* 4: Variant guarenteed to support NSS atoms.
-	  *
-	  * In the case of a context that's specified as 'Only Compute', it'll
-	  * not allow Tiler or Fragment atoms, and so those get rejected */
-	 (JS_CORE_REQ_ALL_OTHERS | JS_CORE_REQ_COMPUTE_SLOT | BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_NSS),
-	 (JS_CTX_REQ_ALL_OTHERS),
+	 /* 4: Unused */
+	 0,
+	 0,
 	 0},
 
 	{
@@ -148,10 +145,7 @@ static const kbasep_atom_req core_req_variants_8987[] = {
 	 /* 4: Variant guarenteed to support Compute contexts/atoms
 	  *
 	  * In the case of a context that's specified as 'Only Compute', it'll
-	  * not allow Tiler or Fragment atoms, and so those get rejected
-	  *
-	  * NOTE: NSS flag cannot be supported, so its flag is cleared on bag
-	  * submit */
+	  * not allow Tiler or Fragment atoms, and so those get rejected */
 	 (JS_CORE_REQ_ALL_OTHERS | JS_CORE_REQ_ONLY_COMPUTE_SLOT_8987 | BASE_JD_REQ_COHERENT_GROUP),
 	 (JS_CTX_REQ_ALL_OTHERS_8987 | KBASE_CTX_FLAG_HINT_ONLY_COMPUTE),
 	 0},
@@ -182,7 +176,6 @@ static const kbasep_atom_req core_req_variants_8987[] = {
 #define CORE_REQ_VARIANT_COMPUTE_ALL_CORES           1
 #define CORE_REQ_VARIANT_COMPUTE_ONLY_COHERENT_GROUP 2
 #define CORE_REQ_VARIANT_COMPUTE_OR_TILING           3
-#define CORE_REQ_VARIANT_COMPUTE_NSS                 4
 #define CORE_REQ_VARIANT_COMPUTE_SPECIFIC_COHERENT_0 5
 #define CORE_REQ_VARIANT_COMPUTE_SPECIFIC_COHERENT_1 6
 
@@ -254,35 +247,6 @@ static const u32 variants_supported_ss_state_8987[] = {
 	(1u << CORE_REQ_VARIANT_ONLY_COMPUTE_8987)
 	    | (1u << CORE_REQ_VARIANT_ONLY_COMPUTE_8987_SPECIFIC_COHERENT_0)
 	    | (1u << CORE_REQ_VARIANT_ONLY_COMPUTE_8987_SPECIFIC_COHERENT_1)
-};
-
-/** Mappings between job slot and variant lists for Non-Soft-Stoppable State
- *
- * @note There is no 'allcores' variant of this, because NSS state forces all
- * atoms with BASE_JD_CORE_REQ_SPECIFIC_COHERENT_GROUP to use slot 1 anyway -
- * hence regardless of whether a specific coregroup is targetted, those atoms
- * still make progress.
- *
- * @note This is effectively not used during BASE_HW_ISSUE_8987, because the
- * NSS flag is cleared from all atoms */
-static const u32 variants_supported_nss_state[] = {
-	/* js[0] uses Fragment only */
-	(1u << CORE_REQ_VARIANT_FRAGMENT),
-
-	/* js[1] uses: Compute-all-cores, Compute-only-coherent, Compute-or-Tiling,
-	 * Compute-targetting-specific-coregroup
-	 *
-	 * Due to NSS atoms, this causes the 'device_nr' for atoms targetting a
-	 * specific coregroup to be ignored (otherwise the Non-NSS atoms targetting
-	 * a coregroup would be unreasonably delayed) */
-	(1u << CORE_REQ_VARIANT_COMPUTE_ALL_CORES)
-	    | (1u << CORE_REQ_VARIANT_COMPUTE_ONLY_COHERENT_GROUP)
-	    | (1u << CORE_REQ_VARIANT_COMPUTE_OR_TILING)
-	    | (1u << CORE_REQ_VARIANT_COMPUTE_SPECIFIC_COHERENT_0)
-	    | (1u << CORE_REQ_VARIANT_COMPUTE_SPECIFIC_COHERENT_1),
-
-	/* js[2] uses: NSS only */
-	(1u << CORE_REQ_VARIANT_COMPUTE_NSS)
 };
 
 /* Defines for easy asserts 'is scheduled'/'is queued'/'is neither queued norscheduled' */
@@ -551,7 +515,6 @@ STATIC void build_slot_lookups(kbase_device *kbdev, kbasep_js_policy_cfs *policy
 	KBASE_DEBUG_ASSERT(kbdev->gpu_props.num_job_slots <= NELEMS(variants_supported_ss_state));
 	KBASE_DEBUG_ASSERT(kbdev->gpu_props.num_job_slots <= NELEMS(variants_supported_ss_allcore_state));
 	KBASE_DEBUG_ASSERT(kbdev->gpu_props.num_job_slots <= NELEMS(variants_supported_ss_state_8987));
-	KBASE_DEBUG_ASSERT(kbdev->gpu_props.num_job_slots <= NELEMS(variants_supported_nss_state));
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8987))
 		variants_supported_ss_for_this_hw = variants_supported_ss_state_8987;
@@ -561,8 +524,6 @@ STATIC void build_slot_lookups(kbase_device *kbdev, kbasep_js_policy_cfs *policy
 		set_slot_to_variant_lookup(policy_info->slot_to_variant_lookup_ss_state, i, variants_supported_ss_for_this_hw[i]);
 
 		set_slot_to_variant_lookup(policy_info->slot_to_variant_lookup_ss_allcore_state, i, variants_supported_ss_allcore_state[i]);
-
-		set_slot_to_variant_lookup(policy_info->slot_to_variant_lookup_nss_state, i, variants_supported_nss_state[i]);
 	}
 
 }
@@ -753,64 +714,54 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 				u32 ticks = atom->sched_info.cfs.ticks++;
 
 #if !CINSTR_DUMPING_ENABLED
-				if ((atom->core_req & BASE_JD_REQ_NSS) == 0) {
-					/* Job is Soft-Stoppable */
-					if (ticks == js_devdata->soft_stop_ticks) {
-						/* Job has been scheduled for at least js_devdata->soft_stop_ticks ticks.
-						 * Soft stop the slot so we can run other jobs.
-						 */
-						KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Soft-stop");
+				/* Job is Soft-Stoppable */
+				if (ticks == js_devdata->soft_stop_ticks) {
+					/* Job has been scheduled for at least js_devdata->soft_stop_ticks ticks.
+					 * Soft stop the slot so we can run other jobs.
+					 */
+					KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Soft-stop");
 
 #if KBASE_DISABLE_SCHEDULING_SOFT_STOPS == 0
-						kbase_job_slot_softstop(kbdev, s, atom);
+					kbase_job_slot_softstop(kbdev, s, atom);
 #endif
-					} else if (ticks == js_devdata->hard_stop_ticks_ss) {
-						/* Job has been scheduled for at least js_devdata->hard_stop_ticks_ss ticks.
-						 * It should have been soft-stopped by now. Hard stop the slot.
-						 */
+				} else if (ticks == js_devdata->hard_stop_ticks_ss) {
+					/* Job has been scheduled for at least js_devdata->hard_stop_ticks_ss ticks.
+					 * It should have been soft-stopped by now. Hard stop the slot.
+					 */
 #if KBASE_DISABLE_SCHEDULING_HARD_STOPS == 0
-						KBASE_DEBUG_PRINT_WARN(KBASE_JM, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
-						kbase_job_slot_hardstop(atom->kctx, s, atom);
+					KBASE_DEBUG_PRINT_WARN(KBASE_JM, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
+					kbase_job_slot_hardstop(atom->kctx, s, atom);
 #endif
-					} else if (ticks == js_devdata->gpu_reset_ticks_ss) {
-						/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_ss ticks.
-						 * It should have left the GPU by now. Signal that the GPU needs to be reset.
-						 */
-						reset_needed = MALI_TRUE;
-					}
-				} else
-#endif				/* !CINSTR_DUMPING_ENABLED */
-					/* NOTE: During CINSTR_DUMPING_ENABLED, we use the NSS-timeouts for *all* atoms,
-					 * which makes the hard-stop and GPU reset timeout much longer. We also ensure
-					 * that we don't soft-stop at all.
-					 *
-					 * Otherwise, this next block is only used for NSS-atoms */
-				{
-					/* Job is Non Soft-Stoppable */
-					if (ticks == js_devdata->soft_stop_ticks) {
-						/* Job has been scheduled for at least js_devdata->soft_stop_ticks.
-						 * Let's try to soft-stop it even if it's supposed to be NSS.
-						 */
-						KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Soft-stop");
-
-#if (KBASE_DISABLE_SCHEDULING_SOFT_STOPS == 0) && (CINSTR_DUMPING_ENABLED == 0)
-						kbase_job_slot_softstop(kbdev, s, atom);
-#endif
-					} else if (ticks == js_devdata->hard_stop_ticks_nss) {
-						/* Job has been scheduled for at least js_devdata->hard_stop_ticks_nss ticks.
-						 * Hard stop the slot.
-						 */
-#if KBASE_DISABLE_SCHEDULING_HARD_STOPS == 0
-						KBASE_DEBUG_PRINT_WARN(KBASE_JM, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
-						kbase_job_slot_hardstop(atom->kctx, s, atom);
-#endif
-					} else if (ticks == js_devdata->gpu_reset_ticks_nss) {
-						/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_nss ticks.
-						 * It should have left the GPU by now. Signal that the GPU needs to be reset.
-						 */
-						reset_needed = MALI_TRUE;
-					}
+				} else if (ticks == js_devdata->gpu_reset_ticks_ss) {
+					/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_ss ticks.
+					 * It should have left the GPU by now. Signal that the GPU needs to be reset.
+					 */
+					reset_needed = MALI_TRUE;
 				}
+#else 				/* !CINSTR_DUMPING_ENABLED */
+				/* NOTE: During CINSTR_DUMPING_ENABLED, we use the alternate timeouts, which
+				 * makes the hard-stop and GPU reset timeout much longer. We also ensure that
+				 * we don't soft-stop at all. */
+				if (ticks == js_devdata->soft_stop_ticks) {
+					/* Job has been scheduled for at least js_devdata->soft_stop_ticks.
+					 * We do not soft-stop during CINSTR_DUMPING_ENABLED, however.
+					 */
+					KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Soft-stop");
+				} else if (ticks == js_devdata->hard_stop_ticks_nss) {
+					/* Job has been scheduled for at least js_devdata->hard_stop_ticks_nss ticks.
+					 * Hard stop the slot.
+					 */
+#if KBASE_DISABLE_SCHEDULING_HARD_STOPS == 0
+					KBASE_DEBUG_PRINT_WARN(KBASE_JM, "JS: Job Hard-Stopped (took more than %lu ticks at %lu ms/tick)", (unsigned long)ticks, (unsigned long)(js_devdata->scheduling_tick_ns / 1000000u));
+					kbase_job_slot_hardstop(atom->kctx, s, atom);
+#endif
+				} else if (ticks == js_devdata->gpu_reset_ticks_nss) {
+					/* Job has been scheduled for at least js_devdata->gpu_reset_ticks_nss ticks.
+					 * It should have left the GPU by now. Signal that the GPU needs to be reset.
+					 */
+					reset_needed = MALI_TRUE;
+				}
+#endif				/* !CINSTR_DUMPING_ENABLED */
 			}
 		}
 	}
@@ -1392,10 +1343,7 @@ mali_bool kbasep_js_policy_dequeue_job(kbase_device *kbdev,
 	policy_info = &js_devdata->policy.cfs;
 
 	/* Get the variants for this slot */
-	if (kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_NSS) != MALI_FALSE) {
-		/* NSS-state */
-		variants_supported = get_slot_to_variant_lookup(policy_info->slot_to_variant_lookup_nss_state, job_slot_idx);
-	} else if (kbdev->gpu_props.num_core_groups > 1 && kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_COMPUTE_ALL_CORES) != MALI_FALSE) {
+	if (kbdev->gpu_props.num_core_groups > 1 && kbasep_js_ctx_attr_is_attr_on_runpool(kbdev, KBASEP_JS_CTX_ATTR_COMPUTE_ALL_CORES) != MALI_FALSE) {
 		/* SS-allcore state, and there's more than one coregroup */
 		variants_supported = get_slot_to_variant_lookup(policy_info->slot_to_variant_lookup_ss_allcore_state, job_slot_idx);
 	} else {

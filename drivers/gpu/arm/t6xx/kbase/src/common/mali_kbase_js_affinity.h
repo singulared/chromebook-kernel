@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -61,21 +61,17 @@ mali_bool kbase_js_can_run_job_on_slot_no_lock(kbase_device *kbdev, int js);
  *
  * Currently assumes an all-on/all-off power management policy.
  * Also assumes there is at least one core with tiler available.
- * Will try to produce an even distribution of cores for SS and
- * NSS jobs. SS jobs will be given cores starting from core-group
- * 0 forward to n. NSS jobs will be given cores from core-group n
- * backwards to 0. This way for example in a T658 SS jobs will
- * tend to run on cores from core-group 0 and NSS jobs will tend
- * to run on cores from core-group 1.
- * An assertion will be raised if computed affinity is 0
  *
- * @param[out] affinity Affinity bitmap computed
+ * Returns MALI_TRUE if a valid affinity was chosen, MALI_FALSE if
+ * no cores were available.
+ *
+ * @param[out] affinity       Affinity bitmap computed
  * @param kbdev The kbase device structure of the device
  * @param katom Job chain of which affinity is going to be found
  * @param js    Slot the job chain is being submitted
 
  */
-void kbase_js_choose_affinity(u64 * const affinity, kbase_device *kbdev, kbase_jd_atom *katom, int js);
+mali_bool kbase_js_choose_affinity(u64 * const affinity, kbase_device *kbdev, kbase_jd_atom *katom, int js);
 
 /**
  * @brief Determine whether a proposed \a affinity on job slot \a js would

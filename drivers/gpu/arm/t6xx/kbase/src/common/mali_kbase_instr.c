@@ -66,7 +66,6 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	u32 irq_mask;
 	int ret;
 	u64 shader_cores_needed;
-	u64 tiler_cores_needed;
 
 	KBASE_DEBUG_ASSERT(NULL != kctx);
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
@@ -74,13 +73,15 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	KBASE_DEBUG_ASSERT(NULL == kbdev->hwcnt.suspended_kctx);
 
 	shader_cores_needed = kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER);
-	tiler_cores_needed = kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_TILER);
 
 	js_devdata = &kbdev->js_data;
 
 	/* alignment failure */
 	if ((setup->dump_buffer == 0ULL) || (setup->dump_buffer & (2048 - 1)))
 		goto out_err;
+
+	/* Override core availability policy to ensure all cores are available */
+	kbase_pm_ca_instr_enable(kbdev);
 
 	/* Mark the context as active so the GPU is kept turned on */
 	/* A suspend won't happen here, because we're in a syscall from a userspace
@@ -89,9 +90,7 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 
 	/* Request the cores early on synchronously - we'll release them on any errors
 	 * (e.g. instrumentation already active) */
-	if (MALI_ERROR_NONE != kbase_pm_request_cores_sync(kbdev, shader_cores_needed, tiler_cores_needed)) {
-		goto out_pm_context_idle;
-	}
+	kbase_pm_request_cores_sync(kbdev, MALI_TRUE, shader_cores_needed);
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 
@@ -179,8 +178,7 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "HW counters dumping set-up for context %p", kctx);
 	return err;
  out_unrequest_cores:
-	kbase_pm_unrequest_cores(kbdev, shader_cores_needed, tiler_cores_needed);
- out_pm_context_idle:
+	kbase_pm_unrequest_cores(kbdev, MALI_TRUE, shader_cores_needed);
 	kbase_pm_context_idle(kbdev);
  out_err:
 	return err;
@@ -263,7 +261,9 @@ mali_error kbase_instr_hwcnt_disable(kbase_context *kctx)
 	kbdev->hwcnt.kctx = NULL;
 	kbdev->hwcnt.addr = 0ULL;
 
-	kbase_pm_unrequest_cores(kbdev, kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER), kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_TILER));
+	kbase_pm_ca_instr_disable(kbdev);
+
+	kbase_pm_unrequest_cores(kbdev, MALI_TRUE, kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER));
 
 	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 

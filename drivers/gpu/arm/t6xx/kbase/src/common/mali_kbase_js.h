@@ -126,7 +126,7 @@ void kbasep_js_kctx_term(kbase_context *kctx);
  * schedule the context/run the job.
  *
  * This atomically does the following:
- * - Update the numbers of jobs information (including NSS state changes)
+ * - Update the numbers of jobs information
  * - Add the job to the run pool if necessary (part of init_job)
  *
  * Once this is done, then an appropriate action is taken:
@@ -201,11 +201,6 @@ void kbasep_js_remove_job(kbase_device *kbdev, kbase_context *kctx, kbase_jd_ato
  * This is a variant of kbasep_js_remove_job() that takes care of removing all
  * of the retained state too. This is generally useful for cancelled atoms,
  * which need not be handled in an optimal way.
- *
- * As such, this can cause an NSS/SS state transition. In this case, slots that
- * previously could not have jobs submitted to might now be submittable to. For
- * this reason, and NSS/SS state transition will cause the Scheduler to try to
- * submit new jobs on the jm_slots.
  *
  * It is a programming error to call this when:
  * - \a atom is not a job belonging to kctx.
@@ -711,9 +706,24 @@ static INLINE void kbasep_js_clear_job_retry_submit(kbase_jd_atom *atom)
 	atom->retry_submit_on_slot = KBASEP_JS_RETRY_SUBMIT_SLOT_INVALID;
 }
 
+/**
+ * Mark a slot as requiring resubmission by carrying that information on a
+ * completing atom.
+ *
+ * @note This can ASSERT in debug builds if the submit slot has been set to
+ * something other than the current value for @a js. This is because you might
+ * be unintentionally stopping more jobs being submitted on the old submit
+ * slot, and that might cause a scheduling-hang.
+ *
+ * @note If you can guarantee that the atoms for the original slot will be
+ * submitted on some other slot, then call kbasep_js_clear_job_retry_submit()
+ * first to silence the ASSERT.
+ */
 static INLINE void kbasep_js_set_job_retry_submit_slot(kbase_jd_atom *atom, int js)
 {
 	KBASE_DEBUG_ASSERT(0 <= js && js <= BASE_JM_MAX_NR_SLOTS);
+	KBASE_DEBUG_ASSERT(atom->retry_submit_on_slot == KBASEP_JS_RETRY_SUBMIT_SLOT_INVALID
+	                   || atom->retry_submit_on_slot == js);
 
 	atom->retry_submit_on_slot = js;
 }

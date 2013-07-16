@@ -603,8 +603,11 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 				node->event_code = katom->event_code;
 				node->status = KBASE_JD_ATOM_STATE_COMPLETED;
 
-				if (node->core_req & BASE_JD_REQ_SOFT_JOB)
-				{
+				if (node->core_req & BASE_JD_REQ_SOFT_JOB) {
+					/* If this is a fence wait then remove it from the list of sync waiters. */
+					if ( BASE_JD_REQ_SOFT_FENCE_WAIT == node->core_req )
+						list_del(&node->dep_item[0]);
+
 					kbase_finish_soft_job(node);
 				}
 			}
@@ -702,6 +705,12 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 	while (katom->status != KBASE_JD_ATOM_STATE_UNUSED) {
 		/* Atom number is already in use, wait for the atom to complete */
 		mutex_unlock(&jctx->lock);
+		
+		/* This thread will wait for the atom to complete. Due to thread scheduling we are not sure that
+		 * the other thread that owns the atom will also schedule the context, so we force the scheduler
+		 * to be active and hence eventually schedule this context at some point later. 
+		 */
+		kbasep_js_try_schedule_head_ctx(kctx->kbdev);
 		if (wait_event_killable(katom->completed, katom->status == KBASE_JD_ATOM_STATE_UNUSED)) {
 			/* We're being killed so the result code doesn't really matter */
 			return MALI_FALSE;
@@ -714,21 +723,6 @@ static mali_bool jd_submit_atom(kbase_context *kctx, const base_jd_atom_v2 *user
 	jctx->job_nr++;
 
 	core_req = user_atom->core_req;
-
-	if (kbase_hw_has_issue(kctx->kbdev, BASE_HW_ISSUE_8987)) {
-		/* For this HW workaround, we scheduled differently on the 'ONLY_COMPUTE'
-		 * flag, at the expense of ignoring the NSS flag.
-		 *
-		 * NOTE: We could allow the NSS flag still (and just ensure that we still
-		 * submit on slot 2 when the NSS flag is set), but we don't because:
-		 * - If we only have NSS contexts, the NSS jobs get all the cores, delaying
-		 * a non-NSS context from getting cores for a long time.
-		 * - A single compute context won't be subject to any timers anyway -
-		 * only when there are >1 contexts (GLES *or* CL) will it get subject to
-		 * timers.
-		 */
-		core_req &= ~((base_jd_core_req) BASE_JD_REQ_NSS);
-	}
 
 	katom->udata = user_atom->udata;
 	katom->kctx = kctx;
@@ -1010,12 +1004,12 @@ static void jd_done_worker(struct work_struct *data)
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_6787) && katom->event_code != BASE_JD_EVENT_DONE && !(katom->event_code & BASE_JD_SW_EVENT))
 		kbasep_jd_cacheclean(kbdev);  /* cache flush when jobs complete with non-done codes */
 	else if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10676)) {
-		if (katom->slot_nr == 2 && kbdev->gpu_props.num_core_groups > 1) {
-			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676");
+		if (kbdev->gpu_props.num_core_groups > 1 && 
+		    !(katom->affinity & kbdev->gpu_props.props.coherency_info.group[0].core_mask) &&
+		    (katom->affinity & kbdev->gpu_props.props.coherency_info.group[1].core_mask)) {
+			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676\n");
 			kbasep_jd_cacheclean(kbdev);
 		}
-		else
-			KBASE_DEBUG_ASSERT(katom->affinity & kbdev->gpu_props.props.coherency_info.group[0].core_mask);
 	}
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10969)            &&
@@ -1034,7 +1028,23 @@ static void jd_done_worker(struct work_struct *data)
 			KBASE_DEBUG_PRINT_INFO(KBASE_JD, " Clamping has been executed, try to rerun the job");
 			katom->event_code = BASE_JD_EVENT_STOPPED;
 			katom->atom_flags |= KBASE_KATOM_FLAGS_RERUN;
+
+			/* The atom will be requeued, but requeing does not submit more
+			 * jobs. If this was the last job, we must also ensure that more
+			 * jobs will be run on slot 0 - this is a Fragment job. */
+			kbasep_js_set_job_retry_submit_slot(katom, 0);
 		}
+	}
+
+	/* If job was rejected due to BASE_JD_EVENT_PM_EVENT but was not
+	 * specifically targeting core group 1, then re-submit targeting core
+	 * group 0 */
+	if (katom->event_code == BASE_JD_EVENT_PM_EVENT && !(katom->core_req & BASE_JD_REQ_SPECIFIC_COHERENT_GROUP)) {
+		katom->event_code = BASE_JD_EVENT_STOPPED;
+		/* Don't need to worry about any previously set retry-slot - it's
+		 * impossible for it to have been set previously, because we guarantee
+		 * kbase_jd_done() was called with done_code==0 on this atom */
+		kbasep_js_set_job_retry_submit_slot(katom, 1);
 	}
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316))

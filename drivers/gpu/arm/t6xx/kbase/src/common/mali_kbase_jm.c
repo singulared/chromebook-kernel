@@ -87,6 +87,7 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 		}
 
 		value = katom->affinity & (mask & 0xFFFFFFFF);
+
 		kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_AFFINITY_NEXT_LO), value, kctx);
 
 		value = (katom->affinity >> 32) & ((mask>>32) & 0xFFFFFFFF);
@@ -117,7 +118,9 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 	kbase_trace_mali_job_slots_event(GATOR_MAKE_EVENT(GATOR_JOB_SLOT_START, js), kctx);
 #endif				/* CONFIG_MALI_GATOR_SUPPORT */
 #ifdef CONFIG_GPU_TRACEPOINTS
+	if (kbasep_jm_nr_jobs_submitted(&kbdev->jm_slots[js]) == 1)
 	{
+		/* If this is the only job on the slot, trace it as starting */
 		char js_string[16];
 		trace_gpu_sched_switch(kbasep_make_job_slot_string(js, js_string), ktime_to_ns(katom->start_timestamp), (u32)katom->kctx, 0, katom->work_id);
 		kbdev->jm_slots[js].last_context = katom->kctx;
@@ -206,6 +209,19 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 	 * - For any other jobs, queue the job back into the dependency system
 	 * - Schedule out the parent context if necessary, and schedule a new one in.
 	 */
+#ifdef CONFIG_GPU_TRACEPOINTS
+	if (kbasep_jm_nr_jobs_submitted(slot) != 0) {
+		kbase_jd_atom *katom;
+		char js_string[16];
+		katom = kbasep_jm_peek_idx_submit_slot(slot, 0);        /* The atom in the HEAD */
+		trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(*end_timestamp), (u32)katom->kctx, 0, katom->work_id);
+		slot->last_context = katom->kctx;
+	} else {
+		char js_string[16];
+		trace_gpu_sched_switch(kbasep_make_job_slot_string(s, js_string), ktime_to_ns(ktime_get()), 0, 0, 0);
+		slot->last_context = 0;
+	}
+#endif
 	kbase_jd_done(katom, s, end_timestamp, KBASE_JS_ATOM_DONE_START_NEW_ATOMS);
 }
 
@@ -389,19 +405,6 @@ void kbase_job_done(kbase_device *kbdev, u32 done)
 		} while (finished & (1 << i));
 
 		kbasep_job_slot_update_head_start_timestamp(kbdev, slot, end_timestamp);
-#ifdef CONFIG_GPU_TRACEPOINTS
-		if (kbasep_jm_nr_jobs_submitted(slot) != 0) {
-			kbase_jd_atom *katom;
-			char js_string[16];
-			katom = kbasep_jm_peek_idx_submit_slot(slot, 0);	/* The atom in the HEAD */
-			trace_gpu_sched_switch(kbasep_make_job_slot_string(i, js_string), ktime_to_ns(katom->start_timestamp), (u32)katom->kctx, 0, katom->work_id);
-			slot->last_context = katom->kctx;
-		} else {
-			char js_string[16];
-			trace_gpu_sched_switch(kbasep_make_job_slot_string(i, js_string), ktime_to_ns(ktime_get()), 0, 0, 0);
-			slot->last_context = 0;
-		}
-#endif
 	}
 	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 
@@ -1000,7 +1003,7 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 
 	mutex_lock(&kbdev->pm.lock);
 	/* We hold the pm lock, so there ought to be a current policy */
-	KBASE_DEBUG_ASSERT(kbdev->pm.current_policy);
+	KBASE_DEBUG_ASSERT(kbdev->pm.pm_current_policy);
 
 	/* All slot have been soft-stopped and we've waited SOFT_STOP_RESET_TIMEOUT for the slots to clear, at this point
 	 * we assume that anything that is still left on the GPU is stuck there and we'll kill it when we reset the GPU */
@@ -1145,9 +1148,7 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Reset complete");
 
 	/* Find out what cores are required now */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
-	kbdev->pm.current_policy->core_state_func[KBASE_PM_POLICY_FUNC_ATOM_CORE_STATE](kbdev);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	kbase_pm_update_cores_state(kbdev);
 
 	/* Synchronously request and wait for those cores, because if
 	 * instrumentation is enabled it would need them immediately. */

@@ -212,6 +212,38 @@ TRACE_EVENT(mali_timeline_gpu_power_active,
 
 );
 
+TRACE_EVENT(mali_timeline_l2_power_active,
+
+	TP_PROTO(u64 ts_sec,
+		u32 ts_nsec,
+		int event_type,
+		int state),
+
+	TP_ARGS(ts_sec,
+		ts_nsec,
+		event_type,
+		state),
+
+	TP_STRUCT__entry(
+			__field(u64, ts_sec)
+			__field(u32, ts_nsec)
+			__field(int, event_type)
+			__field(int, state)
+	),
+
+	TP_fast_assign(
+		__entry->ts_sec = ts_sec;
+		__entry->ts_nsec = ts_nsec;
+		__entry->event_type = event_type;
+		__entry->state = state;
+	),
+
+	TP_printk("%i,%i.%.9i,0,%i", __entry->event_type,
+	                   (int)__entry->ts_sec,
+	                   (int)__entry->ts_nsec,
+	                   __entry->state)
+
+);
 TRACE_EVENT(mali_timeline_pm_event,
 
 	TP_PROTO(u64 ts_sec,
@@ -290,6 +322,40 @@ TRACE_EVENT(mali_timeline_slot_atom,
 				__entry->js,
 				__entry->atom_id)
 );
+
+TRACE_EVENT(mali_timeline_pm_checktrans,
+
+	TP_PROTO(u64 ts_sec,
+		u32 ts_nsec,
+		int trans_code,
+		int trans_id),
+
+	TP_ARGS(ts_sec,
+		ts_nsec,
+		trans_code,
+		trans_id),
+
+	TP_STRUCT__entry(
+			__field(u64, ts_sec)
+			__field(u32, ts_nsec)
+			__field(int, trans_code)
+			__field(int, trans_id)
+	),
+
+	TP_fast_assign(
+		__entry->ts_sec = ts_sec;
+		__entry->ts_nsec = ts_nsec;
+		__entry->trans_code = trans_code;
+		__entry->trans_id = trans_id;
+	),
+
+	TP_printk("%i,%i.%.9i,0,%i", __entry->trans_code,
+	                   (int)__entry->ts_sec,
+	                   (int)__entry->ts_nsec,
+	                   __entry->trans_id)
+
+);
+
 
 #endif				/* _MALI_TIMELINE_H */
 

@@ -520,6 +520,9 @@ typedef struct kbase_trace_kctx_timeline {
 } kbase_trace_kctx_timeline;
 
 typedef struct kbase_trace_kbdev_timeline {
+	/** DebugFS entry */
+	struct dentry *dentry;
+
 	/* Note: strictly speaking, not needed, because it's in sync with
 	 * kbase_device::jm_slots[]::submitted_nr
 	 *
@@ -534,6 +537,10 @@ typedef struct kbase_trace_kbdev_timeline {
 	atomic_t pm_event_uid[KBASEP_TIMELINE_PM_EVENT_LAST+1];
 	/* Counter for generating PM event UIDs */
 	atomic_t pm_event_uid_counter;
+	/*
+	 * L2 transition state - MALI_TRUE indicates that the transition is ongoing
+	 * Expected to be protected by pm.power_change_lock */
+	mali_bool l2_transitioning;
 } kbase_trace_kbdev_timeline;
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
@@ -576,19 +583,19 @@ struct kbase_device {
 	 * cleared to update the power management system and allow transitions to
 	 * occur. */
 	u64 shader_inuse_bitmap;
-	u64 tiler_inuse_bitmap;
 
 	/* Refcount for cores in use */
 	u32 shader_inuse_cnt[64];
-	u32 tiler_inuse_cnt[64];
 
 	/* Bitmaps of cores the JS needs for jobs ready to run */
 	u64 shader_needed_bitmap;
-	u64 tiler_needed_bitmap;
 
 	/* Refcount for cores needed */
 	u32 shader_needed_cnt[64];
-	u32 tiler_needed_cnt[64];
+
+	u32 tiler_inuse_cnt;
+
+	u32 tiler_needed_cnt;
 
 	/* Refcount for tracking users of the l2 cache, e.g. when using hardware counter instrumentation. */
 	u32 l2_users_count;
@@ -601,6 +608,10 @@ struct kbase_device {
 	 */
 	u64 shader_available_bitmap;
 	u64 tiler_available_bitmap;
+	u64 l2_available_bitmap;
+
+	u64 shader_ready_bitmap;
+	u64 shader_transitioning_bitmap;
 
 	s8 nr_hw_address_spaces;			  /**< Number of address spaces in the GPU (constant after driver initialisation) */
 	s8 nr_user_address_spaces;			  /**< Number of address spaces available to user contexts */

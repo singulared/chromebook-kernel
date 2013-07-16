@@ -14,7 +14,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r3p0-01bet0"
+MALI_RELEASE_NAME ?= "r4p0-00alp0"
 
 # Paths required for build
 KBASE_PATH = $(src)/../..
@@ -44,7 +44,6 @@ DEFINES = \
 	-DMALI_ERROR_INJECT_ON=$(MALI_ERROR_INJECT_ON) \
 	-DMALI_MOCK_TEST=$(MALI_MOCK_TEST) \
 	-DMALI_COVERAGE=$(MALI_COVERAGE) \
-	-DMALI_KBASE_SRC_LINUX_PATH=$(src)/linux \
 	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\"
 
@@ -57,8 +56,8 @@ DEFINES +=-DMALI_KBASE_THIRDPARTY_PATH=platform/$(CONFIG_MALI_PLATFORM_THIRDPART
 endif
 
 # Use our defines when compiling
-ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(UMP_PATH)
-subdir-ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(OSK_PATH) -I$(UMP_PATH)
+ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(src)/linux -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(UMP_PATH)
+subdir-ccflags-y += $(DEFINES) -I$(KBASE_PATH) -I$(src)/linux -I$(KBASE_SRC_PATH) -I$(KBASE_PLATFORM_PATH) -I$(OSK_PATH) -I$(UMP_PATH)
 
 SRC := \
 	common/mali_kbase_device.c \
@@ -72,15 +71,17 @@ SRC := \
 	common/mali_kbase_js.c \
 	common/mali_kbase_js_affinity.c \
 	common/mali_kbase_js_ctx_attr.c \
-	common/mali_kbase_pm.c \
 	common/mali_kbase_event.c \
 	common/mali_kbase_context.c \
 	common/mali_kbase_pm.c \
 	common/mali_kbase_pm_driver.c \
 	common/mali_kbase_pm_metrics.c \
+	common/mali_kbase_pm_ca.c \
+	common/mali_kbase_pm_ca_fixed.c \
 	common/mali_kbase_pm_always_on.c \
 	common/mali_kbase_pm_coarse_demand.c \
 	common/mali_kbase_pm_demand.c \
+	common/mali_kbase_pm_policy.c \
 	common/mali_kbase_config.c \
 	common/mali_kbase_security.c \
 	common/mali_kbase_instr.c \
@@ -97,6 +98,13 @@ SRC := \
 	linux/mali_kbase_config_linux.c \
 	linux/mali_kbase_sync.c \
 	linux/mali_kbase_sync_user.c \
+
+ifeq ($(MALI_CUSTOMER_RELEASE),0)
+SRC += \
+     common/mali_kbase_pm_ca_random.c \
+     common/mali_kbase_pm_demand_always_powered.c \
+     common/mali_kbase_pm_fast_start.c 
+endif
 
 # Job Scheduler Policy: Completely Fair Scheduler
 SRC += common/mali_kbase_js_policy_cfs.c
@@ -142,6 +150,11 @@ endif
 ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
 	SRC += platform/vexpress/mali_kbase_config_vexpress.c \
 	       platform/vexpress/mali_kbase_cpu_vexpress.c
+endif
+
+ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
+	SRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
+	       platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
 endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)

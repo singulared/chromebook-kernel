@@ -592,6 +592,40 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 			break;
 		}
 
+	case KBASE_FUNC_TMEM_SET_ATTRIBUTES:
+		{
+			kbase_uk_tmem_set_attributes* set_attributes = args;
+
+			if (sizeof(*set_attributes) != args_size)
+					goto bad_size;
+
+			if (set_attributes->gpu_addr & ~PAGE_MASK) {
+					KBASE_DEBUG_PRINT_WARN(KBASE_MEM, "kbase_dispatch case KBASE_FUNC_TMEM_SET_ATTRIBUTES: set_attributes->gpu_addr: passed parameter is invalid");
+					ukh->ret = MALI_ERROR_FUNCTION_FAILED;
+					break;
+			}
+			ukh->ret = kbase_tmem_set_attributes(kctx, set_attributes->gpu_addr, set_attributes->attributes);
+			break;
+
+		}
+
+	case KBASE_FUNC_TMEM_GET_ATTRIBUTES:
+		{
+			kbase_uk_tmem_get_attributes *get_attributes = args;
+
+			if (sizeof(*get_attributes) != args_size)
+				goto bad_size;
+
+			if (get_attributes->gpu_addr & ~PAGE_MASK) {
+				KBASE_DEBUG_PRINT_WARN(KBASE_MEM, "kbase_dispatch case KBASE_FUNC_TMEM_GET_ATTRIBUTES: get_attributes->gpu_addr: passed parameter is invalid");
+				ukh->ret = MALI_ERROR_FUNCTION_FAILED;
+				break;
+			}
+
+			ukh->ret = kbase_tmem_get_attributes(kctx, get_attributes->gpu_addr, &get_attributes->attributes);
+			break;
+
+		}
 	case KBASE_FUNC_FIND_CPU_MAPPING:
 		{
 			kbase_uk_find_cpu_mapping *find = args;
@@ -853,7 +887,7 @@ static int kbase_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-#define CALL_MAX_SIZE 528
+#define CALL_MAX_SIZE 536 
 
 static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -1518,6 +1552,7 @@ static ssize_t set_policy(struct device *dev, struct device_attribute *attr, con
 	}
 
 	kbase_pm_set_policy(kbdev, new_policy);
+
 	return count;
 }
 
@@ -1528,6 +1563,187 @@ static ssize_t set_policy(struct device *dev, struct device_attribute *attr, con
  * policy.
  */
 DEVICE_ATTR(power_policy, S_IRUGO | S_IWUSR, show_policy, set_policy);
+
+/** Show callback for the @c core_availability_policy sysfs file.
+ *
+ * This function is called to get the contents of the @c core_availability_policy 
+ * sysfs file. This is a list of the available policies with the currently 
+ * active one surrounded by square brackets.
+ *
+ * @param dev	The device this sysfs file is for
+ * @param attr	The attributes of the sysfs file
+ * @param buf	The output buffer for the sysfs file contents
+ *
+ * @return The number of bytes output to @c buf.
+ */
+static ssize_t show_ca_policy(struct device *dev, struct device_attribute *attr, char *const buf)
+{
+	struct kbase_device *kbdev;
+	const struct kbase_pm_ca_policy *current_policy;
+	const struct kbase_pm_ca_policy *const *policy_list;
+	int policy_count;
+	int i;
+	ssize_t ret = 0;
+
+	kbdev = to_kbase_device(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+	current_policy = kbase_pm_ca_get_policy(kbdev);
+
+	policy_count = kbase_pm_ca_list_policies(&policy_list);
+
+	for (i = 0; i < policy_count && ret < PAGE_SIZE; i++) {
+		if (policy_list[i] == current_policy)
+			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "[%s] ", policy_list[i]->name);
+		else
+			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s ", policy_list[i]->name);
+	}
+
+	if (ret < PAGE_SIZE - 1) {
+		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\n");
+	} else {
+		buf[PAGE_SIZE - 2] = '\n';
+		buf[PAGE_SIZE - 1] = '\0';
+		ret = PAGE_SIZE - 1;
+	}
+
+	return ret;
+}
+
+/** Store callback for the @c core_availability_policy sysfs file.
+ *
+ * This function is called when the @c core_availability_policy sysfs file is 
+ * written to. It matches the requested policy against the available policies 
+ * and if a matching policy is found calls @ref kbase_pm_set_policy to change 
+ * the policy.
+ *
+ * @param dev	The device with sysfs file is for
+ * @param attr	The attributes of the sysfs file
+ * @param buf	The value written to the sysfs file
+ * @param count	The number of bytes written to the sysfs file
+ *
+ * @return @c count if the function succeeded. An error code on failure.
+ */
+static ssize_t set_ca_policy(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct kbase_device *kbdev;
+	const struct kbase_pm_ca_policy *new_policy = NULL;
+	const struct kbase_pm_ca_policy *const *policy_list;
+	int policy_count;
+	int i;
+
+	kbdev = to_kbase_device(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+	policy_count = kbase_pm_ca_list_policies(&policy_list);
+
+	for (i = 0; i < policy_count; i++) {
+		if (sysfs_streq(policy_list[i]->name, buf)) {
+			new_policy = policy_list[i];
+			break;
+		}
+	}
+
+	if (!new_policy) {
+		dev_err(dev, "core_availability_policy: policy not found\n");
+		return -EINVAL;
+	}
+
+	kbase_pm_ca_set_policy(kbdev, new_policy);
+
+	return count;
+}
+
+/** The sysfs file @c core_availability_policy
+ *
+ * This is used for obtaining information about the available policies,
+ * determining which policy is currently active, and changing the active
+ * policy.
+ */
+DEVICE_ATTR(core_availability_policy, S_IRUGO | S_IWUSR, show_ca_policy, set_ca_policy);
+
+/** Show callback for the @c core_mask sysfs file.
+ *
+ * This function is called to get the contents of the @c core_mask sysfs
+ * file.
+ *
+ * @param dev	The device this sysfs file is for
+ * @param attr	The attributes of the sysfs file
+ * @param buf	The output buffer for the sysfs file contents
+ *
+ * @return The number of bytes output to @c buf.
+ */
+static ssize_t show_core_mask(struct device *dev, struct device_attribute *attr, char *const buf)
+{
+	struct kbase_device *kbdev;
+	ssize_t ret = 0;
+
+	kbdev = to_kbase_device(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "Current core mask : 0x%llX\n", kbdev->pm.debug_core_mask);
+	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "Available core mask : 0x%llX\n", kbdev->shader_present_bitmap);	
+
+	return ret;
+}
+
+/** Store callback for the @c core_mask sysfs file.
+ *
+ * This function is called when the @c core_mask sysfs file is written to.
+ *
+ * @param dev	The device with sysfs file is for
+ * @param attr	The attributes of the sysfs file
+ * @param buf	The value written to the sysfs file
+ * @param count	The number of bytes written to the sysfs file
+ *
+ * @return @c count if the function succeeded. An error code on failure.
+ */
+static ssize_t set_core_mask(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct kbase_device *kbdev;
+	u64 new_core_mask;
+
+	kbdev = to_kbase_device(dev);
+
+	if (!kbdev)
+		return -ENODEV;
+
+	new_core_mask = simple_strtoull(buf, NULL, 16);
+
+	if ((new_core_mask & kbdev->shader_present_bitmap) != new_core_mask ||
+	    !(new_core_mask & kbdev->gpu_props.props.coherency_info.group[0].core_mask)) {
+		dev_err(dev, "power_policy: invalid core specification\n");
+		return -EINVAL;
+	}
+
+	if (kbdev->pm.debug_core_mask != new_core_mask) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+
+		kbdev->pm.debug_core_mask = new_core_mask;
+		kbase_pm_update_cores_state_nolock(kbdev);
+
+		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	}
+
+	return count;
+}
+
+/** The sysfs file @c core_mask.
+ *
+ * This is used to restrict shader core availability for debugging purposes.
+ * Reading it will show the current core mask and the mask of cores available.
+ * Writing to it will set the current core mask.
+ */
+DEVICE_ATTR(core_mask, S_IRUGO | S_IWUSR, show_core_mask, set_core_mask);
+
 
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
 /* Import the external affinity mask variables */
@@ -1942,14 +2158,6 @@ static ssize_t issue_debug(struct device *dev, struct device_attribute *attr, co
 DEVICE_ATTR(debug_command, S_IRUGO | S_IWUSR, show_debug, issue_debug);
 #endif /* CONFIG_MALI_DEBUG */
 
-#ifdef CONFIG_MALI_TRACE_TIMELINE
-/** The sysfs file @c timeline_defs.
- *
- * This provides formatting for the timeline trace system.
- */
-DEVICE_ATTR(timeline_defs, S_IRUGO, show_timeline_defs, NULL);
-#endif /* CONFIG_MALI_TRACE_TIMELINE */
-
 #ifdef CONFIG_MALI_NO_MALI
 static int kbase_common_reg_map(kbase_device *kbdev)
 {
@@ -2048,6 +2256,16 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		goto out_file;
 	}
 
+	if (device_create_file(osdev->dev, &dev_attr_core_availability_policy)) {
+		dev_err(osdev->dev, "Couldn't create core_availability_policy sysfs file\n");
+		goto out_file_core_availability_policy;
+	}
+
+	if (device_create_file(osdev->dev, &dev_attr_core_mask)) {
+		dev_err(osdev->dev, "Couldn't create core_mask sysfs file\n");
+		goto out_file_core_mask;
+	}
+
 	down(&kbase_dev_list_lock);
 	list_add(&osdev->entry, &kbase_dev_list);
 	up(&kbase_dev_list_lock);
@@ -2130,12 +2348,12 @@ static int kbase_common_device_init(kbase_device *kbdev)
 #endif /* MALI_CUSTOMER_RELEASE */
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
-	if (device_create_file(osdev->dev, &dev_attr_timeline_defs)) {
-		dev_err(osdev->dev, "Couldn't create timeline_defs sysfs file\n");
+	if (kbasep_trace_timeline_debugfs_init(kbdev)) {
+		dev_err(osdev->dev, "Couldn't create mali_timeline_defs debugfs file\n");
 		goto out_partial;
 	}
 	inited |= inited_timeline;
-#endif /* MALI_CUSTOMER_RELEASE */
+#endif /* CONFIG_MALI_TRACE_TIMELINE */
 
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401)) {
 		if (MALI_ERROR_NONE != kbasep_8401_workaround_init(kbdev))
@@ -2170,7 +2388,7 @@ out_partial:
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	if (inited & inited_timeline)
-		device_remove_file(kbdev->osdev.dev, &dev_attr_timeline_defs);
+		kbasep_trace_timeline_debugfs_term(kbdev);
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
 #if MALI_CUSTOMER_RELEASE == 0
@@ -2232,6 +2450,10 @@ out_partial:
 	list_del(&osdev->entry);
 	up(&kbase_dev_list_lock);
 
+	device_remove_file(kbdev->osdev.dev, &dev_attr_core_mask);
+ out_file_core_mask:
+	device_remove_file(kbdev->osdev.dev, &dev_attr_core_availability_policy);
+ out_file_core_availability_policy:
 	device_remove_file(kbdev->osdev.dev, &dev_attr_power_policy);
 out_file:
 	misc_deregister(&kbdev->osdev.mdev);
@@ -2374,9 +2596,11 @@ static int kbase_common_device_remove(struct kbase_device *kbdev)
 
 	/* Remove the sys power policy file */
 	device_remove_file(kbdev->osdev.dev, &dev_attr_power_policy);
+	device_remove_file(kbdev->osdev.dev, &dev_attr_core_availability_policy);
+	device_remove_file(kbdev->osdev.dev, &dev_attr_core_mask);
 
 #ifdef CONFIG_MALI_TRACE_TIMELINE
-	device_remove_file(kbdev->osdev.dev, &dev_attr_timeline_defs);
+	kbasep_trace_timeline_debugfs_term(kbdev);
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
 #ifdef CONFIG_MALI_DEBUG

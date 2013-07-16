@@ -99,6 +99,9 @@ choice
 config MALI_PLATFORM_VEXPRESS
 	depends on ARCH_VEXPRESS && (ARCH_VEXPRESS_CA9X4 || ARCH_VEXPRESS_CA15X4)
 	bool "Versatile Express"
+config MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ
+	depends on ARCH_VEXPRESS && (ARCH_VEXPRESS_CA9X4 || ARCH_VEXPRESS_CA15X4)
+	bool "Versatile Express w/Virtex7 @ 40Mhz"
 config MALI_PLATFORM_GOLDFISH
 	depends on ARCH_GOLDFISH
 	bool "Android Goldfish virtual CPU"

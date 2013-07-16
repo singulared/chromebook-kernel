@@ -1,6 +1,7 @@
+
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -62,4 +63,4 @@ typedef struct kbasep_pm_policy_always_on {
 	int dummy;
 } kbasep_pm_policy_always_on;
 
-#endif
+#endif 				/* MALI_KBASE_PM_ALWAYS_ON_H */

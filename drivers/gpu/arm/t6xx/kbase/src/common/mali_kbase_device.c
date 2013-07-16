@@ -34,11 +34,11 @@
  */
 #define TRACE_BUFFER_HEADER_SPECIAL 0x45435254
 
-#ifdef CONFIG_MALI_PLATFORM_CONFIG_VEXPRESS
+#if defined(CONFIG_MALI_PLATFORM_VEXPRESS) || defined(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ)
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 extern kbase_attribute config_attributes_hw_issue_8408[];
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
-#endif				/* CONFIG_MALI_PLATFORM_CONFIG_VEXPRESS */
+#endif				/* CONFIG_MALI_PLATFORM_VEXPRESS || CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ */
 
 #if KBASE_TRACE_ENABLE != 0
 STATIC CONST char *kbasep_trace_code_string[] = {
@@ -179,14 +179,14 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 
 	kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
 
-#ifdef CONFIG_MALI_PLATFORM_CONFIG_VEXPRESS
+#if defined(CONFIG_MALI_PLATFORM_VEXPRESS) || defined(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ)
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 	/* BASE_HW_ISSUE_8408 requires a configuration with different timeouts for
 	 * the vexpress platform */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8408))
 		kbdev->config_attributes = config_attributes_hw_issue_8408;
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
-#endif				/* CONFIG_MALI_PLATFORM_CONFIG_VEXPRESS */
+#endif				/* CONFIG_MALI_PLATFORM_VEXPRESS || CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ */
 
 	return MALI_ERROR_NONE;
 
@@ -400,9 +400,11 @@ void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)
 		mali_bool cores_are_available;
 		unsigned long flags;
 
+		KBASE_TIMELINE_PM_CHECKTRANS(kbdev, SW_FLOW_PM_CHECKTRANS_GPU_INTERRUPT_START);
 		spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
 		cores_are_available = kbase_pm_check_transitions_nolock(kbdev);
 		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+		KBASE_TIMELINE_PM_CHECKTRANS(kbdev, SW_FLOW_PM_CHECKTRANS_GPU_INTERRUPT_END);
 
 		if (cores_are_available) {
 			/* Fast-path Job Scheduling on PM IRQ */

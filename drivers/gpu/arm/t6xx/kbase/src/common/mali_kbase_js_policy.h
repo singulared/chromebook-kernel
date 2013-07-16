@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -285,7 +285,7 @@
  * - We could just wait until the IRQ handler fires, but for certain types of
  * jobs this can take comparatively a long time to complete, e.g. GLES FS jobs
  * generally take much longer to run that GLES CS jobs, which are vertex shader
- * jobs. Even worse are NSS jobs, which may run for seconds/minutes.
+ * jobs.
  * - Therefore, when a new job appears in the ctx, we must check the job-slots
  * to see if they're free, and run the jobs as before.
  *

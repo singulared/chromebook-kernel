@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -17,7 +17,7 @@
 
 /**
  * @file mali_kbase_pm_coarse_demand.h
- * "Coarse" power management policy
+ * "Coarse Demand" power management policy
  */
 
 #ifndef MALI_KBASE_PM_COARSE_DEMAND_H
@@ -55,4 +55,4 @@ typedef struct kbasep_pm_policy_coarse_demand {
 	int dummy;
 } kbasep_pm_policy_coarse_demand;
 
-#endif
+#endif				/* MALI_KBASE_PM_COARSE_DEMAND_H */

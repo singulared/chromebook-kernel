@@ -55,7 +55,7 @@ static DEFINE_RAW_SPINLOCK(syscfg_lock);
  * kbase_get_vendor_specific_cpu_clock_speed
  * @brief  Retrieves the CPU clock speed.
  *         The implementation is platform specific.
- * @param[in/out] u32* cpu_clock - the value of CPU clock speed in MHz
+ * @param[out]    cpu_clock - the value of CPU clock speed in MHz
  * @return        0 on success, 1 otherwise
 */
 int kbase_get_vexpress_cpu_clock_speed(u32 *cpu_clock)

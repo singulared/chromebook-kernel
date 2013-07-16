@@ -294,21 +294,6 @@ typedef u16 base_jd_core_req;
 
 /* SW-only requirements - the HW does not expose these as part of the job slot capabilities */
 /**
- * SW Only requirement: this job chain might not be soft-stoppable (Non-Soft
- * Stoppable), and so must be scheduled separately from all other job-chains
- * that are soft-stoppable.
- *
- * In absence of this requirement, then the job-chain is assumed to be
- * soft-stoppable. That is, if it does not release the GPU "soon after" it is
- * soft-stopped, then it will be killed. In contrast, NSS job chains can
- * release the GPU "a long time after" they are soft-stopped.
- *
- * "soon after" and "a long time after" are implementation defined, and
- * configurable in the device driver by the system integrator.
- */
-#define BASE_JD_REQ_NSS             (1U << 5)
-
-/**
  * SW Only requirement: the job chain requires a coherent core group. We don't
  * mind which coherent core group is used.
  */
@@ -360,6 +345,9 @@ typedef u16 base_jd_core_req;
  * If both BASE_JD_REQ_COHERENT_GROUP and this flag are set, this flag takes priority
  *
  * This is only guaranteed to work for BASE_JD_REQ_ONLY_COMPUTE atoms.
+ *
+ * If the core availability policy is keeping the required core group turned off, then 
+ * the job will fail with a BASE_JD_EVENT_PM_EVENT error code.
  */
 #define BASE_JD_REQ_SPECIFIC_COHERENT_GROUP (1U << 11)
 
@@ -373,6 +361,7 @@ typedef u16 base_jd_core_req;
 * These requirement bits are currently unused in base_jd_core_req (currently a u16)
 */
 
+#define BASEP_JD_REQ_RESERVED_BIT5  (1U << 5)
 #define BASEP_JD_REQ_RESERVED_BIT13 (1U << 13)
 #define BASEP_JD_REQ_RESERVED_BIT14 (1U << 14)
 #define BASEP_JD_REQ_RESERVED_BIT15 (1U << 15)
@@ -381,7 +370,7 @@ typedef u16 base_jd_core_req;
 * Mask of all the currently unused requirement bits in base_jd_core_req.
 */
 
-#define BASEP_JD_REQ_RESERVED (BASEP_JD_REQ_RESERVED_BIT13 |\
+#define BASEP_JD_REQ_RESERVED (BASEP_JD_REQ_RESERVED_BIT5 | BASEP_JD_REQ_RESERVED_BIT13 |\
 				BASEP_JD_REQ_RESERVED_BIT14 | BASEP_JD_REQ_RESERVED_BIT15)
 
 /**
@@ -438,11 +427,6 @@ typedef struct base_jd_atom {
 	 * BASE_JD_REQ_COHERENT_GROUP or BASE_JD_REQ_SPECIFIC_COHERENT_GROUP flags
 	 * set). In this case, such atoms would block device_nr==1 being used due
 	 * to restrictions on affinity, perhaps indefinitely. To ensure progress is
-	 * made, the atoms targeted for device_nr 1 will instead be redirected to
-	 * device_nr 0
-	 * - When any process in the system is using 'NSS' (BASE_JD_REQ_NSS) atoms,
-	 * because there'd be very high latency on atoms targeting a coregroup
-	 * that is also in use by NSS atoms. To ensure progress is
 	 * made, the atoms targeted for device_nr 1 will instead be redirected to
 	 * device_nr 0
 	 * - During certain HW workarounds, such as BASE_HW_ISSUE_8987, where
@@ -789,6 +773,7 @@ typedef enum base_jd_event_code {
 	BASE_JD_EVENT_TIMED_OUT = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x001,
 	BASE_JD_EVENT_JOB_CANCELLED = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x002,
 	BASE_JD_EVENT_JOB_INVALID = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x003,
+	BASE_JD_EVENT_PM_EVENT = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_JOB | 0x004,
 
 	BASE_JD_EVENT_BAG_INVALID = BASE_JD_SW_EVENT | BASE_JD_SW_EVENT_BAG | 0x003,
 
@@ -1206,15 +1191,17 @@ struct mali_base_gpu_tiler_props {
 };
 
 /**
- * GPU threading system details. If a value is 0 the information is not available on
- * the implementation of the GPU.
+ * GPU threading system details.  
  */
 struct mali_base_gpu_thread_props {
+	u32 max_threads;            /* Max. number of threads per core */ 
+	u32 max_workgroup_size;     /* Max. number of threads per workgroup */
+	u32 max_barrier_size;       /* Max. number of threads that can synchronize on a simple barrier */
 	u16 max_registers;			/* Total size [1..65535] of the register file available per core. */
-	u8 max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
-	u8 max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
-	u8 impl_tech;		    	/* 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
-	u8 padding[3];
+	u8  max_task_queue;			/* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
+	u8  max_thread_group_split;	/* Max. allowed value [1..15] of the Thread Group Split field. */
+	u8  impl_tech;		    	/* 0 = Not specified, 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
+	u8  padding[7];
 };
 
 /**
@@ -1326,6 +1313,11 @@ struct midg_raw_gpu_props {
 
 /**
  * Return structure for _mali_base_get_gpu_props().
+ *
+ * NOTE: the raw_props member in this datastructure contains the register
+ * values from which the value of the other members are derived. The derived
+ * members exist to allow for efficient access and/or shielding the details
+ * of the layout of the registers.
  *
  */
 typedef struct mali_base_gpu_props {

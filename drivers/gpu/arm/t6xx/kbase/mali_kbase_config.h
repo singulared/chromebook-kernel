@@ -223,11 +223,10 @@ enum {
 	KBASE_CONFIG_ATTR_JS_SOFT_STOP_TICKS,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before Soft-Stoppable
-	 * (BASE_JD_REQ_NSS bit \b clear) jobs are hard-stopped.
+	 * Job Scheduler minimum number of scheduling ticks before jobs are hard-stopped.
 	 *
-	 * This defines the amount of time a Soft-Stoppable job is allowed to spend
-	 * on the GPU before it is killed. Such jobs won't be resumed if killed.
+	 * This defines the amount of time a job is allowed to spend on the GPU before it
+	 * is killed. Such jobs won't be resumed if killed.
 	 *
 	 * This value is supported by the following scheduling policies:
 	 * - The Completely Fair Share (CFS) policy
@@ -243,11 +242,11 @@ enum {
 	KBASE_CONFIG_ATTR_JS_HARD_STOP_TICKS_SS,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before Non-Soft-Stoppable
-	 * (BASE_JD_REQ_NSS bit \b set) jobs are hard-stopped.
+	 * Job Scheduler minimum number of scheduling ticks before jobs are hard-stopped
+	 * when dumping.
 	 *
-	 * This defines the amount of time a Non-Soft-Stoppable job is allowed to spend
-	 * on the GPU before it is killed. Such jobs won't be resumed if killed.
+	 * This defines the amount of time a job is allowed to spend on the GPU before it
+	 * is killed. Such jobs won't be resumed if killed.
 	 *
 	 * This value is supported by the following scheduling policies:
 	 * - The Completely Fair Share (CFS) policy
@@ -336,14 +335,13 @@ enum {
 	KBASE_CONFIG_ATTR_JS_CFS_CTX_RUNTIME_MIN_SLICES,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before Soft-Stoppable
-	 * (BASE_JD_REQ_NSS bit \b clear) jobs cause the GPU to be reset.
+	 * Job Scheduler minimum number of scheduling ticks before jobs cause the GPU to be
+	 * reset.
 	 *
-	 * This defines the amount of time a Soft-Stoppable job is allowed to spend
-	 * on the GPU before it is assumed that the GPU has hung and needs to be reset.
-	 * The assumes that the job has been hard-stopped already and so the presence of
-	 * a job that has remained on the GPU for so long indicates that the GPU has in some
-	 * way hung.
+	 * This defines the amount of time a job is allowed to spend on the GPU before it 
+	 * is assumed that the GPU has hung and needs to be reset. The assumes that the job
+	 * has been hard-stopped already and so the presence of a job that has remained on
+	 * the GPU for so long indicates that the GPU has in some way hung.
 	 *
 	 * This value is supported by the following scheduling policies:
 	 * - The Completely Fair Share (CFS) policy
@@ -356,14 +354,13 @@ enum {
 	KBASE_CONFIG_ATTR_JS_RESET_TICKS_SS,
 
 	/**
-	 * Job Scheduler minimum number of scheduling ticks before Non-Soft-Stoppable
-	 * (BASE_JD_REQ_NSS bit \b set) jobs cause the GPU to be reset.
+	 * Job Scheduler minimum number of scheduling ticks before jobs cause the GPU to be
+	 * reset when dumping.
 	 *
-	 * This defines the amount of time a Non-Soft-Stoppable job is allowed to spend
-	 * on the GPU before it is assumed that the GPU has hung and needs to be reset.
-	 * The assumes that the job has been hard-stopped already and so the presence of
-	 * a job that has remained on the GPU for so long indicates that the GPU has in some
-	 * way hung.
+	 * This defines the amount of time a job is allowed to spend on the GPU before it
+	 * is assumed that the GPU has hung and needs to be reset. The assumes that the job
+	 * has been hard-stopped already and so the presence of a job that has remained on 
+	 * the GPU for so long indicates that the GPU has in some way hung.
 	 *
 	 * This value is supported by the following scheduling policies:
 	 * - The Completely Fair Share (CFS) policy

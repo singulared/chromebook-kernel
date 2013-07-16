@@ -59,10 +59,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 				u32 copy_size = MIN(PAGE_SIZE - offset, JOB_HEADER_SIZE);
 
 				page_1 = kmap_atomic(pfn_to_page(PFN_DOWN(page_array[page_index])));
-				if (!page_1){
-					KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 1");
-					goto exit;
-				}
+
 				/* page_1 is a u32 pointer, offset is expressed in bytes */
 				page_1 += offset>>2;
 				kbase_sync_to_cpu(page_array[page_index] + offset, page_1, copy_size);
@@ -71,11 +68,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 				/* The data needed overflows page the dimension, need to map the subsequent page */
 				if (copy_size < JOB_HEADER_SIZE){
 					page_2 = kmap_atomic(pfn_to_page(PFN_DOWN(page_array[page_index + 1])));
-					if (!page_2){
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 2");
-						kunmap_atomic(page_1);
-						goto exit;
-					}
+
 					kbase_sync_to_cpu(page_array[page_index + 1], page_2, JOB_HEADER_SIZE - copy_size);
 					memcpy(dst + copy_size, page_2, JOB_HEADER_SIZE - copy_size);
 				}
@@ -94,16 +87,16 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 					restartY = job_header[JOB_DESC_FAULT_ADDR_LOW_WORD] & Y_COORDINATE_MASK;
 
 					KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Before Clamping: \n" \
-							                 "Jobstatus: %08x  \n" \
-							                 "restartIdx: %08x  \n" \
-							                 "Fault_addr_low: %08x \n" \
-							                 "minCoordsX: %08x minCoordsY: %08x \n" \
-							                 "maxCoordsX: %08x maxCoordsY: %08x",
-							       job_header[JOB_DESC_STATUS_WORD],
-							       job_header[JOB_DESC_RESTART_INDEX_WORD],
-							       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
-							       minX,minY,
-							       maxX,maxY );
+					                                 "Jobstatus: %08x  \n" \
+					                                 "restartIdx: %08x  \n" \
+					                                 "Fault_addr_low: %08x \n" \
+					                                 "minCoordsX: %08x minCoordsY: %08x \n" \
+					                                 "maxCoordsX: %08x maxCoordsY: %08x", 
+					                       job_header[JOB_DESC_STATUS_WORD],
+					                       job_header[JOB_DESC_RESTART_INDEX_WORD],
+					                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
+					                       minX,minY,
+					                       maxX,maxY );
 
 					/* Set the restart index to the one which generated the fault*/
 					job_header[JOB_DESC_RESTART_INDEX_WORD] = job_header[JOB_DESC_FAULT_ADDR_LOW_WORD];
@@ -111,28 +104,28 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 					if (restartX < minX){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (minX) | restartY;
 						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-								       "Clamping restart X index to minimum. %08x clamped to %08x \n",
-								       restartX, minX );
+						                       "Clamping restart X index to minimum. %08x clamped to %08x \n",
+						                       restartX, minX );
 						clamped =  1;
 					}
 					if (restartY < minY){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (minY) | restartX;
 						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-								       "Clamping restart Y index to minimum. %08x clamped to %08x \n",
-									restartY, minY );
+						                       "Clamping restart Y index to minimum. %08x clamped to %08x \n",
+						                        restartY, minY );
 						clamped =  1;
 					}
 					if (restartX > maxX){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (maxX) | restartY;
 						KBASE_DEBUG_PRINT_WARN(KBASE_JD,
-								       "Clamping restart X index to maximum. %08x clamped to %08x \n",
-									restartX, maxX );
+						                       "Clamping restart X index to maximum. %08x clamped to %08x \n",
+						                        restartX, maxX );
 						clamped =  1;
 					}
 					if (restartY > maxY){
 						job_header[JOB_DESC_RESTART_INDEX_WORD] = (maxY) | restartX;
 						KBASE_DEBUG_PRINT_WARN(KBASE_JD,"Clamping restart Y index to maximum. %08x clamped to %08x \n",
-									restartY, maxY );
+						                        restartY, maxY );
 						clamped =  1;
 					}
 
@@ -141,16 +134,16 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 						job_header[JOB_DESC_FAULT_ADDR_LOW_WORD] = 0x0;
 						job_header[JOB_DESC_STATUS_WORD] = BASE_JD_EVENT_STOPPED;
 						KBASE_DEBUG_PRINT_WARN(KBASE_JD, "After Clamping: \n"                   \
-							                         "Jobstatus: %08x  \n"                  \
-							                         "restartIdx: %08x  \n"                 \
-							                         "Fault_addr_low: %08x \n"              \
-							                         "minCoordsX: %08x minCoordsY: %08x \n" \
-							                         "maxCoordsX: %08x maxCoordsY: %08x",
-							               job_header[JOB_DESC_STATUS_WORD],
-							               job_header[JOB_DESC_RESTART_INDEX_WORD],
-							               job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
-							               minX,minY,
-							               maxX,maxY );
+						                                 "Jobstatus: %08x  \n"                  \
+						                                 "restartIdx: %08x  \n"                 \
+						                                 "Fault_addr_low: %08x \n"              \
+						                                 "minCoordsX: %08x minCoordsY: %08x \n" \
+						                                 "maxCoordsX: %08x maxCoordsY: %08x", 
+						                       job_header[JOB_DESC_STATUS_WORD],
+						                       job_header[JOB_DESC_RESTART_INDEX_WORD],
+						                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
+						                       minX,minY,
+						                       maxX,maxY );
 
 						/* Flush CPU cache to update memory for future GPU reads*/
 						memcpy(page_1, dst, copy_size);
@@ -170,6 +163,5 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 			}
 		}
 	}
-exit:
 	return clamped;
 }

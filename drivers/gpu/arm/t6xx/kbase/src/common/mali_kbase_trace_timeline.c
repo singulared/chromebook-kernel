@@ -23,6 +23,9 @@
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 #include "mali_timeline.h"
 
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
 struct kbase_trace_timeline_desc
 {
 	char *enum_str;
@@ -40,22 +43,68 @@ struct kbase_trace_timeline_desc kbase_trace_timeline_desc_table[] =
 
 #define KBASE_NR_TRACE_CODES ARRAY_SIZE(kbase_trace_timeline_desc_table)
 
-ssize_t show_timeline_defs(struct device *dev, struct device_attribute *attr, char *buf)
+STATIC void *kbasep_trace_timeline_seq_start(struct seq_file *s, loff_t *pos)
 {
-	ssize_t ret = 0;
-	int i = 0;
+	if (*pos >= KBASE_NR_TRACE_CODES)
+		return NULL;
 
-	for (i = 0; i < KBASE_NR_TRACE_CODES; ++i) {
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s#%s#%s#%s\n", kbase_trace_timeline_desc_table[i].enum_str, kbase_trace_timeline_desc_table[i].desc, kbase_trace_timeline_desc_table[i].format, kbase_trace_timeline_desc_table[i].format_desc);
-	}
+	return &kbase_trace_timeline_desc_table[*pos];
+}
 
-	if (PAGE_SIZE == ret) {
-		/* we attempted to write more than a page full - truncate */
-		buf[PAGE_SIZE - 2] = '\n';
-		buf[PAGE_SIZE - 1] = '\0';
-		ret = PAGE_SIZE - 1;
-	}
-	return ret;
+STATIC void kbasep_trace_timeline_seq_stop(struct seq_file *s, void *data)
+{
+}
+
+STATIC void *kbasep_trace_timeline_seq_next(struct seq_file *s, void *data, loff_t *pos)
+{
+	(*pos)++;
+
+	if (*pos == KBASE_NR_TRACE_CODES)
+		return NULL;
+
+	return &kbase_trace_timeline_desc_table[*pos];
+}
+
+STATIC int kbasep_trace_timeline_seq_show(struct seq_file *s, void *data)
+{
+	struct kbase_trace_timeline_desc *trace_desc = data;
+
+	seq_printf(s, "%s#%s#%s#%s\n", trace_desc->enum_str, trace_desc->desc, trace_desc->format, trace_desc->format_desc);
+	return 0;
+}
+
+
+static const struct seq_operations kbasep_trace_timeline_seq_ops = {
+	.start = kbasep_trace_timeline_seq_start,
+	.next = kbasep_trace_timeline_seq_next,
+	.stop = kbasep_trace_timeline_seq_stop,
+	.show = kbasep_trace_timeline_seq_show,
+};
+
+STATIC int kbasep_trace_timeline_debugfs_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &kbasep_trace_timeline_seq_ops);
+}
+
+static const struct file_operations kbasep_trace_timeline_debugfs_fops = {
+	.open = kbasep_trace_timeline_debugfs_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release_private,
+};
+
+mali_error kbasep_trace_timeline_debugfs_init(kbase_device *kbdev)
+{
+	kbdev->timeline.dentry = debugfs_create_file("mali_timeline_defs", S_IRUGO, NULL, NULL, &kbasep_trace_timeline_debugfs_fops);
+	if (IS_ERR(kbdev->timeline.dentry))
+		return MALI_ERROR_FUNCTION_FAILED;
+
+	return MALI_ERROR_NONE;
+}
+
+void kbasep_trace_timeline_debugfs_term(kbase_device *kbdev)
+{
+	debugfs_remove(kbdev->timeline.dentry);
 }
 
 void kbase_timeline_job_slot_submit(kbase_device *kbdev, kbase_context *kctx,
@@ -154,6 +203,25 @@ void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event
 		uid = 0;
 
 	KBASE_TIMELINE_PM_HANDLE_EVENT(kbdev, event, uid);
+}
+
+void kbase_timeline_pm_l2_transition_start(kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	/* Simply log the start of the transition */
+	kbdev->timeline.l2_transitioning = MALI_TRUE;
+	KBASE_TIMELINE_POWERING_L2(kbdev);
+}
+
+void kbase_timeline_pm_l2_transition_done(kbase_device *kbdev)
+{
+	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	/* Simply log the end of the transition */
+	if( MALI_FALSE != kbdev->timeline.l2_transitioning )
+	{
+		kbdev->timeline.l2_transitioning = MALI_FALSE;
+		KBASE_TIMELINE_POWERED_L2(kbdev);
+	}
 }
 
 #endif /* CONFIG_MALI_TRACE_TIMELINE */

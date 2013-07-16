@@ -27,12 +27,15 @@ typedef enum
 	#undef KBASE_TIMELINE_TRACE_CODE
 } kbase_trace_timeline_code;
 
-extern ssize_t show_timeline_defs(struct device *dev, struct device_attribute *attr, char *buf);
+/** Initialize Timeline DebugFS entries */
+mali_error kbasep_trace_timeline_debugfs_init(kbase_device *kbdev);
+/** Terminate Timeline DebugFS entries */
+void kbasep_trace_timeline_debugfs_term(kbase_device *kbdev);
 
 /* mali_timeline.h defines kernel tracepoints used by the KBASE_TIMELINE
-   functions.
-   Output is timestamped by either sched_clock() (default), local_clock(), or
-   cpu_clock(), depending on /sys/kernel/debug/tracing/trace_clock */
+ * functions.
+ * Output is timestamped by either sched_clock() (default), local_clock(), or
+ * cpu_clock(), depending on /sys/kernel/debug/tracing/trace_clock */
 #include "mali_timeline.h"
 
 /* Trace number of atoms in flight for kctx (atoms either not completed, or in
@@ -149,6 +152,37 @@ extern ssize_t show_timeline_defs(struct device *dev, struct device_attribute *a
 		                                     hweight64(bitmap));         \
 	} while (0)
 
+/* Trace state of L2 power */
+#define KBASE_TIMELINE_POWER_L2(kbdev, bitmap)                              \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_gpu_power_active(ts.tv_sec, ts.tv_nsec,         \
+				                             SW_SET_GPU_POWER_L2_ACTIVE,    \
+				                             hweight64(bitmap));            \
+	}while(0)
+
+/* Trace state of L2 cache*/
+#define KBASE_TIMELINE_POWERING_L2(kbdev)                                   \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,	        \
+		                                    SW_FLOW_GPU_POWER_L2_POWERING,  \
+		                                    1);                             \
+	}while(0)
+
+#define KBASE_TIMELINE_POWERED_L2(kbdev)                                    \
+	do                                                                      \
+	{                                                                       \
+		struct timespec ts;                                                 \
+		getnstimeofday(&ts);                                                \
+		trace_mali_timeline_l2_power_active(ts.tv_sec, ts.tv_nsec,          \
+		                                    SW_FLOW_GPU_POWER_L2_ACTIVE,    \
+		                                     1);                            \
+	}while(0)
 
 /* Trace kbase_pm_send_event message send */
 #define KBASE_TIMELINE_PM_SEND_EVENT(kbdev, event_type, pm_event_id) \
@@ -197,6 +231,20 @@ extern ssize_t show_timeline_defs(struct device *dev, struct device_attribute *a
 		                              js, _producerof_atom_number_completed);     \
 	} while (0)
 
+/** Trace beginning/end of a call to kbase_pm_check_transitions_nolock from a
+ * certin caller */
+#define KBASE_TIMELINE_PM_CHECKTRANS(kbdev, trace_code) \
+	do                                                                  \
+	{                                                                   \
+		struct timespec ts;                                             \
+		getnstimeofday(&ts);                                            \
+		trace_mali_timeline_pm_checktrans(ts.tv_sec, ts.tv_nsec,        \
+		                                  trace_code, \
+		                                  1);     \
+	} while (0)
+
+/* NOTE: kbase_timeline_pm_cores_func() is in mali_kbase_pm_policy.c */
+
 /**
  * Trace that an atom is starting on a job slot
  *
@@ -236,6 +284,11 @@ void kbase_timeline_pm_check_handle_event(kbase_device *kbdev, kbase_timeline_pm
 /** Check whether a pm event was present, and if so trace finishing it */
 void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event event);
 
+/** Trace L2 power-up start */
+void kbase_timeline_pm_l2_transition_start(kbase_device *kbdev);
+
+/** Trace L2 power-up done */
+void kbase_timeline_pm_l2_transition_done(kbase_device *kbdev);
 
 #else
 
@@ -257,6 +310,12 @@ void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event
 
 #define KBASE_TIMELINE_POWER_SHADER(kbdev, bitmap) CSTD_NOP()
 
+#define KBASE_TIMELINE_POWER_L2(kbdev, active) CSTD_NOP()
+
+#define KBASE_TIMELINE_POWERING_L2(kbdev) CSTD_NOP()
+
+#define KBASE_TIMELINE_POWERED_L2(kbdev)  CSTD_NOP()
+
 #define KBASE_TIMELINE_PM_SEND_EVENT(kbdev, event_type, pm_event_id) CSTD_NOP()
 
 #define KBASE_TIMELINE_PM_HANDLE_EVENT(kbdev, event_type, pm_event_id) CSTD_NOP()
@@ -264,6 +323,8 @@ void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_timeline_pm_event
 #define KBASE_TIMELINE_JOB_START(kctx, js, _consumerof_atom_number) CSTD_NOP()
 
 #define KBASE_TIMELINE_JOB_STOP(kctx, js, _producerof_atom_number_completed) CSTD_NOP()
+
+#define KBASE_TIMELINE_PM_CHECKTRANS(kbdev, trace_code) CSTD_NOP()
 
 static INLINE void kbase_timeline_job_slot_submit(kbase_device *kbdev, kbase_context *kctx,
                                     kbase_jd_atom *katom, int js)
@@ -290,6 +351,15 @@ static INLINE void kbase_timeline_pm_handle_event(kbase_device *kbdev, kbase_tim
 {
 }
 
+static INLINE void kbase_timeline_pm_l2_transition_start(kbase_device *kbdev)
+{
+
+}
+
+static INLINE void kbase_timeline_pm_l2_transition_done(kbase_device *kbdev)
+{
+
+}
 #endif				/* CONFIG_MALI_TRACE_TIMELINE */
 
 #endif				/* _KBASE_TRACE_TIMELINE_H */

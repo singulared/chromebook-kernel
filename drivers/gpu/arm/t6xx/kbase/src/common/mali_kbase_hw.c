@@ -67,9 +67,6 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 	case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 1):
 		issues = base_hw_issues_t67x_r1p0;
 		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T75X, 0, 0, 0):
-		issues = base_hw_issues_t75x_r0p0;
-		break;
 	default:
 		KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
 		return MALI_ERROR_FUNCTION_FAILED;

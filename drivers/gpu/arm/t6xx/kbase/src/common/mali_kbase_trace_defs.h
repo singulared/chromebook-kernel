@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -210,6 +210,8 @@ int dummy_array[] = {
 	KBASE_TRACE_CODE_MAKE_CODE(PM_GPU_ON),
 	KBASE_TRACE_CODE_MAKE_CODE(PM_GPU_OFF),
 	KBASE_TRACE_CODE_MAKE_CODE(PM_SET_POLICY),	/* info_val == policy number, or -1 for "Already changing" */
+	KBASE_TRACE_CODE_MAKE_CODE(PM_CA_SET_POLICY),
+
 	KBASE_TRACE_CODE_MAKE_CODE(PM_CURRENT_POLICY_INIT),	/* info_val == policy number */
 	KBASE_TRACE_CODE_MAKE_CODE(PM_CURRENT_POLICY_TERM),	/* info_val == policy number */
 /* Unused code just to make it easier to not have a comma at the end.

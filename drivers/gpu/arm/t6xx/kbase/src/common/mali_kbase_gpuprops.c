@@ -257,11 +257,7 @@ static void kbase_gpuprops_calculate_props(base_gpu_props * const gpu_props, kba
 
 	gpu_props->l2_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 0U, 8);
 	gpu_props->l2_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 16U, 8);
-	if (gpu_props->core_props.product_id == GPU_ID_PI_T75X) {
-		gpu_props->l2_props.num_l2_slices = KBASE_UBFX32(gpu_props->raw_props.mem_features, 8U, 4) + 1;
-	} else {
-		gpu_props->l2_props.num_l2_slices = 1;
-	}
+	gpu_props->l2_props.num_l2_slices = 1;
 
 	gpu_props->l3_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 0U, 8);
 	gpu_props->l3_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 16U, 8);
@@ -269,11 +265,32 @@ static void kbase_gpuprops_calculate_props(base_gpu_props * const gpu_props, kba
 	gpu_props->tiler_props.bin_size_bytes = 1 << KBASE_UBFX32(gpu_props->raw_props.tiler_features, 0U, 6);
 	gpu_props->tiler_props.max_active_levels = KBASE_UBFX32(gpu_props->raw_props.tiler_features, 8U, 4);
 
-	gpu_props->thread_props.max_registers = KBASE_UBFX32(gpu_props->raw_props.thread_features, 0U, 16);
-	gpu_props->thread_props.max_task_queue = KBASE_UBFX32(gpu_props->raw_props.thread_features, 16U, 8);
-	gpu_props->thread_props.max_thread_group_split = KBASE_UBFX32(gpu_props->raw_props.thread_features, 24U, 6);
-	gpu_props->thread_props.impl_tech = KBASE_UBFX32(gpu_props->raw_props.thread_features, 30U, 2);
+	if (gpu_props->raw_props.thread_max_threads == 0)
+		gpu_props->thread_props.max_threads = THREAD_MT_DEFAULT;
+	else
+		gpu_props->thread_props.max_threads = gpu_props->raw_props.thread_max_threads;
 
+	if (gpu_props->raw_props.thread_max_workgroup_size == 0)
+		gpu_props->thread_props.max_workgroup_size = THREAD_MWS_DEFAULT;
+	else
+		gpu_props->thread_props.max_workgroup_size = gpu_props->raw_props.thread_max_workgroup_size;
+
+	if (gpu_props->raw_props.thread_max_barrier_size == 0)
+		gpu_props->thread_props.max_barrier_size = THREAD_MBS_DEFAULT;
+	else
+		gpu_props->thread_props.max_barrier_size = gpu_props->raw_props.thread_max_barrier_size;
+
+	if (gpu_props->raw_props.thread_features == 0) {
+		gpu_props->thread_props.max_registers = THREAD_MR_DEFAULT;
+		gpu_props->thread_props.max_task_queue = THREAD_MTQ_DEFAULT;
+		gpu_props->thread_props.max_thread_group_split = THREAD_MTGS_DEFAULT;
+		gpu_props->thread_props.impl_tech = THREAD_IT_DEFAULT;
+	} else {
+		gpu_props->thread_props.max_registers = KBASE_UBFX32(gpu_props->raw_props.thread_features, 0U, 16);
+		gpu_props->thread_props.max_task_queue = KBASE_UBFX32(gpu_props->raw_props.thread_features, 16U, 8);
+		gpu_props->thread_props.max_thread_group_split = KBASE_UBFX32(gpu_props->raw_props.thread_features, 24U, 6);
+		gpu_props->thread_props.impl_tech = KBASE_UBFX32(gpu_props->raw_props.thread_features, 30U, 2);
+	}
 	/* Initialize the coherent_group structure for each group */
 	kbase_gpuprops_construct_coherent_groups(gpu_props);
 }

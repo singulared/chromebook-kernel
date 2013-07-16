@@ -265,9 +265,6 @@ void kbasep_js_ctx_attr_ctx_retain_atom(kbase_device *kbdev, kbase_context *kctx
 	KBASE_DEBUG_ASSERT(katom);
 	core_req = katom->core_req;
 
-	if (core_req & BASE_JD_REQ_NSS)
-		runpool_state_changed |= kbasep_js_ctx_attr_ctx_retain_attr(kbdev, kctx, KBASEP_JS_CTX_ATTR_NSS);
-
 	if (core_req & BASE_JD_REQ_ONLY_COMPUTE)
 		runpool_state_changed |= kbasep_js_ctx_attr_ctx_retain_attr(kbdev, kctx, KBASEP_JS_CTX_ATTR_COMPUTE);
 	else
@@ -295,9 +292,6 @@ mali_bool kbasep_js_ctx_attr_ctx_release_atom(kbase_device *kbdev, kbase_context
 	/* No-op for invalid atoms */
 	if (kbasep_js_atom_retained_state_is_valid(katom_retained_state) == MALI_FALSE)
 		return MALI_FALSE;
-
-	if (core_req & BASE_JD_REQ_NSS)
-		runpool_state_changed |= kbasep_js_ctx_attr_ctx_release_attr(kbdev, kctx, KBASEP_JS_CTX_ATTR_NSS);
 
 	if (core_req & BASE_JD_REQ_ONLY_COMPUTE)
 		runpool_state_changed |= kbasep_js_ctx_attr_ctx_release_attr(kbdev, kctx, KBASEP_JS_CTX_ATTR_COMPUTE);

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -539,25 +539,33 @@ void kbase_destroy_os_context(kbase_os_context *osctx)
 
 KBASE_EXPORT_TEST_API(kbase_destroy_os_context)
 
-void *kbase_va_alloc(kbase_context *kctx, u32 size)
+void *kbase_va_alloc(kbase_context *kctx, u32 size, kbase_hwc_dma_mapping * handle)
 {
+	int i;
 	void *va;
-	u32 pages = ((size - 1) >> PAGE_SHIFT) + 1;
+	dma_addr_t  dma_pa;
 	struct kbase_va_region *reg;
 	phys_addr_t *page_array;
-	u32 flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR | BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR;
-	int i;
 
+	u32 pages = ((size - 1) >> PAGE_SHIFT) + 1;
+	u32 flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR | BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR;
+	
 	KBASE_DEBUG_ASSERT(kctx != NULL);
+	KBASE_DEBUG_ASSERT(0 != size);
 
 	if (size == 0)
 		goto err;
 
-	KBASE_DEBUG_ASSERT(0 != size);
-	va = vmalloc_user(size);
-
+	va = dma_alloc_writecombine(NULL, size, &dma_pa, GFP_KERNEL);
 	if (!va)
 		goto err;
+
+	memset(va, 0x0, size);
+
+	/* Store the state so we can free it later. */
+	handle->cpu_va = va;
+	handle->dma_pa = dma_pa;
+	handle->size   = size;
 
 	kbase_gpu_vm_lock(kctx);
 
@@ -578,11 +586,7 @@ void *kbase_va_alloc(kbase_context *kctx, u32 size)
 		goto free_reg;
 
 	for (i = 0; i < pages; i++) {
-		uintptr_t addr;
-		struct page *page;
-		addr = (uintptr_t) va + (i << PAGE_SHIFT);
-		page = vmalloc_to_page((void *)addr);
-		page_array[i] = PFN_PHYS(page_to_pfn(page));
+		page_array[i] = dma_pa + (i << PAGE_SHIFT);
 	}
 
 	kbase_set_phy_pages(reg, page_array);
@@ -600,7 +604,7 @@ void *kbase_va_alloc(kbase_context *kctx, u32 size)
 	kfree(reg);
  vm_unlock:
 	kbase_gpu_vm_unlock(kctx);
-	vfree(va);
+	dma_free_writecombine(NULL, size, va, dma_pa);
  err:
 	return NULL;
 }
@@ -692,18 +696,18 @@ static int kbase_tracking_page_setup(struct kbase_context * kctx, struct vm_area
 	return 0;
 }
 
-void kbase_va_free(kbase_context *kctx, void *va)
+void kbase_va_free(kbase_context *kctx, kbase_hwc_dma_mapping * handle)
 {
 	struct kbase_va_region *reg;
 	phys_addr_t *page_array;
 	mali_error err;
 
 	KBASE_DEBUG_ASSERT(kctx != NULL);
-	KBASE_DEBUG_ASSERT(va != NULL);
+	KBASE_DEBUG_ASSERT(handle->cpu_va != NULL);
 
 	kbase_gpu_vm_lock(kctx);
 
-	reg = kbase_region_tracker_find_region_base_address(kctx, (uintptr_t) va);
+	reg = kbase_region_tracker_find_region_base_address(kctx, (uintptr_t)handle->cpu_va);
 	KBASE_DEBUG_ASSERT(reg);
 
 	err = kbase_gpu_munmap(kctx, reg);
@@ -716,6 +720,6 @@ void kbase_va_free(kbase_context *kctx, void *va)
 
 	kbase_gpu_vm_unlock(kctx);
 
-	vfree(va);
+	dma_free_writecombine(NULL, handle->size, handle->cpu_va, handle->dma_pa);
 }
 KBASE_EXPORT_SYMBOL(kbase_va_free)

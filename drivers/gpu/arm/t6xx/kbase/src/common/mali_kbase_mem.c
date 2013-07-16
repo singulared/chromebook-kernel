@@ -429,6 +429,8 @@ mali_error kbase_region_tracker_init(kbase_context *kctx)
 	struct kbase_va_region *pmem_reg;
 	struct kbase_va_region *exec_reg;
 	struct kbase_va_region *tmem_reg;
+	u64 tmem_size = KBASE_REG_ZONE_TMEM_SIZE;
+	u64 va_limit;
 
 	/* Make sure page 0 is not used... */
 	pmem_reg = kbase_alloc_free_region(kctx, 1, KBASE_REG_ZONE_EXEC_BASE - 1, KBASE_REG_ZONE_PMEM);
@@ -441,7 +443,20 @@ mali_error kbase_region_tracker_init(kbase_context *kctx)
 		return MALI_ERROR_OUT_OF_MEMORY;
 	}
 
-	tmem_reg = kbase_alloc_free_region(kctx, KBASE_REG_ZONE_TMEM_BASE, KBASE_REG_ZONE_TMEM_SIZE, KBASE_REG_ZONE_TMEM);
+	/* Find out where TMEM should end */
+	va_limit = (1ULL << kctx->kbdev->gpu_props.mmu.va_bits) >> PAGE_SHIFT;
+	KBASE_DEBUG_ASSERT(va_limit > KBASE_REG_ZONE_TMEM_BASE);
+
+	/* If the current size of TMEM is out of range of the 
+	 * virtual address space addressable by the MMU then
+	 * we should shrink it to fit
+	 */
+	if( (KBASE_REG_ZONE_TMEM_BASE + KBASE_REG_ZONE_TMEM_SIZE) >= va_limit )
+	{
+		tmem_size = va_limit - KBASE_REG_ZONE_TMEM_BASE;
+	}
+
+	tmem_reg = kbase_alloc_free_region(kctx, KBASE_REG_ZONE_TMEM_BASE, tmem_size, KBASE_REG_ZONE_TMEM);
 	if (!tmem_reg) {
 		kbase_free_alloced_region(pmem_reg);
 		kbase_free_alloced_region(exec_reg);
@@ -1872,6 +1887,138 @@ struct kbase_va_region *kbase_tmem_import(kbase_context *kctx, base_tmem_import_
 		return NULL;
 	}
 }
+
+mali_error kbase_tmem_set_attributes(kbase_context *kctx, mali_addr64 gpu_addr, u32  attributes )
+{
+	kbase_va_region *reg;
+	u32 requested_attributes = 0;
+	u32 prev_attributes = 0;
+	mali_error       ret = MALI_ERROR_FUNCTION_FAILED;
+
+	KBASE_DEBUG_ASSERT(NULL != kctx);
+
+	if( 0 == gpu_addr )
+		return ret;
+
+	kbase_gpu_vm_lock(kctx);
+
+	/* Find the region */
+	reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
+	if (!reg || (reg->flags & KBASE_REG_FREE))
+			goto out_unlock;
+
+	/* Verify if this is actually a tmem region */
+	if( !(reg->flags & KBASE_REG_ZONE_TMEM) )
+		goto out_unlock;
+
+	/* Verify if there is anything to be updated and if the attributes are valid */
+
+	/* Get the attributes ( only ) */
+	if( BASE_MEM_COHERENT_SYSTEM & attributes )
+		requested_attributes |= KBASE_REG_SHARE_BOTH;
+	else if ( BASE_MEM_COHERENT_LOCAL & attributes )
+		requested_attributes |= KBASE_REG_SHARE_IN;
+
+	if ( requested_attributes != ( reg->flags & (KBASE_REG_SHARE_BOTH | KBASE_REG_SHARE_IN)) )
+	{
+		prev_attributes = reg->flags;
+		reg->flags &= ~(KBASE_REG_SHARE_BOTH|KBASE_REG_SHARE_IN);
+		reg->flags |= requested_attributes;
+	}
+	else
+	{
+		/* Nothing to be updated - leave */
+		ret = MALI_ERROR_NONE;
+		goto out_unlock;
+	}
+
+	/* Currently supporting only imported memory */
+	switch(reg->imported_type)
+	{
+#ifdef CONFIG_UMP
+	case BASE_TMEM_IMPORT_TYPE_UMP:
+		ret = kbase_mmu_update_pages(kctx, reg->start_pfn, kbase_get_phy_pages(reg), reg->nr_alloc_pages, reg->flags );
+		break;
+#endif
+#ifdef 	CONFIG_DMA_SHARED_BUFFER
+	case BASE_TMEM_IMPORT_TYPE_UMM:
+		ret = MALI_ERROR_NONE;
+		if(reg->imported_metadata.umm.current_mapping_usage_count)
+		{
+			/*Update the pages only if the dma buff is already mapped*/
+			KBASE_DEBUG_ASSERT(reg->imported_metadata.umm.dma_attachment);
+			KBASE_DEBUG_ASSERT(reg->imported_metadata.umm.st);
+
+			ret = kbase_mmu_update_pages(kctx, reg->start_pfn, kbase_get_phy_pages(reg), reg->nr_alloc_pages, reg->flags | KBASE_REG_GPU_WR | KBASE_REG_GPU_RD );
+
+		}
+
+		break;
+#endif
+	default:
+		break;
+	}
+
+	if( MALI_ERROR_NONE != ret )
+	{
+		/* Rollback case failed to update page tables */
+		reg->flags = prev_attributes;
+	}
+
+out_unlock:
+	kbase_gpu_vm_unlock(kctx);
+	return ret;
+}
+KBASE_EXPORT_TEST_API(kbase_tmem_set_attributes)
+
+mali_error kbase_tmem_get_attributes(kbase_context *kctx, mali_addr64 gpu_addr, u32 * const attributes )
+{
+	kbase_va_region *reg;
+	u32 current_attributes = 0;
+	mali_error   ret = MALI_ERROR_FUNCTION_FAILED;
+
+	KBASE_DEBUG_ASSERT(NULL != kctx);
+	KBASE_DEBUG_ASSERT(NULL != attributes);
+
+	if( 0 == gpu_addr )
+		return ret;
+
+	kbase_gpu_vm_lock(kctx);
+
+	/* Find the region */
+	reg = kbase_region_tracker_find_region_base_address(kctx, gpu_addr);
+	if (!reg || (reg->flags & KBASE_REG_FREE))
+			goto out_unlock;
+
+	/* Verify if this is actually a tmem region */
+	if( !(reg->flags & KBASE_REG_ZONE_TMEM) )
+		goto out_unlock;
+
+	/* Verify if this is an imported memory */
+	if(BASE_TMEM_IMPORT_TYPE_INVALID != reg->imported_type)
+	{
+		/* Get the attributes ( only ) */
+		if( KBASE_REG_GPU_WR & reg->flags )
+			current_attributes |= BASE_MEM_PROT_GPU_WR;
+		if( KBASE_REG_GPU_RD & reg->flags )
+			current_attributes |= BASE_MEM_PROT_GPU_RD;
+		if( KBASE_REG_GPU_NX & reg->flags )
+			current_attributes |= BASE_MEM_PROT_GPU_EX;
+		if( KBASE_REG_SHARE_BOTH & reg->flags )
+			current_attributes |= BASE_MEM_COHERENT_SYSTEM;
+		if ( KBASE_REG_SHARE_IN & reg->flags )
+			current_attributes |= BASE_MEM_COHERENT_LOCAL;
+	}
+
+	*attributes = current_attributes;
+	ret = MALI_ERROR_NONE;
+
+out_unlock:
+	kbase_gpu_vm_unlock(kctx);
+	return ret;
+}
+KBASE_EXPORT_TEST_API(kbase_tmem_get_attributes)
+
 
 /**
  * @brief Acquire the per-context region list lock
