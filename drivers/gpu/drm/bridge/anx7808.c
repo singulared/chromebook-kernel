@@ -230,24 +230,6 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 	return 0;
 }
 
-static int anx7808_vbus_power_on(struct anx7808_data *anx7808)
-{
-	uint8_t status;
-
-	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL6,
-			 P5V_PROTECT_PD | SHORT_PROTECT_PD);
-	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
-	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
-
-	anx7808_read_reg(anx7808, SP_TX_PLL_FILTER_CTRL6, &status);
-	if (status & (P5V_PROTECT | SHORT_PROTECT)) {
-		DRM_ERROR("Failed to enable VBUS: 0x%02x.\n", status);
-		return -EIO;
-	}
-	DRM_DEBUG_KMS("Enabled VBUS.\n");
-	return 0;
-}
-
 static int anx7808_aux_wait(struct anx7808_data *anx7808)
 {
 	int err;
@@ -464,9 +446,6 @@ static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 {
 	anx7808_rx_initialization(anx7808);
 	anx7808_tx_initialization(anx7808);
-
-	anx7808_vbus_power_on(anx7808);
-	msleep(20);
 }
 
 static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
