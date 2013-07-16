@@ -368,6 +368,26 @@
 			sleep-gpio = <&gpc3 6 1 0 0>;
 			reset-gpio = <&gpc3 1 1 0 0>;
 			hpd-gpio = <&gpc3 0 0 0 0>;
+
+			/*
+			 * The following table maps the timings set forth in the
+			 * LCD's datasheet to the timings specified in the
+			 * PS8622 datasheet.
+			 * ----------+---------------------------+--------------
+			 * LCD TIME  | TRANSITION                | PS8622 EQUIV
+			 * ----------+---------------------------+--------------
+			 * t2 <= 50  | LCD_VCC -> VIDEO_SIGNAL	 | T3+4+5+6+7+8
+			 * 200 <= t5 | VIDEO_SIGNAL -> LED_EN	 | T9 + T10
+			 * 0 <= t9   | LCD_BL_PWM -> LED_EN	 | T10
+			 * 10 <= t8  | VLED -> LCD_BL_PWM	 | --
+			 * 200 <= t6 | !LED_EN -> !VIDEO_SIGNAL  | T11 + T12
+			 * t3 <= 50  | !VIDEO_SIGNAL -> !LCD_VCC | T13
+			 * 400 <= t4 | !LCD_VCC -> LCD_VCC	 | T15
+			 * 0 <= t10  | !LED_EN -> !LCD_BL_PWM    | T11
+			 * 10 <= t11 | !LCD_BL_PWM -> !VLED      | --
+			 * ----------+---------------------------+--------------
+			 */
+			power-seq-timing = <10 200 10 5 200 10 600>;
 		};
 
 		codec {
