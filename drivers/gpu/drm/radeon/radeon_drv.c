@@ -116,9 +116,6 @@ int radeon_mode_dumb_mmap(struct drm_file *filp,
 int radeon_mode_dumb_create(struct drm_file *file_priv,
 			    struct drm_device *dev,
 			    struct drm_mode_create_dumb *args);
-int radeon_mode_dumb_destroy(struct drm_file *file_priv,
-			     struct drm_device *dev,
-			     uint32_t handle);
 struct dma_buf *radeon_gem_prime_export(struct drm_device *dev,
 					struct drm_gem_object *obj,
 					int flags);
@@ -393,7 +390,7 @@ static struct drm_driver kms_driver = {
 	.dma_ioctl = radeon_dma_ioctl_kms,
 	.dumb_create = radeon_mode_dumb_create,
 	.dumb_map_offset = radeon_mode_dumb_mmap,
-	.dumb_destroy = radeon_mode_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 
 	.atomic_begin     = drm_atomic_helper_begin,
 	.atomic_set_event = drm_atomic_helper_set_event,

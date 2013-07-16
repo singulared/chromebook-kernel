@@ -663,7 +663,7 @@ driver = {
 
 	.dumb_create = nouveau_display_dumb_create,
 	.dumb_map_offset = nouveau_display_dumb_map_offset,
-	.dumb_destroy = nouveau_display_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 
 	.atomic_begin     = drm_atomic_helper_begin,
 	.atomic_set_event = drm_atomic_helper_set_event,
