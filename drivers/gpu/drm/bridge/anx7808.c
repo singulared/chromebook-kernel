@@ -605,7 +605,8 @@ static void anx7808_update_audio(struct anx7808_data *anx7808)
 	anx7808_copy_regs(anx7808, HDMI_RX_AUD_IN_CH_STATUS1_REG,
 			  SP_TX_AUD_CH_STATUS_REG1, 5);
 
-	anx7808_aux_dpcd_write(anx7808, SINK_DEV_SEL, 3, force_audio);
+	if (anx7808->ds_type == DOWNSTREAM_HDMI)
+		anx7808_aux_dpcd_write(anx7808, SINK_DEV_SEL, 3, force_audio);
 
 	/* enable audio */
 	anx7808_set_bits(anx7808, SP_TX_AUD_CTRL, AUD_EN);
