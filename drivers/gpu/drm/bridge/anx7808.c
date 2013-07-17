@@ -226,7 +226,7 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 		DRM_ERROR("ANX7808 not found.  ID reg contains: %04x\n", id);
 		return -ENODEV;
 	}
-	DRM_INFO("ANX7808 found.\n");
+	DRM_DEBUG("ANX7808 found.\n");
 	return 0;
 }
 
@@ -517,7 +517,7 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	case BW_NULL:
 	case BW_OVER:
 	default:
-		DRM_INFO("Waiting to read DP bandwidth.");
+		DRM_INFO("Waiting to read DP bandwidth.\n");
 		return -EAGAIN;
 	}
 
@@ -655,7 +655,7 @@ static int anx7808_get_cable_type(struct anx7808_data *anx7808)
 		break;
 	default:
 		anx7808->ds_type = DOWNSTREAM_UNKNOWN;
-		DRM_INFO("Unknown downstream type.\n");
+		DRM_ERROR("Unknown downstream type.\n");
 		break;
 	}
 
@@ -745,7 +745,7 @@ static void anx7808_play_video(struct work_struct *work)
 static void anx7808_cable_det_timer(unsigned long data)
 {
 	struct anx7808_data *anx7808 = (struct anx7808_data *)data;
-	DRM_INFO("anx7808_cable_det_timer");
+	DRM_DEBUG("anx7808_cable_det_timer called.\n");
 	queue_delayed_work(anx7808->wq, &anx7808->play_video, 0);
 }
 
@@ -753,11 +753,11 @@ static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
 	struct anx7808_data *anx7808 = data;
 	if (gpio_get_value(anx7808->cable_det_gpio)) {
-		DRM_INFO("Cable detected; Setting cable_det_timer.\n");
+		DRM_DEBUG("Cable detected; Setting cable_det_timer.\n");
 		mod_timer(&anx7808->cable_det_timer,
 			  jiffies + msecs_to_jiffies(CABLE_DET_TIME_MS));
 	} else {
-		DRM_INFO("Cable unplugged; Deleting cable_det_timer.\n");
+		DRM_DEBUG("Cable unplugged; Deleting cable_det_timer.\n");
 		del_timer(&anx7808->cable_det_timer);
 	}
 	return IRQ_HANDLED;
