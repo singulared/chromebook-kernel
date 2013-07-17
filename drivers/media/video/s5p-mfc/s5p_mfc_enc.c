@@ -349,7 +349,7 @@ static struct mfc_control controls[] = {
 		.minimum = 0,
 		.maximum = 51,
 		.step = 1,
-		.default_value = 1,
+		.default_value = 51,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDEO_H264_P_FRAME_QP,
@@ -392,7 +392,7 @@ static struct mfc_control controls[] = {
 		.minimum = 1,
 		.maximum = 31,
 		.step = 1,
-		.default_value = 1,
+		.default_value = 31,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDEO_H263_P_FRAME_QP,
@@ -437,7 +437,7 @@ static struct mfc_control controls[] = {
 		.minimum = 0,
 		.maximum = 51,
 		.step = 1,
-		.default_value = 1,
+		.default_value = 51,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDEO_MPEG4_P_FRAME_QP,
