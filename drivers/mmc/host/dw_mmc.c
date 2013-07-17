@@ -1081,6 +1081,8 @@ static void dw_mci_tasklet_func(unsigned long priv)
 
 			if (status & DW_MCI_DATA_ERROR_FLAGS) {
 				if (status & SDMMC_INT_DRTO) {
+					dev_err(host->dev,
+						"data timeout error\n");
 					data->error = -ETIMEDOUT;
 				} else if (status & SDMMC_INT_DCRC) {
 					data->error = -EILSEQ;
@@ -1094,6 +1096,11 @@ static void dw_mci_tasklet_func(unsigned long priv)
 					 */
 					data->bytes_xfered = 0;
 					data->error = -ETIMEDOUT;
+				} else if (status & SDMMC_INT_SBE) {
+					dev_err(host->dev,
+						"Start bit error (status=%08x)\n",
+						status);
+						data->error = -EIO;
 				} else {
 					dev_err(host->dev,
 						"data FIFO error "
@@ -1112,6 +1119,17 @@ static void dw_mci_tasklet_func(unsigned long priv)
 				ctrl = mci_readl(host, CTRL);
 				ctrl |= SDMMC_CTRL_FIFO_RESET;
 				mci_writel(host, CTRL, ctrl);
+#ifdef CONFIG_MMC_DW_IDMAC
+				/*
+				 * After an error, it is possible that
+				 * DMA goes to unknow/bad state, it is safe
+				 * reset the DMA in error condition
+				 */
+				ctrl = mci_readl(host, BMOD);
+				/* Software reset of DMA */
+				ctrl |= SDMMC_IDMAC_SWRESET;
+				mci_writel(host, BMOD, ctrl);
+#endif
 			} else {
 				data->bytes_xfered = data->blocks * data->blksz;
 				data->error = 0;
@@ -1627,6 +1645,10 @@ static irqreturn_t dw_mci_interrupt(int irq, void *dev_id)
 			host->data_status = pending;
 			smp_wmb();
 			set_bit(EVENT_DATA_ERROR, &host->pending_events);
+			if (pending & SDMMC_INT_SBE) {
+				set_bit(EVENT_DATA_COMPLETE,
+					&host->pending_events);
+			}
 			tasklet_schedule(&host->tasklet);
 		}
 
