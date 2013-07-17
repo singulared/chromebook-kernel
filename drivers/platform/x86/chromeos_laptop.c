@@ -263,16 +263,6 @@ static int setup_isl29018_als(enum i2c_adapter_type type)
 	return (!als) ? -EAGAIN : 0;
 }
 
-static int setup_isl29023_als(enum i2c_adapter_type type)
-{
-	if (als)
-		return 0;
-
-	/* add isl29023 light sensor */
-	als = add_i2c_device("lightsensor", type, &isl_als_device);
-	return (!als) ? -EAGAIN : 0;
-}
-
 static int setup_tsl2583_als(enum i2c_adapter_type type)
 {
 	if (als)
@@ -367,7 +357,7 @@ static struct chromeos_laptop chromebook_pixel = {
 		/* Touchpad. */
 		{ .add = setup_atmel_224s_tp, I2C_ADAPTER_VGADDC },
 		/* Light Sensor. */
-		{ .add = setup_isl29023_als, I2C_ADAPTER_PANEL },
+		{ .add = setup_isl29018_als, I2C_ADAPTER_PANEL },
 	},
 	.has_keyboard_backlight = true,
 };
@@ -375,7 +365,7 @@ static struct chromeos_laptop chromebook_pixel = {
 static struct chromeos_laptop slippy = {
 	.i2c_peripherals = {
 		/* Light Sensor. */
-		{ .add = setup_isl29023_als, I2C_ADAPTER_I2C1 },
+		{ .add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 		/* Touchpad. */
 		{ .add = setup_cyapa_tp, I2C_ADAPTER_I2C0 },
 	},
@@ -384,7 +374,7 @@ static struct chromeos_laptop slippy = {
 static struct chromeos_laptop falco = {
 	.i2c_peripherals = {
 		/* Light Sensor. */
-		{ .add = setup_isl29023_als, I2C_ADAPTER_I2C1 },
+		{ .add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 		/* Touchpad. */
 		{ .add = setup_cyapa_tp, I2C_ADAPTER_I2C0 },
 	},
@@ -393,7 +383,7 @@ static struct chromeos_laptop falco = {
 static struct chromeos_laptop peppy = {
 	.i2c_peripherals = {
 		/* Light Sensor. */
-		{ .add = setup_isl29023_als, I2C_ADAPTER_I2C1 },
+		{ .add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 		/* Touchpad. */
 		{ .add = setup_cyapa_tp, I2C_ADAPTER_I2C0 },
 	},
@@ -422,7 +412,7 @@ static struct chromeos_laptop hp_pavilion_14_chromebook = {
 
 static struct chromeos_laptop cr48 = {
 	.i2c_peripherals = {
-		/* Light Sensor.. */
+		/* Light Sensor. */
 		{ .add = setup_tsl2563_als, I2C_ADAPTER_SMBUS },
 	},
 };
@@ -434,7 +424,7 @@ static struct chromeos_laptop bolt = {
 		/* Touchpad. */
 		{. add = setup_atmel_224s_tp, I2C_ADAPTER_I2C0 },
 		/* Light Sensor. */
-		{. add = setup_isl29023_als, I2C_ADAPTER_I2C1 },
+		{. add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 	},
 	.has_keyboard_backlight = true,
 };
@@ -506,14 +496,14 @@ static struct dmi_system_id __initdata chromeos_laptop_dmi_table[] = {
 		_CBDD(acer_ac700),
 	},
 	{
-		.ident = "HP Pavilion 14 Chromebook - Touchpad",
+		.ident = "HP Pavilion 14 Chromebook",
 		.matches = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "Butterfly"),
 		},
 		_CBDD(hp_pavilion_14_chromebook),
 	},
 	{
-		.ident = "Cr-48 - Light Sensor",
+		.ident = "Cr-48",
 		.matches = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "Mario"),
 		},
