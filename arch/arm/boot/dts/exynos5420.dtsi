@@ -271,7 +271,8 @@
 	/* tmu for CPU2 */
 	tmu@10068000 {
 		compatible = "samsung,exynos5420-tmu";
-		reg = <0x10068000 0x100>;
+		/* 2nd reg is for the misplaced TRIMINFO register */
+		reg = <0x10068000 0x100>, <0x1006c000 0x4>;
 		interrupts = <0 184 0>;
 		clocks = <&clock 318>;
 		clock-names = "tmu_apbif";
@@ -280,7 +281,8 @@
 	/* tmu for CPU3 */
 	tmu@1006c000 {
 		compatible = "samsung,exynos5420-tmu";
-		reg = <0x1006c000 0x100>;
+		/* 2nd reg is for the misplaced TRIMINFO register */
+		reg = <0x1006c000 0x100>, <0x100a0000 0x4>;
 		interrupts = <0 185 0>;
 		clocks = <&clock 318>;
 		clock-names = "tmu_apbif";
@@ -289,7 +291,8 @@
 	/* tmu for GPU */
 	tmu@100a0000 {
 		compatible = "samsung,exynos5420-tmu";
-		reg = <0x100a0000 0x100>;
+		/* 2nd reg is for the misplaced TRIMINFO register */
+		reg = <0x100a0000 0x100>, <0x10068000 0x4>;
 		interrupts = <0 215 0>;
 		clocks = <&clock 318>;
 		clock-names = "tmu_apbif";
