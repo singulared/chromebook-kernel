@@ -1,0 +1,48 @@
+* Exynos Thermal
+
+Required properties:
+- compatible: should be one of the following.
+    * "samsung,exynos4210-tmu" - for controllers compatible with exynos4210 tmu.
+    * "samsung,exynos5250-tmu" - for controllers compatible with exynos5250 tmu.
+    * "samsung,exynos5420-tmu" - for controllers compatible with exynos5420 tmu.
+
+- reg: physical base address of the controller and length of
+  memory mapped region.
+
+    ** NOTE FOR EXYNOS5420 **
+    TRIMINFO register is being misplaced for TMU channels 2, 3 and 4
+
+    TERMINFO for TMU channel 2 is present in address space of TMU channel 3
+    TERMINFO for TMU channel 3 is present in address space of TMU channel 4
+    TERMINFO for TMU channel 4 is present in address space of TMU channel 2
+
+    * In such cases the reg property contains the misplaced register address and
+      range as the second parameter.
+
+- interrupts : interrupt number to the cpu.
+- clocks : Clock number as per common clock framework for the cpu.
+- clock-names : clock name to be used in the driver
+
+Example:
+
+	/* tmu for CPU0 */
+	tmu@10060000 {
+		compatible = "samsung,exynos5420-tmu";
+		reg = <0x10060000 0x100>;
+		interrupts = <0 65 0>;
+		clocks = <&clock 318>;
+		clock-names = "tmu_apbif";
+	};
+
+Example: In case of Exynos5420 TMU channel 3
+
+	/* tmu for CPU3 */
+	tmu@1006c000 {
+		compatible = "samsung,exynos5420-tmu";
+		/* 2nd reg is for the misplaced TRIMINFO register */
+		reg = <0x1006c000 0x100>, <0x100a0000 0x4>;
+		interrupts = <0 185 0>;
+		clocks = <&clock 318>;
+		clock-names = "tmu_apbif";
+	};
+

@@ -38,6 +38,7 @@
 #include <linux/cpufreq.h>
 #include <linux/cpu_cooling.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 
 #include <plat/cpu.h>
 #include <mach/regs-pmu.h>	/* for EXYNOS5_PS_HOLD_CONTROL */
@@ -123,7 +124,7 @@ struct exynos_thermal_zone;
 struct exynos_tmu_data {
 	struct exynos_tmu_platform_data *pdata;
 	struct resource *mem;
-	void __iomem *base;
+	void __iomem *base, *triminfo_base;
 	int irq;
 	enum soc_type soc;
 	struct work_struct irq_work;
@@ -665,8 +666,14 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 		__raw_writel(EXYNOS_TRIMINFO_RELOAD,
 				data->base + EXYNOS_TMU_TRIMINFO_CON);
 	}
+
 	/* Save trimming info in order to perform calibration */
-	trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
+	if (data->triminfo_base)
+		/* On exynos5420 TRIMINFO is misplaced for some channels */
+		trim_info = readl(data->triminfo_base);
+	else
+		trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
+
 	data->temp_error1 = trim_info & EXYNOS_TMU_TRIM_TEMP_MASK;
 	data->temp_error2 = ((trim_info >> 8) & EXYNOS_TMU_TRIM_TEMP_MASK);
 
@@ -1016,6 +1023,15 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	/* For Exynos5420 The misplaced TERMINFO register address will be
+	 * passed from device tree node.
+	 *
+	 * We cannot use devm_request_and_ioremap, as the base address
+	 * over laps with the address space of the other TMU channel.
+	 * Check Documentation for details
+	 */
+	data->triminfo_base = of_iomap(pdev->dev.of_node, 1);
+
 	data->clk = devm_clk_get(&pdev->dev, "tmu_apbif");
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev, "Failed to get clock\n");
@@ -1086,6 +1102,9 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 err_irq:
 	exynos_unregister_thermal(data);
 err_clk:
+	if (data->triminfo_base)
+		iounmap(data->triminfo_base);
+
 	platform_set_drvdata(pdev, NULL);
 	clk_unprepare(data->clk);
 	return ret;
@@ -1099,6 +1118,9 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	exynos_tmu_control(pdev, false);
 
 	exynos_unregister_thermal(data);
+
+	if (data->triminfo_base)
+		iounmap(data->triminfo_base);
 
 	clk_unprepare(data->clk);
 
