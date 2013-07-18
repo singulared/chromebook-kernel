@@ -1574,7 +1574,8 @@ static int vidioc_g_crop(struct file *file, void *priv, struct v4l2_crop *a)
 	return 0;
 }
 
-static int vidioc_s_crop(struct file *file, void *priv, struct v4l2_crop *a)
+static int vidioc_s_crop(struct file *file, void *priv,
+				const struct v4l2_crop *a)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
