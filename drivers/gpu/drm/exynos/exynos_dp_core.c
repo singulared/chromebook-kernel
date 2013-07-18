@@ -1072,18 +1072,18 @@ static void exynos_dp_phy_init(struct exynos_dp_device *dp)
 {
 	u32 reg;
 
-	reg = __raw_readl(dp->phy_addr);
+	reg = readl(dp->phy_addr);
 	reg |= dp->enable_mask;
-	__raw_writel(reg, dp->phy_addr);
+	writel(reg, dp->phy_addr);
 }
 
 static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 {
 	u32 reg;
 
-	reg = __raw_readl(dp->phy_addr);
+	reg = readl(dp->phy_addr);
 	reg &= ~(dp->enable_mask);
-	__raw_writel(reg, dp->phy_addr);
+	writel(reg, dp->phy_addr);
 }
 
 void exynos_dp_poweron(struct exynos_dp_device *dp)
