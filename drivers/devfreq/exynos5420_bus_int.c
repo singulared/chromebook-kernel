@@ -369,10 +369,6 @@ EXYNOS5_INT_PM_CLK(aclk_300_disp1, "aclk300_disp1",
 			"aclk300_disp1_d", aclk_300_disp1);
 EXYNOS5_INT_PM_CLK(aclk_300_jpeg, "aclk300_jpeg",
 			"aclk300_jpeg_d", aclk_300_jpeg);
-EXYNOS5_INT_PM_CLK(aclk_266_g2d, "aclk266_g2d",
-			"aclk266_g2d_d", aclk_266_g2d);
-EXYNOS5_INT_PM_CLK(aclk_333_g2d, "aclk333_g2d",
-			"aclk333_g2d_d", aclk_333_g2d);
 EXYNOS5_INT_PM_CLK(aclk_400_disp1, "aclk400_disp1",
 			"aclk400_disp1_d", aclk_400_disp1);
 
@@ -394,8 +390,6 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 	&int_pm_clks_aclk_300_gscl,
 	&int_pm_clks_aclk_300_disp1,
 	&int_pm_clks_aclk_300_jpeg,
-	&int_pm_clks_aclk_266_g2d,
-	&int_pm_clks_aclk_333_g2d,
 	&int_pm_clks_aclk_400_disp1,
 };
 
