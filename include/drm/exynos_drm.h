@@ -14,6 +14,7 @@
 #ifndef _EXYNOS_DRM_H_
 #define _EXYNOS_DRM_H_
 
+#include <linux/fb.h>
 #include <uapi/drm/exynos_drm.h>
 
 /**
