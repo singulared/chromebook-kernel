@@ -2076,7 +2076,6 @@ fail:
 	return -ENODEV;
 }
 
-#ifdef CONFIG_OF
 static struct s5p_hdmi_platform_data *drm_hdmi_dt_parse_pdata
 					(struct device *dev)
 {
@@ -2110,11 +2109,8 @@ static int drm_hdmi_dt_parse_phy_pow_control(struct hdmi_context *hdata)
 	int ret = 0;
 
 	phy_pow_ctrl_node = of_find_node_by_name(NULL, "phy-power-control");
-	if (!phy_pow_ctrl_node) {
-		DRM_ERROR("Failed to find phy power control node\n");
-		ret = -ENODEV;
-		goto fail;
-	}
+	if (!phy_pow_ctrl_node)
+		return 0;
 
 	/* reg property holds two informations: addr of pmu register, size */
 	if (of_property_read_u32_array(phy_pow_ctrl_node, "reg",
@@ -2136,20 +2132,6 @@ fail:
 	return ret;
 }
 
-#else
-static struct s5p_hdmi_platform_data *drm_hdmi_dt_parse_pdata
-					(struct device *dev)
-{
-	return NULL;
-}
-
-static int drm_hdmi_dt_parse_phy_pow_control(struct hdmi_context *hdata)
-{
-	return 0;
-}
-
-#endif
-
 static struct platform_device_id hdmi_driver_types[] = {
 	{
 		.name		= "s5pv210-hdmi",
@@ -2168,7 +2150,6 @@ static struct platform_device_id hdmi_driver_types[] = {
 	}
 };
 
-#ifdef CONFIG_OF
 static struct of_device_id hdmi_match_types[] = {
 	{
 		.compatible = "samsung,exynos4212-hdmi",
@@ -2180,7 +2161,6 @@ static struct of_device_id hdmi_match_types[] = {
 		/* end node */
 	}
 };
-#endif
 
 struct platform_device *hdmi_audio_device;
 

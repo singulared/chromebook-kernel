@@ -924,7 +924,6 @@ static struct exynos_drm_display exynos_dp_display = {
 	.ops = &exynos_dp_display_ops,
 };
 
-#ifdef CONFIG_OF
 static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *dp_node = dev->of_node;
@@ -1086,32 +1085,6 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 	reg &= ~(dp->enable_mask);
 	__raw_writel(reg, dp->phy_addr);
 }
-#else
-static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
-{
-	return NULL;
-}
-
-static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
-{
-	return -EINVAL;
-}
-
-static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
-{
-	return -EINVAL;
-}
-
-static void exynos_dp_phy_init(struct exynos_dp_device *dp)
-{
-	return;
-}
-
-static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
-{
-	return;
-}
-#endif /* CONFIG_OF */
 
 void exynos_dp_poweron(struct exynos_dp_device *dp)
 {

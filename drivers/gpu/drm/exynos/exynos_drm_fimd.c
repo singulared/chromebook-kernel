@@ -131,7 +131,6 @@ void exynos_fimd_dp_attach(struct device *dev)
 	dp_dev = dev;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id fimd_driver_dt_match[] = {
 	{ .compatible = "samsung,exynos4-fimd",
 	  .data = &exynos4_fimd_driver_data },
@@ -140,18 +139,15 @@ static const struct of_device_id fimd_driver_dt_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, fimd_driver_dt_match);
-#endif
 
 static inline struct fimd_driver_data *drm_fimd_get_driver_data(
 	struct platform_device *pdev)
 {
-#ifdef CONFIG_OF
 	const struct of_device_id *of_id =
 			of_match_device(fimd_driver_dt_match, &pdev->dev);
 
 	if (of_id)
 		return (struct fimd_driver_data *)of_id->data;
-#endif
 
 	return (struct fimd_driver_data *)
 		platform_get_device_id(pdev)->driver_data;
@@ -883,7 +879,6 @@ static int fimd_activate(struct fimd_context *ctx, bool enable)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -915,12 +910,6 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 
 	return pd;
 }
-#else
-static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
-{
-	return NULL;
-}
-#endif /* CONFIG_OF */
 
 static int fimd_probe(struct platform_device *pdev)
 {
@@ -1137,17 +1126,6 @@ static struct platform_device_id fimd_driver_ids[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(platform, fimd_driver_ids);
-
-#ifdef CONFIG_OF
-static const struct of_device_id fimd_dt_match[] = {
-	{ .compatible = "samsung,exynos5-fimd",
-	  .data	= &exynos5_fimd_driver_data },
-	{ .compatible = "samsung,exynos4-fimd",
-	  .data = &exynos4_fimd_driver_data },
-	{},
-};
-MODULE_DEVICE_TABLE(of, fimd_dt_match);
-#endif
 
 static const struct dev_pm_ops fimd_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(fimd_suspend, fimd_resume)
