@@ -580,6 +580,17 @@ static int read_sync(struct qcusbnet *dev, void **buf, u16 cid, u16 tid,
 			    result, cid, tid);
 
 			spin_lock_irqsave(&dev->qmi.clients_lock, flags);
+			/* The client could potentially be freed when the lock
+			 * is released, so check to make sure the client still
+			 * exists reacquring the lock.
+			 */
+			if (client_bycid(dev, cid) != client) {
+				GOBI_ERROR("client (cid=0x%04x) has been freed",
+					  cid);
+				spin_unlock_irqrestore(&dev->qmi.clients_lock,
+						       flags);
+				return -ENXIO;
+			}
 			list_for_each(node, &client->notifies) {
 				notify = list_entry(node, struct notifyreq, node);
 				if (notify->data == &sem) {
@@ -943,6 +954,17 @@ static void client_free(struct qcusbnet *dev, u16 cid, int sync_flags)
 			spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
 			client_notify_and_free(dev, notify);
 			spin_lock_irqsave(&dev->qmi.clients_lock, flags);
+			/* The client could potentially be freed when the lock
+			 * is released, so check to make sure the client still
+			 * exists reacquring the lock.
+			 */
+			if (client_bycid(dev, cid) != client) {
+				GOBI_WARN("client (cid=0x%04x) has been freed",
+					  cid);
+				spin_unlock_irqrestore(&dev->qmi.clients_lock,
+						       flags);
+				return;
+			}
 		}
 		urb = client_delurb(dev, cid, NULL);
 		while (urb != NULL) {
