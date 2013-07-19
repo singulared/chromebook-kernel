@@ -204,6 +204,13 @@
 		};
 	};
 
+	ramoops {
+		compatible = "ramoops";
+		reg = <0x41f00000 0x00100000>;
+		record-size = <0x00020000>;
+		dump-oops;
+	};
+
 	watchdog {
 		status = "okay";
 	};
