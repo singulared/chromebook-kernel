@@ -109,6 +109,8 @@ static void exynos_cluster_power_control(unsigned int cluster, int enable)
 
 static int exynos_power_up(unsigned int cpu, unsigned int cluster)
 {
+	unsigned long mpidr;
+
 	pr_debug("%s: cpu %u cluster %u\n", __func__, cpu, cluster);
 	if (cpu >= 4 || cluster >= 2)
 		return -EINVAL;
@@ -125,6 +127,13 @@ static int exynos_power_up(unsigned int cpu, unsigned int cluster)
 		if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN)
 			exynos_cluster_power_control(cluster, 1);
 		exynos_core_power_control(cpu, cluster, 1);
+
+		if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN) {
+			mpidr = read_cpuid_mpidr();
+			udelay(10);
+			cci_control_port_by_cpu(mpidr, true);
+		}
+
 		set_boot_flag(cpu, EXYNOS_HOTPLUG);
 		__raw_writel(virt_to_phys(mcpm_entry_point),
 				REG_ENTRY_ADDR);
@@ -234,6 +243,7 @@ static void exynos_power_down(void)
 		 * incoming snoops and DVM messages:
 		 */
 		cci_control_port_by_cpu(mpidr, false);
+		cci_control_port_by_cpu(mpidr ^ (1 << 8), false);
 
 		__mcpm_outbound_leave_critical(cluster, CLUSTER_DOWN);
 	} else {
@@ -259,8 +269,6 @@ static void exynos_power_down(void)
 	if (!skip_wfi) {
 		dsb();
 		dmb();
-		if (last_man)
-			cci_control_port_by_cpu(mpidr, false);
 		__mcpm_cpu_down(cpu, cluster);
 		wfi();
 	} else {
