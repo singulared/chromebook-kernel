@@ -121,6 +121,13 @@
 			samsung,pin-drv = <0>;
 		};
 
+		tps65090_irq: tps65090-irq {
+			samsung,pins = "gpx2-5";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 		trackpad_irq: trackpad-irq {
 			samsung,pins = "gpx1-1";
 			samsung,pin-function = <0>;
@@ -383,9 +390,12 @@
 					compatible = "ti,tps65090";
 					reg = <0x48>;
 
-					/* TODO: add back when no-ack-irq */
-					/* interrupts = <21 0>; */
-					/* interrupt-parent = <&wakeup_eint>; */
+					/*
+					 * Config irq to disable internal pulls
+					 * even though we run in polling mode.
+					 */
+					pinctrl-names = "default";
+					pinctrl-0 = <&tps65090_irq>;
 
 					vsys1-supply = <&vbat>;
 					vsys2-supply = <&vbat>;
@@ -439,6 +449,10 @@
 						};
 						ldo2 {
 						};
+					};
+
+					charger {
+						compatible = "ti,tps65090-charger";
 					};
 				};
 
