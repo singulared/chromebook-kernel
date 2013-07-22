@@ -316,7 +316,11 @@ static void exynos_powered_up(bool switched)
 
 	local_irq_disable();
 	arch_spin_lock(&bl_lock);
-	if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN)
+	/*
+	 * HACK: Only ever power down the A15 cluster.  Powering on/off the
+	 * A7 cluster seems to cause increased instability.
+	 */
+	if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN && cluster == 0)
 		exynos_cluster_power_control(cluster, 0);
 	arch_spin_unlock(&bl_lock);
 	local_irq_enable();
