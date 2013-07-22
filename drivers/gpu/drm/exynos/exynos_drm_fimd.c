@@ -110,6 +110,7 @@ struct fimd_context {
 	struct clk			*fimd_mux_clk;
 	struct clk			*bus_clk;
 	struct clk			*lcd_clk;
+	unsigned long			lcd_clk_rate;
 	void __iomem			*regs;
 	void __iomem			*regs_mie;
 	struct fimd_mode_data		mode;
@@ -517,7 +518,7 @@ static u32 fimd_calc_clkdiv(struct fimd_context *ctx,
 	u32 clkdiv;
 
 	/* Find the clock divider value that gets us closest to ideal_clk */
-	clkdiv = DIV_ROUND_CLOSEST(clk_get_rate(ctx->lcd_clk), ideal_clk);
+	clkdiv = DIV_ROUND_CLOSEST(ctx->lcd_clk_rate, ideal_clk);
 
 	return (clkdiv < 0x100) ? clkdiv : 0xff;
 }
@@ -530,7 +531,7 @@ static bool fimd_mode_fixup(void *in_ctx, const struct drm_display_mode *mode,
 	if (adjusted_mode->vrefresh == 0)
 		adjusted_mode->vrefresh = 60;
 
-	adjusted_mode->clock = clk_get_rate(ctx->lcd_clk) /
+	adjusted_mode->clock = ctx->lcd_clk_rate /
 			fimd_calc_clkdiv(ctx, adjusted_mode);
 	return true;
 }
@@ -984,6 +985,7 @@ static int fimd_probe(struct platform_device *pdev)
 
 	/* Set the FIMD pixel clock to desired value */
 	clk_set_rate(ctx->lcd_clk, pdata->src_clk_rate);
+	ctx->lcd_clk_rate = pdata->src_clk_rate;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
