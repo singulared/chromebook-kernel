@@ -131,7 +131,7 @@ static unsigned int set_asv_info(struct asv_common *exynos_asv_common,
 			exynos_asv_info->ops->get_asv_group(exynos_asv_common,
 						exynos_asv_info->asv_type);
 		exynos_asv_info->result_asv_grp = match_grp_nr;
-		pr_debug("%s ASV group is %d\n", exynos_asv_info->name,
+		pr_info("%s ASV group is %d\n", exynos_asv_info->name,
 					exynos_asv_info->result_asv_grp);
 		result = exynos_asv_info->ops->set_asv_info
 						(exynos_asv_info, show_volt);
