@@ -220,11 +220,13 @@
 			power-regulator {
 				compatible = "ti,tps65090";
 				reg = <0x48>;
-				interrupts = <6 0>;
-				interrupt-parent = <&gpx2>;
+
+				/*
+				 * Config irq to disable internal pulls
+				 * even though we run in polling mode.
+				 */
 				pinctrl-names = "default";
 				pinctrl-0 = <&tps65090_irq>;
-				no-ack-irq;
 
 				vsys1-supply = <&vbat>;
 				vsys2-supply = <&vbat>;
@@ -277,6 +279,10 @@
 					};
 					ldo2 {
 					};
+				};
+
+				charger {
+					compatible = "ti,tps65090-charger";
 				};
 			};
 
