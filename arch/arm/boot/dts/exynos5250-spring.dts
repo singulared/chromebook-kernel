@@ -442,7 +442,7 @@
 		};
 
 		gpc3: gpio-controller@11400140 {
-			powerdown-settings = <6 2 1 2 2 2 2>;
+			powerdown-settings = <6 2 1 2 2 2 3>;
 		};
 
 		gpc4: gpio-controller@114002E0 {
