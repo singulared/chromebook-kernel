@@ -203,10 +203,11 @@ static void notrace cci_port_control(unsigned int port, bool enable)
 }
 
 /**
- * cci_disable_port_by_cpu() - function to disable a CCI port by CPU
+ * cci_control_port_by_cpu() - function to control a CCI port by CPU
  *			       reference
  *
- * @mpidr: mpidr of the CPU whose CCI port should be disabled
+ * @mpidr: mpidr of the CPU whose CCI port should be enabled/disabled
+ * @enable: if true enables the port, if false disables it
  *
  * Disabling a CCI port for a CPU implies disabling the CCI port
  * controlling that CPU cluster. Code disabling CPU CCI ports
@@ -217,20 +218,20 @@ static void notrace cci_port_control(unsigned int port, bool enable)
  *	0 on success
  *	-ENODEV on port look-up failure
  */
-int notrace cci_disable_port_by_cpu(u64 mpidr)
+int notrace cci_control_port_by_cpu(u64 mpidr, bool enable)
 {
 	int cpu;
 	bool is_valid;
 	for (cpu = 0; cpu < nr_cpu_ids; cpu++) {
 		is_valid = cpu_port_is_valid(&cpu_port[cpu]);
 		if (is_valid && cpu_port_match(&cpu_port[cpu], mpidr)) {
-			cci_port_control(cpu_port[cpu].port, false);
+			cci_port_control(cpu_port[cpu].port, enable);
 			return 0;
 		}
 	}
 	return -ENODEV;
 }
-EXPORT_SYMBOL_GPL(cci_disable_port_by_cpu);
+EXPORT_SYMBOL_GPL(cci_control_port_by_cpu);
 
 /**
  * cci_enable_port_for_self() - enable a CCI port for calling CPU
@@ -374,7 +375,7 @@ int notrace __cci_control_port_by_index(u32 port, bool enable)
 	/*
 	 * CCI control for ports connected to CPUS is extremely fragile
 	 * and must be made to go through a specific and controlled
-	 * interface (ie cci_disable_port_by_cpu(); control by general purpose
+	 * interface (ie cci_control_port_by_cpu(); control by general purpose
 	 * indexing is therefore disabled for ACE ports.
 	 */
 	if (ports[port].type == ACE_PORT)

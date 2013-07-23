@@ -233,7 +233,7 @@ static void exynos_power_down(void)
 		 * Disable cluster-level coherency by masking
 		 * incoming snoops and DVM messages:
 		 */
-		cci_disable_port_by_cpu(mpidr);
+		cci_control_port_by_cpu(mpidr, false);
 
 		__mcpm_outbound_leave_critical(cluster, CLUSTER_DOWN);
 	} else {
@@ -260,7 +260,7 @@ static void exynos_power_down(void)
 		dsb();
 		dmb();
 		if (last_man)
-			cci_disable_port_by_cpu(mpidr);
+			cci_control_port_by_cpu(mpidr, false);
 		__mcpm_cpu_down(cpu, cluster);
 		wfi();
 	} else {
