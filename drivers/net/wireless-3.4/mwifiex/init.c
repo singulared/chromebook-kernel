@@ -502,8 +502,6 @@ mwifiex_adapter_cleanup(struct mwifiex_adapter *adapter)
 	dev_dbg(adapter->dev, "info: free cmd buffer\n");
 	mwifiex_free_cmd_buffer(adapter);
 
-	del_timer(&adapter->cmd_timer);
-
 	dev_dbg(adapter->dev, "info: free scan table\n");
 
 	adapter->if_ops.cleanup_if(adapter);
