@@ -504,8 +504,6 @@ mwifiex_adapter_cleanup(struct mwifiex_adapter *adapter)
 
 	dev_dbg(adapter->dev, "info: free scan table\n");
 
-	adapter->if_ops.cleanup_if(adapter);
-
 	if (adapter->sleep_cfm)
 		dev_kfree_skb_any(adapter->sleep_cfm);
 }
