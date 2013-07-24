@@ -41,6 +41,7 @@ static struct clk *mout_kfc;
 static struct clk *mout_mspll_kfc;
 static struct clk *mout_kpll;
 static struct clk *fout_kpll;
+static struct clk *fout_spll;
 
 struct cpufreq_clkdiv {
 	unsigned int	index;
@@ -243,6 +244,7 @@ static void exynos5420_set_apll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
+	clk_prepare_enable(fout_spll);
 	/* 1. MUX_CORE_SEL = MOUT_MSPLL; ARMCLK uses MOUT_MSPLL for lock time */
 	if (clk_set_parent(mout_cpu, mout_mspll_cpu)) {
 		pr_err(KERN_ERR "Unable to set parent %s of clock %s.\n",
@@ -273,6 +275,7 @@ static void exynos5420_set_apll(unsigned int new_index,
 		tmp &= EXYNOS5_CLKMUX_STATCPU_MUXCORE_MASK;
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT));
 
+	clk_disable_unprepare(fout_spll);
 }
 
 static void exynos5420_set_kpll(unsigned int new_index,
@@ -281,6 +284,7 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
+	clk_prepare_enable(fout_spll);
 	/* 0. before change to MPLL, set div for MPLL output */
 	if ((new_index < L5) && (old_index < L5))
 		exynos5420_set_clkdiv_CA7(L5); /* pll_safe_index of CA7 */
@@ -313,6 +317,8 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	/* 4. restore original div value */
 	if ((new_index < L5) && (old_index < L5))
 		exynos5420_set_clkdiv_CA7(new_index);
+
+	clk_disable_unprepare(fout_spll);
 }
 
 static bool exynos5420_pms_change(unsigned int old_index,
@@ -330,7 +336,6 @@ static bool exynos5420_pms_change(unsigned int old_index,
 	 */
 	return (old_index != new_index);
 }
-
 static void exynos5420_set_frequency(unsigned int old_index,
 				     unsigned int new_index)
 {
@@ -409,6 +414,7 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 	int i;
 	unsigned int tmp;
 	unsigned long rate;
+	struct clk *sclk_spll;
 
 	set_volt_table_CA7();
 
@@ -419,6 +425,15 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 	mout_mspll_kfc = clk_get(NULL, "mout_mspll_kfc");
 	if (IS_ERR(mout_mspll_kfc))
 		goto err_mout_mspll_kfc;
+	sclk_spll = clk_get(NULL, "mout_spll");
+	if (IS_ERR(sclk_spll))
+	{
+		pr_err("Clock sclk_spll not found\n");
+		goto err_sclk_spll;
+	}
+	clk_set_parent(mout_mspll_kfc, sclk_spll);
+	clk_put(sclk_spll);
+
 	rate = clk_get_rate(mout_mspll_kfc) / 1000;
 
 	mout_kpll = clk_get(NULL, "mout_kpll");
@@ -471,6 +486,8 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 err_fout_kpll:
 	clk_put(mout_kpll);
 err_mout_kpll:
+	clk_put(sclk_spll);
+err_sclk_spll:
 	clk_put(mout_mspll_kfc);
 err_mout_mspll_kfc:
 	clk_put(mout_kfc);
@@ -485,6 +502,7 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 	int i;
 	unsigned int tmp;
 	unsigned long rate;
+	struct clk *sclk_spll;
 
 	set_volt_table();
 
@@ -495,6 +513,22 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 	mout_mspll_cpu = clk_get(NULL, "mout_mspll_cpu");
 	if (IS_ERR(mout_mspll_cpu))
 		goto err_mout_mspll_cpu;
+	sclk_spll = clk_get(NULL, "mout_spll");
+	if (IS_ERR(sclk_spll))
+	{
+		pr_err("Clock sclk_spll not found\n");
+		goto err_sclk_spll;
+	}
+	clk_set_parent(mout_mspll_cpu, sclk_spll);
+	clk_put(sclk_spll);
+
+	fout_spll = clk_get(NULL, "fout_spll");
+	if (IS_ERR(fout_spll))
+	{
+		pr_err("Clock fout_spll not found\n");
+		goto err_fout_spll;
+	}
+
 	rate = clk_get_rate(mout_mspll_cpu) / 1000;
 
 	mout_apll = clk_get(NULL, "mout_apll");
@@ -561,6 +595,10 @@ err_fout_apll:
 	clk_put(fout_apll);
 err_mout_apll:
 	clk_put(mout_apll);
+err_fout_spll:
+	clk_put(fout_spll);
+err_sclk_spll:
+	clk_put(sclk_spll);
 err_mout_mspll_cpu:
 	clk_put(mout_mspll_cpu);
 
