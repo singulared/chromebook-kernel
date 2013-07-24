@@ -145,6 +145,10 @@
 /* HDMI_PHY_STATUS */
 #define HDMI_PHY_STATUS_READY		(1 << 0)
 
+/* HDMI_HPD */
+#define HDMI_HPD_SW_HPD			(1 << 1)
+#define HDMI_HPD_HPD_SEL		(1 << 0)
+
 /* HDMI_MODE_SEL */
 #define HDMI_MODE_HDMI_EN		(1 << 1)
 #define HDMI_MODE_DVI_EN		(1 << 0)

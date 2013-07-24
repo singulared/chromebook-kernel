@@ -187,6 +187,7 @@ struct hdmi_context {
 	bool				hpd;
 	bool				powered;
 	bool				dvi_mode;
+	spinlock_t                      writemask_lock;
 
 	void __iomem			*regs;
 	void __iomem			*phy_pow_ctrl_reg;
@@ -540,6 +541,16 @@ static inline void hdmi_reg_writemask(struct hdmi_context *hdata,
 	u32 old = readl(hdata->regs + reg_id);
 	value = (value & mask) | (old & ~mask);
 	writel(value, hdata->regs + reg_id);
+}
+
+static void hdmi_reg_writemask_atomic(struct hdmi_context *hdata,
+				u32 reg_id, u32 value, u32 mask)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&hdata->writemask_lock, flags);
+	hdmi_reg_writemask(hdata, reg_id, value, mask);
+	spin_unlock_irqrestore(&hdata->writemask_lock, flags);
 }
 
 static inline void hdmi_phy_pow_ctrl_reg_writemask(struct hdmi_context *hdata,
@@ -1240,6 +1251,10 @@ static void hdmi_conf_init(struct hdmi_context *hdata)
 	/* disable HPD interrupts from HDMI IP block, use GPIO instead */
 	hdmi_reg_writemask(hdata, HDMI_INTC_CON, 0, HDMI_INTC_EN_GLOBAL |
 		HDMI_INTC_EN_HPD_PLUG | HDMI_INTC_EN_HPD_UNPLUG);
+
+	/* Update the block's internal HPD status (necessary for HDCP) */
+	hdmi_reg_writemask_atomic(hdata, HDMI_HPD, ~0, HDMI_HPD_HPD_SEL |
+		HDMI_HPD_SW_HPD);
 
 	/* choose HDMI mode */
 	hdmi_reg_writemask(hdata, HDMI_MODE_SEL,
@@ -2015,6 +2030,11 @@ static void hdmi_hotplug_work_func(struct work_struct *work)
 	hdata = container_of(work, struct hdmi_context, hotplug_work.work);
 
 	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
+
+	/* Update the block's internal HPD status (necessary for HDCP) */
+	if (!hdata->hpd)
+		hdmi_reg_writemask_atomic(hdata, HDMI_HPD, 0, HDMI_HPD_HPD_SEL);
+
 	if (hdata->drm_dev)
 		drm_helper_hpd_irq_event(hdata->drm_dev);
 }
@@ -2356,6 +2376,8 @@ static int hdmi_probe(struct platform_device *pdev)
 			goto err_ddc;
 		}
 	}
+
+	spin_lock_init(&hdata->writemask_lock);
 
 	hdata->irq = gpio_to_irq(hdata->hpd_gpio);
 	if (hdata->irq < 0) {
