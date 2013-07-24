@@ -121,6 +121,13 @@
 			samsung,pin-drv = <0>;
 		};
 
+		tpm_irq: tpm-irq {
+			samsung,pins = "gpx1-0";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 		tps65090_irq: tps65090-irq {
 			samsung,pins = "gpx2-5";
 			samsung,pin-function = <0>;
@@ -996,6 +1003,10 @@
 		clock-frequency = <400000>;
 
 		tpm@20 {
+			/* Unused irq; but still need to configure the pins */
+			pinctrl-names = "default";
+			pinctrl-0 = <&tpm_irq>;
+
 			compatible = "infineon,slb9645tt";
 			reg = <0x20>;
 		};
