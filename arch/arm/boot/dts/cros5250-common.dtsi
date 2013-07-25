@@ -365,6 +365,11 @@
 		samsung,i2c-sda-delay = <100>;
 		samsung,i2c-max-bus-freq = <66000>;
 
+		hdmihdcp@3a {
+			compatible = "samsung,exynos4210-hdmihdcp";
+			reg = <0x3a>;
+		};
+
 		hdmiddc@50 {
 			compatible = "samsung,exynos4210-hdmiddc";
 			reg = <0x50>;
