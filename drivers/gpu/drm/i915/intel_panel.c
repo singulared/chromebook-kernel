@@ -622,10 +622,6 @@ static void intel_panel_init_backlight(struct drm_device *dev)
 	dev_priv->disable_backlight = intel_panel_disable_backlight;
 	dev_priv->enable_backlight = intel_panel_enable_backlight;
 
-	dev_priv->backlight_level = dev_priv->get_backlight(dev);
-	dev_priv->backlight_level_has_been_set = false;
-	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
-
 	if (dmi_check_system(link_dmi_table)) {
 		struct drm_connector *connector;
 		bool found = false;
@@ -645,6 +641,10 @@ static void intel_panel_init_backlight(struct drm_device *dev)
 			intel_attach_panel_gamma_property(connector);
 		}
 	}
+
+	dev_priv->backlight_level = dev_priv->get_backlight(dev);
+	dev_priv->backlight_level_has_been_set = false;
+	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
 }
 
 enum drm_connector_status
@@ -701,7 +701,7 @@ int intel_panel_setup_backlight(struct drm_connector *connector)
 
 	memset(&props, 0, sizeof(props));
 	props.type = BACKLIGHT_RAW;
-	props.max_brightness = intel_panel_get_max_backlight(dev);
+	props.max_brightness = dev_priv->get_max_backlight(dev);
 	dev_priv->backlight =
 		backlight_device_register("intel_backlight",
 					  &connector->kdev, dev,
