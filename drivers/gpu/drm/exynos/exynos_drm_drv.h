@@ -141,6 +141,7 @@ struct exynos_drm_overlay {
  * @check_mode: check if mode is valid or not.
  * @dpms: display device on or off.
  * @commit: apply changes to hw
+ * @set_property: sets a drm propery on the display
  */
 struct exynos_drm_display_ops {
 	int (*initialize)(void *ctx, struct drm_device *drm_dev);
@@ -157,6 +158,8 @@ struct exynos_drm_display_ops {
 	int (*check_mode)(void *ctx, struct drm_display_mode *mode);
 	void (*dpms)(void *ctx, int mode);
 	void (*commit)(void *ctx);
+	int (*set_property)(void *ctx, struct drm_property *property,
+			uint64_t val);
 };
 
 /*

@@ -226,6 +226,23 @@ exynos_drm_connector_detect(struct drm_connector *connector, bool force)
 	return status;
 }
 
+static int exynos_drm_connector_set_property(struct drm_connector *connector,
+		struct drm_property *property, uint64_t val)
+{
+	struct exynos_drm_connector *exynos_connector =
+					to_exynos_connector(connector);
+	struct exynos_drm_display *display = exynos_connector->display;
+	int ret;
+
+	if (display->ops->set_property) {
+		ret = display->ops->set_property(display->ctx, property, val);
+		if (ret)
+			return ret;
+	}
+
+	return drm_object_property_set_value(&connector->base, property, val);
+}
+
 static void exynos_drm_connector_destroy(struct drm_connector *connector)
 {
 	struct exynos_drm_connector *exynos_connector =
@@ -242,6 +259,7 @@ static struct drm_connector_funcs exynos_connector_funcs = {
 	.dpms		= drm_helper_connector_dpms,
 	.fill_modes	= exynos_drm_connector_fill_modes,
 	.detect		= exynos_drm_connector_detect,
+	.set_property	= exynos_drm_connector_set_property,
 	.destroy	= exynos_drm_connector_destroy,
 };
 
