@@ -1414,10 +1414,7 @@ mali_error kbase_platform_init(kbase_device *kbdev)
 
 	kbdev->platform_context = (void *) platform;
 
-	if (soc_is_exynos5250())
-		platform->t6xx_default_clock = 533000000;
-	else if (soc_is_exynos5420())
-		platform->t6xx_default_clock = 300000000;
+	platform->t6xx_default_clock = 533000000;
 
 	platform->cmu_pmu_status = 0;
 	spin_lock_init(&platform->cmu_pmu_lock);
