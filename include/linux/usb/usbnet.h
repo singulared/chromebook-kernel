@@ -34,6 +34,7 @@ struct usbnet {
 	struct mutex		phy_mutex;
 	unsigned char		suspend_count;
 	unsigned char		pkt_cnt, pkt_err;
+	unsigned short          rx_qlen, tx_qlen;
 	unsigned		can_dma_sg:1;
 
 	/* i/o info: pipes etc */
@@ -248,5 +249,7 @@ extern int usbnet_nway_reset(struct net_device *net);
 
 extern int usbnet_manage_power(struct usbnet *, int);
 void usbnet_link_change(struct usbnet *dev, bool link, bool need_reset);
+
+extern void usbnet_update_max_qlen(struct usbnet *dev);
 
 #endif /* __LINUX_USB_USBNET_H */
