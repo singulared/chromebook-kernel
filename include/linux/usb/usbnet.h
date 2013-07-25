@@ -247,4 +247,6 @@ extern int usbnet_nway_reset(struct net_device *net);
 
 extern void usbnet_link_change(struct usbnet *, bool, bool);
 
+extern void usbnet_update_max_qlen(struct usbnet *dev);
+
 #endif /* __LINUX_USB_USBNET_H */
