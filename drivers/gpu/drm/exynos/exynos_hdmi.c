@@ -60,6 +60,45 @@
 #define HDMI_AUI_VERSION	0x01
 #define HDMI_AUI_LENGTH	0x0A
 
+#define HDCP_MAX_TRIES                  10
+#define LOAD_KEY_TIMEOUT_MSECS          2000
+#define AUTH_ACK_TIMEOUT_MSECS          5000
+#define RI_VERIFY_TIMEOUT_MSECS         1000
+#define KSV_READY_TIMEOUT_MSECS         5000
+#define KSV_READ_KEY_TIMEOUT_MSECS      500
+#define SHA_COMPARE_TIMEOUT_MSECS       250
+
+#define HDCP_I2C_ADDR_BKSV              0x00
+#define HDCP_I2C_ADDR_RI                0x08
+#define HDCP_I2C_ADDR_AKSV              0x10
+#define HDCP_I2C_ADDR_AN                0x18
+#define HDCP_I2C_ADDR_V_PRIME           0x20
+#define HDCP_I2C_ADDR_BCAPS             0x40
+#define HDCP_I2C_ADDR_BSTATUS           0x41
+#define HDCP_I2C_ADDR_KSV_FIFO          0x43
+
+#define HDCP_I2C_LEN_BKSV               5
+#define HDCP_I2C_LEN_RI                 2
+#define HDCP_I2C_LEN_AKSV               5
+#define HDCP_I2C_LEN_AN                 8
+#define HDCP_I2C_LEN_V_PRIME            20
+#define HDCP_I2C_LEN_BCAPS              1
+#define HDCP_I2C_LEN_BSTATUS            2
+
+#define HDCP_I2C_MASK_BCAPS_REPEATER            (1 << 6)
+#define HDCP_I2C_MASK_BCAPS_READY               (1 << 5)
+#define HDCP_I2C_MASK_BSTATUS_0_MAX_DEVS        (1 << 7)
+#define HDCP_I2C_MASK_BSTATUS_1_MAX_CASCADE     (1 << 3)
+
+enum exynos_hdcp_state {
+	HDCP_STATE_OFF,
+	HDCP_STATE_WAIT_ACTIVE_RX,
+	HDCP_STATE_EXCHANGE_KSV,
+	HDCP_STATE_COMPUTATIONS,
+	HDCP_STATE_AUTHENTICATED,
+	HDCP_STATE_READ_KSV_LIST,
+};
+
 /* HDMI infoframe to configure HDMI out packet header, AUI and AVI */
 enum HDMI_PACKET_TYPE {
 	/* refer to Table 5-8 Packet Type in HDMI specification v1.4a */
@@ -189,14 +228,22 @@ struct hdmi_context {
 	bool				dvi_mode;
 	spinlock_t                      writemask_lock;
 
+	bool                            hdcp_desired;
+	struct work_struct              hdcp_work;
+	enum exynos_hdcp_state          hdcp_state;
+	bool                            hdcp_repeater;
+	int                             hdcp_tries;
+
 	void __iomem			*regs;
 	void __iomem			*phy_pow_ctrl_reg;
 	void __iomem			*regs_hdmiphy;
 	int				irq;
+	int				hdcp_irq;
 	struct delayed_work		hotplug_work;
 
 	struct i2c_client		*ddc_port;
 	struct i2c_client		*hdmiphy_port;
+	struct i2c_client               *hdcp_port;
 
 	/* current hdmiphy conf regs */
 	struct hdmi_conf_regs		mode_conf;
@@ -1068,6 +1115,523 @@ static void hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 	}
 }
 
+static int hdcp_exchange_ksvs(struct hdmi_context *hdata)
+{
+	u8 bksv[HDCP_I2C_LEN_BKSV], bcaps[HDCP_I2C_LEN_BCAPS];
+	int ret, i, ones = 0;
+
+	if (hdata->hdcp_state != HDCP_STATE_WAIT_ACTIVE_RX)
+		return -EINVAL;
+
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_BCAPS, HDCP_I2C_LEN_BCAPS, bcaps);
+	if (ret != HDCP_I2C_LEN_BCAPS) {
+		DRM_ERROR("Could not read bcaps (%d)\n", ret);
+		return -EIO;
+	}
+	hdmi_reg_writeb(hdata, HDMI_HDCP_BCAPS, bcaps[0]);
+	hdata->hdcp_repeater = bcaps[0] & HDCP_I2C_MASK_BCAPS_REPEATER;
+
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_BKSV, HDCP_I2C_LEN_BKSV, bksv);
+	if (ret != HDCP_I2C_LEN_BKSV) {
+		DRM_ERROR("Could not read bksv (%d)\n", ret);
+		return -EIO;
+	}
+
+	/* Validate bksv by ensuring there are 20 1's */
+	for (i = 0; i < HDCP_I2C_LEN_BKSV; i++) {
+		u32 tmp = bksv[i];
+
+		ones += hweight_long(tmp);
+	}
+	if (ones != 20) {
+		DRM_ERROR("Invalid bksv, ones=%d\n", ones);
+		return -ENODEV;
+	}
+
+	for (i = 0; i < HDCP_I2C_LEN_BKSV; i++)
+		hdmi_reg_writeb(hdata, HDMI_HDCP_BKSV(i), bksv[i]);
+
+	hdata->hdcp_state = HDCP_STATE_EXCHANGE_KSV;
+	return 0;
+}
+
+static int hdcp_an_write(struct hdmi_context *hdata)
+{
+	int ret, i;
+	u8 an[HDCP_I2C_LEN_AN], aksv[HDCP_I2C_LEN_AKSV];
+	u32 value;
+
+	if (hdata->hdcp_state != HDCP_STATE_EXCHANGE_KSV)
+		return -EINVAL;
+
+	for (i = 0; i < HDCP_I2C_LEN_AN; i++) {
+		value = hdmi_reg_read(hdata, HDMI_HDCP_AN(i));
+		an[i] = value & 0xff;
+	}
+
+	ret = i2c_smbus_write_i2c_block_data(hdata->hdcp_port, HDCP_I2C_ADDR_AN,
+			HDCP_I2C_LEN_AN, an);
+	if (ret) {
+		DRM_ERROR("Failed to send An value to receiver (%d)\n", ret);
+		return ret;
+	}
+
+	for (i = 0; i < HDCP_I2C_LEN_AKSV; i++) {
+		value = hdmi_reg_read(hdata, HDMI_HDCP_AKSV(i));
+		aksv[i] = value & 0xff;
+	}
+
+	ret = i2c_smbus_write_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_AKSV, HDCP_I2C_LEN_AKSV, aksv);
+	if (ret) {
+		DRM_ERROR("Failed to send Aksv value to receiver (%d)\n", ret);
+		return ret;
+	}
+
+	hdata->hdcp_state = HDCP_STATE_COMPUTATIONS;
+	return 0;
+}
+
+static int hdcp_enable_encryption(struct hdmi_context *hdata)
+{
+	int ret;
+
+	if (hdata->hdcp_state == HDCP_STATE_AUTHENTICATED)
+		return 0;
+
+	ret = wait_for(hdmi_reg_read(hdata, HDMI_SYS_STATUS) &
+			HDMI_SYS_STATUS_MASK_AUTH_ACK, AUTH_ACK_TIMEOUT_MSECS,
+			1);
+	if (ret) {
+		DRM_ERROR("Wait for auth ack failed with %d\n", ret);
+		return ret;
+	}
+
+	hdmi_reg_writemask(hdata, HDMI_ENC_EN, ~0, HDMI_ENC_EN_MASK_ENABLE);
+	hdata->hdcp_state = HDCP_STATE_AUTHENTICATED;
+	DRM_INFO("HDCP has been successfully enabled\n");
+	return 0;
+}
+
+static int hdcp_compare_ri(struct hdmi_context *hdata)
+{
+	int ret, i;
+	u8 ari[HDCP_I2C_LEN_RI], bri[HDCP_I2C_LEN_RI];
+	u32 value;
+
+	for (i = 0; i < HDCP_I2C_LEN_RI; i++) {
+		value = hdmi_reg_read(hdata, HDMI_HDCP_RI(i));
+		ari[i] = value & 0xff;
+	}
+
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_RI, HDCP_I2C_LEN_RI, bri);
+	if (ret != HDCP_I2C_LEN_RI) {
+		DRM_ERROR("Failed to read Ri from i2c (%d)\n", ret);
+		return ret;
+	}
+
+	if (!memcmp(ari, bri, HDCP_I2C_LEN_RI))
+		return 0;
+
+	return -EAGAIN;
+}
+
+static int hdcp_update_ri(struct hdmi_context *hdata)
+{
+	int ret, compare_ret;
+
+	if (hdata->hdcp_state != HDCP_STATE_COMPUTATIONS &&
+	    hdata->hdcp_state != HDCP_STATE_AUTHENTICATED)
+		return -EINVAL;
+
+	ret = wait_for((compare_ret = hdcp_compare_ri(hdata)) != -EAGAIN,
+			RI_VERIFY_TIMEOUT_MSECS, 5);
+	if (ret || compare_ret) {
+		DRM_ERROR("Transmitter and receiver Ri differ\n");
+		hdmi_reg_writemask(hdata, HDMI_HDCP_CHECK_RESULT, ~0,
+				HDMI_HDCP_CHECK_RESULT_MASK_DIFFER);
+		return -EINVAL;
+	}
+
+	hdmi_reg_writemask(hdata, HDMI_HDCP_CHECK_RESULT, ~0,
+			HDMI_HDCP_CHECK_RESULT_MASK_EQUAL);
+
+	if (!hdata->hdcp_repeater &&
+	    hdata->hdcp_state != HDCP_STATE_AUTHENTICATED)
+		return hdcp_enable_encryption(hdata);
+	else if (hdata->hdcp_state == HDCP_STATE_COMPUTATIONS)
+		hdata->hdcp_state = HDCP_STATE_READ_KSV_LIST;
+
+	return 0;
+}
+
+static int hdcp_add_repeater_ksv(struct hdmi_context *hdata, u8 *ksv, bool last)
+{
+	int ret, i;
+	u8 val = HDMI_HDCP_KSV_LIST_CON_MASK_DONE;
+
+	for (i = 0; i < HDCP_I2C_LEN_BKSV; i++)
+		hdmi_reg_writeb(hdata, HDMI_HDCP_KSV_LIST(i), ksv[i]);
+
+	if (last)
+		val |= HDMI_HDCP_KSV_LIST_CON_MASK_END;
+
+	hdmi_reg_writeb(hdata, HDMI_HDCP_KSV_LIST_CON, val);
+
+	/* Don't wait for the last key */
+	if (last)
+		return 0;
+
+	/* Wait for the key to be read from KSV registers before continuing */
+	ret = wait_for(hdmi_reg_read(hdata, HDMI_HDCP_KSV_LIST_CON) &
+			HDMI_HDCP_KSV_LIST_CON_MASK_READ,
+			KSV_READ_KEY_TIMEOUT_MSECS, 5);
+	if (ret) {
+		DRM_ERROR("Failed waiting for KSV key read with %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int hdcp_check_ksv_ready(struct hdmi_context *hdata, u8 *bcaps)
+{
+	int ret;
+
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_BCAPS, HDCP_I2C_LEN_BCAPS, bcaps);
+	if (ret != HDCP_I2C_LEN_BCAPS) {
+		DRM_ERROR("Failed to read BCAPS (%d)\n", ret);
+		return ret;
+	}
+
+	if (bcaps[0] & HDCP_I2C_MASK_BCAPS_READY)
+		return 0;
+
+	return -EAGAIN;
+}
+
+static int hdcp_repeater_auth(struct hdmi_context *hdata)
+{
+	int ret, ksv_ret, ksv_len, i;
+	u8 bcaps[HDCP_I2C_LEN_BCAPS], bstatus[HDCP_I2C_LEN_BSTATUS],
+		vprime[HDCP_I2C_LEN_V_PRIME], val, *ksv_list;
+
+	if (hdata->hdcp_state != HDCP_STATE_READ_KSV_LIST)
+		return -EINVAL;
+
+	/* Wait for the repeater to compile a list of KSVs from downstream */
+	ret = wait_for((ksv_ret = hdcp_check_ksv_ready(hdata, bcaps)) !=
+			-EAGAIN, KSV_READY_TIMEOUT_MSECS, 5);
+	if (ret || ksv_ret) {
+		DRM_ERROR("KSV list from repeater not ready %d\n", ret);
+		return ret;
+	}
+	hdmi_reg_writeb(hdata, HDMI_HDCP_BCAPS, bcaps[0]);
+
+	/* Make sure the repeater hasn't encountered an error */
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_BSTATUS, HDCP_I2C_LEN_BSTATUS, bstatus);
+	if (ret != HDCP_I2C_LEN_BSTATUS) {
+		DRM_ERROR("Failed to read status from repeater (%d)\n", ret);
+		return ret;
+	}
+	if (bstatus[0] & HDCP_I2C_MASK_BSTATUS_0_MAX_DEVS) {
+		DRM_ERROR("Connected repeater has exceeded the max devices!\n");
+		return -ENODEV;
+	}
+	if (bstatus[1] & HDCP_I2C_MASK_BSTATUS_1_MAX_CASCADE) {
+		DRM_ERROR("Connected repeater has exceeded the max depth!\n");
+		return -ENODEV;
+	}
+	hdmi_reg_writeb(hdata, HDMI_HDCP_BSTATUS_0, bstatus[0]);
+	hdmi_reg_writeb(hdata, HDMI_HDCP_BSTATUS_1, bstatus[1]);
+
+	/* No receivers downstream of repeater */
+	if (!bstatus[0]) {
+		hdmi_reg_writemask(hdata, HDMI_HDCP_KSV_LIST_CON, ~0,
+				HDMI_HDCP_KSV_LIST_CON_MASK_EMPTY);
+		return 0;
+	}
+
+	ksv_len = bstatus[0] * HDCP_I2C_LEN_BKSV;
+	ksv_list = kzalloc(ksv_len, GFP_KERNEL);
+	if (!ksv_list) {
+		DRM_ERROR("Could not allocate ksv_list\n");
+		return -ENOMEM;
+	}
+
+	/* Read the repeater's KSV list */
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_KSV_FIFO, ksv_len, ksv_list);
+	if (ret != ksv_len) {
+		DRM_ERROR("Failed to read ksv list from repeater (%d)\n", ret);
+		goto out;
+	}
+	for (i = 0; i < bstatus[0]; i++) {
+		u8 *ksv = ksv_list + i * HDCP_I2C_LEN_BKSV;
+
+		ret = hdcp_add_repeater_ksv(hdata, ksv, i == (bstatus[0] - 1));
+		if (ret) {
+			DRM_ERROR("Add repeater key %d failed (%d)\n", i, ret);
+			goto out;
+		}
+	}
+
+	/* Read the repeater's SHA-1 hash of KSV/BStatus/M0 */
+	ret = i2c_smbus_read_i2c_block_data(hdata->hdcp_port,
+			HDCP_I2C_ADDR_V_PRIME, HDCP_I2C_LEN_V_PRIME, vprime);
+	if (ret != HDCP_I2C_LEN_V_PRIME) {
+		DRM_ERROR("Failed to read V' from i2c (%d)\n", ret);
+		goto out;
+	}
+
+	/* Write the SHA-1 hash back to the AP */
+	hdmi_reg_writeb(hdata, HDMI_HDCP_SHA_RESULT, 0);
+	for (i = 0; i < HDCP_I2C_LEN_V_PRIME; i++)
+		hdmi_reg_writeb(hdata, HDMI_HDCP_SHA1(i), vprime[i]);
+
+	ret = wait_for((val = hdmi_reg_read(hdata, HDMI_HDCP_SHA_RESULT)) &
+			HDMI_HDCP_SHA_RESULT_MASK_READY,
+			SHA_COMPARE_TIMEOUT_MSECS, 5);
+	if (ret) {
+		DRM_ERROR("Waiting for SHA-1 result failed with %d\n", ret);
+		goto sha_result;
+	}
+
+	if (val & HDMI_HDCP_SHA_RESULT_MASK_VALID) {
+		ret = hdcp_enable_encryption(hdata);
+	} else {
+		DRM_ERROR("SHA-1 result is not valid\n");
+		ret = -ENODEV;
+	}
+
+sha_result:
+	hdmi_reg_writeb(hdata, HDMI_HDCP_SHA_RESULT, 0);
+out:
+	kfree(ksv_list);
+	return ret;
+}
+
+static int hdcp_update_drm_property(struct hdmi_context *hdata, int value)
+{
+	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
+	struct drm_connector *connector;
+
+	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+
+	list_for_each_entry(connector, &mode_config->connector_list, head) {
+		if (connector->connector_type == DRM_MODE_CONNECTOR_HDMIA)
+			return drm_object_property_set_value(&connector->base,
+				mode_config->content_protection_property,
+				value);
+	}
+	return -ENODEV;
+}
+
+static void hdcp_disable(struct hdmi_context *hdata)
+{
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, 0, HDMI_INTC_EN_HDCP);
+	hdmi_reg_writemask(hdata, HDMI_HDCP_CTRL1, 0,
+			HDMI_HDCP_CTRL1_MASK_CP_DESIRED);
+	hdmi_reg_writemask(hdata, HDMI_STATUS_EN, 0,
+			HDMI_STATUS_EN_MASK_ACTIVE_RX |
+			HDMI_STATUS_EN_MASK_WATCHDOG |
+			HDMI_STATUS_EN_MASK_AN_WRITE |
+			HDMI_STATUS_EN_MASK_UPDATE_RI);
+	hdmi_reg_writemask(hdata, HDMI_SYS_STATUS, ~0,
+			HDMI_SYS_STATUS_MASK_ACTIVE_RX |
+			HDMI_SYS_STATUS_MASK_WATCHDOG |
+			HDMI_SYS_STATUS_MASK_AN_WRITE |
+			HDMI_SYS_STATUS_MASK_UPDATE_RI);
+	hdmi_reg_writemask(hdata, HDMI_ENC_EN, 0, HDMI_ENC_EN_MASK_ENABLE);
+	hdmi_reg_writemask(hdata, HDMI_HDCP_CHECK_RESULT, 0,
+			HDMI_HDCP_CHECK_RESULT_MASK_CLEAR);
+
+	/*
+	 * Avert your eyes! We simulate a hotplug here, because that's the only
+	 * way to reset the HDCP core so we can restart it later.
+	 */
+	hdmi_reg_writemask(hdata, HDMI_HPD, 0, HDMI_HPD_HPD_SEL);
+	hdmi_reg_writemask(hdata, HDMI_HPD, ~0, HDMI_HPD_HPD_SEL);
+
+	hdata->hdcp_state = HDCP_STATE_OFF;
+
+	/*
+	 * It's possible we're stopping because of hotplug, so make sure we
+	 * maintain the hdcp desiredness
+	 */
+	if (hdata->hdcp_desired)
+		hdcp_update_drm_property(hdata,
+				DRM_MODE_CONTENT_PROTECTION_DESIRED);
+}
+
+static void hdcp_enable(struct hdmi_context *hdata)
+{
+	hdata->hdcp_state = HDCP_STATE_WAIT_ACTIVE_RX;
+
+	hdmi_reg_writemask(hdata, HDMI_STATUS_EN, ~0,
+			HDMI_STATUS_EN_MASK_ACTIVE_RX |
+			HDMI_STATUS_EN_MASK_WATCHDOG |
+			HDMI_STATUS_EN_MASK_AN_WRITE |
+			HDMI_STATUS_EN_MASK_UPDATE_RI);
+
+	hdmi_reg_writemask(hdata, HDMI_HDCP_CTRL1, ~0,
+			HDMI_HDCP_CTRL1_MASK_CP_DESIRED);
+
+	/* Enable hdcp interrupts and activate content protection */
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, ~0,
+			HDMI_INTC_EN_GLOBAL | HDMI_INTC_EN_HDCP);
+
+
+	hdcp_update_drm_property(hdata, DRM_MODE_CONTENT_PROTECTION_DESIRED);
+}
+
+static void hdcp_work_func(struct work_struct *work)
+{
+	struct hdmi_context *hdata;
+	int ret;
+	u32 irq;
+
+	hdata = container_of(work, struct hdmi_context, hdcp_work);
+
+	irq = hdmi_reg_read(hdata, HDMI_SYS_STATUS);
+	hdmi_reg_writemask(hdata, HDMI_SYS_STATUS, ~0, irq);
+
+	if (irq & HDMI_SYS_STATUS_MASK_ACTIVE_RX) {
+		ret = hdcp_exchange_ksvs(hdata);
+		hdmi_reg_writeb(hdata, HDMI_HDCP_I2C_INT, 0);
+		if (ret)
+			goto reset;
+	}
+
+	if (irq & HDMI_SYS_STATUS_MASK_AN_WRITE) {
+		ret = hdcp_an_write(hdata);
+		hdmi_reg_writeb(hdata, HDMI_HDCP_AN_INT, 0);
+		if (ret)
+			goto reset;
+	}
+
+	if (irq & HDMI_SYS_STATUS_MASK_UPDATE_RI) {
+		ret = hdcp_update_ri(hdata);
+		hdmi_reg_writeb(hdata, HDMI_HDCP_RI_INT, 0);
+		if (ret)
+			goto reset;
+	}
+
+	if (irq & HDMI_SYS_STATUS_MASK_WATCHDOG) {
+		ret = hdcp_repeater_auth(hdata);
+		hdmi_reg_writeb(hdata, HDMI_HDCP_WDT_INT, 0);
+		if (ret)
+			goto reset;
+	}
+
+	if (hdata->hdcp_state == HDCP_STATE_AUTHENTICATED) {
+		mutex_lock(&hdata->drm_dev->mode_config.mutex);
+		hdcp_update_drm_property(hdata,
+				DRM_MODE_CONTENT_PROTECTION_ENABLED);
+		mutex_unlock(&hdata->drm_dev->mode_config.mutex);
+
+		hdata->hdcp_tries = 0;
+	}
+
+	/*
+	 * We unmask here to prevent any races with the interrupt handler. That
+	 * is, we don't want a situation where 2 HDCP interrupts occur without
+	 * the worker running in between. It's also worth noting that we only
+	 * need to unmask the HDCP interrupt if we were successful. If things
+	 * fail, we restart HDCP which will enable things for us.
+	 */
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, ~0, HDMI_INTC_EN_HDCP);
+
+	return;
+
+reset:
+	mutex_lock(&hdata->drm_dev->mode_config.mutex);
+	hdcp_disable(hdata);
+	mutex_unlock(&hdata->drm_dev->mode_config.mutex);
+
+	if (hdata->hdcp_tries > HDCP_MAX_TRIES) {
+		DRM_ERROR("Maximum HDCP tries exceeded, giving up\n");
+		return;
+	}
+
+	msleep(20);
+
+	mutex_lock(&hdata->drm_dev->mode_config.mutex);
+	hdcp_enable(hdata);
+	mutex_unlock(&hdata->drm_dev->mode_config.mutex);
+
+	hdata->hdcp_tries++;
+}
+
+static int hdcp_load_efuse_key(struct hdmi_context *hdata)
+{
+	int ret;
+	u32 status;
+
+	hdmi_reg_writemask(hdata, HDCP_E_FUSE_CTRL, ~0,
+			HDCP_E_FUSE_CTRL_MASK_READ_KEY);
+
+	ret = wait_for(!((status = hdmi_reg_read(hdata, HDCP_E_FUSE_STATUS)) &
+			HDCP_E_FUSE_STATUS_MASK_BUSY), LOAD_KEY_TIMEOUT_MSECS,
+			1);
+	if (ret) {
+		DRM_ERROR("Load hdcp key from efuse failed with %d\n", ret);
+		return ret;
+	}
+
+	if (status & HDCP_E_FUSE_STATUS_MASK_FAIL) {
+		DRM_ERROR("Failed to load hdcp key from efuse\n");
+		return -ENODEV;
+	}
+
+	WARN_ON(!(status & HDCP_E_FUSE_STATUS_MASK_DONE));
+	return 0;
+
+}
+
+static void hdcp_stop(struct hdmi_context *hdata)
+{
+	if (hdata->hdcp_state == HDCP_STATE_OFF)
+		return;
+
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, 0, HDMI_INTC_EN_HDCP);
+	cancel_work_sync(&hdata->hdcp_work);
+
+	hdcp_disable(hdata);
+}
+
+static int hdcp_start(struct hdmi_context *hdata)
+{
+	int ret = 0;
+
+	if (!hdata->hdcp_desired || hdata->hdcp_state != HDCP_STATE_OFF)
+		return 0;
+
+	ret = hdcp_load_efuse_key(hdata);
+	if (ret) {
+		DRM_ERROR("Could not load hdcp key from efuse! %d\n", ret);
+		return ret;
+	}
+
+	hdata->hdcp_tries = 0;
+
+	hdcp_enable(hdata);
+
+	return 0;
+}
+
+static void hdcp_initialize(struct hdmi_context *hdata)
+{
+	hdata->hdcp_desired = false;
+	hdata->hdcp_state = HDCP_STATE_OFF;
+	INIT_WORK(&hdata->hdcp_work, hdcp_work_func);
+}
+
 static void hdmi_set_acr(u32 freq, u8 *acr)
 {
 	u32 n, cts;
@@ -1249,7 +1813,7 @@ static void hdmi_conf_init(struct hdmi_context *hdata)
 	struct hdmi_infoframe infoframe;
 
 	/* disable HPD interrupts from HDMI IP block, use GPIO instead */
-	hdmi_reg_writemask(hdata, HDMI_INTC_CON, 0, HDMI_INTC_EN_GLOBAL |
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, 0,
 		HDMI_INTC_EN_HPD_PLUG | HDMI_INTC_EN_HPD_UNPLUG);
 
 	/* Update the block's internal HPD status (necessary for HDCP) */
@@ -1685,6 +2249,8 @@ static void hdmi_conf_apply(struct hdmi_context *hdata)
 	if (!support_hdmi_audio_through_alsa(hdata))
 		hdmi_audio_control(hdata, true);
 
+	hdcp_start(hdata);
+
 	hdmi_regs_dump(hdata, "start");
 }
 
@@ -1941,6 +2507,31 @@ static void hdmi_commit(void *ctx)
 	hdmi_conf_apply(hdata);
 }
 
+static int hdmi_set_property(void *ctx, struct drm_property *property,
+			uint64_t val)
+{
+	struct hdmi_context *hdata = ctx;
+	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
+	int ret = 0;
+
+	if (property != mode_config->content_protection_property)
+		return 0;
+
+	hdata->hdcp_desired = val;
+
+	if (!hdata->powered)
+		return 0;
+
+	mutex_lock(&mode_config->mutex);
+	if (hdata->hdcp_desired)
+		ret = hdcp_start(hdata);
+	else
+		hdcp_stop(hdata);
+	mutex_unlock(&mode_config->mutex);
+
+	return ret;
+}
+
 static void hdmi_poweron(struct hdmi_context *hdata)
 {
 	struct hdmi_resources *res = &hdata->res;
@@ -1969,6 +2560,8 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 
 	if (!hdata->powered)
 		return;
+
+	hdcp_stop(hdata);
 
 	/* HDMI System Disable */
 	hdmi_reg_writemask(hdata, HDMI_CON_0, 0, HDMI_EN);
@@ -2016,6 +2609,7 @@ static struct exynos_drm_display_ops hdmi_display_ops = {
 	.mode_set	= hdmi_mode_set,
 	.dpms		= hdmi_dpms,
 	.commit		= hdmi_commit,
+	.set_property	= hdmi_set_property,
 };
 
 static struct exynos_drm_display hdmi_display = {
@@ -2045,6 +2639,31 @@ static irqreturn_t hdmi_irq_thread(int irq, void *arg)
 
 	mod_delayed_work(system_wq, &hdata->hotplug_work,
 				msecs_to_jiffies(HOTPLUG_DEBOUNCE_MS));
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t hdcp_irq_thread(int irq, void *arg)
+{
+	struct hdmi_context *hdata = arg;
+	u32 intc_flag;
+
+	intc_flag = hdmi_reg_read(hdata, HDMI_INTC_FLAG);
+	if (!(intc_flag & HDMI_INTC_FLAG_HDCP)) {
+		DRM_INFO("Received unknown interrupt 0x%x\n", intc_flag);
+		hdmi_reg_writemask(hdata, HDMI_INTC_FLAG, ~0, intc_flag);
+		return IRQ_HANDLED;
+	}
+
+	/*
+	 * Unlike the hotplug interrupts, the HDCP interrupt is
+	 * not acked through the FLAG register. This means that
+	 * we'll keep getting these suckers unless we mask it
+	 * off manually.
+	 */
+	hdmi_reg_writemask_atomic(hdata, HDMI_INTC_CON, 0, HDMI_INTC_EN_HDCP);
+
+	schedule_work(&hdata->hdcp_work);
 
 	return IRQ_HANDLED;
 }
@@ -2262,7 +2881,7 @@ static int hdmi_probe(struct platform_device *pdev)
 	struct hdmi_context *hdata;
 	struct s5p_hdmi_platform_data *pdata;
 	struct resource *res;
-	struct device_node *ddc_node, *phy_node;
+	struct device_node *ddc_node, *phy_node, *hdcp_node;
 	int ret;
 
 	DRM_DEBUG_KMS("[%d]\n", __LINE__);
@@ -2379,11 +2998,39 @@ static int hdmi_probe(struct platform_device *pdev)
 
 	spin_lock_init(&hdata->writemask_lock);
 
+	/* HDCP i2c driver */
+	hdcp_node = of_find_node_by_name(NULL, "hdmihdcp");
+	if (!hdcp_node) {
+		DRM_ERROR("Failed to find hdcp node in device tree\n");
+		return -ENODEV;
+	}
+	hdata->hdcp_port = of_find_i2c_device_by_node(hdcp_node);
+	if (!hdata->hdcp_port) {
+		DRM_ERROR("Failed to get hdcp i2c client by node\n");
+		return -ENODEV;
+	}
+
+	hdata->hdcp_irq = platform_get_irq(pdev, 0);
+	if (hdata->hdcp_irq < 0) {
+		DRM_ERROR("Failed to get HDCP irq\n");
+		ret = hdata->hdcp_irq;
+		goto err_hdmiphy;
+	}
+
+	hdcp_initialize(hdata);
+
+	ret = request_threaded_irq(hdata->hdcp_irq, NULL, hdcp_irq_thread,
+			IRQF_ONESHOT, "hdmi_hdcp", hdata);
+	if (ret) {
+		DRM_ERROR("Failed to request hdcp interrupt %d\n", ret);
+		goto err_hdmiphy;
+	}
+
 	hdata->irq = gpio_to_irq(hdata->hpd_gpio);
 	if (hdata->irq < 0) {
 		DRM_ERROR("failed to get GPIO irq\n");
 		ret = hdata->irq;
-		goto err_hdmiphy;
+		goto err_hdcp;
 	}
 
 	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
@@ -2394,7 +3041,7 @@ static int hdmi_probe(struct platform_device *pdev)
 			"hdmi", hdata);
 	if (ret) {
 		DRM_ERROR("failed to register hdmi interrupt\n");
-		goto err_hdmiphy;
+		goto err_hdcp;
 	}
 
 	hdmi_display.ctx = hdata;
@@ -2406,12 +3053,15 @@ static int hdmi_probe(struct platform_device *pdev)
 		ret = hdmi_register_audio_device(pdev);
 		if (ret) {
 			DRM_ERROR("hdmi-audio device registering failed.\n");
-			goto err_hdmiphy;
+			goto err_hdcp;
 		}
 	}
 
 	return 0;
 
+err_hdcp:
+	if (hdata->hdcp_port)
+		put_device(&hdata->hdcp_port->dev);
 err_hdmiphy:
 	if (hdata->hdmiphy_port)
 		put_device(&hdata->hdmiphy_port->dev);
@@ -2437,6 +3087,7 @@ static int hdmi_remove(struct platform_device *pdev)
 
 	cancel_delayed_work_sync(&hdata->hotplug_work);
 
+	put_device(&hdata->hdcp_port->dev);
 	put_device(&hdata->hdmiphy_port->dev);
 	put_device(&hdata->ddc_port->dev);
 

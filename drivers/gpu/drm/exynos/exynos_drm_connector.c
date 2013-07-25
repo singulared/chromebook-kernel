@@ -303,6 +303,10 @@ struct drm_connector *exynos_drm_connector_create(struct drm_device *dev,
 	drm_connector_init(dev, connector, &exynos_connector_funcs, type);
 	drm_connector_helper_add(connector, &exynos_connector_helper_funcs);
 
+	drm_object_attach_property(&connector->base,
+			dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
+
 	err = drm_sysfs_connector_add(connector);
 	if (err)
 		goto err_connector;

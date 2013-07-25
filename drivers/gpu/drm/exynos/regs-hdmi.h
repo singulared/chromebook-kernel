@@ -24,6 +24,7 @@
 #define HDMI_CORE_BASE(x)		((x) + 0x00010000)
 #define HDMI_I2S_BASE(x)		((x) + 0x00040000)
 #define HDMI_TG_BASE(x)			((x) + 0x00050000)
+#define HDMI_E_FUSE_BASE(x)             ((x) + 0x00060000)
 
 /* Control registers */
 #define HDMI_INTC_CON			HDMI_CTRL_BASE(0x0000)
@@ -112,6 +113,10 @@
 #define HDMI_TG_FIELD_BOT_HDMI_L	HDMI_TG_BASE(0x0090)
 #define HDMI_TG_FIELD_BOT_HDMI_H	HDMI_TG_BASE(0x0094)
 
+/* eFuse related registers */
+#define HDCP_E_FUSE_CTRL                HDMI_E_FUSE_BASE(0x0000)
+#define HDCP_E_FUSE_STATUS              HDMI_E_FUSE_BASE(0x0004)
+
 /*
  * Bit definition part
  */
@@ -120,10 +125,12 @@
 #define HDMI_INTC_EN_GLOBAL		(1 << 6)
 #define HDMI_INTC_EN_HPD_PLUG		(1 << 3)
 #define HDMI_INTC_EN_HPD_UNPLUG		(1 << 2)
+#define HDMI_INTC_EN_HDCP               (1 << 0)
 
 /* HDMI_INTC_FLAG */
 #define HDMI_INTC_FLAG_HPD_PLUG		(1 << 3)
 #define HDMI_INTC_FLAG_HPD_UNPLUG	(1 << 2)
+#define HDMI_INTC_FLAG_HDCP             (1 << 0)
 
 /* HDMI_PHY_RSTOUT */
 #define HDMI_PHY_SW_RSTOUT		(1 << 0)
@@ -142,8 +149,22 @@
 #define HDMI_VID_PREAMBLE_DIS		(1 << 5)
 #define HDMI_GUARD_BAND_DIS		(1 << 1)
 
+/* HDMI_SYS_STATUS */
+#define HDMI_SYS_STATUS_MASK_AUTH_ACK   (1 << 7)
+#define HDMI_SYS_STATUS_MASK_UPDATE_RI  (1 << 4)
+#define HDMI_SYS_STATUS_MASK_AN_WRITE   (1 << 2)
+#define HDMI_SYS_STATUS_MASK_WATCHDOG   (1 << 1)
+#define HDMI_SYS_STATUS_MASK_ACTIVE_RX  (1 << 0)
+
 /* HDMI_PHY_STATUS */
 #define HDMI_PHY_STATUS_READY		(1 << 0)
+
+/* HDMI_STATUS_EN */
+#define HDMI_STATUS_EN_MASK_AUTH_ACK    (1 << 7)
+#define HDMI_STATUS_EN_MASK_UPDATE_RI   (1 << 4)
+#define HDMI_STATUS_EN_MASK_AN_WRITE    (1 << 2)
+#define HDMI_STATUS_EN_MASK_WATCHDOG    (1 << 1)
+#define HDMI_STATUS_EN_MASK_ACTIVE_RX   (1 << 0)
 
 /* HDMI_HPD */
 #define HDMI_HPD_SW_HPD			(1 << 1)
@@ -154,10 +175,20 @@
 #define HDMI_MODE_DVI_EN		(1 << 0)
 #define HDMI_MODE_MASK			(3 << 0)
 
+/* HDMI_ENC_EN */
+#define HDMI_ENC_EN_MASK_ENABLE         (1 << 0)
+
 /* HDMI_TG_CMD */
 #define HDMI_TG_EN			(1 << 0)
 #define HDMI_FIELD_EN			(1 << 1)
 
+/* HDCP_E_FUSE_CTRL */
+#define HDCP_E_FUSE_CTRL_MASK_READ_KEY  (1 << 0)
+
+/* HDCP_E_FUSE_STATUS */
+#define HDCP_E_FUSE_STATUS_MASK_FAIL    (1 << 2)
+#define HDCP_E_FUSE_STATUS_MASK_BUSY    (1 << 1)
+#define HDCP_E_FUSE_STATUS_MASK_DONE    (1 << 0)
 
 /* HDMI Registers in Exynos4212 */
 /* Control registers */
@@ -376,8 +407,7 @@
 #define HDMI_HDCP_BCAPS			HDMI_CORE_BASE(0x7100)
 #define HDMI_HDCP_BSTATUS_0		HDMI_CORE_BASE(0x7110)
 #define HDMI_HDCP_BSTATUS_1		HDMI_CORE_BASE(0x7114)
-#define HDMI_HDCP_RI_0			HDMI_CORE_BASE(0x7140)
-#define HDMI_HDCP_RI_1			HDMI_CORE_BASE(0x7144)
+#define HDMI_HDCP_RI(n)                 HDMI_CORE_BASE(0x7140 + 4 * (n))
 #define HDMI_HDCP_I2C_INT		HDMI_CORE_BASE(0x7180)
 #define HDMI_HDCP_AN_INT		HDMI_CORE_BASE(0x7190)
 #define HDMI_HDCP_WDT_INT		HDMI_CORE_BASE(0x71A0)
@@ -385,6 +415,19 @@
 #define HDMI_HDCP_RI_COMPARE_0		HDMI_CORE_BASE(0x71D0)
 #define HDMI_HDCP_RI_COMPARE_1		HDMI_CORE_BASE(0x71D4)
 #define HDMI_HDCP_FRAME_COUNT		HDMI_CORE_BASE(0x71E0)
+
+/* HDMI_HDCP related masks */
+#define HDMI_HDCP_SHA_RESULT_MASK_READY         (1 << 1)
+#define HDMI_HDCP_SHA_RESULT_MASK_VALID         (1 << 0)
+#define HDMI_HDCP_KSV_LIST_CON_MASK_EMPTY       (1 << 2)
+#define HDMI_HDCP_KSV_LIST_CON_MASK_DONE        (1 << 3)
+#define HDMI_HDCP_KSV_LIST_CON_MASK_END         (1 << 1)
+#define HDMI_HDCP_KSV_LIST_CON_MASK_READ        (1 << 0)
+#define HDMI_HDCP_CTRL1_MASK_CP_DESIRED         (1 << 1)
+#define HDMI_HDCP_CHECK_RESULT_MASK_IGNORE      ((1 << 1) | (1 << 0))
+#define HDMI_HDCP_CHECK_RESULT_MASK_EQUAL       ((1 << 1) | (1 << 0))
+#define HDMI_HDCP_CHECK_RESULT_MASK_DIFFER      (1 << 1)
+#define HDMI_HDCP_CHECK_RESULT_MASK_CLEAR       ((1 << 1) | (1 << 0))
 
 #define HDMI_RGB_ROUND_EN		HDMI_CORE_BASE(0xD500)
 #define HDMI_VACT_SPACE_R_0		HDMI_CORE_BASE(0xD504)
