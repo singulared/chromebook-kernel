@@ -398,8 +398,10 @@ static void __init set_volt_table_CA7(void)
 		pr_debug("CPUFREQ of CA7  L%d : %d uV\n", i,
 				exynos5420_volt_table_CA7[i]);
 	}
+	for (i = L8; i <= L11; i++)
+		exynos5420_freq_table_CA7[i].frequency = CPUFREQ_ENTRY_INVALID;
 	max_support_idx_CA7 = L0;
-	min_support_idx_CA7 = L11;
+	min_support_idx_CA7 = L7;
 }
 
 int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
