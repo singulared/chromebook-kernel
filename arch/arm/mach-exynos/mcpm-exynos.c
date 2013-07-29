@@ -65,19 +65,29 @@ static void clear_boot_flag(unsigned int cpu, unsigned int mode)
 static arch_spinlock_t bl_lock = __ARCH_SPIN_LOCK_UNLOCKED;
 static int cpu_use_count[4][2];
 
+static bool exynos_core_power_state(unsigned int cpu, unsigned int cluster)
+{
+	unsigned int val;
+
+	if (cluster)
+		cpu += 4;
+	val = __raw_readl(EXYNOS_ARM_CORE_STATUS(cpu)) &
+				EXYNOS_CORE_LOCAL_PWR_EN;
+	return !!val;
+}
+
 static void exynos_core_power_control(unsigned int cpu, unsigned int cluster,
 						int enable)
 {
-	unsigned int status, val = 0;
+	unsigned int val = 0;
+
+	if (exynos_core_power_state(cpu, cluster) == enable)
+		return;
 
 	if (cluster)
 		cpu += 4;
 	if (enable)
 		val = EXYNOS_CORE_LOCAL_PWR_EN;
-
-	status = __raw_readl(EXYNOS_ARM_CORE_STATUS(cpu));
-	if ((status & EXYNOS_CORE_LOCAL_PWR_EN) == val)
-		return;
 	__raw_writel(val, EXYNOS_ARM_CORE_CONFIGURATION(cpu));
 }
 
@@ -296,15 +306,13 @@ static void exynos_powered_up(bool switched)
 	if (!switched)
 		return;
 
-	while (!__mcpm_is_cpu_down(cpu, cluster) &&
+	while (exynos_core_power_state(cpu, cluster) &&
 			time_before(jiffies, timeout))
 		cpu_relax();
 
-	if (!__mcpm_is_cpu_down(cpu, cluster))
+	if (exynos_core_power_state(cpu, cluster))
 		pr_warn("timed out waiting for CPU %u to power off\n",
 			cpu + cluster * 4);
-
-	udelay(10);
 
 	local_irq_disable();
 	arch_spin_lock(&bl_lock);
