@@ -19,7 +19,7 @@
  * @file mali_kbase_device.c
  * Base kernel device APIs
  */
-
+#include <linux/kernel.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
@@ -267,10 +267,57 @@ void kbase_device_trace_buffer_uninstall(kbase_context *kctx)
 	spin_unlock_irqrestore(&kctx->jctx.tb_lock, flags);
 }
 
+void kbase_device_context_integrity_check(kbase_context *kctx, const char *msg, ...)
+{
+	unsigned long flags;
+	unsigned long tb;
+	u32 wrap_offset;
+
+	/* early out when no context */
+	if (!kctx)
+		return;
+
+	spin_lock_irqsave(&kctx->jctx.tb_lock, flags);
+	tb = (unsigned long)kctx->jctx.tb;
+	wrap_offset = kctx->jctx.tb_wrap_offset;
+	spin_unlock_irqrestore(&kctx->jctx.tb_lock, flags);
+
+	/* if pointer set and not valid for vmalloc or wrap not set, then
+	 * print msg and BUG. */
+	if (tb && ((tb & (PAGE_SIZE - 1)) || !wrap_offset)) {
+		struct va_format vformat;
+		va_list args;
+
+		va_start(args, msg);
+
+		vformat.fmt = msg;
+		vformat.va = &args;
+
+		pr_err("%pV\n", &vformat);
+
+		va_end(args);
+
+		BUG();
+	}
+}
+
 void kbase_device_trace_register_access(kbase_context *kctx, kbase_reg_access_type type, u16 reg_offset, u32 reg_value)
 {
 	unsigned long flags;
+	unsigned long jctx_tb;
+
 	spin_lock_irqsave(&kctx->jctx.tb_lock, flags);
+
+	/* if pointer set and not valid for vmalloc or wrap not set, then
+	 * print msg and BUG. */
+	jctx_tb = (unsigned long)kctx->jctx.tb;
+	if (kctx->jctx.tb &&
+			(((unsigned long)kctx->jctx.tb & (PAGE_SIZE - 1)) ||
+			!kctx->jctx.tb_wrap_offset)) {
+		pr_err("Invalid trace buffer setup detected on kbase context.\n");
+		BUG();
+	}
+
 	if (kctx->jctx.tb) {
 		u16 wrap_count;
 		u16 write_offset;

@@ -410,8 +410,10 @@ struct s5p_mfc_mpeg4_enc_params {
  * struct s5p_mfc_enc_params - general encoding parameters
  */
 struct s5p_mfc_enc_params {
-	u16 width;
-	u16 height;
+	u16 crop_left_offset;
+	u16 crop_right_offset;
+	u16 crop_top_offset;
+	u16 crop_bottom_offset;
 
 	u16 gop_size;
 	enum v4l2_mpeg_video_multi_slice_mode slice_mode;

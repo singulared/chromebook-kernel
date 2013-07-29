@@ -655,7 +655,7 @@
 /***************************************************************/
 /*AUX channel*/
 
-#define AUX_DPCD 0x09
+#define AUX_DPCD 0x08
 
 /***************************************************************/
 /*Definition of DPCD*/
@@ -666,6 +666,11 @@
 #define MAX_DOWNSPREAD 0x00003
 #define DP_PWR_VOLTAGE_CAP 0x00004
 #define DOWNSTREAMPORT_PRESENT 0x00005
+#define DOWNSTREAMPORT_TYPE 0x07
+#define DOWNSTREAMPORT_DP 0x00
+#define DOWNSTREAMPORT_VGA 0x03
+#define DOWNSTREAMPORT_HDMI 0x05
+
 #define MAIN_LINK_CHANNEL_CODING 0x00006
 #define DOWN_STM_PORT 0x00007
 #define RECEIVE_PORT0_CAP_0 0x00008
@@ -685,6 +690,8 @@
 #define SINK_COUNT 0x00200
 #define DEVICE_SERVICE_IRQ_VECTOR 0x00201
 #define LANE0_1_STATUS 0x00202
+#define LANE0_1_STATUS_SUCCESS 0x07
+
 #define LANE_ALIGH_STUTUS_UPDATED 0x00204
 #define SINK_STATUS 0x00205
 #define ADJUST_REQUEST_LANE0_1 0x00206

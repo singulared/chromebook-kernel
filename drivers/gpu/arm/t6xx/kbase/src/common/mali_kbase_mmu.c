@@ -142,7 +142,7 @@ static void page_fault_worker(struct work_struct *data)
 		}
 		return;
 	}
-
+	kbase_device_context_integrity_check(kctx, "page_fault_worker enter");
 	fault_status = kbase_reg_read(kbdev, MMU_AS_REG(as_no, ASn_FAULTSTATUS), NULL);
 
 	KBASE_DEBUG_ASSERT(kctx->kbdev == kbdev);
@@ -261,6 +261,10 @@ static void page_fault_worker(struct work_struct *data)
 
  fault_done:
 	/* By this point, the fault was handled in some way, so release the ctx refcount */
+
+	/* Not sure if the context can be destroyed after we drop the ref count, so perform check
+	 * before we drop the ref count */
+	kbase_device_context_integrity_check(kctx, "page_fault_worker exit");
 	kbasep_js_runpool_release_ctx(kbdev, kctx);
 }
 
@@ -947,6 +951,9 @@ static void bus_fault_worker(struct work_struct *data)
 	 * NOTE: NULL can be returned here if we're gracefully handling a spurious interrupt */
 	kctx = kbasep_js_runpool_lookup_ctx_noretain(kbdev, as_no);
 
+	if (kctx)
+		kbase_device_context_integrity_check(kctx, "bus_fault_worker enter");
+
 	/* switch to UNMAPPED mode, will abort all jobs and stop any hw counter dumping */
 	/* AS transaction begin */
 	mutex_lock(&kbdev->as[as_no].transaction_mutex);
@@ -981,8 +988,10 @@ static void bus_fault_worker(struct work_struct *data)
 		kbase_reset_gpu(kbdev);
 
 	/* By this point, the fault was handled in some way, so release the ctx refcount */
-	if (kctx != NULL)
+	if (kctx != NULL) {
 		kbasep_js_runpool_release_ctx(kbdev, kctx);
+		kbase_device_context_integrity_check(kctx, "bus_fault_worker exit");
+	}
 }
 
 void kbase_mmu_interrupt(kbase_device *kbdev, u32 irq_stat)

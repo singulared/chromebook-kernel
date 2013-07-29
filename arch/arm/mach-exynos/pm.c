@@ -317,6 +317,8 @@ static void exynos_pm_resume(void)
 	/* For release retention */
 
 	__raw_writel((1 << 28), S5P_PAD_RET_MAUDIO_OPTION);
+	__raw_writel((1 << 28), S5P_PAD_RET_MMCC_OPTION);
+	__raw_writel((1 << 28), S5P_PAD_RET_MMCD_OPTION);
 	__raw_writel((1 << 28), S5P_PAD_RET_GPIO_OPTION);
 	__raw_writel((1 << 28), S5P_PAD_RET_UART_OPTION);
 	__raw_writel((1 << 28), S5P_PAD_RET_MMCA_OPTION);

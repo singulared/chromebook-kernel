@@ -48,6 +48,13 @@ enum dp_link_bw {
 	BW_NULL = 0x00
 };
 
+enum downstream_type {
+	DOWNSTREAM_UNKNOWN,
+	DOWNSTREAM_DP,
+	DOWNSTREAM_VGA,
+	DOWNSTREAM_HDMI,
+};
+
 struct anx7808_data {
 	int pd_gpio;
 	int reset_gpio;
@@ -63,9 +70,9 @@ struct anx7808_data {
 	struct i2c_client *rx_p1;
 	struct delayed_work play_video;
 	struct workqueue_struct *wq;
-	enum dp_link_bw dp_supported_bw;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
+	enum downstream_type ds_type;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -219,25 +226,7 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 		DRM_ERROR("ANX7808 not found.  ID reg contains: %04x\n", id);
 		return -ENODEV;
 	}
-	DRM_INFO("ANX7808 found.\n");
-	return 0;
-}
-
-static int anx7808_vbus_power_on(struct anx7808_data *anx7808)
-{
-	uint8_t status;
-
-	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL6,
-			 P5V_PROTECT_PD | SHORT_PROTECT_PD);
-	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
-	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, V33_SWITCH_ON);
-
-	anx7808_read_reg(anx7808, SP_TX_PLL_FILTER_CTRL6, &status);
-	if (status & (P5V_PROTECT | SHORT_PROTECT)) {
-		DRM_ERROR("Failed to enable VBUS: 0x%02x.\n", status);
-		return -EIO;
-	}
-	DRM_DEBUG_KMS("Enabled VBUS.\n");
+	DRM_DEBUG("ANX7808 found.\n");
 	return 0;
 }
 
@@ -264,7 +253,43 @@ static int anx7808_aux_wait(struct anx7808_data *anx7808)
 }
 
 static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
-			    uint8_t cmd, uint8_t count, uint8_t *pBuf)
+			    uint8_t cmd, uint8_t count, uint8_t *buf)
+{
+	int i;
+	int err = 0;
+	int addrl = (addr >> 0) & 0xFF;
+	int addrm = (addr >> 8) & 0xFF;
+	int addrh = (addr >> 16) & 0x0F;
+
+	if (count > AUX_BUFFER_SIZE)
+		return -EINVAL;
+
+	err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_COUNT_REG, BUF_CLR);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_CTRL_REG,
+				 ((count - 1) << 4) | cmd | 0x01);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_15_8_REG, addrm);
+	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_19_16_REG, addrh);
+	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
+	if (err)
+		return -EIO;
+	usleep_range(2000, 4000);
+
+	err = anx7808_aux_wait(anx7808);
+	if (err)
+		return err;
+
+	for (i = 0; i < count; i++)
+		err |= anx7808_read_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
+					buf + i);
+	if (err)
+		return -EIO;
+
+	return 0;
+}
+
+static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
+			     uint8_t cmd, uint8_t count, uint8_t *buf)
 {
 	int i;
 	int err = 0;
@@ -281,28 +306,27 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_7_0_REG, addrl);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_15_8_REG, addrm);
 	err |= anx7808_write_reg(anx7808, SP_TX_AUX_ADDR_19_16_REG, addrh);
-	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
-	if (err)
-		return -EIO;
-	usleep_range(2000, 4000);
-
-	err = anx7808_aux_wait(anx7808);
-	if (err)
-		return err;
-
 	for (i = 0; i < count; i++)
-		err |= anx7808_read_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
-					pBuf + i);
+		err |= anx7808_write_reg(anx7808, SP_TX_BUF_DATA_0_REG + i,
+					*(buf + i));
+	err |= anx7808_set_bits(anx7808, SP_TX_AUX_CTRL_REG2, AUX_OP_EN);
+
 	if (err)
 		return -EIO;
 
-	return 0;
+	return anx7808_aux_wait(anx7808);
 }
 
 static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
-				 uint8_t count, uint8_t *pBuf)
+				 uint8_t count, uint8_t *buf)
 {
-	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, pBuf);
+	return anx7808_aux_read(anx7808, addr, AUX_DPCD, count, buf);
+}
+
+static int anx7808_aux_dpcd_write(struct anx7808_data *anx7808, uint32_t addr,
+				  uint8_t count, uint8_t *buf)
+{
+	return anx7808_aux_write(anx7808, addr, AUX_DPCD, count, buf);
 }
 
 static void anx7808_set_hpd(struct anx7808_data *anx7808, bool enable)
@@ -422,17 +446,19 @@ static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 {
 	anx7808_rx_initialization(anx7808);
 	anx7808_tx_initialization(anx7808);
-
-	anx7808_vbus_power_on(anx7808);
-	msleep(20);
 }
 
 static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
 {
+	int err;
 	uint8_t status;
 
-	if (anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status))
-		return -EAGAIN;
+	if (anx7808->ds_type != DOWNSTREAM_HDMI)
+		return 0;
+
+	err = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &status);
+	if (err)
+		return err;
 	if (!(status & DOWN_STRM_HPD)) {
 		DRM_INFO("Waiting for downstream HPD.\n");
 		return -EAGAIN;
@@ -459,16 +485,31 @@ static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 	return 0;
 }
 
+static int anx7808_check_dp_link(struct anx7808_data *anx7808)
+{
+	int err;
+	uint8_t status;
+
+	err = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &status);
+	if (err)
+		return err;
+	if ((status & LANE0_1_STATUS_SUCCESS) != LANE0_1_STATUS_SUCCESS) {
+		DRM_INFO("Waiting for DP Lane 0 to train: %02x\n", status);
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
 static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 {
-	uint8_t dp_bw, status;
 	int err;
+	uint8_t dp_bw;
 
 	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
 	if (err)
 		return err;
-	anx7808->dp_supported_bw = (enum dp_link_bw)dp_bw;
-	switch (anx7808->dp_supported_bw) {
+	switch ((enum dp_link_bw)dp_bw) {
 	case BW_162G:
 	case BW_27G:
 	case BW_54G:
@@ -476,52 +517,20 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	case BW_NULL:
 	case BW_OVER:
 	default:
-		DRM_INFO("Waiting to read DP bandwidth.");
+		DRM_INFO("Waiting to read DP bandwidth.\n");
 		return -EAGAIN;
 	}
 
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, VIDEO_PD);
-	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN | VIDEO_MUTE);
-
-	msleep(20);
-
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
-	anx7808_write_reg(anx7808, SP_TX_SYS_CTRL2_REG, status);
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL2_REG, &status);
-	if (status & CHA_STA) {
-		DRM_INFO("Waiting for DP clock: 0x%02x\n", status);
-		return -EAGAIN;
-	}
-
-	anx7808_set_bits(anx7808, SP_TX_SYS_CTRL3_REG, STRM_VALID);
-	anx7808_read_reg(anx7808, SP_TX_SYS_CTRL3_REG, &status);
-	if (!(status & STRM_VALID)) {
-		DRM_INFO("Waiting for DP signal: 0x%02x\n", status);
-		return -EAGAIN;
-	}
-
-	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
-
-	anx7808_set_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
-	usleep_range(1000, 2000);
-	anx7808_clear_bits(anx7808, SP_TX_ANALOG_PD_REG, CH0_PD);
-
-	anx7808_set_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
-	usleep_range(1000, 2000);
-	anx7808_clear_bits(anx7808, SP_TX_PLL_CTRL_REG, PLL_RST);
-
-	if (anx7808->dp_manual_bw == 0)
-		dp_bw = (uint8_t)anx7808->dp_supported_bw;
-	else
+	if (anx7808->dp_manual_bw != 0)
 		dp_bw = (uint8_t)anx7808->dp_manual_bw;
 	anx7808_write_reg(anx7808, SP_TX_LINK_BW_SET_REG, dp_bw);
 	anx7808_write_reg(anx7808, SP_TX_LT_CTRL_REG, SP_TX_LT_EN);
+	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
+	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 
-	anx7808_read_reg(anx7808, SP_TX_LT_CTRL_REG, &status);
-	if (status & 0x70) {
-		DRM_INFO("Waiting for DP link training: 0x%02x\n", status);
-		return -EAGAIN;
-	}
+	err = anx7808_check_dp_link(anx7808);
+	if (err)
+		return err;
 
 	anx7808_clear_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_MUTE);
 
@@ -533,13 +542,13 @@ static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
-static void anx7808_update_infoframes(struct anx7808_data *anx7808)
+static void anx7808_update_infoframes(struct anx7808_data *anx7808, bool force)
 {
 	uint8_t status6;
 
 	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &status6);
 
-	if (status6 & NEW_AVI) {
+	if (status6 & NEW_AVI || force) {
 		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
 		anx7808_write_reg(anx7808, SP_TX_AVI_TYPE, SP_TX_AVI_KTYPE);
 		anx7808_write_reg(anx7808, SP_TX_AVI_VER, SP_TX_AVI_KVER);
@@ -551,7 +560,7 @@ static void anx7808_update_infoframes(struct anx7808_data *anx7808)
 		anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, NEW_AVI);
 	}
 
-	if (status6 & NEW_AUD) {
+	if (status6 & NEW_AUD || force) {
 		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
 		anx7808_write_reg(anx7808, SP_TX_AUD_TYPE, SP_TX_AUD_KTYPE);
 		anx7808_write_reg(anx7808, SP_TX_AUD_VER, SP_TX_AUD_KVER);
@@ -564,6 +573,47 @@ static void anx7808_update_infoframes(struct anx7808_data *anx7808)
 	}
 }
 
+static void anx7808_update_audio(struct anx7808_data *anx7808)
+{
+	uint8_t c5, c6;
+	uint8_t force_audio[3] = {0x06, 0x85, 0x08};
+	bool has_audio;
+
+	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS5_REG, &c5);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS5_REG, c5 & AUDIO_RCV);
+	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &c6);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, c6 & CTS_RCV);
+	has_audio = (c6 & CTS_RCV && c5 & AUDIO_RCV);
+	if (!has_audio)
+		return;
+
+	anx7808_clear_bits(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG,
+			   AUD_MUTE);
+
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL4, 0x05);
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL5, 0x00);
+	anx7808_write_reg(anx7808, SP_TX_AUD_INTERFACE_CTRL6, 0x00);
+
+	anx7808_clear_bits(anx7808, SP_TX_AUD_INTERFACE_CTRL0,
+			   AUD_INTERFACE_DISABLE);
+
+	anx7808_set_bits(anx7808, SP_TX_AUD_INTERFACE_CTRL2,
+			 M_AUD_ADJUST_ST);
+
+	anx7808_write_reg(anx7808, SP_TX_AUD_CH_NUM_REG5, 0);
+
+	anx7808_copy_regs(anx7808, HDMI_RX_AUD_IN_CH_STATUS1_REG,
+			  SP_TX_AUD_CH_STATUS_REG1, 5);
+
+	if (anx7808->ds_type == DOWNSTREAM_HDMI)
+		anx7808_aux_dpcd_write(anx7808, SINK_DEV_SEL, 3, force_audio);
+
+	/* enable audio */
+	anx7808_set_bits(anx7808, SP_TX_AUD_CTRL, AUD_EN);
+
+	return;
+}
+
 static int anx7808_check_polling_err(struct anx7808_data *anx7808)
 {
 	uint8_t tx_int_status;
@@ -573,6 +623,42 @@ static int anx7808_check_polling_err(struct anx7808_data *anx7808)
 		DRM_INFO("Polling error: %02x", tx_int_status);
 		return -EFAULT;
 	}
+	return 0;
+}
+
+static int anx7808_hdmi_enable(struct anx7808_data *anx7808)
+{
+	uint8_t hdmi_enable = 1;
+
+	return anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
+}
+
+static int anx7808_get_cable_type(struct anx7808_data *anx7808)
+{
+	int err;
+	uint8_t ds_present;
+
+	err = anx7808_aux_dpcd_read(anx7808, DOWNSTREAMPORT_PRESENT , 1,
+				    &ds_present);
+	if (err)
+		return err;
+
+	switch (ds_present & DOWNSTREAMPORT_TYPE) {
+	case DOWNSTREAMPORT_DP:
+		anx7808->ds_type = DOWNSTREAM_DP;
+		break;
+	case DOWNSTREAMPORT_HDMI:
+		anx7808->ds_type = DOWNSTREAM_HDMI;
+		break;
+	case DOWNSTREAMPORT_VGA:
+		anx7808->ds_type = DOWNSTREAM_VGA;
+		break;
+	default:
+		anx7808->ds_type = DOWNSTREAM_UNKNOWN;
+		DRM_ERROR("Unknown downstream type.\n");
+		break;
+	}
+
 	return 0;
 }
 
@@ -600,6 +686,11 @@ static void anx7808_play_video(struct work_struct *work)
 
 		switch (state) {
 		case STATE_CABLE_DETECTED:
+			if (anx7808_get_cable_type(anx7808))
+				break;
+			if (anx7808->ds_type == DOWNSTREAM_HDMI)
+				if (anx7808_hdmi_enable(anx7808))
+					break;
 			if (anx7808_detect_dp_hotplug(anx7808))
 				break;
 			anx7808_set_hpd(anx7808, 1);
@@ -617,9 +708,16 @@ static void anx7808_play_video(struct work_struct *work)
 
 		case STATE_DP_OK:
 			anx7808_config_dp_output(anx7808);
+			anx7808_update_infoframes(anx7808, true);
+			DRM_INFO("Video playback successful.\n");
 			state = STATE_PLAY;
+
 		case STATE_PLAY:
-			anx7808_update_infoframes(anx7808);
+			anx7808_update_infoframes(anx7808, false);
+			anx7808_update_audio(anx7808);
+			if (anx7808_check_dp_link(anx7808))
+				state = STATE_HDMI_OK;
+
 		default:
 			break;
 		}
@@ -647,7 +745,7 @@ static void anx7808_play_video(struct work_struct *work)
 static void anx7808_cable_det_timer(unsigned long data)
 {
 	struct anx7808_data *anx7808 = (struct anx7808_data *)data;
-	DRM_INFO("anx7808_cable_det_timer");
+	DRM_DEBUG("anx7808_cable_det_timer called.\n");
 	queue_delayed_work(anx7808->wq, &anx7808->play_video, 0);
 }
 
@@ -655,11 +753,11 @@ static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
 	struct anx7808_data *anx7808 = data;
 	if (gpio_get_value(anx7808->cable_det_gpio)) {
-		DRM_INFO("Cable detected; Setting cable_det_timer.\n");
+		DRM_DEBUG("Cable detected; Setting cable_det_timer.\n");
 		mod_timer(&anx7808->cable_det_timer,
 			  jiffies + msecs_to_jiffies(CABLE_DET_TIME_MS));
 	} else {
-		DRM_INFO("Cable unplugged; Deleting cable_det_timer.\n");
+		DRM_DEBUG("Cable unplugged; Deleting cable_det_timer.\n");
 		del_timer(&anx7808->cable_det_timer);
 	}
 	return IRQ_HANDLED;

@@ -176,6 +176,7 @@ struct sysmmu_drvdata {
 	struct iommu_domain *domain;
 	sysmmu_fault_handler_t fault_handler;
 	unsigned long pgtable;
+	bool runtime_active;
 };
 
 static bool set_sysmmu_active(struct sysmmu_drvdata *data)
@@ -197,14 +198,25 @@ static bool is_sysmmu_active(struct sysmmu_drvdata *data)
 	return data->activations > 0;
 }
 
-static void sysmmu_block(void __iomem *sfrbase)
-{
-	__raw_writel(CTRL_BLOCK, sfrbase + REG_MMU_CTRL);
-}
-
 static void sysmmu_unblock(void __iomem *sfrbase)
 {
 	__raw_writel(CTRL_ENABLE, sfrbase + REG_MMU_CTRL);
+}
+
+static bool sysmmu_block(void __iomem *sfrbase)
+{
+	int i = 120;
+
+	__raw_writel(CTRL_BLOCK, sfrbase + REG_MMU_CTRL);
+	while ((i > 0) && !(__raw_readl(sfrbase + REG_MMU_STATUS) & 1))
+		--i;
+
+	if (!(__raw_readl(sfrbase + REG_MMU_STATUS) & 1)) {
+		sysmmu_unblock(sfrbase);
+		return false;
+	}
+	return true;
+
 }
 
 static void __sysmmu_tlb_invalidate(void __iomem *sfrbase)
@@ -409,6 +421,7 @@ static void __exynos_sysmmu_enable(struct sysmmu_drvdata *data,
 	}
 
 	data->domain = domain;
+	data->runtime_active = true;
 
 	dev_dbg(data->sysmmu, "(%s) Enabled\n", data->dbgname);
 
@@ -459,12 +472,18 @@ static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
 
 	read_lock_irqsave(&data->lock, flags);
 
-	if (is_sysmmu_active(data)) {
+	if (is_sysmmu_active(data) && data->runtime_active) {
 		int i;
 		for (i = 0; i < data->nsfrs; i++) {
-			sysmmu_block(data->sfrbases[i]);
-			__sysmmu_tlb_invalidate_entry(data->sfrbases[i], iova);
-			sysmmu_unblock(data->sfrbases[i]);
+			if (sysmmu_block(data->sfrbases[i])) {
+				__sysmmu_tlb_invalidate_entry(
+						data->sfrbases[i], iova);
+				sysmmu_unblock(data->sfrbases[i]);
+			} else {
+				dev_err(dev,
+					"%s failed due to blocking timeout\n",
+					__func__);
+			}
 		}
 	} else {
 		dev_dbg(data->sysmmu,
@@ -601,11 +620,12 @@ err_alloc:
 
 static int exynos_runtime_suspend(struct device *dev)
 {
-	struct sysmmu_drvdata *data;
-	data = dev_get_drvdata(dev);
+	struct sysmmu_drvdata *data = dev_get_drvdata(dev);
 
-	if (!is_sysmmu_active(data))
+	if (!is_sysmmu_active(data) || !data->runtime_active)
 		return 0;
+
+	data->runtime_active = false;
 
 	if (data->clk[1])
 		clk_disable(data->clk[1]);
@@ -616,21 +636,9 @@ static int exynos_runtime_suspend(struct device *dev)
 
 static int exynos_runtime_resume(struct device *dev)
 {
-	struct sysmmu_drvdata *data;
-	data = dev_get_drvdata(dev);
+	struct sysmmu_drvdata *data = dev_get_drvdata(dev);
 
-	if (is_sysmmu_active(data))
-		__exynos_sysmmu_enable(data, data->pgtable, NULL);
-	return 0;
-}
-
-static int exynos_pm_resume(struct device *dev)
-{
-	struct sysmmu_drvdata *data;
-
-	data = dev_get_drvdata(dev);
-
-	if (is_sysmmu_active(data))
+	if (is_sysmmu_active(data) && !data->runtime_active)
 		__exynos_sysmmu_enable(data, data->pgtable, NULL);
 
 	return 0;
@@ -639,7 +647,8 @@ static int exynos_pm_resume(struct device *dev)
 const struct dev_pm_ops exynos_pm_ops = {
 	.runtime_suspend = &exynos_runtime_suspend,
 	.runtime_resume = &exynos_runtime_resume,
-	.resume = &exynos_pm_resume,
+	.suspend = &exynos_runtime_suspend,
+	.resume = &exynos_runtime_resume,
 };
 
 #ifdef CONFIG_OF
@@ -962,6 +971,7 @@ static size_t exynos_iommu_unmap(struct iommu_domain *domain,
 
 	if (lv2ent_small(ent)) {
 		*ent = 0;
+		pgtable_flush(ent, ent + 1);
 		size = SPAGE_SIZE;
 		priv->lv2entcnt[lv1ent_offset(iova)] += 1;
 		goto done;
@@ -971,6 +981,7 @@ static size_t exynos_iommu_unmap(struct iommu_domain *domain,
 	BUG_ON(size < LPAGE_SIZE);
 
 	memset(ent, 0, sizeof(*ent) * SPAGES_PER_LPAGE);
+	pgtable_flush(ent, ent + SPAGES_PER_LPAGE);
 
 	size = LPAGE_SIZE;
 	priv->lv2entcnt[lv1ent_offset(iova)] += SPAGES_PER_LPAGE;

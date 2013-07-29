@@ -20,10 +20,10 @@
 
 #include <linux/bug.h>
 
-/** @brief If equals to 0, a trace containing the file, line, and function will be displayed before each message. */
-#define KBASE_DEBUG_SKIP_TRACE 0
+/** @brief If 0, the current file:line is displayed before each message. */
+#define KBASE_DEBUG_SKIP_TRACE 1
 
-/** @brief If different from 0, the trace will only contain the file and line. */
+/** @brief If 0, the current function is displayed before each message. */
 #define KBASE_DEBUG_SKIP_FUNCTION_NAME 0
 
 /** @brief Disable the asserts tests if set to 1. Default is to disable the asserts in release. */
@@ -34,6 +34,18 @@
 #define KBASE_DEBUG_DISABLE_ASSERTS 1
 #endif
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
+
+/**
+ * @brief If 1, disable INFO messages.
+ * @note If this is not disabled then Android boot times out.
+ */
+#ifndef KBASE_DEBUG_DISABLE_INFO
+#ifdef CONFIG_MALI_DEBUG
+#define KBASE_DEBUG_DISABLE_INFO 0
+#else
+#define KBASE_DEBUG_DISABLE_INFO 1
+#endif
+#endif
 
 typedef enum {
 	KBASE_UNKNOWN = 0, /**< @brief Unknown module */
@@ -62,35 +74,37 @@ typedef struct kbasep_debug_assert_cb {
  * @sa KBASE_DEBUG_SKIP_TRACE, KBASE_DEBUG_SKIP_FUNCTION_NAME
  */
 #if KBASE_DEBUG_SKIP_TRACE == 0
-#define KBASEP_DEBUG_PRINT_TRACE \
-		"In file: " __FILE__ " line: " CSTD_STR2(__LINE__)
-#if KBASE_DEBUG_SKIP_FUNCTION_NAME == 0
-#define KBASEP_DEBUG_PRINT_FUNCTION CSTD_FUNC
-#else
-#define KBASEP_DEBUG_PRINT_FUNCTION ""
-#endif
+#define KBASEP_DEBUG_PRINT_TRACE __FILE__ ":" CSTD_STR2(__LINE__) ":"
 #else
 #define KBASEP_DEBUG_PRINT_TRACE ""
 #endif
 
 /**
- * @def KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)
- * @brief (Private) system printing function associated to the @see KBASE_DEBUG_ASSERT_MSG event.
- * @param trace location in the code from where the message is printed
- * @param function function from where the message is printed
- * @param ... Format string followed by format arguments.
- * @note function parameter cannot be concatenated with other strings
+ * @def KBASEP_DEBUG_PRINT_FUNCTION
+ * @brief Private macro containing the format of the trace to display before every message
+ * @sa KBASE_DEBUG_SKIP_TRACE, KBASE_DEBUG_SKIP_FUNCTION_NAME
  */
-/* Select the correct system output function*/
-#ifdef CONFIG_MALI_DEBUG
-#define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...)\
-		do { \
-			printk(KERN_ERR "Mali<ASSERT>: %s function:%s ", trace, function);\
-			printk(KERN_ERR __VA_ARGS__);\
-			printk(KERN_ERR "\n");\
-		} while (MALI_FALSE)
+#if KBASE_DEBUG_SKIP_FUNCTION_NAME == 0
+#define KBASEP_DEBUG_PRINT_FUNCTION CSTD_FUNC
 #else
-#define KBASEP_DEBUG_ASSERT_OUT(trace, function, ...) CSTD_NOP()
+#define KBASEP_DEBUG_PRINT_FUNCTION ""
+#endif
+
+/**
+ * @def KBASEP_DEBUG_ASSERT_OUT(format, ...)
+ * @brief (Private) system printing function associated to the @see KBASE_DEBUG_ASSERT_MSG event.
+ * @param format Message to display on assert.
+ * @param ... format arguments
+ */
+#ifdef CONFIG_MALI_DEBUG
+#define KBASEP_DEBUG_ASSERT_OUT(format, ...) \
+	do { \
+		pr_err("Mali<ASSERT>: " \
+				KBASEP_DEBUG_PRINT_TRACE"%s " format "\n", \
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
+	} while (MALI_FALSE)
+#else
+#define KBASEP_DEBUG_ASSERT_OUT(format, ...) CSTD_NOP()
 #endif
 
 #ifdef CONFIG_MALI_DEBUG
@@ -110,71 +124,66 @@ typedef struct kbasep_debug_assert_cb {
 #define KBASE_DEBUG_ASSERT(expr) \
 	KBASE_DEBUG_ASSERT_MSG(expr, #expr)
 
+/**
+ * @def KBASE_DEBUG_ASSERT_MSG(expr, ...)
+ * @brief Calls @see KBASEP_DEBUG_ASSERT_OUT and prints the given message if @a expr is false
+ *
+ * @note This macro does nothing if the flag @see KBASE_DEBUG_DISABLE_ASSERTS is set to 1
+ *
+ * @param expr Boolean expression
+ * @param format  Message to display when @a expr is false, as a format string.
+ * @param ...  format arguments
+ */
 #if KBASE_DEBUG_DISABLE_ASSERTS
-#define KBASE_DEBUG_ASSERT_MSG(expr, ...) CSTD_NOP()
+#define KBASE_DEBUG_ASSERT_MSG(expr, format, ...) CSTD_NOP()
 #else
-	/**
-	 * @def KBASE_DEBUG_ASSERT_MSG(expr, ...)
-	 * @brief Calls @see KBASEP_DEBUG_ASSERT_OUT and prints the given message if @a expr is false
-	 *
-	 * @note This macro does nothing if the flag @see KBASE_DEBUG_DISABLE_ASSERTS is set to 1
-	 *
-	 * @param expr Boolean expression
-	 * @param ...  Message to display when @a expr is false, as a format string followed by format arguments.
-	 */
-#define KBASE_DEBUG_ASSERT_MSG(expr, ...) \
-		do { \
-			if (MALI_FALSE == (expr)) { \
-				KBASEP_DEBUG_ASSERT_OUT(KBASEP_DEBUG_PRINT_TRACE, KBASEP_DEBUG_PRINT_FUNCTION, __VA_ARGS__);\
-				KBASE_CALL_ASSERT_HOOK();\
-				BUG();\
-			} \
-		} while (MALI_FALSE)
+#define KBASE_DEBUG_ASSERT_MSG(expr, format, ...) \
+	do { \
+		if (MALI_FALSE == (expr)) { \
+			KBASEP_DEBUG_ASSERT_OUT(format, ##__VA_ARGS__); \
+			KBASE_CALL_ASSERT_HOOK();\
+			BUG(); \
+		} \
+	} while (MALI_FALSE)
 #endif				/* KBASE_DEBUG_DISABLE_ASSERTS */
 
-/**
- * @def KBASEP_DEBUG_WARN_OUT(module, trace, ...)
- * @brief (Private) system printing function associated to the @see KBASE_DEBUG_PRINT_WARN event.
- * @param module module ID
- * @param trace location in the code from where the message is printed
- * @param function function from where the message is printed
- * @param ... Format string followed by format arguments.
- * @note function parameter cannot be concatenated with other strings
- */
-#ifdef CONFIG_MALI_DEBUG
-#define KBASE_DEBUG_PRINT_WARN(module, ...)\
-		do {\
-			printk(KERN_WARNING "Mali<WARN, %s>: %s function:%s ", kbasep_debug_module_to_str(module), KBASEP_DEBUG_PRINT_TRACE, KBASEP_DEBUG_PRINT_FUNCTION);\
-			printk(KERN_WARNING __VA_ARGS__);\
-			printk(KERN_WARNING "\n");\
-		} while (MALI_FALSE)
+#define KBASE_DEBUG_PRINT_WARN(module, format, ...) \
+	do { \
+		pr_warn("Mali<WARN, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
+				kbasep_debug_module_to_str(module), \
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
+	} while (MALI_FALSE)
+
+#define KBASE_DEBUG_PRINT_ERROR(module, format, ...) \
+	do { \
+		pr_err("Mali<ERROR, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
+				kbasep_debug_module_to_str(module), \
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
+	} while (MALI_FALSE)
+
+#if KBASE_DEBUG_DISABLE_INFO
+#define KBASE_DEBUG_PRINT_INFO(module, format, ...) CSTD_NOP()
 #else
-#define KBASE_DEBUG_PRINT_WARN(module, ...) CSTD_NOP()
+#define KBASE_DEBUG_PRINT_INFO(module, format, ...)\
+	do {\
+		pr_info("Mali<INFO, %s>: " \
+				KBASEP_DEBUG_PRINT_TRACE "%s " format "\n", \
+				kbasep_debug_module_to_str(module), \
+				KBASEP_DEBUG_PRINT_FUNCTION, ##__VA_ARGS__); \
+	} while (MALI_FALSE)
 #endif
 
-#define KBASE_DEBUG_PRINT_ERROR(module, ...)\
-	do {\
-		printk(KERN_ERR "Mali<ERROR, %s>: %s function:%s ", kbasep_debug_module_to_str(module), KBASEP_DEBUG_PRINT_TRACE, KBASEP_DEBUG_PRINT_FUNCTION);\
-		printk(KERN_ERR __VA_ARGS__);\
-		printk(KERN_ERR "\n");\
+#define KBASE_DEBUG_PRINT_RAW_LEVEL(level, module, format, ...) do { \
+		printk(level format "\n", ##__VA_ARGS__); \
 	} while (MALI_FALSE)
 
-/*If this is not disabled then Android boot times out*/
-#define KBASE_DEBUG_PRINT_INFO(module, ...) CSTD_NOP()
+#define KBASE_DEBUG_PRINT_RAW(module, format, ...) \
+	KBASE_DEBUG_PRINT_RAW_LEVEL("", module, format, ##__VA_ARGS__)
 
-#define KBASE_DEBUG_PRINT_RAW(module, ...)\
-	do {\
-		printk(__VA_ARGS__);\
-		printk("\n");\
-	} while (MALI_FALSE)
-
-#define KBASE_DEBUG_PRINT_RAW_LEVEL(level, module, ...)\
-	do {\
-		printk(level __VA_ARGS__);\
-		printk(level "\n");\
-	} while (MALI_FALSE)
-
-#define KBASE_DEBUG_PRINT(module, ...) KBASE_DEBUG_PRINT_RAW(module, __VA_ARGS__)
+#define KBASE_DEBUG_PRINT(module, format, ...) \
+	KBASE_DEBUG_PRINT_RAW(module, format, ##__VA_ARGS__)
 
 /**
  * @def KBASE_DEBUG_CODE( X )

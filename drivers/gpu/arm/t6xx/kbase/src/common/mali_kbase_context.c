@@ -103,6 +103,8 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	atomic_set(&kctx->timeline.jd_atoms_in_flight, 0);
 #endif
 
+	/* Rule out any corruption during context creation */
+	kbase_device_context_integrity_check(kctx, "kbase_create_context");
 	return kctx;
 
  free_osctx:
@@ -145,7 +147,7 @@ void kbase_destroy_context(kbase_context *kctx)
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
 
 	KBASE_TRACE_ADD(kbdev, CORE_CTX_DESTROY, kctx, NULL, 0u, 0u);
-
+	kbase_device_context_integrity_check(kctx, "kbase_destroy_context enter");
 	/* Ensure the core is powered up for the destroy process */
 	/* A suspend won't happen here, because we're in a syscall from a userspace
 	 * thread. */
@@ -187,6 +189,10 @@ void kbase_destroy_context(kbase_context *kctx)
 
 	kbase_mem_allocator_term(&kctx->osalloc);
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
+
+	/* debug memory should still be untouched at this stage */
+	kbase_device_context_integrity_check(kctx, "kbase_destroy_context pre-vfree");
+
 	vfree(kctx);
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context)

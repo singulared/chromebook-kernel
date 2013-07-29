@@ -355,6 +355,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 		}
 	}
 
+	kbase_device_context_integrity_check(kctx, "pre cmd(%d)", id);
 	/* setup complete, perform normal operation */
 	switch (id) {
 	case KBASE_FUNC_TMEM_ALLOC:
@@ -736,11 +737,13 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 		goto out_bad;
 	}
 
+	kbase_device_context_integrity_check(kctx, "post cmd(%d)", id);
 	return MALI_ERROR_NONE;
 
  bad_size:
 	dev_err(kbdev->osdev.dev, "Wrong syscall size (%d) for %08x\n", args_size, id);
  out_bad:
+	kbase_device_context_integrity_check(kctx, "error on cmd(%d)", id);
 	return MALI_ERROR_FUNCTION_FAILED;
 }
 
@@ -828,6 +831,8 @@ static int kbase_release(struct inode *inode, struct file *filp)
 	kbasep_kctx_list_element *element, *tmp;
 	mali_bool found_element = MALI_FALSE;
 
+	kbase_device_context_integrity_check(kctx, "kbase_release enter");
+
 	mutex_lock(&kbdev->kctx_list_lock);
 	list_for_each_entry_safe(element, tmp, &kbdev->kctx_list, link) {
 		if (element->kctx == kctx) {
@@ -880,6 +885,8 @@ static ssize_t kbase_read(struct file *filp, char __user *buf, size_t count, lof
 	base_jd_event_v2 uevent;
 	int out_count = 0;
 
+	kbase_device_context_integrity_check(kctx, "kbase_read enter");
+
 	if (count < sizeof(uevent))
 		return -ENOBUFS;
 
@@ -888,20 +895,29 @@ static ssize_t kbase_read(struct file *filp, char __user *buf, size_t count, lof
 			if (out_count > 0)
 				goto out;
 
-			if (filp->f_flags & O_NONBLOCK)
+			if (filp->f_flags & O_NONBLOCK) {
+				kbase_device_context_integrity_check(kctx, "kbase_read EAGAIN");
 				return -EAGAIN;
+			}
 
-			if (wait_event_interruptible(kctx->osctx.event_queue, kbase_event_pending(kctx)))
+			if (wait_event_interruptible(kctx->osctx.event_queue,
+					kbase_event_pending(kctx))) {
+				kbase_device_context_integrity_check(kctx, "kbase_read ERESTARTSYS");
 				return -ERESTARTSYS;
+			}
 		}
 		if (uevent.event_code == BASE_JD_EVENT_DRV_TERMINATED) {
-			if (out_count == 0)
+			if (out_count == 0) {
+				kbase_device_context_integrity_check(kctx, "kbase_read EPIPE");
 				return -EPIPE;
+			}
 			goto out;
 		}
 
-		if (copy_to_user(buf, &uevent, sizeof(uevent)))
+		if (copy_to_user(buf, &uevent, sizeof(uevent))) {
+			kbase_device_context_integrity_check(kctx, "kbase_read EFAULT");
 			return -EFAULT;
+		}
 
 		buf += sizeof(uevent);
 		out_count++;
@@ -909,16 +925,22 @@ static ssize_t kbase_read(struct file *filp, char __user *buf, size_t count, lof
 	} while (count >= sizeof(uevent));
 
  out:
+	kbase_device_context_integrity_check(kctx, "kbase_read exit");
+
 	return out_count * sizeof(uevent);
 }
 
 static unsigned int kbase_poll(struct file *filp, poll_table *wait)
 {
 	kbase_context *kctx = filp->private_data;
+	kbase_device_context_integrity_check(kctx, "kbase_poll enter");
 
 	poll_wait(filp, &kctx->osctx.event_queue, wait);
-	if (kbase_event_pending(kctx))
+	if (kbase_event_pending(kctx)) {
+		kbase_device_context_integrity_check(kctx, "kbase_poll event");
 		return POLLIN | POLLRDNORM;
+	}
+	kbase_device_context_integrity_check(kctx, "kbase_poll exit");
 
 	return 0;
 }

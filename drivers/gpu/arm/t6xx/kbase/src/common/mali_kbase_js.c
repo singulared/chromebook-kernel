@@ -1968,7 +1968,7 @@ void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
 
 	js_devdata = &kbdev->js_data;
 	js_policy = &kbdev->js_data.policy;
-
+	kbase_device_context_integrity_check(parent_ctx, "kbasep_js_job_done_slot_irq enter");
 	lockdep_assert_held(&js_devdata->runpool_irq.lock);
 
 	/*
@@ -2027,6 +2027,7 @@ void kbasep_js_job_done_slot_irq(kbase_jd_atom *katom, int slot_nr,
 		KBASE_TRACE_ADD_SLOT(kbdev, JS_JOB_DONE_RETRY_NEEDED, parent_ctx, katom, katom->jc, slot_nr);
 		kbasep_js_set_job_retry_submit_slot(katom, slot_nr);
 	}
+	kbase_device_context_integrity_check(parent_ctx, "kbasep_js_job_done_slot_irq exit");
 }
 
 void kbasep_js_suspend(kbase_device *kbdev)
@@ -2053,6 +2054,7 @@ void kbasep_js_suspend(kbase_device *kbdev)
 		retained = retained << 1;
 
 		if (kctx) {
+			kbase_device_context_integrity_check(kctx, "kbasep_js_suspend retain");
 			++(js_per_as_data->as_busy_refcount);
 			retained |= 1u;
 			/* We can only cope with up to 1 privileged context - the
@@ -2072,6 +2074,8 @@ void kbasep_js_suspend(kbase_device *kbdev)
 		 ++i, retained = retained >> 1) {
 		kbasep_js_per_as_data *js_per_as_data = &js_devdata->runpool_irq.per_as_data[i];
 		kbase_context *kctx = js_per_as_data->kctx;
+
+		kbase_device_context_integrity_check(kctx, "kbasep_js_suspend de-ref");
 
 		if (retained & 1u)
 			kbasep_js_runpool_release_ctx(kbdev,kctx);

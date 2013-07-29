@@ -492,7 +492,7 @@ static int sbs_get_battery_capacity(struct i2c_client *client,
 	int reg_offset, enum power_supply_property psp,
 	union power_supply_propval *val)
 {
-	s32 ret;
+	int ret;
 	enum sbs_battery_mode mode = BATTERY_MODE_WATTS;
 
 	if (power_supply_is_amp_property(psp))
@@ -504,7 +504,8 @@ static int sbs_get_battery_capacity(struct i2c_client *client,
 
 	ret = sbs_read_word_data(client, sbs_data[reg_offset].addr);
 	if (ret < 0) {
-		pr_warn("Failed to read word data\n");
+		dev_warn(&client->dev, "Failed to read property (%d) at reg (%02x).  Error: %d\n",
+				reg_offset, sbs_data[reg_offset].addr, ret);
 		return ret;
 	}
 
