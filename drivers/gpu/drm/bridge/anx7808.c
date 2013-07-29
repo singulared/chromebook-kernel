@@ -73,6 +73,7 @@ struct anx7808_data {
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
+	bool suspended;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -682,6 +683,9 @@ static void anx7808_play_video(struct work_struct *work)
 
 	while (true) {
 		/* Make progress towards playback state. */
+		if (anx7808->suspended)
+			break;
+
 		if (anx7808->dp_manual_bw_changed)
 			break;
 
@@ -747,9 +751,8 @@ static void anx7808_cable_det_timer(unsigned long data)
 	queue_delayed_work(anx7808->wq, &anx7808->play_video, 0);
 }
 
-static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
+static void anx7808_cable_det(struct anx7808_data *anx7808)
 {
-	struct anx7808_data *anx7808 = data;
 	if (gpio_get_value(anx7808->cable_det_gpio)) {
 		DRM_DEBUG("Cable detected; Setting cable_det_timer.\n");
 		mod_timer(&anx7808->cable_det_timer,
@@ -758,6 +761,12 @@ static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 		DRM_DEBUG("Cable unplugged; Deleting cable_det_timer.\n");
 		del_timer(&anx7808->cable_det_timer);
 	}
+}
+
+static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
+{
+	struct anx7808_data *anx7808 = data;
+	anx7808_cable_det(anx7808);
 	return IRQ_HANDLED;
 }
 
@@ -817,6 +826,24 @@ static void unregister_i2c_clients(struct anx7808_data *anx7808)
 		i2c_unregister_device(anx7808->tx_p2);
 	if (anx7808->tx_p1)
 		i2c_unregister_device(anx7808->tx_p1);
+}
+
+static int anx7808_suspend(struct device *dev)
+{
+	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
+
+	anx7808->suspended = true;
+	flush_delayed_work(&anx7808->play_video);
+	return 0;
+}
+
+static int anx7808_resume(struct device *dev)
+{
+	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
+
+	anx7808_cable_det(anx7808);
+	anx7808->suspended = false;
+	return 0;
 }
 
 static int anx7808_probe(struct i2c_client *client,
@@ -1009,10 +1036,15 @@ static const struct i2c_device_id anx7808_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, anx7808_id);
 
+static const struct dev_pm_ops anx7808_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(anx7808_suspend, anx7808_resume)
+};
+
 static struct i2c_driver anx7808_driver = {
 	.driver = {
 		.name = "anx7808",
 		.owner = THIS_MODULE,
+		.pm = &anx7808_pm_ops,
 	},
 	.probe = anx7808_probe,
 	.remove = anx7808_remove,
