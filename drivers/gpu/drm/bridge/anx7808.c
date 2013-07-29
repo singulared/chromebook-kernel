@@ -539,6 +539,14 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 
 static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 {
+	uint8_t hdmi_status, hdmi_enable;
+
+	anx7808_read_reg(anx7808, HDMI_RX_HDMI_STATUS_REG, &hdmi_status);
+	hdmi_enable = (hdmi_status & HDMI_MODE) ? 1 : 0;
+	DRM_INFO("HDMI enable: %d\n", hdmi_enable);
+
+	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
+
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
@@ -626,13 +634,6 @@ static int anx7808_check_polling_err(struct anx7808_data *anx7808)
 	return 0;
 }
 
-static int anx7808_hdmi_enable(struct anx7808_data *anx7808)
-{
-	uint8_t hdmi_enable = 1;
-
-	return anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
-}
-
 static int anx7808_get_cable_type(struct anx7808_data *anx7808)
 {
 	int err;
@@ -688,9 +689,6 @@ static void anx7808_play_video(struct work_struct *work)
 		case STATE_CABLE_DETECTED:
 			if (anx7808_get_cable_type(anx7808))
 				break;
-			if (anx7808->ds_type == DOWNSTREAM_HDMI)
-				if (anx7808_hdmi_enable(anx7808))
-					break;
 			if (anx7808_detect_dp_hotplug(anx7808))
 				break;
 			anx7808_set_hpd(anx7808, 1);
