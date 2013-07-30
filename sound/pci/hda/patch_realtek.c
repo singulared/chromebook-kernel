@@ -2568,6 +2568,14 @@ static void alc269vb_toggle_power_output(struct hda_codec *codec, int power_up)
 static void alc269_shutup(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
+	int val;
+
+	if (codec->vendor_id == 0x10ec0283) {
+			val = alc_read_coef_idx(codec, 0x06);
+			alc_write_coef_idx(codec, 0x06, val & ~0x000c);
+			val = alc_read_coef_idx(codec, 0x46);
+			alc_write_coef_idx(codec, 0x46, val | (3 << 12));
+	}
 
 	if (spec->codec_variant != ALC269_TYPE_ALC269VB)
 		return;
@@ -2584,6 +2592,14 @@ static void alc269_shutup(struct hda_codec *codec)
 static int alc269_resume(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
+	int val;
+
+	if (codec->vendor_id == 0x10ec0283) {
+			val = alc_read_coef_idx(codec, 0x06);
+			alc_write_coef_idx(codec, 0x06, val | (1 << 2));
+			val = alc_read_coef_idx(codec, 0x46);
+			alc_write_coef_idx(codec, 0x46, val & ~(3 << 12));
+	}
 
 	if (spec->codec_variant == ALC269_TYPE_ALC269VB)
 		alc269vb_toggle_power_output(codec, 0);
