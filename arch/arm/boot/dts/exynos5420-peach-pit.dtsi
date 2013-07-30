@@ -100,6 +100,13 @@
 			samsung,pid-drv = <0>;
 		};
 
+		pmic_dvs_1: pmic-dvs-1 {
+			samsung,pins = "gpy7-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
 		power_key_irq: power-key-irq {
 			samsung,pins = "gpx1-2";
 			samsung,pin-function = <0>;
@@ -180,6 +187,22 @@
 		};
 	};
 
+	pinctrl@14000000 {
+		pmic_dvs_2: pmic-dvs-2 {
+			samsung,pins = "gpj4-2";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		pmic_dvs_3: pmic-dvs-3 {
+			samsung,pins = "gpj4-3";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
 	pinctrl@14010000 {
 		/*
 		 * TODO(sjg@chromium.org: Do we need this
@@ -208,6 +231,14 @@
 
 		usb3_vbus1_en: usb3-vbus1-en {
 			samsung,pins = "gph0-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		pmic_selb: pmic-selb {
+			samsung,pins = "gph0-2", "gph0-3", "gph0-4", "gph0-5",
+				       "gph0-6";
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
@@ -620,9 +651,21 @@
 			interrupt-parent = <&gpx3>;
 			interrupts = <1 0>;
 			pinctrl-names = "default";
-			pinctrl-0 = <&max77802_irq>;
+			pinctrl-0 = <&max77802_irq>, <&pmic_selb>,
+				    <&pmic_dvs_1>, <&pmic_dvs_2>, <&pmic_dvs_3>;
 			wakeup-source;
 			reg = <0x9>;
+
+			/* Using idx 1 means warm reset will get good voltage */
+			max77xxx,pmic-buck-default-dvs-idx = <1>;
+			max77xxx,pmic-buck-dvs-gpios = <&gpy7 6 0>,
+						       <&gpj4 2 0>,
+						       <&gpj4 3 0>;
+			max77xxx,pmic-buck-selb-gpios = <&gph0 2 0>,
+							<&gph0 3 0>,
+							<&gph0 4 0>,
+							<&gph0 5 0>,
+							<&gph0 6 0>;
 
 			voltage-regulators {
 				ldo1_reg: LDO1 {
