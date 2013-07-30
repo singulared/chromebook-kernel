@@ -397,9 +397,17 @@ static void __init set_volt_table(void)
 static void __init set_volt_table_CA7(void)
 {
 	unsigned int i;
+	unsigned int asv_volt = 0;
 
 	for (i = 0; i < CPUFREQ_NUM_LEVELS_CA7; i++) {
-		exynos5420_volt_table_CA7[i] = asv_voltage_5420_CA7[i];
+#ifdef CONFIG_ARM_EXYNOS5420_ASV
+		asv_volt = get_match_volt(ID_KFC,
+				exynos5420_freq_table_CA7[i].frequency);
+#endif
+		if (!asv_volt)
+			exynos5420_volt_table_CA7[i] = asv_voltage_5420_CA7[i];
+		else
+			exynos5420_volt_table_CA7[i] = asv_volt;
 		pr_debug("CPUFREQ of CA7  L%d : %d uV\n", i,
 				exynos5420_volt_table_CA7[i]);
 	}
