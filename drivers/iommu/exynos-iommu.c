@@ -361,7 +361,7 @@ static int __sysmmu_sort_prefbuf(struct sysmmu_prefbuf prefbuf[],
 				swap(prefbuf[i], prefbuf[j]);
 	}
 
-	if (check_size) {
+	if (check_size && nbufs > 0) {
 		unsigned long sum = 0;
 		for (i = 1; i < nbufs; i++)
 			sum += prefbuf[i].size;
@@ -383,6 +383,7 @@ static void __exynos_sysmmu_set_pbuf_ver31(struct sysmmu_drvdata *data,
 	unsigned long cfg =
 		__raw_readl(data->sfrbases[idx] + REG_MMU_CFG) & CFG_MASK;
 
+	cfg &= ~(3 << 28);
 	if (nbufs > 1) {
 		unsigned long base = prefbuf[1].base;
 		unsigned long end = prefbuf[1].base + prefbuf[1].size;
@@ -399,22 +400,26 @@ static void __exynos_sysmmu_set_pbuf_ver31(struct sysmmu_drvdata *data,
 
 		__sysmmu_set_prefbuf(data->sfrbases[idx] + pbuf_offset[1],
 					base, end - base, 1);
+		__sysmmu_set_prefbuf(data->sfrbases[idx] + pbuf_offset[1],
+					prefbuf[0].base, prefbuf[0].size, 0);
 
 		data->num_pbufs = 2;
 		data->pbufs[0] = prefbuf[0];
 		data->pbufs[1] = prefbuf[1];
 
-	} else {
+	} else if (nbufs == 1) {
 		/* Combined PB mode */
 		cfg |= 3 << 28;
 		data->num_pbufs = 1;
 		data->pbufs[0] = prefbuf[0];
+
+		__sysmmu_set_prefbuf(data->sfrbases[idx] + pbuf_offset[1],
+					prefbuf[0].base, prefbuf[0].size, 0);
+	} else {
+		data->num_pbufs = 0;
 	}
 
 	__raw_writel(cfg, data->sfrbases[idx] + REG_MMU_CFG);
-
-	__sysmmu_set_prefbuf(data->sfrbases[idx] + pbuf_offset[1],
-				prefbuf[0].base, prefbuf[0].size, 0);
 }
 
 static void __exynos_sysmmu_set_pbuf_ver32(struct sysmmu_drvdata *data,
@@ -424,12 +429,17 @@ static void __exynos_sysmmu_set_pbuf_ver32(struct sysmmu_drvdata *data,
 	unsigned long cfg =
 		__raw_readl(data->sfrbases[idx] + REG_MMU_CFG) & CFG_MASK;
 
-	cfg |= 7 << 16; /* enabling PB0 ~ PB2 */
-
-	/* This is common to all cases below */
-	data->pbufs[0] = prefbuf[0];
+	cfg &= ~(7 << 16 | 1 << 21 | 1 << 19);
+	if (nbufs > 0) {
+		/* This is common to all cases where PBs are enabled */
+		cfg |= 7 << 16; /* enabling PB0 ~ PB2 */
+		data->pbufs[0] = prefbuf[0];
+	}
 
 	switch (nbufs) {
+	case 0:
+		data->num_pbufs = 0;
+		break;
 	case 1:
 		/* Combined PB mode (0 ~ 2) */
 		cfg |= 1 << 19;
@@ -480,9 +490,10 @@ static void __exynos_sysmmu_set_pbuf_ver32(struct sysmmu_drvdata *data,
 static void __exynos_sysmmu_set_pbuf_ver33(struct sysmmu_drvdata *data,
 			int idx, int nbufs, struct sysmmu_prefbuf prefbuf[])
 {
-	static char pbcfg[6][6] = {
-		{7, 7, 7, 7, 7, 7}, {7, 7, 7, 7, 7, 7}, {2, 2, 3, 7, 7, 7},
-		{1, 2, 3, 4, 7, 7}, {7, 7, 7, 7, 7, 7}, {2, 2, 3, 4, 5, 6}
+	static char pbcfg[6][7] = {
+		{7, 7, 7, 7, 7, 7, 7}, {7, 7, 7, 7, 7, 7, 7},
+		{2, 2, 2, 3, 7, 7, 7}, {1, 1, 2, 3, 4, 7, 7},
+		{7, 7, 7, 7, 7, 7, 7}, {2, 2, 2, 3, 4, 5, 6}
 		};
 	int pbselect;
 	int cmp, i;
@@ -519,7 +530,7 @@ static void __exynos_sysmmu_set_pbuf_ver33(struct sysmmu_drvdata *data,
 	}
 
 	/* Disable prefetch buffers that is not set */
-	for (cmp = pbcfg[num_pb - 1][nbufs - 1] - nbufs; cmp > 0; cmp--) {
+	for (cmp = pbcfg[num_pb - 1][nbufs] - nbufs; cmp > 0; cmp--) {
 		__raw_writel(cmp + nbufs - 1,
 				data->sfrbases[idx] + REG_PB_INDICATE);
 		__raw_writel(0, data->sfrbases[idx] + REG_PB_CFG);
@@ -539,9 +550,6 @@ void exynos_sysmmu_set_pbuf(struct device *dev, int nbufs,
 {
 	struct device *sysmmu;
 	int nsfrs;
-
-	if (WARN_ON(nbufs < 1))
-		return;
 
 	for_each_sysmmu(dev, sysmmu) {
 		unsigned long flags;
@@ -1000,9 +1008,7 @@ static int __init __sysmmu_setup(struct device *sysmmu,
 		dev_dbg(sysmmu, "Found version %d.%d\n", ver[0], ver[1]);
 	}
 
-	drvdata->pbufs[0].base = 0;
-	drvdata->pbufs[0].size = ~0;
-	drvdata->num_pbufs = 1;
+	drvdata->num_pbufs = 0;
 
 	master_node = of_parse_phandle(sysmmu->of_node, "mmu-master", 0);
 	if (!master_node && !of_property_read_string(
