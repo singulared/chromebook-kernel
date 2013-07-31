@@ -28,19 +28,25 @@
 #define MAX_FB_BUFFER	4
 #define DEFAULT_ZPOS	-1
 
-#define _wait_for(COND, MS) ({ \
-	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS);	\
+#define _wait_for(COND, TO_MS, INTVL_MS) ({ \
+	unsigned long timeout__ = jiffies + msecs_to_jiffies(TO_MS);	\
 	int ret__ = 0;							\
 	while (!(COND)) {						\
 		if (time_after(jiffies, timeout__)) {			\
 			ret__ = -ETIMEDOUT;				\
 			break;						\
 		}							\
+		if (drm_can_sleep())  {					\
+			usleep_range(INTVL_MS * 1000,			\
+				(INTVL_MS + 5) * 1000);			\
+		} else {						\
+			cpu_relax();					\
+		}							\
 	}								\
 	ret__;								\
 })
 
-#define wait_for(COND, MS) _wait_for(COND, MS)
+#define wait_for(COND, TO_MS, INTVL_MS) _wait_for(COND, TO_MS, INTVL_MS)
 
 struct drm_device;
 struct exynos_drm_overlay;
