@@ -1051,7 +1051,7 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 {
 	struct mixer_context *ctx = arg;
 	struct mixer_resources *res = &ctx->mixer_res;
-	u32 val, base, shadow;
+	u32 val;
 	int i;
 	unsigned long flags;
 	bool finish_pageflip = false;
@@ -1068,19 +1068,6 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 
 	/* handling VSYNC */
 	if (val & MXR_INT_STATUS_VSYNC) {
-		/* interlace scan need to check shadow register */
-		if (ctx->interlace) {
-			base = mixer_reg_read(res, MXR_GRAPHIC_BASE(0));
-			shadow = mixer_reg_read(res, MXR_GRAPHIC_BASE_S(0));
-			if (base != shadow)
-				goto out;
-
-			base = mixer_reg_read(res, MXR_GRAPHIC_BASE(1));
-			shadow = mixer_reg_read(res, MXR_GRAPHIC_BASE_S(1));
-			if (base != shadow)
-				goto out;
-		}
-
 		drm_handle_vblank(ctx->drm_dev, ctx->pipe);
 
 		if (ctx->mxr_ver == MXR_VER_16_0_33_0 ||
