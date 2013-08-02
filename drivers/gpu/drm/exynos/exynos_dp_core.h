@@ -56,6 +56,8 @@ struct exynos_dp_device {
 	int			dpms_mode;
 
 	struct exynos_drm_panel_info panel;
+
+	u32 quirks;
 };
 
 /* exynos_dp_core.c */

@@ -187,6 +187,10 @@ static int exynos_dp_handle_edid(struct exynos_dp_device *dp)
 	if (retval)
 		return retval;
 
+	/* On some hardware we need to skip reading the EDID */
+	if (dp->quirks & EXYNOS_DP_QUIRK_SKIP_EDID)
+		return 0;
+
 	/* Read EDID */
 	for (i = 0; i < 3; i++) {
 		retval = exynos_dp_read_edid(dp);
@@ -996,11 +1000,22 @@ static struct exynos_drm_display exynos_dp_display = {
 	.ops = &exynos_dp_display_ops,
 };
 
+static const struct {
+	char *quirk;
+	int id;
+} exynos_dp_quirks[] = {
+	{
+		.quirk	= "samsung,skip-edid-read",
+		.id	= EXYNOS_DP_QUIRK_SKIP_EDID,
+	},
+};
+
 static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *dp_node = dev->of_node;
 	struct exynos_dp_platdata *pd;
 	struct video_info *dp_video_config;
+	int i;
 
 	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
 	if (!pd) {
@@ -1062,6 +1077,10 @@ static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 	}
 
 	pd->hpd_gpio = of_get_named_gpio(dp_node, "samsung,hpd-gpio", 0);
+
+	for (i = 0; i < ARRAY_SIZE(exynos_dp_quirks); i++)
+		if (of_property_read_bool(dp_node, exynos_dp_quirks[i].quirk))
+			pd->quirks |= exynos_dp_quirks[i].id;
 
 	return pd;
 }
@@ -1178,6 +1197,8 @@ static int exynos_dp_probe(struct platform_device *pdev)
 		}
 	}
 
+	dp->quirks = pdata->quirks;
+
 	dp->clock = devm_clk_get(&pdev->dev, "dp");
 	if (IS_ERR(dp->clock)) {
 		dev_err(&pdev->dev, "failed to get clock\n");
@@ -1285,4 +1306,3 @@ struct platform_driver dp_driver = {
 		.of_match_table = of_match_ptr(exynos_dp_match),
 	},
 };
-

@@ -121,6 +121,8 @@ struct video_info {
 	enum link_lane_count_type lane_count;
 };
 
+#define EXYNOS_DP_QUIRK_SKIP_EDID	BIT(0)	/* Don't read EDID */
+
 struct exynos_dp_platdata {
 	struct video_info *video_info;
 
@@ -128,6 +130,8 @@ struct exynos_dp_platdata {
 
 	void (*phy_init)(void);
 	void (*phy_exit)(void);
+
+	u32 quirks;
 };
 
 #endif /* _EXYNOS_DP_H */

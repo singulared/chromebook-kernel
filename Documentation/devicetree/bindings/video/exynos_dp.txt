@@ -78,6 +78,9 @@ Optional properties for dp-controller:
 			Indicates which GPIO should be used for hotplug
 			detection
 
+	-samsung,skip-edid-read:
+		If present we'll skip reading the EDID.
+
 Example:
 
 SOC specific portion:
