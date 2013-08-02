@@ -78,8 +78,6 @@
 #include "iwl-csr.h"
 #include "iwl-fh.h"
 #include "iwl-io.h"
-#include "iwl-test.h"
-#include "iwl-testmode.h"
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
 #include "iwl-tm-infc.h"
@@ -129,90 +127,6 @@ void iwl_mvm_testmode_event(struct iwl_op_mode *op_mode, struct sk_buff *skb)
 	cfg80211_testmode_event(skb, GFP_ATOMIC);
 }
 
-/*
- * Handle a testmode command from user space.
- */
-int iwl_mvm_testmode_cmd(struct ieee80211_hw *hw, void *data, int len)
-{
-	struct nlattr *tb[IWL_TM_ATTR_MAX];
-	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_op_mode *op_mode = hw->priv;
-	int result;
-
-	result = iwl_test_parse(&op_mode->tst, tb, data, len);
-	if (result)
-		return result;
-
-	/* in case multiple accesses to the device happens */
-	mutex_lock(&mvm->mutex);
-	switch (nla_get_u32(tb[IWL_TM_ATTR_COMMAND])) {
-	case IWL_TM_CMD_APP2DEV_UCODE:
-	case IWL_TM_CMD_APP2DEV_DIRECT_REG_READ32:
-	case IWL_TM_CMD_APP2DEV_DIRECT_REG_WRITE32:
-	case IWL_TM_CMD_APP2DEV_DIRECT_REG_WRITE8:
-	case IWL_TM_CMD_APP2DEV_BEGIN_TRACE:
-	case IWL_TM_CMD_APP2DEV_END_TRACE:
-	case IWL_TM_CMD_APP2DEV_INDIRECT_BUFFER_READ:
-	case IWL_TM_CMD_APP2DEV_NOTIFICATIONS:
-	case IWL_TM_CMD_APP2DEV_INDIRECT_BUFFER_WRITE:
-	case IWL_TM_CMD_APP2DEV_GET_FW_VERSION:
-	case IWL_TM_CMD_APP2DEV_GET_DEVICE_ID:
-		result = iwl_test_handle_cmd(&op_mode->tst, tb);
-		break;
-
-	case IWL_TM_CMD_APP2DEV_GET_DEVICENAME:
-	case IWL_TM_CMD_APP2DEV_LOAD_INIT_FW:
-	case IWL_TM_CMD_APP2DEV_CFG_INIT_CALIB:
-	case IWL_TM_CMD_APP2DEV_LOAD_RUNTIME_FW:
-	case IWL_TM_CMD_APP2DEV_GET_EEPROM:
-	case IWL_TM_CMD_APP2DEV_FIXRATE_REQ:
-	case IWL_TM_CMD_APP2DEV_LOAD_WOWLAN_FW:
-	case IWL_TM_CMD_APP2DEV_GET_FW_INFO:
-	case IWL_TM_CMD_APP2DEV_OWNERSHIP:
-		IWL_DEBUG_INFO(mvm, "cmd not supported in this op mode\n");
-		result = -EOPNOTSUPP;
-		break;
-
-	default:
-		IWL_ERR(mvm, "Unknown testmode command\n");
-		result = -ENOSYS;
-		break;
-	}
-	mutex_unlock(&mvm->mutex);
-
-	return result;
-}
-
-int iwl_mvm_testmode_dump(struct ieee80211_hw *hw, struct sk_buff *skb,
-			  struct netlink_callback *cb,
-			  void *data, int len)
-{
-	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_op_mode *op_mode = hw->priv;
-	int result;
-	u32 cmd;
-
-	if (cb->args[3]) {
-		/* offset by 1 since commands start at 0 */
-		cmd = cb->args[3] - 1;
-	} else {
-		struct nlattr *tb[IWL_TM_ATTR_MAX];
-
-		result = iwl_test_parse(&op_mode->tst, tb, data, len);
-		if (result)
-			return result;
-
-		cmd = nla_get_u32(tb[IWL_TM_ATTR_COMMAND]);
-		cb->args[3] = cmd + 1;
-	}
-
-	/* in case multiple accesses to the device happens */
-	mutex_lock(&mvm->mutex);
-	result = iwl_test_dump(&op_mode->tst, cmd, skb, cb);
-	mutex_unlock(&mvm->mutex);
-	return result;
-}
-
 static int iwl_mvm_tm_send_hcmd(struct iwl_mvm *mvm,
 				struct iwl_tm_data *data_in,
 				struct iwl_tm_data *data_out)
@@ -226,7 +140,7 @@ static int iwl_mvm_tm_send_hcmd(struct iwl_mvm *mvm,
 		.data[0] = hcmd_req->data,
 		.len[0] = hcmd_req->len,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_ON_DEMAND | CMD_SYNC,
+		.flags = CMD_SYNC,
 	};
 	int ret;
 

@@ -71,7 +71,6 @@
 #include "iwl-op-mode.h"
 #include "iwl-tm-gnl.h"
 #include "iwl-tm-infc.h"
-#include "iwl-testmode.h"
 
 /**
  * iwl_tm_validate_fw_cmd() - Validates FW host command input data

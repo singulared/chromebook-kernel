@@ -14,7 +14,7 @@ iwlwifi-$(CPTCFG_IWLWIFI_PCIE)-$(CPTCFG_IWLMVM) += iwl-7000.o
 iwlwifi-objs += $(iwlwifi-y-y) $(iwlwifi-y-m)
 
 iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TRACING) += iwl-devtrace.o
-iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TESTMODE) += iwl-test.o iwl-tm-gnl.o
+iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TESTMODE) += iwl-tm-gnl.o
 
 ccflags-y += -D__CHECK_ENDIAN__ -I$(src)
 

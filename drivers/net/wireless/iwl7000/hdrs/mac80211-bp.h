@@ -124,3 +124,103 @@ cfg80211_report_wowlan_wakeup(struct wireless_dev *wdev,
 			      struct cfg80211_wowlan_wakeup *wakeup, gfp_t gfp)
 {
 }
+
+static inline void cfg80211_rx_unprot_mlme_mgmt(struct net_device *dev,
+						void *data, int len)
+{
+	struct ieee80211_hdr *hdr = data;
+
+	if (ieee80211_is_deauth(hdr->frame_control))
+		cfg80211_send_unprot_deauth(dev, data, len);
+	else
+		cfg80211_send_unprot_disassoc(dev, data, len);
+}
+
+static inline void cfg80211_tx_mlme_mgmt(struct net_device *dev,
+					 void *data, int len)
+{
+	struct ieee80211_hdr *hdr = data;
+
+	if (ieee80211_is_deauth(hdr->frame_control))
+		cfg80211_send_deauth(dev, data, len);
+	else
+		cfg80211_send_disassoc(dev, data, len);
+}
+
+static inline void cfg80211_rx_mlme_mgmt(struct net_device *dev,
+					 void *data, int len)
+{
+	struct ieee80211_hdr *hdr = data;
+
+	if (ieee80211_is_auth(hdr->frame_control))
+		cfg80211_send_rx_auth(dev, data, len);
+	else if (ieee80211_is_deauth(hdr->frame_control))
+		cfg80211_send_deauth(dev, data, len);
+	else
+		cfg80211_send_disassoc(dev, data, len);
+}
+
+static inline void cfg80211_assoc_timeout(struct net_device *dev,
+					  struct cfg80211_bss *bss)
+{
+	cfg80211_send_assoc_timeout(dev, bss->bssid);
+}
+
+static inline void cfg80211_auth_timeout(struct net_device *dev,
+					 const u8 *bssid)
+{
+	cfg80211_send_auth_timeout(dev, bssid);
+}
+
+static inline void cfg80211_rx_assoc_resp(struct net_device *dev,
+					  struct cfg80211_bss *bss,
+					  void *data, int len)
+{
+	cfg80211_send_rx_assoc(dev, bss, data, len);
+}
+
+enum nl80211_bss_scan_width {
+	NL80211_BSS_CHAN_WIDTH_20,
+};
+
+static inline int
+ieee80211_chandef_max_power(struct cfg80211_chan_def *chandef)
+{
+	return chandef->chan->max_power;
+}
+
+static inline enum ieee80211_rate_flags
+ieee80211_chandef_rate_flags(struct cfg80211_chan_def *chandef)
+{
+	return 0;
+}
+
+static inline enum nl80211_bss_scan_width
+cfg80211_chandef_to_scan_width(const struct cfg80211_chan_def *chandef)
+{
+	return NL80211_BSS_CHAN_WIDTH_20;
+}
+
+static inline struct cfg80211_bss * __must_check
+cfg80211_inform_bss_width_frame(struct wiphy *wiphy,
+				struct ieee80211_channel *channel,
+				enum nl80211_bss_scan_width scan_width,
+				struct ieee80211_mgmt *mgmt, size_t len,
+				s32 signal, gfp_t gfp)
+{
+	return cfg80211_inform_bss_frame(wiphy, channel, mgmt,
+					 len, signal, gfp);
+}
+
+#define ieee80211_mandatory_rates(sband, width) ieee80211_mandatory_rates(sband)
+
+#define IEEE80211_CHAN_HALF 0
+#define IEEE80211_CHAN_QUARTER 0
+
+static inline bool
+iwl7000_cfg80211_rx_mgmt(struct wireless_dev *wdev, int freq, int sig_dbm,
+			 const u8 *buf, size_t len, u32 flags, gfp_t gfp)
+{
+	return cfg80211_rx_mgmt(wdev, freq, sig_dbm, buf, len, gfp);
+}
+#define cfg80211_rx_mgmt iwl7000_cfg80211_rx_mgmt

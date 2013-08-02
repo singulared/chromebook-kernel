@@ -63,4 +63,6 @@ static inline void idr_preload_end(void)
 #define genl_info_snd_portid(__genl_info) (__genl_info->snd_portid)
 #define NETLINK_CB_PORTID(__skb) NETLINK_CB(cb->skb).portid
 
+#define netdev_notifier_info_to_dev(ndev)	ndev
+
 #endif /* __IWL_CHROME */

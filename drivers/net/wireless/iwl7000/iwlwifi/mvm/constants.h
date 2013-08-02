@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2010 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 Intel Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2010 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 Intel Corporation. All rights reserved.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,43 +60,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *****************************************************************************/
+#ifndef __MVM_CONSTANTS_H
+#define __MVM_CONSTANTS_H
 
-#ifndef __IWL_TEST_H__
-#define __IWL_TEST_H__
+#define IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT	(100 * USEC_PER_MSEC)
+#define IWL_MVM_DEFAULT_PS_RX_DATA_TIMEOUT	(100 * USEC_PER_MSEC)
+#define IWL_MVM_WOWLAN_PS_TX_DATA_TIMEOUT	(10 * USEC_PER_MSEC)
+#define IWL_MVM_WOWLAN_PS_RX_DATA_TIMEOUT	(10 * USEC_PER_MSEC)
+#define IWL_MVM_UAPSD_RX_DATA_TIMEOUT		(50 * USEC_PER_MSEC)
+#define IWL_MVM_UAPSD_TX_DATA_TIMEOUT		(50 * USEC_PER_MSEC)
+#define IWL_MVM_PS_HEAVY_TX_THLD_PACKETS	20
+#define IWL_MVM_PS_HEAVY_RX_THLD_PACKETS	8
+#define IWL_MVM_PS_SNOOZE_HEAVY_TX_THLD_PACKETS	30
+#define IWL_MVM_PS_SNOOZE_HEAVY_RX_THLD_PACKETS	20
+#define IWL_MVM_PS_HEAVY_TX_THLD_PERCENT	50
+#define IWL_MVM_PS_HEAVY_RX_THLD_PERCENT	50
+#define IWL_MVM_PS_SNOOZE_INTERVAL		25
+#define IWL_MVM_PS_SNOOZE_WINDOW		50
+#define IWL_MVM_WOWLAN_PS_SNOOZE_WINDOW		25
 
-#include <linux/types.h>
-
-#include "iwl-op-mode.h"
-#include "iwl-trans.h"
-
-#ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
-
-void iwl_test_init(struct iwl_op_mode *op_mode);
-void iwl_test_free(struct iwl_op_mode *op_mode);
-
-#else
-
-static inline void iwl_test_init(struct iwl_op_mode *op_mode)
-{}
-static inline void iwl_test_free(struct iwl_op_mode *op_mode)
-{}
-
-#endif
-
-int iwl_test_parse(struct iwl_test *tst, struct nlattr **tb,
-		   void *data, int len);
-
-int iwl_test_handle_cmd(struct iwl_test *tst, struct nlattr **tb);
-
-int iwl_test_dump(struct iwl_test *tst, u32 cmd, struct sk_buff *skb,
-		  struct netlink_callback *cb);
-
-void iwl_test_rx(struct iwl_test *tst, struct iwl_rx_cmd_buffer *rxb);
-
-static inline void iwl_test_enable_notifications(struct iwl_test *tst,
-						 bool enable)
-{
-	tst->notify = enable;
-}
-
-#endif
+#endif /* __MVM_CONSTANTS_H */

@@ -391,8 +391,7 @@ static void iwl_mvm_tt_tx_protection(struct iwl_mvm *mvm, bool enable)
 		mvmsta = (void *)sta->drv_priv;
 		if (enable == mvmsta->tt_tx_protection)
 			continue;
-		err = iwl_mvm_tx_protection(mvm, &mvmsta->lq_sta.lq,
-					    mvmsta, enable);
+		err = iwl_mvm_tx_protection(mvm, mvmsta, enable);
 		if (err) {
 			IWL_ERR(mvm, "Failed to %s Tx protection\n",
 				enable ? "enable" : "disable");
@@ -427,6 +426,7 @@ void iwl_mvm_tt_handler(struct iwl_mvm *mvm)
 	const struct iwl_tt_params *params = mvm->thermal_throttle.params;
 	struct iwl_mvm_tt_mgmt *tt = &mvm->thermal_throttle;
 	s32 temperature = mvm->temperature;
+	bool throttle_enable = false;
 	int i;
 	u32 tx_backoff;
 
@@ -445,6 +445,7 @@ void iwl_mvm_tt_handler(struct iwl_mvm *mvm)
 			ieee80211_iterate_active_interfaces_atomic(
 					mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
 					iwl_mvm_tt_smps_iterator, mvm);
+			throttle_enable = true;
 		} else if (tt->dynamic_smps &&
 			   temperature <= params->dynamic_smps_exit) {
 			IWL_DEBUG_TEMP(mvm, "Disable dynamic SMPS\n");
@@ -456,10 +457,12 @@ void iwl_mvm_tt_handler(struct iwl_mvm *mvm)
 	}
 
 	if (params->support_tx_protection) {
-		if (temperature >= params->tx_protection_entry)
+		if (temperature >= params->tx_protection_entry) {
 			iwl_mvm_tt_tx_protection(mvm, true);
-		else if (temperature <= params->tx_protection_exit)
+			throttle_enable = true;
+		} else if (temperature <= params->tx_protection_exit) {
 			iwl_mvm_tt_tx_protection(mvm, false);
+		}
 	}
 
 	if (params->support_tx_backoff) {
@@ -469,8 +472,21 @@ void iwl_mvm_tt_handler(struct iwl_mvm *mvm)
 				break;
 			tx_backoff = params->tx_backoff[i].backoff;
 		}
+		if (tx_backoff != 0)
+			throttle_enable = true;
 		if (tt->tx_backoff != tx_backoff)
 			iwl_mvm_tt_tx_backoff(mvm, tx_backoff);
+	}
+
+	if (!tt->throttle && throttle_enable) {
+		IWL_WARN(mvm,
+			 "Due to high temperature thermal throttling initiated\n");
+		tt->throttle = true;
+	} else if (tt->throttle && !tt->dynamic_smps && tt->tx_backoff == 0 &&
+		   temperature <= params->tx_protection_exit) {
+		IWL_WARN(mvm,
+			 "Temperature is back to normal thermal throttling stopped\n");
+		tt->throttle = false;
 	}
 }
 
@@ -496,12 +512,40 @@ static const struct iwl_tt_params iwl7000_tt_params = {
 	.support_tx_backoff = true,
 };
 
+static const struct iwl_tt_params iwl7000_high_temp_tt_params = {
+	.ct_kill_entry = 118,
+	.ct_kill_exit = 96,
+	.ct_kill_duration = 5,
+	.dynamic_smps_entry = 114,
+	.dynamic_smps_exit = 110,
+	.tx_protection_entry = 114,
+	.tx_protection_exit = 108,
+	.tx_backoff = {
+		{.temperature = 112, .backoff = 300},
+		{.temperature = 113, .backoff = 800},
+		{.temperature = 114, .backoff = 1500},
+		{.temperature = 115, .backoff = 3000},
+		{.temperature = 116, .backoff = 5000},
+		{.temperature = 117, .backoff = 10000},
+	},
+	.support_ct_kill = true,
+	.support_dynamic_smps = true,
+	.support_tx_protection = true,
+	.support_tx_backoff = true,
+};
+
 void iwl_mvm_tt_initialize(struct iwl_mvm *mvm)
 {
 	struct iwl_mvm_tt_mgmt *tt = &mvm->thermal_throttle;
 
 	IWL_DEBUG_TEMP(mvm, "Initialize Thermal Throttling\n");
-	tt->params = &iwl7000_tt_params;
+
+	if (mvm->cfg->high_temp)
+		tt->params = &iwl7000_high_temp_tt_params;
+	else
+		tt->params = &iwl7000_tt_params;
+
+	tt->throttle = false;
 	INIT_DELAYED_WORK(&tt->ct_kill_exit, check_exit_ctkill);
 }
 

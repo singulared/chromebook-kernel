@@ -106,17 +106,8 @@ static u32 ieee80211_hw_conf_chan(struct ieee80211_local *local)
 
 	offchannel_flag = local->hw.conf.flags & IEEE80211_CONF_OFFCHANNEL;
 
-	if (local->scan_channel) {
-		chandef.chan = local->scan_channel;
-		/* If scanning on oper channel, use whatever channel-type
-		 * is currently in use.
-		 */
-		if (chandef.chan == local->_oper_chandef.chan) {
-			chandef = local->_oper_chandef;
-		} else {
-			chandef.width = NL80211_CHAN_WIDTH_20_NOHT;
-			chandef.center_freq1 = chandef.chan->center_freq;
-		}
+	if (local->scan_chandef.chan) {
+		chandef = local->scan_chandef;
 	} else if (local->tmp_channel) {
 		chandef.chan = local->tmp_channel;
 		chandef.width = NL80211_CHAN_WIDTH_20_NOHT;
@@ -155,7 +146,7 @@ static u32 ieee80211_hw_conf_chan(struct ieee80211_local *local)
 		changed |= IEEE80211_CONF_CHANGE_SMPS;
 	}
 
-	power = chandef.chan->max_power;
+	power = ieee80211_chandef_max_power(&chandef);
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
@@ -323,6 +314,12 @@ static int ieee80211_ifa_changed(struct notifier_block *nb,
 	if (wdev->wiphy != local->hw.wiphy)
 		return NOTIFY_DONE;
 
+#ifdef CPTCFG_CFG80211_ANDROID_P2P_HACK
+	/* P2P Device has no netdev assigned to it */
+	if (wdev->iftype == NL80211_IFTYPE_P2P_DEVICE)
+		return NOTIFY_DONE;
+#endif
+
 	sdata = IEEE80211_DEV_TO_SUB_IF(ndev);
 	bss_conf = &sdata->vif.bss_conf;
 
@@ -374,6 +371,12 @@ static int ieee80211_ifa6_changed(struct notifier_block *nb,
 	/* Make sure it's our interface that got changed */
 	if (!wdev || wdev->wiphy != local->hw.wiphy)
 		return NOTIFY_DONE;
+
+#ifdef CPTCFG_CFG80211_ANDROID_P2P_HACK
+	/* P2P Device has no netdev assigned to it */
+	if (wdev->iftype == NL80211_IFTYPE_P2P_DEVICE)
+		return NOTIFY_DONE;
+#endif
 
 	sdata = IEEE80211_DEV_TO_SUB_IF(ndev);
 
@@ -598,6 +601,7 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 					 IEEE80211_RADIOTAP_VHT_KNOWN_BANDWIDTH;
 	local->hw.uapsd_queues = IEEE80211_DEFAULT_UAPSD_QUEUES;
 	local->hw.uapsd_max_sp_len = IEEE80211_DEFAULT_MAX_SP_LEN;
+	local->hw.smps_mode_in_ps = IEEE80211_SMPS_DYNAMIC;
 	local->user_power_level = IEEE80211_UNSET_POWER_LEVEL;
 	wiphy->ht_capa_mod_mask = &mac80211_ht_capa_mod_mask;
 //	wiphy->vht_capa_mod_mask = &mac80211_vht_capa_mod_mask;
@@ -691,12 +695,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	     local->hw.offchannel_tx_hw_queue >= local->hw.queues))
 		return -EINVAL;
 
-#ifdef CONFIG_PM
-	if ((hw->wiphy->wowlan.flags || hw->wiphy->wowlan.n_patterns) &&
-	    (!local->ops->suspend || !local->ops->resume))
-		return -EINVAL;
-#endif
-
 	if (!local->use_chanctx) {
 		for (i = 0; i < local->hw.wiphy->n_iface_combinations; i++) {
 			const struct ieee80211_iface_combination *comb;
@@ -720,9 +718,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			const struct ieee80211_iface_combination *comb;
 
 			comb = &local->hw.wiphy->iface_combinations[i];
-
-//			if (comb->radar_detect_widths)
-//				return -EINVAL;
 		}
 	}
 
@@ -908,9 +903,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (!local->ops->remain_on_channel)
 		local->hw.wiphy->max_remain_on_channel_duration = 5000;
 
-	if (local->ops->sched_scan_start)
-		local->hw.wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
-
 	/* mac80211 based drivers don't support internal TDLS setup */
 	if (local->hw.wiphy->flags & WIPHY_FLAG_SUPPORTS_TDLS)
 		local->hw.wiphy->flags |= WIPHY_FLAG_TDLS_EXTERNAL_SETUP;
@@ -927,7 +919,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		hw->queues = IEEE80211_MAX_QUEUES;
 
 	local->workqueue =
-		alloc_ordered_workqueue(wiphy_name(local->hw.wiphy), 0);
+		alloc_ordered_workqueue("%s", 0, wiphy_name(local->hw.wiphy));
 	if (!local->workqueue) {
 		result = -ENOMEM;
 		goto fail_workqueue;

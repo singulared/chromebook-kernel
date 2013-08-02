@@ -95,7 +95,7 @@ struct iwl_tm_data;
  *	1) The driver layer (iwl-drv.c) chooses the op_mode based on the
  *	   capabilities advertized by the fw file (in TLV format).
  *	2) The driver layer starts the op_mode (ops->start)
- *	3) The op_mode registers registers mac80211
+ *	3) The op_mode registers mac80211
  *	4) The op_mode is governed by mac80211
  *	5) The driver layer stops the op_mode
  */
@@ -143,7 +143,6 @@ struct iwl_test_ops {
 	void (*event)(struct iwl_op_mode *op_mode, struct sk_buff *skb);
 };
 
-struct iwl_test_ops;
 /**
  * struct iwl_op_mode_ops - op_mode specific operations
  *
@@ -158,7 +157,7 @@ struct iwl_test_ops;
  * @stop: stop the op_mode. Must free all the memory allocated.
  *	May sleep
  * @rx: Rx notification to the op_mode. rxb is the Rx buffer itself. Cmd is the
- *	HCMD the this Rx responds to.
+ *	HCMD this Rx responds to.
  *	This callback may sleep, it is called from a threaded IRQ handler.
  * @queue_full: notifies that a HW queue is full.
  *	Must be atomic and called with BH disabled.
@@ -204,22 +203,13 @@ void iwl_opmode_deregister(const char *name);
 
 struct iwl_test_trace {
 	u32 size;
-	u32 nchunks; /* used only by old testmode */
 	u8 *cpu_addr;
 	dma_addr_t dma_addr;
 	bool enabled;
 };
 
-struct iwl_test_mem {
-	u32 size;
-	u32 nchunks; /* used only by old testmode */
-	u8 *addr;
-	bool in_read; /* only used by old testmode */
-};
-
 struct iwl_test {
 	struct iwl_test_trace trace;
-	struct iwl_test_mem mem;
 	bool notify;
 };
 

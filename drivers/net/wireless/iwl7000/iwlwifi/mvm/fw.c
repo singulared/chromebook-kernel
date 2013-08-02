@@ -79,22 +79,6 @@
 
 #define UCODE_VALID_OK	cpu_to_le32(0x1)
 
-/* Default calibration values for WkP - set to INIT image w/o running */
-static const u8 wkp_calib_values_rx_iq_skew[] = { 0x00, 0x00, 0x01, 0x00 };
-static const u8 wkp_calib_values_tx_iq_skew[] = { 0x01, 0x00, 0x00, 0x00 };
-
-struct iwl_calib_default_data {
-	u16 size;
-	void *data;
-};
-
-#define CALIB_SIZE_N_DATA(_buf) {.size = sizeof(_buf), .data = &_buf}
-
-static const struct iwl_calib_default_data wkp_calib_default_data[12] = {
-	[9] = CALIB_SIZE_N_DATA(wkp_calib_values_tx_iq_skew),
-	[11] = CALIB_SIZE_N_DATA(wkp_calib_values_rx_iq_skew),
-};
-
 struct iwl_mvm_alive_data {
 	bool valid;
 	u32 scd_base_addr;
@@ -216,7 +200,7 @@ static int iwl_mvm_load_ucode_wait_alive(struct iwl_mvm *mvm,
 	 */
 
 	for (i = 0; i < IWL_MAX_HW_QUEUES; i++) {
-		if (i < IWL_MVM_FIRST_AGG_QUEUE && i != IWL_MVM_CMD_QUEUE)
+		if (i < mvm->first_agg_queue && i != IWL_MVM_CMD_QUEUE)
 			mvm->queue_to_mac80211[i] = i;
 		else
 			mvm->queue_to_mac80211[i] = IWL_INVALID_MAC80211_QUEUE;
@@ -249,40 +233,6 @@ static int iwl_send_phy_cfg_cmd(struct iwl_mvm *mvm)
 				    sizeof(phy_cfg_cmd), &phy_cfg_cmd);
 }
 
-static int iwl_set_default_calibrations(struct iwl_mvm *mvm)
-{
-	u8 cmd_raw[16]; /* holds the variable size commands */
-	struct iwl_set_calib_default_cmd *cmd =
-		(struct iwl_set_calib_default_cmd *)cmd_raw;
-	int ret, i;
-
-	/* Setting default values for calibrations we don't run */
-	for (i = 0; i < ARRAY_SIZE(wkp_calib_default_data); i++) {
-		u16 cmd_len;
-
-		if (wkp_calib_default_data[i].size == 0)
-			continue;
-
-		memset(cmd_raw, 0, sizeof(cmd_raw));
-		cmd_len = wkp_calib_default_data[i].size + sizeof(cmd);
-		cmd->calib_index = cpu_to_le16(i);
-		cmd->length = cpu_to_le16(wkp_calib_default_data[i].size);
-		if (WARN_ONCE(cmd_len > sizeof(cmd_raw),
-			      "Need to enlarge cmd_raw to %d\n", cmd_len))
-			break;
-		memcpy(cmd->data, wkp_calib_default_data[i].data,
-		       wkp_calib_default_data[i].size);
-		ret = iwl_mvm_send_cmd_pdu(mvm, SET_CALIB_DEFAULT_CMD, 0,
-					   sizeof(*cmd) +
-					   wkp_calib_default_data[i].size,
-					   cmd);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 int iwl_run_init_mvm_ucode(struct iwl_mvm *mvm, bool read_nvm)
 {
 	struct iwl_notification_wait calib_wait;
@@ -294,7 +244,7 @@ int iwl_run_init_mvm_ucode(struct iwl_mvm *mvm, bool read_nvm)
 
 	lockdep_assert_held(&mvm->mutex);
 
-	if (mvm->init_ucode_run)
+	if (mvm->init_ucode_complete)
 		return 0;
 
 	iwl_init_notification_wait(&mvm->notif_wait,
@@ -343,11 +293,6 @@ int iwl_run_init_mvm_ucode(struct iwl_mvm *mvm, bool read_nvm)
 	if (ret)
 		goto error;
 
-	/* need to set default values */
-	ret = iwl_set_default_calibrations(mvm);
-	if (ret)
-		goto error;
-
 	/*
 	 * Send phy configurations command to init uCode
 	 * to start the 16.0 uCode init image internal calibrations.
@@ -366,7 +311,7 @@ int iwl_run_init_mvm_ucode(struct iwl_mvm *mvm, bool read_nvm)
 	ret = iwl_wait_notification(&mvm->notif_wait, &calib_wait,
 			MVM_UCODE_CALIB_TIMEOUT);
 	if (!ret)
-		mvm->init_ucode_run = true;
+		mvm->init_ucode_complete = true;
 	goto out;
 
 error:
@@ -409,8 +354,12 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	if (ret)
 		return ret;
 
-	/* If we were in RFKILL during module loading, load init ucode now */
-	if (!mvm->init_ucode_run) {
+	/*
+	 * If we haven't completed the run of the init ucode during
+	 * module loading, load init ucode now
+	 * (for example, if we were in RFKILL)
+	 */
+	if (!mvm->init_ucode_complete) {
 		ret = iwl_run_init_mvm_ucode(mvm, false);
 		if (ret && !iwlmvm_mod_params.init_dbg) {
 			IWL_ERR(mvm, "Failed to run INIT ucode: %d\n", ret);
@@ -479,6 +428,10 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 		if (ret)
 			goto error;
 	}
+
+	ret = iwl_mvm_power_update_device_mode(mvm);
+	if (ret)
+		goto error;
 
 	IWL_DEBUG_INFO(mvm, "RT uCode started.\n");
 	return 0;

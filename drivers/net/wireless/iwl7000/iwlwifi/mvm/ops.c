@@ -226,6 +226,10 @@ static const struct iwl_rx_handlers iwl_mvm_rx_handlers[] = {
 
 	RX_HANDLER(SCAN_REQUEST_CMD, iwl_mvm_rx_scan_response, false),
 	RX_HANDLER(SCAN_COMPLETE_NOTIFICATION, iwl_mvm_rx_scan_complete, false),
+	RX_HANDLER(SCAN_OFFLOAD_COMPLETE,
+		   iwl_mvm_rx_scan_offload_complete_notif, false),
+	RX_HANDLER(MATCH_FOUND_NOTIFICATION, iwl_mvm_rx_sched_scan_results,
+		   false),
 
 	RX_HANDLER(RADIO_VERSION_NOTIFICATION, iwl_mvm_rx_radio_ver, false),
 	RX_HANDLER(CARD_STATE_NOTIFICATION, iwl_mvm_rx_card_state_notif, false),
@@ -252,6 +256,7 @@ static const char *iwl_mvm_cmd_strings[REPLY_MAX] = {
 	CMD(TIME_EVENT_NOTIFICATION),
 	CMD(BINDING_CONTEXT_CMD),
 	CMD(TIME_QUOTA_CMD),
+	CMD(NON_QOS_TX_COUNTER_CMD),
 	CMD(RADIO_VERSION_NOTIFICATION),
 	CMD(SCAN_REQUEST_CMD),
 	CMD(SCAN_ABORT_CMD),
@@ -263,10 +268,12 @@ static const char *iwl_mvm_cmd_strings[REPLY_MAX] = {
 	CMD(CALIB_RES_NOTIF_PHY_DB),
 	CMD(SET_CALIB_DEFAULT_CMD),
 	CMD(CALIBRATION_COMPLETE_NOTIFICATION),
+	CMD(ADD_STA_KEY),
 	CMD(ADD_STA),
 	CMD(REMOVE_STA),
 	CMD(LQ_CMD),
 	CMD(SCAN_OFFLOAD_CONFIG_CMD),
+	CMD(MATCH_FOUND_NOTIFICATION),
 	CMD(SCAN_OFFLOAD_REQUEST_CMD),
 	CMD(SCAN_OFFLOAD_ABORT_CMD),
 	CMD(SCAN_OFFLOAD_COMPLETE),
@@ -278,6 +285,7 @@ static const char *iwl_mvm_cmd_strings[REPLY_MAX] = {
 	CMD(BEACON_NOTIFICATION),
 	CMD(BEACON_TEMPLATE_CMD),
 	CMD(STATISTICS_NOTIFICATION),
+	CMD(REDUCE_TX_POWER_CMD),
 	CMD(TX_ANT_CONFIGURATION_CMD),
 	CMD(D3_CONFIG_CMD),
 	CMD(PROT_OFFLOAD_CONFIG_CMD),
@@ -301,9 +309,11 @@ static const char *iwl_mvm_cmd_strings[REPLY_MAX] = {
 	CMD(BT_COEX_PROT_ENV),
 	CMD(BT_PROFILE_NOTIFICATION),
 	CMD(BT_CONFIG),
-	CMD(REPLY_BEACON_FILTERING_CMD),
 	CMD(MCAST_FILTER_CMD),
+	CMD(REPLY_BEACON_FILTERING_CMD),
 	CMD(REPLY_THERMAL_MNG_BACKOFF),
+	CMD(MAC_PM_POWER_TABLE),
+	CMD(BT_COEX_CI),
 };
 #undef CMD
 
@@ -342,6 +352,16 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	mvm->cfg = cfg;
 	mvm->fw = fw;
 	mvm->hw = hw;
+
+	mvm->restart_fw = iwlwifi_mod_params.restart_fw ? -1 : 0;
+
+	mvm->aux_queue = 15;
+	mvm->first_agg_queue = 16;
+	mvm->last_agg_queue = mvm->cfg->base_params->num_of_queues - 1;
+	if (mvm->cfg->base_params->num_of_queues == 16) {
+		mvm->aux_queue = 11;
+		mvm->first_agg_queue = 12;
+	}
 
 	mutex_init(&mvm->mutex);
 	spin_lock_init(&mvm->async_handlers_lock);
@@ -433,6 +453,13 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	err = iwl_mvm_dbgfs_register(mvm, dbgfs_dir);
 	if (err)
 		goto out_unregister;
+
+	if (mvm->fw->ucode_capa.flags & IWL_UCODE_TLV_FLAGS_UAPSD)
+		mvm->pm_ops = &pm_mac_ops;
+	else
+		mvm->pm_ops = &pm_legacy_ops;
+
+	memset(&mvm->rx_stats, 0, sizeof(struct mvm_statistics_rx));
 
 	return op_mode;
 
@@ -548,7 +575,6 @@ static int iwl_mvm_rx_dispatch(struct iwl_op_mode *op_mode,
 	 * In this case the iwl_test object will handle forwarding the rx
 	 * data to user space.
 	 */
-	iwl_test_rx(&op_mode->tst, rxb);
 	iwl_tm_mvm_send_rx(op_mode, rxb);
 #endif
 
@@ -652,6 +678,22 @@ static void iwl_mvm_free_skb(struct iwl_op_mode *op_mode, struct sk_buff *skb)
 	ieee80211_free_txskb(mvm->hw, skb);
 }
 
+struct iwl_mvm_reprobe {
+	struct device *dev;
+	struct work_struct work;
+};
+
+static void iwl_mvm_reprobe_wk(struct work_struct *wk)
+{
+	struct iwl_mvm_reprobe *reprobe;
+
+	reprobe = container_of(wk, struct iwl_mvm_reprobe, work);
+	if (device_reprobe(reprobe->dev))
+		dev_err(reprobe->dev, "reprobe failed!\n");
+	kfree(reprobe);
+	module_put(THIS_MODULE);
+}
+
 static void iwl_mvm_nic_restart(struct iwl_mvm *mvm)
 {
 	iwl_abort_notification_waits(&mvm->notif_wait);
@@ -663,9 +705,30 @@ static void iwl_mvm_nic_restart(struct iwl_mvm *mvm)
 	 * can't recover this since we're already half suspended.
 	 */
 	if (test_and_set_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status)) {
-		IWL_ERR(mvm, "Firmware error during reconfiguration! Abort.\n");
-	} else if (mvm->cur_ucode == IWL_UCODE_REGULAR &&
-		   iwlwifi_mod_params.restart_fw) {
+		struct iwl_mvm_reprobe *reprobe;
+
+		IWL_ERR(mvm,
+			"Firmware error during reconfiguration - reprobe!\n");
+
+		/*
+		 * get a module reference to avoid doing this while unloading
+		 * anyway and to avoid scheduling a work with code that's
+		 * being removed.
+		 */
+		if (!try_module_get(THIS_MODULE)) {
+			IWL_ERR(mvm, "Module is being unloaded - abort\n");
+			return;
+		}
+
+		reprobe = kzalloc(sizeof(*reprobe), GFP_ATOMIC);
+		if (!reprobe) {
+			module_put(THIS_MODULE);
+			return;
+		}
+		reprobe->dev = mvm->trans->dev;
+		INIT_WORK(&reprobe->work, iwl_mvm_reprobe_wk);
+		schedule_work(&reprobe->work);
+	} else if (mvm->cur_ucode == IWL_UCODE_REGULAR && mvm->restart_fw) {
 		/*
 		 * This is a bit racy, but worst case we tell mac80211 about
 		 * a stopped/aborted (sched) scan when that was already done
@@ -681,8 +744,13 @@ static void iwl_mvm_nic_restart(struct iwl_mvm *mvm)
 		case IWL_MVM_SCAN_OS:
 			ieee80211_scan_completed(mvm->hw, true);
 			break;
+		case IWL_MVM_SCAN_SCHED:
+			ieee80211_sched_scan_stopped(mvm->hw);
+			break;
 		}
 
+		if (mvm->restart_fw > 0)
+			mvm->restart_fw--;
 		ieee80211_restart_hw(mvm->hw);
 	}
 }
@@ -692,6 +760,8 @@ static void iwl_mvm_nic_error(struct iwl_op_mode *op_mode)
 	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
 
 	iwl_mvm_dump_nic_error_log(mvm);
+	if (!mvm->restart_fw)
+		iwl_mvm_dump_sram(mvm);
 
 	iwl_mvm_nic_restart(mvm);
 }
@@ -725,6 +795,6 @@ static const struct iwl_op_mode_ops iwl_mvm_ops = {
 		.reply = iwl_mvm_testmode_reply,
 		.alloc_event = iwl_mvm_testmode_alloc_event,
 		.event = iwl_mvm_testmode_event,
-	}
+	},
 #endif
 };

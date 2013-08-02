@@ -799,15 +799,15 @@ _iwl_op_mode_start(struct iwl_drv *drv, struct iwlwifi_opmode_table *op)
 
 	op_mode = ops->start(drv->trans, drv->cfg, &drv->fw, dbgfs_dir);
 
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
 	if (!op_mode) {
+#ifdef CPTCFG_IWLWIFI_DEBUGFS
 		debugfs_remove_recursive(drv->dbgfs_op_mode);
 		drv->dbgfs_op_mode = NULL;
-	}
+		return NULL;
 #endif
+	}
 
 	iwl_tm_gnl_add(op_mode);
-	iwl_test_init(op_mode);
 
 	return op_mode;
 }
@@ -816,7 +816,6 @@ static void _iwl_op_mode_stop(struct iwl_drv *drv)
 {
 	/* op_mode can be NULL if its start failed */
 	if (drv->op_mode) {
-		iwl_test_free(drv->op_mode);
 		iwl_tm_gnl_remove(drv->op_mode);
 		iwl_op_mode_stop(drv->op_mode);
 		drv->op_mode = NULL;
@@ -849,7 +848,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	int i;
 	bool load_module = false;
 
-	fw->ucode_capa.max_probe_length = 200;
+	fw->ucode_capa.max_probe_length = IWL_DEFAULT_MAX_PROBE_LENGTH;
 	fw->ucode_capa.standard_phy_calibration_size =
 			IWL_DEFAULT_STANDARD_PHY_CALIBRATE_TBL_SIZE;
 
@@ -1038,8 +1037,10 @@ struct iwl_drv *iwl_drv_start(struct iwl_trans *trans,
 	int ret;
 
 	drv = kzalloc(sizeof(*drv), GFP_KERNEL);
-	if (!drv)
-		return NULL;
+	if (!drv) {
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	drv->trans = trans;
 	drv->dev = trans->dev;
@@ -1084,7 +1085,7 @@ err_free_dbgfs:
 err_free_drv:
 #endif
 	kfree(drv);
-
+err:
 	return ERR_PTR(ret);
 }
 
@@ -1117,11 +1118,8 @@ void iwl_drv_stop(struct iwl_drv *drv)
 /* shared module parameters */
 struct iwl_mod_params iwlwifi_mod_params = {
 	.restart_fw = true,
-	.plcp_check = true,
 	.bt_coex_active = true,
 	.power_level = IWL_POWER_INDEX_1,
-	.bt_ch_announce = true,
-	.auto_agg = true,
 	.wd_disable = true,
 	/* the rest are 0 by default */
 };
@@ -1264,14 +1262,6 @@ module_param_named(antenna_coupling, iwlwifi_mod_params.ant_coupling,
 MODULE_PARM_DESC(antenna_coupling,
 		 "specify antenna coupling in dB (defualt: 0 dB)");
 
-module_param_named(bt_ch_inhibition, iwlwifi_mod_params.bt_ch_announce,
-		   bool, S_IRUGO);
-MODULE_PARM_DESC(bt_ch_inhibition,
-		 "Enable BT channel inhibition (default: enable)");
-
-module_param_named(plcp_check, iwlwifi_mod_params.plcp_check, bool, S_IRUGO);
-MODULE_PARM_DESC(plcp_check, "Check plcp health (default: 1 [enabled])");
-
 module_param_named(wd_disable, iwlwifi_mod_params.wd_disable, int, S_IRUGO);
 MODULE_PARM_DESC(wd_disable,
 		"Disable stuck queue watchdog timer 0=system default, "
@@ -1313,8 +1303,3 @@ module_param_named(power_level, iwlwifi_mod_params.power_level,
 		int, S_IRUGO);
 MODULE_PARM_DESC(power_level,
 		 "default power save level (range from 1 - 5, default: 1)");
-
-module_param_named(auto_agg, iwlwifi_mod_params.auto_agg,
-		bool, S_IRUGO);
-MODULE_PARM_DESC(auto_agg,
-		 "enable agg w/o check traffic load (default: enable)");

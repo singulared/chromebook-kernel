@@ -64,7 +64,6 @@
 #define __IWL_TM_GNL_H__
 
 #include <linux/types.h>
-#include "iwl-test.h"
 
 /**
  * iwl_tm_data - A data packet for testmode usages
@@ -118,5 +117,9 @@ static inline int iwl_tm_gnl_exit(void)
 }
 
 #endif
+
+#define ADDR_IN_AL_MSK (0x80000000)
+#define GET_AL_ADDR(ofs) (ofs & ~(ADDR_IN_AL_MSK))
+#define IS_AL_ADDR(ofs) (!!(ofs & (ADDR_IN_AL_MSK)))
 
 #endif

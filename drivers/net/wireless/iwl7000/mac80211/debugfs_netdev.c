@@ -212,16 +212,19 @@ static int ieee80211_set_smps(struct ieee80211_sub_if_data *sdata,
 			      enum ieee80211_smps_mode smps_mode)
 {
 	struct ieee80211_local *local = sdata->local;
+	enum ieee80211_smps_mode target_mode = smps_mode;
 	int err;
 
+	/* in case of auto, hw.smps_mode_in_ps will be configured when in psm */
+	if (smps_mode == IEEE80211_SMPS_AUTOMATIC)
+		target_mode = local->hw.smps_mode_in_ps;
+
 	if (!(local->hw.flags & IEEE80211_HW_SUPPORTS_STATIC_SMPS) &&
-	    smps_mode == IEEE80211_SMPS_STATIC)
+	    target_mode == IEEE80211_SMPS_STATIC)
 		return -EINVAL;
 
-	/* auto should be dynamic if in PS mode */
 	if (!(local->hw.flags & IEEE80211_HW_SUPPORTS_DYNAMIC_SMPS) &&
-	    (smps_mode == IEEE80211_SMPS_DYNAMIC ||
-	     smps_mode == IEEE80211_SMPS_AUTOMATIC))
+	    target_mode == IEEE80211_SMPS_DYNAMIC)
 		return -EINVAL;
 
 	/* supported only on managed interfaces for now */

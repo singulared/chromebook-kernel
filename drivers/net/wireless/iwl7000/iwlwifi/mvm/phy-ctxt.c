@@ -209,6 +209,7 @@ int iwl_mvm_phy_ctxt_add(struct iwl_mvm *mvm, struct iwl_mvm_phy_ctxt *ctxt,
 	lockdep_assert_held(&mvm->mutex);
 
 	ctxt->channel = chandef->chan;
+
 	ret = iwl_mvm_phy_ctxt_apply(mvm, ctxt, chandef,
 				     chains_static, chains_dynamic,
 				     FW_CTXT_ACTION_ADD, 0);
