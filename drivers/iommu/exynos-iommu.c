@@ -515,7 +515,9 @@ static void __exynos_sysmmu_set_pbuf_ver33(struct sysmmu_drvdata *data,
 		else if (nbufs < 3)
 			pbselect = 5;
 	} else if ((num_pb == 3) && (nbufs < 3)) {
-			pbselect = 1;
+		pbselect = 1;
+	} else if ((num_pb == 4) && (nbufs == 0)) {
+		pbselect = 3;
 	}
 
 	__raw_writel(pbselect, data->sfrbases[idx] + REG_PB_LMM);
