@@ -27,6 +27,7 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
 #endif
+#include "exynos_trace.h"
 #include "exynos_drm_plane.h"
 
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
@@ -149,6 +150,8 @@ static void exynos_drm_crtc_try_do_flip(struct drm_crtc *crtc)
 		if (exynos_fb->rendered && !exynos_fb->prepared &&
 		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
 			exynos_drm_crtc_update(crtc, next_desc.fb);
+			trace_exynos_page_flip_state(exynos_crtc->pipe,
+					DRM_BASE_ID(next_desc.fb), "prepared");
 			exynos_fb->prepared = true;
 		}
 	}
@@ -414,6 +417,8 @@ void exynos_drm_kds_callback(void *callback_parameter,
 	struct drm_crtc *crtc = callback_extra_parameter;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 
+	trace_exynos_page_flip_state(to_exynos_crtc(crtc)->pipe,
+			DRM_BASE_ID(fb), "rendered");
 	exynos_fb->rendered = true;
 
 	/*
@@ -495,6 +500,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		exynos_drm_fb_attach_dma_buf(exynos_fb, buf);
 
 		/* Waiting for the KDS resource*/
+		trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
+				"wait_kds");
 		ret = kds_async_waitall(&flip_desc.kds,
 					&dev_priv->kds_cb, fb, crtc, 1,
 					&shared, &res_list);
@@ -724,6 +731,9 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 		return;
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
 		return;
+
+	trace_exynos_page_flip_state(pipe, DRM_BASE_ID(next_desc.fb),
+			"flipped");
 
 	if (cur_descp->kds)
 		kds_resource_set_release(&cur_descp->kds);
