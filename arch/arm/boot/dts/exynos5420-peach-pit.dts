@@ -1,5 +1,5 @@
 /*
- * Google Peach Pit Rev 1 / 2 board device tree source
+ * Google Peach Pit Rev 5+ board device tree source
  *
  * Copyright (c) 2013 Google, Inc
  *
@@ -13,12 +13,9 @@
 #include "exynos5420-peach-pit.dtsi"
 
 / {
-	model = "Google Peach Pit Rev 1/2";
+	model = "Google Peach Pit Rev 5+";
 
-	compatible = "google,pit-rev2", "google,pit-rev1", "google,pit",
-		"google,peach", "samsung,exynos5420";
-
-	sysmmu-fimd1m1 {
-		status = "disabled";
-	};
+	compatible = "google,pit-rev10", "google,pit-rev9", "google,pit-rev8",
+		"google,pit-rev7", "google,pit-rev6", "google,pit-rev5",
+		"google,pit", "google,peach", "samsung,exynos5420";
 };
