@@ -2553,7 +2553,7 @@ int dw_mci_suspend(struct dw_mci *host)
 		}
 	}
 
-	if (host->vmmc)
+	if (host->vmmc && !(host->pdata->pm_caps & MMC_PM_KEEP_POWER))
 		regulator_disable(host->vmmc);
 
 	return 0;
@@ -2566,7 +2566,7 @@ int dw_mci_resume(struct dw_mci *host)
 
 	int i, ret;
 
-	if (host->vmmc) {
+	if (host->vmmc && !(host->pdata->pm_caps & MMC_PM_KEEP_POWER)) {
 		ret = regulator_enable(host->vmmc);
 		if (ret) {
 			dev_err(host->dev,
