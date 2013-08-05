@@ -13,6 +13,9 @@
  */
 
 #include <drm/drmP.h>
+#include <drm/bridge/ptn3460.h>
+#include <drm/bridge/ps8622.h>
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
@@ -22,6 +25,40 @@
 static LIST_HEAD(exynos_drm_subdrv_list);
 static LIST_HEAD(exynos_drm_manager_list);
 static LIST_HEAD(exynos_drm_display_list);
+
+struct exynos_drm_bridge {
+	enum exynos_drm_output_type type;
+	int (*init)(struct drm_encoder *encoder);
+};
+
+static struct exynos_drm_bridge exynos_possible_bridges[] = {
+	{
+		.type = EXYNOS_DISPLAY_TYPE_LCD,
+		.init = ptn3460_init,
+	},
+	{
+		.type = EXYNOS_DISPLAY_TYPE_LCD,
+		.init = ps8622_init,
+	},
+};
+
+static int exynos_drm_attach_bridge(struct drm_encoder *encoder,
+			enum exynos_drm_output_type type)
+{
+	int i;
+	struct exynos_drm_bridge *bridge;
+
+	for (i = 0; i < ARRAY_SIZE(exynos_possible_bridges); i++) {
+		bridge = &exynos_possible_bridges[i];
+
+		if (type != bridge->type)
+			continue;
+
+		if (!bridge->init(encoder))
+			return 0;
+	}
+	return -ENODEV;
+}
 
 static int exynos_drm_create_enc_conn(struct drm_device *dev,
 					struct exynos_drm_display *display)
@@ -50,6 +87,11 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder),
 			exynos_drm_output_type_name(display->type));
 
+	display->encoder = encoder;
+
+	if (!exynos_drm_attach_bridge(encoder, display->type))
+		return 0;
+
 	/*
 	 * create and initialize a connector for this sub driver and
 	 * attach the encoder created above to the connector.
@@ -64,9 +106,6 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 			DRM_BASE_ID(connector),
 			drm_get_connector_name(connector),
 			exynos_drm_output_type_name(display->type));
-
-	display->encoder = encoder;
-	display->connector = connector;
 
 	return 0;
 

@@ -36,11 +36,7 @@
 
 #include <linux/i2c.h>
 #include <linux/kds.h>
-#include <linux/of_i2c.h>
 #include <linux/pm_runtime.h>
-
-#include <drm/bridge/ptn3460.h>
-#include <drm/bridge/ps8622.h>
 
 #define DRIVER_NAME	"exynos"
 #define DRIVER_DESC	"Samsung SoC DRM"
@@ -51,39 +47,16 @@
 /* platform device pointer for eynos drm device. */
 static struct platform_device *exynos_drm_pdev;
 
-struct bridge_init {
-	struct i2c_client *client;
-	struct device_node *node;
-	bool valid;
-};
-
-static int find_bridge(const char *name, struct bridge_init *bridge)
-{
-	bridge->valid = false;
-	bridge->client = NULL;
-	bridge->node = of_find_node_by_name(NULL, name);
-	if (!bridge->node)
-		return 0;
-
-	bridge->client = of_find_i2c_device_by_node(bridge->node);
-	if (!bridge->client)
-		return -ENODEV;
-
-	bridge->valid = true;
-	return 0;
-}
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 void exynos_drm_kds_callback(void *callback_parameter,
 			     void *callback_extra_parameter);
 #endif
-
 
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
 	struct exynos_drm_private *private;
 	int ret;
 	int nr;
-	struct bridge_init bridge;
 
 	DRM_DEBUG_DRIVER("flags: 0x%lx\n", flags);
 
@@ -151,41 +124,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	 * vblank event (after drm_vblank_put function is called).
 	 */
 	dev->vblank_disable_allowed = 1;
-
-	ret = find_bridge("ptn3460-bridge", &bridge);
-	if (ret) {
-		DRM_ERROR("Could not get PTN3460 bridge %d\n", ret);
-		goto err_vblank;
-	}
-	if (bridge.valid) {
-		ret = ptn3460_init(dev, bridge.client, bridge.node);
-		if (ret) {
-			DRM_ERROR("Failed to initialize the ptn bridge\n");
-			goto err_vblank;
-		}
-	} else {
-		ret = find_bridge("ps8622-bridge", &bridge);
-		if (ret) {
-			DRM_ERROR("Could not get PS8622 bridge %d\n", ret);
-			goto err_vblank;
-		} else if (!bridge.valid) {
-			ret = find_bridge("ps8625-bridge", &bridge);
-			if (ret) {
-				DRM_ERROR("Could not get PS8625 bridge %d\n",
-					  ret);
-				goto err_vblank;
-			}
-		}
-
-		if (bridge.valid) {
-			ret = ps8622_init(dev, bridge.client, bridge.node);
-			if (ret) {
-				DRM_ERROR("Failed to initialize the Parade "
-					  "bridge\n");
-				goto err_vblank;
-			}
-		}
-	}
 
 	/*
 	 * probe sub drivers such as display controller and hdmi driver,

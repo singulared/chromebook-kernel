@@ -179,7 +179,6 @@ struct exynos_drm_display_ops {
  * @list: the list entry for this manager
  * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
  * @encoder: encoder object this display maps to
- * @connector: connector object this display maps to
  * @ops: pointer to callbacks for exynos drm specific functionality
  * @ctx: A pointer to the display's implementation specific context
  */
@@ -187,7 +186,6 @@ struct exynos_drm_display {
 	struct list_head list;
 	enum exynos_drm_output_type type;
 	struct drm_encoder *encoder;
-	struct drm_connector *connector;
 	struct exynos_drm_display_ops *ops;
 	void *ctx;
 };
