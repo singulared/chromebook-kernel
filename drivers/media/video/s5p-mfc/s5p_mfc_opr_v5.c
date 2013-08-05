@@ -688,7 +688,7 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	reg = mfc_read(dev, S5P_FIMV_ENC_PIC_TYPE_CTRL);
 	reg |= (1 << 18);
 	reg &= ~(0xFFFF);
-	reg |= p->gop_size;
+	reg |= p->codec.runtime.gop_size;
 	mfc_write(dev, reg, S5P_FIMV_ENC_PIC_TYPE_CTRL);
 	mfc_write(dev, 0, S5P_FIMV_ENC_B_RECON_WRITE_ON);
 	/* multi-slice control */
@@ -736,7 +736,7 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	mfc_write(dev, reg, S5P_FIMV_ENC_RC_CONFIG);
 	/* bit rate */
 	if (p->rc_frame)
-		mfc_write(dev, p->rc_bitrate,
+		mfc_write(dev, p->codec.runtime.rc_bitrate,
 			S5P_FIMV_ENC_RC_BIT_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_BIT_RATE);
@@ -831,9 +831,10 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	reg |= p_264->rc_frame_qp;
 	mfc_write(dev, reg, S5P_FIMV_ENC_RC_CONFIG);
 	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_denom)
-		mfc_write(dev, p->rc_framerate_num * 1000
-			/ p->rc_framerate_denom, S5P_FIMV_ENC_RC_FRAME_RATE);
+	if (p->rc_frame && p->codec.runtime.rc_framerate_denom)
+		mfc_write(dev, p->codec.runtime.rc_framerate_num * 1000
+			/ p->codec.runtime.rc_framerate_denom,
+			S5P_FIMV_ENC_RC_FRAME_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_FRAME_RATE);
 	/* max & min value of QP */
@@ -950,16 +951,17 @@ static int s5p_mfc_set_enc_params_mpeg4(struct s5p_mfc_ctx *ctx)
 	}
 	/* frame rate */
 	if (p->rc_frame) {
-		if (p->rc_framerate_denom > 0) {
-			framerate = p->rc_framerate_num * 1000 /
-						p->rc_framerate_denom;
+		if (p->codec.runtime.rc_framerate_denom > 0) {
+			framerate = p->codec.runtime.rc_framerate_num * 1000 /
+				p->codec.runtime.rc_framerate_denom;
 			mfc_write(dev, framerate,
 				S5P_FIMV_ENC_RC_FRAME_RATE);
 			shm = s5p_mfc_read_info_v5(ctx, RC_VOP_TIMING);
 			shm &= ~(0xFFFFFFFF);
 			shm |= (1 << 31);
-			shm |= ((p->rc_framerate_num & 0x7FFF) << 16);
-			shm |= (p->rc_framerate_denom & 0xFFFF);
+			shm |= ((p->codec.runtime.rc_framerate_num & 0x7FFF)
+				<< 16);
+			shm |= (p->codec.runtime.rc_framerate_denom & 0xFFFF);
 			s5p_mfc_write_info_v5(ctx, shm, RC_VOP_TIMING);
 		}
 	} else {
@@ -1009,9 +1011,10 @@ static int s5p_mfc_set_enc_params_h263(struct s5p_mfc_ctx *ctx)
 		s5p_mfc_write_info_v5(ctx, shm, P_B_FRAME_QP);
 	}
 	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_denom)
-		mfc_write(dev, p->rc_framerate_num * 1000
-			/ p->rc_framerate_denom, S5P_FIMV_ENC_RC_FRAME_RATE);
+	if (p->rc_frame && p->codec.runtime.rc_framerate_denom)
+		mfc_write(dev, p->codec.runtime.rc_framerate_num * 1000
+		/ p->codec.runtime.rc_framerate_denom,
+		S5P_FIMV_ENC_RC_FRAME_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_FRAME_RATE);
 	/* rate control config. */

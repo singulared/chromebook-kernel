@@ -522,6 +522,52 @@ static int s5p_mfc_set_slice_mode(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
+static int s5p_mfc_set_runtime_enc_params(struct s5p_mfc_ctx *ctx,
+		struct s5p_mfc_runtime_enc_params *runtime_p)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	struct s5p_mfc_enc_params *p = &ctx->enc_params;
+	unsigned int params_changed = 0;
+
+	if (runtime_p->params_changed & (1 << MFC_ENC_GOP_CONFIG_CHANGE)) {
+		params_changed |= (1 << S5P_FIMV_E_GOP_CONFIG_CHANGE_SHIFT_V6);
+		/* pictype: IDR period */
+		WRITEL((runtime_p->gop_size & 0xFFFF),
+			S5P_FIMV_E_GOP_CONFIG_V6);
+	}
+	if (runtime_p->params_changed & (1 << MFC_ENC_FRAME_RATE_CHANGE)) {
+		/* frame rate */
+		if (p->rc_frame && runtime_p->rc_framerate_num &&
+			runtime_p->rc_framerate_denom) {
+			params_changed |=
+				(1 << S5P_FIMV_E_FRAME_RATE_CHANGE_SHIFT_V6);
+			WRITEL((((runtime_p->rc_framerate_num & 0xFFFF) << 16) |
+				(runtime_p->rc_framerate_denom & 0xFFFF)),
+				S5P_FIMV_E_RC_FRAME_RATE_V6);
+		}
+	}
+	if (runtime_p->params_changed & (1 << MFC_ENC_BIT_RATE_CHANGE)) {
+		/* bit rate */
+		if (p->rc_frame) {
+			params_changed |=
+				(1 << S5P_FIMV_E_BIT_RATE_CHANGE_SHIFT_V6);
+			WRITEL(runtime_p->rc_bitrate,
+				S5P_FIMV_E_RC_BIT_RATE_V6);
+		}
+	}
+	if (runtime_p->params_changed & (1 << MFC_ENC_FRAME_INSERTION)) {
+		unsigned int reg = READL(S5P_FIMV_E_FRAME_INSERTION_V6);
+		reg &= ~0x3;
+		reg |= runtime_p->force_frame_type & 0x3;
+		WRITEL(reg, S5P_FIMV_E_FRAME_INSERTION_V6);
+	}
+
+	if (params_changed)
+		WRITEL(params_changed, S5P_FIMV_E_PARAM_CHANGE_V6);
+
+	return 0;
+}
+
 static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -546,10 +592,10 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 		(((p->crop_top_offset / 16) & 0x2FF) << 10),
 		S5P_FIMV_E_FRAME_CROP_OFFSET_V6);
 
-	/* pictype : IDR period */
-	reg = 0;
-	reg |= p->gop_size & 0xFFFF;
-	WRITEL(reg, S5P_FIMV_E_GOP_CONFIG_V6);
+	/* send all runtime encoder parameters. */
+	p->codec.runtime.params_changed = ~0;
+	s5p_mfc_set_runtime_enc_params(ctx, &p->codec.runtime);
+	p->codec.runtime.params_changed = 0;
 
 	/* multi-slice control */
 	/* multi-slice MB number or bit size */
@@ -634,13 +680,6 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	/* frame-level rate control */
 	reg |= ((p->rc_frame & 0x1) << 9);
 	WRITEL(reg, S5P_FIMV_E_RC_CONFIG_V6);
-
-	/* bit rate */
-	if (p->rc_frame)
-		WRITEL(p->rc_bitrate,
-			S5P_FIMV_E_RC_BIT_RATE_V6);
-	else
-		WRITEL(1, S5P_FIMV_E_RC_BIT_RATE_V6);
 
 	/* reaction coefficient */
 	if (p->rc_frame) {
@@ -747,14 +786,6 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 		reg |= ((p_h264->rc_p_frame_qp & 0x3F) << 8);
 		reg |= p_h264->rc_frame_qp & 0x3F;
 		WRITEL(reg, S5P_FIMV_E_FIXED_PICTURE_QP_V6);
-	}
-
-	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_num && p->rc_framerate_denom) {
-		reg = 0;
-		reg |= ((p->rc_framerate_num & 0xFFFF) << 16);
-		reg |= p->rc_framerate_denom & 0xFFFF;
-		WRITEL(reg, S5P_FIMV_E_RC_FRAME_RATE_V6);
 	}
 
 	/* vbv buffer size */
@@ -1024,14 +1055,6 @@ static int s5p_mfc_set_enc_params_mpeg4(struct s5p_mfc_ctx *ctx)
 		WRITEL(reg, S5P_FIMV_E_FIXED_PICTURE_QP_V6);
 	}
 
-	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_num && p->rc_framerate_denom) {
-		reg = 0;
-		reg |= ((p->rc_framerate_num & 0xFFFF) << 16);
-		reg |= p->rc_framerate_denom & 0xFFFF;
-		WRITEL(reg, S5P_FIMV_E_RC_FRAME_RATE_V6);
-	}
-
 	/* vbv buffer size */
 	if (p->frame_skip_mode ==
 			V4L2_MPEG_MFC51_VIDEO_FRAME_SKIP_MODE_BUF_LIMIT) {
@@ -1094,14 +1117,6 @@ static int s5p_mfc_set_enc_params_h263(struct s5p_mfc_ctx *ctx)
 		reg |= ((p_h263->rc_p_frame_qp & 0x3F) << 8);
 		reg |= p_h263->rc_frame_qp & 0x3F;
 		WRITEL(reg, S5P_FIMV_E_FIXED_PICTURE_QP_V6);
-	}
-
-	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_num && p->rc_framerate_denom) {
-		reg = 0;
-		reg |= ((p->rc_framerate_num & 0xFFFF) << 16);
-		reg |= p->rc_framerate_denom & 0xFFFF;
-		WRITEL(reg, S5P_FIMV_E_RC_FRAME_RATE_V6);
 	}
 
 	/* vbv buffer size */
@@ -1404,6 +1419,7 @@ static inline int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 	mfc_debug(2, "enc src c addr: 0x%08lx\n", src_c_addr);
 
 	s5p_mfc_set_enc_frame_buffer_v6(ctx, src_y_addr, src_c_addr);
+	s5p_mfc_set_runtime_enc_params(ctx, &src_mb->runtime_enc_params);
 
 	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
 	dst_mb->flags |= MFC_BUF_FLAG_USED;
