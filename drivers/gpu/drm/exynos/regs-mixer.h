@@ -44,6 +44,7 @@
 #define MXR_CM_COEFF_Y			0x0080
 #define MXR_CM_COEFF_CB			0x0084
 #define MXR_CM_COEFF_CR			0x0088
+#define MXR_TVOUT_CFG			0x0100
 #define MXR_MO				0x0304
 #define MXR_RESOLUTION			0x0310
 
@@ -122,6 +123,16 @@
 #define MXR_GRP_WH_V_SCALE(x)		MXR_MASK_VAL(x, 12, 12)
 #define MXR_GRP_WH_WIDTH(x)		MXR_MASK_VAL(x, 26, 16)
 #define MXR_GRP_WH_HEIGHT(x)		MXR_MASK_VAL(x, 10, 0)
+
+/* bits for MXR_TVOUT_CFG */
+#define MXR_TVOUT_CFG_STEREOSCOPIC	(1 << 0)
+#define MXR_TVOUT_CFG_UNKNOWN		(1 << 1)
+#define MXR_TVOUT_CFG_PATH_TWO_PATH	(0 << 2)
+#define MXR_TVOUT_CFG_PATH_ONE_PATH	(1 << 2)
+#define MXR_TVOUT_CFG_SELECT_PATH	(1 << 3)
+#define MXR_TVOUT_CFG_FRAME_FMT_PACK	((0 << 4) | (0 << 5))
+#define MXR_TVOUT_CFG_FRAME_FMT_SXS	((1 << 4) | (0 << 5))
+#define MXR_TVOUT_CFG_FRAME_FMT_VERT	((1 << 4) | (1 << 5))
 
 /* bits for MXR_RESOLUTION */
 #define MXR_MXR_RES_HEIGHT(x)		MXR_MASK_VAL(x, 26, 16)

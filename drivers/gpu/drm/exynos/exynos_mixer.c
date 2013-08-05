@@ -79,6 +79,12 @@ struct mixer_resources {
 	struct clk		*sclk_dac;
 };
 
+enum workaround_state {
+	WORKAROUND_STATE_INACTIVE,
+	WORKAROUND_STATE_INIT,
+	WORKAROUND_STATE_ACTIVE,
+};
+
 enum mixer_version_id {
 	MXR_VER_0_0_0_16,
 	MXR_VER_16_0_33_0,
@@ -93,12 +99,14 @@ struct mixer_context {
 	bool			powered;
 	bool			vp_enabled;
 	u32			int_en;
+	u32			previous_dxy;
 
 	struct mixer_resources	mixer_res;
 	struct hdmi_win_data	win_data[MIXER_WIN_NR];
 	enum mixer_version_id	mxr_ver;
 	wait_queue_head_t	wait_vsync_queue;
 	atomic_t		wait_vsync_event;
+	enum workaround_state	workaround_state;
 };
 
 struct mixer_drv_data {
@@ -164,6 +172,11 @@ const struct mixer_scan_range scan_ranges[] = {
 		.mode_type = EXYNOS_MIXER_MODE_SD_PAL,
 	},
 	{
+		.min_res = { 800, 600 },
+		.max_res = { 800, 600 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+	},
+	{
 		.min_res = { 1024, 0 },
 		.max_res = { 1280, 720 },
 		.mode_type = EXYNOS_MIXER_MODE_HD_720,
@@ -171,6 +184,11 @@ const struct mixer_scan_range scan_ranges[] = {
 	{
 		.min_res = { 1664, 0 },
 		.max_res = { 1920, 1080 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+	},
+	{
+		.min_res = { 1440, 900 },
+		.max_res = { 1440, 900 },
 		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
 	},
 };
@@ -425,6 +443,16 @@ static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int width,
 	}
 
 	mixer_reg_writemask(res, MXR_CFG, val, MXR_CFG_SCAN_MASK);
+}
+
+unsigned mixer_get_horizontal_offset(unsigned width, unsigned height)
+{
+	if (width == 800 && height == 600)
+		return 0x20;
+	else if (width == 1440 && height == 900)
+		return 0xe0;
+
+	return 0;
 }
 
 static void mixer_cfg_rgb_fmt(struct mixer_context *ctx, unsigned int height)
@@ -711,6 +739,12 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	val |= MXR_GRP_SXY_SY(src_y_offset);
 	mixer_reg_write(res, MXR_GRAPHIC_SXY(win), val);
 
+	/* Add any applicable horizontal offset to the destination offset */
+	if (ctx->mxr_ver == MXR_VER_16_0_33_0)
+		dst_x_offset += mixer_get_horizontal_offset(
+					win_data->mode_width,
+					win_data->mode_height);
+
 	/* setup offsets in display image */
 	val  = MXR_GRP_DXY_DX(dst_x_offset);
 	val |= MXR_GRP_DXY_DY(dst_y_offset);
@@ -720,6 +754,7 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	mixer_reg_write(res, MXR_GRAPHIC_BASE(win), dma_addr);
 
 	mixer_cfg_scan(ctx, win_data->mode_width, win_data->mode_height);
+
 	mixer_cfg_rgb_fmt(ctx, win_data->mode_height);
 	mixer_cfg_layer(ctx, win, true);
 
@@ -939,6 +974,24 @@ static void mixer_win_mode_set(void *ctx,
 	win_data->mode_height = overlay->mode_height;
 
 	win_data->scan_flags = overlay->scan_flag;
+
+	/* The 800x600 workaround just applies to 16.0.33.0 */
+	if (mixer_ctx->mxr_ver != MXR_VER_16_0_33_0)
+		return;
+
+	/* Don't worry about the 800x600 workaround if we're not root window */
+	if (win != MIXER_DEFAULT_WIN)
+		return;
+
+	/* Reset workaround state if the resolution is not 800x600 */
+	if (win_data->mode_width != 800 || win_data->mode_height != 600) {
+		mixer_ctx->workaround_state = WORKAROUND_STATE_INACTIVE;
+		return;
+	}
+
+	/* Initialize workaround state if not active */
+	if (mixer_ctx->workaround_state != WORKAROUND_STATE_ACTIVE)
+		mixer_ctx->workaround_state = WORKAROUND_STATE_INIT;
 }
 
 static void mixer_win_commit(void *ctx, int zpos)
@@ -1055,6 +1108,9 @@ static void mixer_window_resume(struct mixer_context *ctx)
 		win_data->enabled = win_data->resume;
 		win_data->resume = false;
 	}
+
+	if (ctx->workaround_state != WORKAROUND_STATE_INACTIVE)
+		ctx->workaround_state = WORKAROUND_STATE_INIT;
 }
 
 static void mixer_poweron(struct mixer_context *ctx)
@@ -1163,6 +1219,34 @@ static struct exynos_drm_manager mixer_manager = {
 	.ops			= &mixer_manager_ops,
 };
 
+static inline void mixer_update_workaround_state(struct mixer_context *mctx)
+{
+	struct mixer_resources *res = &mctx->mixer_res;
+	u32 val;
+
+	/* The 800x600 workaround just applies to 16.0.33.0 */
+	if (mctx->mxr_ver != MXR_VER_16_0_33_0)
+		return;
+
+	/* The workaround uses stereoscopic output mode*/
+	val = MXR_TVOUT_CFG_STEREOSCOPIC | MXR_TVOUT_CFG_UNKNOWN |
+		MXR_TVOUT_CFG_FRAME_FMT_SXS;
+
+	switch (mctx->workaround_state) {
+	case WORKAROUND_STATE_INACTIVE:
+		val = MXR_TVOUT_CFG_PATH_ONE_PATH; /* Revert back to one path */
+		break;
+	case WORKAROUND_STATE_INIT:
+		val |= MXR_TVOUT_CFG_PATH_ONE_PATH;
+		mctx->workaround_state = WORKAROUND_STATE_ACTIVE;
+		break;
+	case WORKAROUND_STATE_ACTIVE:
+		val |= MXR_TVOUT_CFG_PATH_TWO_PATH;
+		break;
+	}
+	mixer_reg_write(res, MXR_TVOUT_CFG, val);
+}
+
 static irqreturn_t mixer_irq_handler(int irq, void *arg)
 {
 	struct mixer_context *ctx = arg;
@@ -1191,6 +1275,8 @@ static irqreturn_t mixer_irq_handler(int irq, void *arg)
 			/* Bail out if a layer update is pending */
 			if (mixer_get_layer_update_count(ctx))
 				goto out;
+
+			mixer_update_workaround_state(ctx);
 
 			for (i = 0; i < MIXER_WIN_NR; i++)
 				ctx->win_data[i].updated = false;

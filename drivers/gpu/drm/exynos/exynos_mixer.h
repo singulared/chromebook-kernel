@@ -17,4 +17,6 @@
 /* This function returns 0 if the given timing is valid for the mixer */
 int mixer_check_mode(struct drm_display_mode *mode);
 
+/* This function returns the horizontal offset for a mode */
+unsigned mixer_get_horizontal_offset(unsigned width, unsigned height);
 #endif

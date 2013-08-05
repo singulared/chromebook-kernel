@@ -2373,6 +2373,7 @@ static void hdmi_4212_mode_set(struct hdmi_context *hdata,
 	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4212_conf.tg;
 	struct hdmi_4212_core_regs *core =
 		&hdata->mode_conf.conf.v4212_conf.core;
+	u32 hact_offset = 0;
 
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
@@ -2469,11 +2470,21 @@ static void hdmi_4212_mode_set(struct hdmi_context *hdata,
 	hdmi_set_reg(core->v_sync_line_aft_pxl_5, 2, 0xffff);
 	hdmi_set_reg(core->v_sync_line_aft_pxl_6, 2, 0xffff);
 
+	/*
+	 * The mixer supports some additional resolutions by shifting stuff
+	 * horizontally in 3d mode (<-- simplified explanation). We need to
+	 * mirror that here, so ask it for the offset.
+	 */
+	if (hdata->version == HDMI_VER_EXYNOS4212)
+		hact_offset = mixer_get_horizontal_offset(m->crtc_hdisplay,
+				m->crtc_vdisplay);
+
 	/* Timing generator registers */
 	hdmi_set_reg(tg->cmd, 1, 0x0);
 	hdmi_set_reg(tg->h_fsz, 2, m->crtc_htotal);
-	hdmi_set_reg(tg->hact_st, 2, m->crtc_htotal - m->crtc_hdisplay);
-	hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay);
+	hdmi_set_reg(tg->hact_st, 2, m->crtc_htotal - m->crtc_hdisplay -
+			hact_offset);
+	hdmi_set_reg(tg->hact_sz, 2, m->crtc_hdisplay + hact_offset);
 	hdmi_set_reg(tg->vsync, 2, 0x1);
 	hdmi_set_reg(tg->field_chg, 2, 0x233); /* Reset value */
 	hdmi_set_reg(tg->vsync_top_hdmi, 2, 0x1); /* Reset value */
