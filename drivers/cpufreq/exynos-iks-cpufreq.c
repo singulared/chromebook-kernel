@@ -43,9 +43,6 @@ struct lpj_info {
 
 static struct lpj_info global_lpj_ref;
 
-/* Use boot_freq when entering sleep mode */
-static unsigned int boot_freq;
-
 /* For switcher */
 /* Minimum (Big/Little) clock frequency */
 static unsigned int freq_min[CA_END] __read_mostly;
@@ -452,11 +449,12 @@ static int exynos_target(struct cpufreq_policy *policy,
 {
 	/* read current cluster */
 	enum cluster_type cur = get_cur_cluster(policy->cpu);
-	unsigned int index, new_freq = 0, do_switch = 0;
+	unsigned int boot_freq, index, new_freq = 0, do_switch = 0;
 	int ret = 0;
 
 	mutex_lock(&cpufreq_lock);
 
+	boot_freq = VIRT_FREQ(get_boot_freq(CA15), CA15);
 	if (exynos_info[cur]->blocked && (target_freq != boot_freq))
 		goto out;
 
@@ -658,8 +656,6 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	freqs[CA7]->old = exynos_getspeed_cluster(CA7);
 	freqs[CA15]->old = exynos_getspeed_cluster(CA15);
 
-	boot_freq = exynos_getspeed(policy->cpu);
-	pr_debug("\nboot_freq %d\n", boot_freq);
 	cpufreq_frequency_table_get_attr(merge_freq_table, policy->cpu);
 
 	/*
