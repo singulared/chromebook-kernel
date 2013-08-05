@@ -1309,7 +1309,9 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_MPEG_VIDEO_GOP_SIZE:
-		p->gop_size = ctrl->val;
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_GOP_CONFIG_CHANGE);
+		p->codec.runtime.gop_size = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE:
 		p->slice_mode = ctrl->val;
@@ -1335,13 +1337,17 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 		p->rc_frame = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_BITRATE:
-		p->rc_bitrate = ctrl->val;
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_BIT_RATE_CHANGE);
+		p->codec.runtime.rc_bitrate = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_MFC51_VIDEO_RC_REACTION_COEFF:
 		p->rc_reaction_coeff = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE:
-		ctx->force_frame_type = ctrl->val;
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_FRAME_INSERTION);
+		p->codec.runtime.force_frame_type = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_VBV_SIZE:
 		p->vbv_size = ctrl->val;
@@ -1574,12 +1580,29 @@ static int vidioc_s_parm(struct file *file, void *priv,
 			 struct v4l2_streamparm *a)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
+	struct s5p_mfc_runtime_enc_params *runtime_params =
+		&ctx->enc_params.codec.runtime;
 
+	/*
+	 * Note that MFC hardware specifies framerate but the V4L2 API specifies
+	 * timeperframe. Take the reciprocal of one to get the other.
+	 */
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		ctx->enc_params.rc_framerate_num =
-					a->parm.output.timeperframe.denominator;
-		ctx->enc_params.rc_framerate_denom =
-					a->parm.output.timeperframe.numerator;
+		if ((runtime_params->rc_framerate_num !=
+			a->parm.output.timeperframe.denominator) ||
+			(runtime_params->rc_framerate_denom !=
+			a->parm.output.timeperframe.numerator)) {
+			if (a->parm.output.timeperframe.numerator == 0) {
+				mfc_err("Cannot set an infinite FPS\n");
+				return -EINVAL;
+			}
+			runtime_params->params_changed |=
+				(1 << MFC_ENC_FRAME_RATE_CHANGE);
+			runtime_params->rc_framerate_num =
+				a->parm.output.timeperframe.denominator;
+			runtime_params->rc_framerate_denom =
+				a->parm.output.timeperframe.numerator;
+		}
 	} else {
 		mfc_err("Setting FPS is only possible for the output queue\n");
 		return -EINVAL;
@@ -1594,9 +1617,9 @@ static int vidioc_g_parm(struct file *file, void *priv,
 
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
 		a->parm.output.timeperframe.denominator =
-					ctx->enc_params.rc_framerate_num;
+			ctx->enc_params.codec.runtime.rc_framerate_num;
 		a->parm.output.timeperframe.numerator =
-					ctx->enc_params.rc_framerate_denom;
+			ctx->enc_params.codec.runtime.rc_framerate_denom;
 	} else {
 		mfc_err("Getting FPS is only possible for the output queue\n");
 		return -EINVAL;
@@ -1977,7 +2000,19 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 		ctx->dst_queue_cnt++;
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 	} else if (vq->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		struct s5p_mfc_runtime_enc_params *runtime_params =
+			&ctx->enc_params.codec.runtime;
 		mfc_buf = &ctx->src_bufs[vb->v4l2_buf.index];
+		/* Tag buffer with runtime encoding parameters */
+		memcpy(&mfc_buf->runtime_enc_params, runtime_params,
+			sizeof(mfc_buf->runtime_enc_params));
+		runtime_params->params_changed = 0;
+		/* force_frame_type needs to revert to 0 after being sent. */
+		if (runtime_params->force_frame_type != 0) {
+			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
+				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
+				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED);
+		}
 		mfc_buf->flags &= ~MFC_BUF_FLAG_USED;
 		spin_lock_irqsave(&dev->irqlock, flags);
 		list_add_tail(&mfc_buf->list, &ctx->src_queue);
