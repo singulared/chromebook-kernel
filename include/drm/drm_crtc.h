@@ -488,6 +488,7 @@ struct drm_encoder_funcs {
  * @possible_crtcs: bitmask of potential CRTC bindings
  * @possible_clones: bitmask of potential sibling encoders for cloning
  * @crtc: currently bound CRTC
+ * @bridge: bridge associated to the encoder (mapped at init)
  * @funcs: control functions
  * @helper_private: mid-layer private data
  *
@@ -504,6 +505,7 @@ struct drm_encoder {
 	uint32_t possible_clones;
 
 	struct drm_crtc *crtc;
+	struct drm_bridge *bridge;
 	const struct drm_encoder_funcs *funcs;
 	void *helper_private;
 };
@@ -551,7 +553,6 @@ enum drm_connector_force {
  * @force: a %DRM_FORCE_<foo> state for forced mode sets
  * @encoder_ids: valid encoders for this connector
  * @encoder: encoder driving this connector, if any
- * @bridge: bridge connected to this connector
  * @eld: EDID-like data, if present
  * @dvi_dual: dual link DVI, if found
  * @max_tmds_clock: max clock rate, if found
@@ -602,7 +603,6 @@ struct drm_connector {
 	enum drm_connector_force force;
 	uint32_t encoder_ids[DRM_CONNECTOR_MAX_ENCODER];
 	struct drm_encoder *encoder; /* currently active encoder */
-	struct drm_bridge *bridge; /* currently active bridge */
 
 	/* EDID bits */
 	uint8_t eld[MAX_ELD_BYTES];
@@ -680,9 +680,25 @@ struct drm_plane {
 
 /**
  * drm_bridge_funcs - drm_bridge control functions
+ * @mode_fixup: Try to fixup (or reject entirely) proposed mode for this bridge
+ * @disable: Called right before encoder prepare, disables the bridge
+ * @post_disable: Called right after encoder prepare, for lockstepped disable
+ * @mode_set: Set this mode to the bridge
+ * @pre_enable: Called right before encoder commit, for lockstepped commit
+ * @enable: Called right after encoder commit, enables the bridge
  * @destroy: make object go away
  */
 struct drm_bridge_funcs {
+	bool (*mode_fixup)(struct drm_bridge *bridge,
+			   const struct drm_display_mode *mode,
+			   struct drm_display_mode *adjusted_mode);
+	void (*disable)(struct drm_bridge *bridge);
+	void (*post_disable)(struct drm_bridge *bridge);
+	void (*mode_set)(struct drm_bridge *bridge,
+			 struct drm_display_mode *mode,
+			 struct drm_display_mode *adjusted_mode);
+	void (*pre_enable)(struct drm_bridge *bridge);
+	void (*enable)(struct drm_bridge *bridge);
 	void (*destroy)(struct drm_bridge *bridge);
 };
 
@@ -691,10 +707,8 @@ struct drm_bridge_funcs {
  * @dev: DRM device this bridge belongs to
  * @head: list management
  * @base: base mode object
- * @crtc: crtc we're currently attached to
- * @connector_type: the type of connector this bridge can attach to
  * @funcs: control functions
- * @helper_private: mid-layer private data
+ * @driver_private: pointer to the bridge driver's internal context
  */
 struct drm_bridge {
 	struct drm_device *dev;
@@ -702,12 +716,8 @@ struct drm_bridge {
 
 	struct drm_mode_object base;
 
-	struct drm_crtc *crtc;
-
-	int connector_type;
-
 	const struct drm_bridge_funcs *funcs;
-	void *helper_private;
+	void *driver_private;
 };
 
 /**
