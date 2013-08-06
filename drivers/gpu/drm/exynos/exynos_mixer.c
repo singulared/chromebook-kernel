@@ -135,6 +135,57 @@ static const u8 filter_cr_horiz_tap4[] = {
 	70,	59,	48,	37,	27,	19,	11,	5,
 };
 
+enum exynos_mixer_mode_type {
+	EXYNOS_MIXER_MODE_INVALID,
+	EXYNOS_MIXER_MODE_SD_NTSC,
+	EXYNOS_MIXER_MODE_SD_PAL,
+	EXYNOS_MIXER_MODE_HD_720,
+	EXYNOS_MIXER_MODE_HD_1080,
+};
+
+struct mixer_scan_range {
+	int min_res[2], max_res[2];
+	enum exynos_mixer_mode_type mode_type;
+};
+
+struct mixer_scan_adjustment {
+	int res[2], new_res[2];
+};
+
+const struct mixer_scan_range scan_ranges[] = {
+	{
+		.min_res = { 464, 0 },
+		.max_res = { 720, 480 },
+		.mode_type = EXYNOS_MIXER_MODE_SD_NTSC,
+	},
+	{
+		.min_res = { 464, 481 },
+		.max_res = { 720, 576 },
+		.mode_type = EXYNOS_MIXER_MODE_SD_PAL,
+	},
+	{
+		.min_res = { 1024, 0 },
+		.max_res = { 1280, 720 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_720,
+	},
+	{
+		.min_res = { 1664, 0 },
+		.max_res = { 1920, 1080 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+	},
+};
+
+const struct mixer_scan_adjustment scan_adjustments[] = {
+	{
+		.res = { 1024, 768 },
+		.new_res = { 1024, 720 },
+	},
+	{
+		.res = { 1280, 800 },
+		.new_res = { 1280, 720 },
+	},
+};
+
 static inline u32 vp_reg_read(struct mixer_resources *res, u32 reg_id)
 {
 	return readl(res->vp_regs + reg_id);
@@ -173,6 +224,69 @@ static inline void mixer_reg_writemask(struct mixer_resources *res,
 
 	val = (val & mask) | (old & ~mask);
 	writel(val, res->mixer_regs + reg_id);
+}
+
+enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height)
+{
+	int i;
+
+	/*
+	 * If the mode matches an adjustment, adjust it before finding the
+	 * mode type
+	 */
+	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
+		const struct mixer_scan_adjustment *adj = &scan_adjustments[i];
+
+		if (width == adj->res[0] && height == adj->res[1]) {
+			width = adj->new_res[0];
+			height = adj->new_res[1];
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(scan_ranges); i++) {
+		const struct mixer_scan_range *range = &scan_ranges[i];
+
+		if (width >= range->min_res[0] && width <= range->max_res[0]
+		 && height >= range->min_res[1] && height <= range->max_res[1])
+			return range->mode_type;
+	}
+	return EXYNOS_MIXER_MODE_INVALID;
+}
+
+static void mixer_adjust_modes(void *ctx, struct drm_connector *connector)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
+		const struct mixer_scan_adjustment *adj = &scan_adjustments[i];
+		struct drm_display_mode *mode;
+		bool native_support = false;
+
+		/*
+		 * Make sure the mode resulting from the adjustment is not
+		 * already natively supported. This might cause us to do
+		 * something stupid like choose a chopped 1280x800 resolution
+		 * over native 720p.
+		 */
+		list_for_each_entry(mode, &connector->modes, head) {
+			if (adj->new_res[0] == mode->hdisplay &&
+			    adj->new_res[1] == mode->vdisplay) {
+				native_support = true;
+				break;
+			}
+		}
+		if (native_support)
+			continue;
+
+		list_for_each_entry(mode, &connector->modes, head) {
+			if (adj->res[0] == mode->hdisplay &&
+			    adj->res[1] == mode->vdisplay) {
+				mode->hdisplay = adj->new_res[0];
+				mode->vdisplay = adj->new_res[1];
+				break;
+			}
+		}
+	}
 }
 
 static void mixer_regs_dump(struct mixer_context *ctx)
@@ -277,9 +391,11 @@ static void mixer_vsync_set_update(struct mixer_context *ctx, bool enable)
 			VP_SHADOW_UPDATE_ENABLE : 0);
 }
 
-static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int height)
+static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int width,
+		unsigned int height)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
+	enum exynos_mixer_mode_type mode_type;
 	u32 val;
 
 	/* choosing between interlace and progressive mode */
@@ -288,16 +404,24 @@ static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int height)
 
 	if (ctx->mxr_ver != MXR_VER_128_0_0_184) {
 		/* choosing between proper HD and SD mode */
-		if (height <= 480)
+		mode_type = exynos_mixer_get_mode_type(width, height);
+		switch (mode_type) {
+		case EXYNOS_MIXER_MODE_SD_NTSC:
 			val |= MXR_CFG_SCAN_NTSC | MXR_CFG_SCAN_SD;
-		else if (height <= 576)
+			break;
+		case EXYNOS_MIXER_MODE_SD_PAL:
 			val |= MXR_CFG_SCAN_PAL | MXR_CFG_SCAN_SD;
-		else if (height <= 720)
+			break;
+		case EXYNOS_MIXER_MODE_HD_720:
 			val |= MXR_CFG_SCAN_HD_720 | MXR_CFG_SCAN_HD;
-		else if (height <= 1080)
+			break;
+		case EXYNOS_MIXER_MODE_HD_1080:
 			val |= MXR_CFG_SCAN_HD_1080 | MXR_CFG_SCAN_HD;
-		else
-			val |= MXR_CFG_SCAN_HD_720 | MXR_CFG_SCAN_HD;
+			break;
+		default:
+			DRM_ERROR("Invalid config %dx%d\n", width, height);
+			return;
+		}
 	}
 
 	mixer_reg_writemask(res, MXR_CFG, val, MXR_CFG_SCAN_MASK);
@@ -481,7 +605,7 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	vp_reg_write(res, VP_TOP_C_PTR, chroma_addr[0]);
 	vp_reg_write(res, VP_BOT_C_PTR, chroma_addr[1]);
 
-	mixer_cfg_scan(ctx, win_data->mode_height);
+	mixer_cfg_scan(ctx, win_data->mode_width, win_data->mode_height);
 	mixer_cfg_rgb_fmt(ctx, win_data->mode_height);
 	mixer_cfg_layer(ctx, win, true);
 	mixer_run(ctx);
@@ -595,7 +719,7 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 	/* set buffer address to mixer */
 	mixer_reg_write(res, MXR_GRAPHIC_BASE(win), dma_addr);
 
-	mixer_cfg_scan(ctx, win_data->mode_height);
+	mixer_cfg_scan(ctx, win_data->mode_width, win_data->mode_height);
 	mixer_cfg_rgb_fmt(ctx, win_data->mode_height);
 	mixer_cfg_layer(ctx, win, true);
 
@@ -1013,27 +1137,19 @@ static void mixer_dpms(void *ctx, int mode)
 /* Only valid for Mixer version 16.0.33.0 */
 int mixer_check_mode(struct drm_display_mode *mode)
 {
-	u32 w, h;
-
-	w = mode->hdisplay;
-	h = mode->vdisplay;
-
 	DRM_DEBUG_KMS("xres=%d, yres=%d, refresh=%d, intl=%d\n",
 		mode->hdisplay, mode->vdisplay, mode->vrefresh,
 		(mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0);
 
-	if ((w >= 464 && w <= 720 && h >= 261 && h <= 576) ||
-		(w >= 1024 && w <= 1280 && h >= 576 && h <= 720) ||
-		(w >= 1664 && w <= 1920 && h >= 936 && h <= 1080))
-		return 0;
-
-	return -EINVAL;
+	return exynos_mixer_get_mode_type(mode->hdisplay, mode->vdisplay)
+		!= EXYNOS_MIXER_MODE_INVALID ? 0 : -EINVAL;
 }
 
 static struct exynos_drm_manager_ops mixer_manager_ops = {
 	.initialize		= mixer_initialize,
 	.remove			= mixer_mgr_remove,
 	.dpms			= mixer_dpms,
+	.adjust_modes		= mixer_adjust_modes,
 	.apply                  = mixer_apply,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
