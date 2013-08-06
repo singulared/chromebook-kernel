@@ -145,6 +145,18 @@ void exynos_drm_remove_managers(struct drm_device *dev)
 		exynos_drm_manager_unregister(manager);
 }
 
+struct exynos_drm_manager *exynos_drm_manager_from_display(
+		struct exynos_drm_display *display)
+{
+	struct exynos_drm_manager *manager;
+
+	list_for_each_entry(manager, &exynos_drm_manager_list, list) {
+		if (manager->type == display->type)
+			return manager;
+	}
+	return NULL;
+}
+
 int exynos_drm_initialize_displays(struct drm_device *dev)
 {
 	struct exynos_drm_display *display, *n;

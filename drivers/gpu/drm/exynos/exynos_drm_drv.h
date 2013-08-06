@@ -193,6 +193,7 @@ struct exynos_drm_display {
  * @initialize: initializes the manager with drm_dev
  * @remove: cleans up the manager for removal
  * @dpms: control device power.
+ * @adjust_modes: allows manager to adjust modes in the fill_modes path
  * @apply: set timing, vblank and overlay data to registers.
  * @mode_fixup: fix mode data before applying it
  * @update: set the given mode to the manager
@@ -208,6 +209,7 @@ struct exynos_drm_manager_ops {
 	int (*initialize)(void *ctx, struct drm_device *drm_dev, int pipe);
 	void (*remove)(void *ctx);
 	void (*dpms)(void *ctx, int mode);
+	void (*adjust_modes)(void *ctx, struct drm_connector *connector);
 	void (*apply)(void *ctx);
 	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
@@ -340,6 +342,10 @@ int exynos_drm_manager_register(struct exynos_drm_manager *manager);
 int exynos_drm_manager_unregister(struct exynos_drm_manager *manager);
 int exynos_drm_display_register(struct exynos_drm_display *display);
 int exynos_drm_display_unregister(struct exynos_drm_display *display);
+
+/* This function returns a manager of the same type as the given display */
+struct exynos_drm_manager *exynos_drm_manager_from_display(
+		struct exynos_drm_display *display);
 
 /*
  * this function would be called by sub drivers such as display controller
