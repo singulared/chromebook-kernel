@@ -694,12 +694,27 @@ static bool enable_mwi87xx(void)
 
 static void exynos_wifi_bt_set_power(u32 slot_id, u32 volt)
 {
-	if (volt == 0 || (!of_machine_is_compatible("google,snow") &&
+	static bool already_ran;
+
+	if (already_ran ||
+	    volt == 0 || (!of_machine_is_compatible("google,snow") &&
 			  !of_machine_is_compatible("google,spring") &&
 			  !of_machine_is_compatible("google,daisy")))
 		return;
-	if (!enable_mwi87xx())
+
+	if (!enable_mwi87xx()) {
 		pr_err("%s: problem enabling WiFi+BT\n", __func__);
+		return;
+	}
+
+	/*
+	 * We enable the regulators at bootup once the LCD comes on and never
+	 * let them go.  Enabling them more than once is pointless and just
+	 * increments the reference count for the regulators, preventing
+	 * the mwifiex_sdio_mwi87xx_reset() from working properly.
+	 */
+	already_ran = true;
+
 	/* NB: bt-reset-l is tied to wifi-rst-l so BT should be ready too */
 }
 
