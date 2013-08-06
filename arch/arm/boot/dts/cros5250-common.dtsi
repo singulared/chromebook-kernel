@@ -567,16 +567,8 @@
 		pinctrl-0 = <&max98095_en>;
 	};
 
-	// NB: these are manually enabled in platform code
-	wifi-en-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "wifi-en";
-		gpio = <&gpx0 1 0>;
-		enable-active-high;
-		pinctrl-names = "default";
-		pinctrl-0 = <&wifi_en>;
-	};
-	wifi-rst-regulator {
+	/* Chain regulators to ensure proper Wifi turn on sequence */
+	wifi_rst_regulator: wifi-rst-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "wifi-rst-l";
 		gpio = <&gpx0 2 0>;
@@ -584,6 +576,25 @@
 		startup-delay-us = <1500>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&wifi_rst>;
+
+		/*
+		 * Technically we should have a vin-supply of the 32k clock.
+		 * ...but that causes a deferred probe of this regulator
+		 * despite the fact that we don't need to enable it until
+		 * much later.  Skip the dependency since we know that the
+		 * 32k clock will always be kept on from early boot.
+		 *
+		 * vin-supply = <&en32khz_cp>;
+		 */
+	};
+	wifi_en_regulator: wifi-en-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "wifi-en";
+		gpio = <&gpx0 1 0>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_en>;
+		vin-supply = <&wifi_rst_regulator>;
 	};
 
 	gpio-keys {

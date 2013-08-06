@@ -299,6 +299,13 @@
 	 * reduce EMI.
 	 */
 	dwmmc3@12230000 {
+		/*
+		 * The current best way to ensure that reset/enable and clocks
+		 * are available before we try to probe the WiFi card is through
+		 * a chain of regulators.
+		 */
+		vmmc-supply = <&wifi_en_regulator>;
+
 		pinctrl-names = "default";
 		pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_bus4>;
 	};
