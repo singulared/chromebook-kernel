@@ -13,7 +13,7 @@
 #include <linux/of_fdt.h>
 #include <linux/memblock.h>
 #include <linux/io.h>
-#include <linux/pwm_backlight.h>
+#include <linux/platform_data/ntc_thermistor.h>
 #include <linux/gpio.h>
 #include <linux/delay.h>
 #include <linux/regulator/fixed.h>
@@ -31,7 +31,6 @@
 
 #include <plat/cpu.h>
 #include <plat/mfc.h>
-#include <plat/backlight.h>
 #include <plat/adc.h>	/* for s3c_adc_register and friends */
 #include <plat/gpio-cfg.h>
 #include <plat/fb.h>
@@ -80,30 +79,6 @@ static void __init exynos5_ramoops_reserve(void)
 		pr_info("Ramoops: %08lx - %08lx\n", start, start + size - 1);
 	}
 }
-
-static int smdk5250_bl_notify(struct device *unused, int brightness)
-{
-	/* manage lcd_bl_en signal */
-	if (brightness)
-		gpio_set_value(EXYNOS5_GPX3(0), 1);
-	else
-		gpio_set_value(EXYNOS5_GPX3(0), 0);
-
-	return brightness;
-}
-
-/* LCD Backlight data */
-static struct samsung_bl_gpio_info smdk5250_bl_gpio_info = {
-	.no	= EXYNOS5_GPB2(0),
-	.func	= S3C_GPIO_SFN(2),
-};
-
-static struct platform_pwm_backlight_data smdk5250_bl_data = {
-	.max_brightness = 2800,
-	.dft_brightness = 2800,
-	.pwm_period_ns	= 1000000,
-	.notify		= smdk5250_bl_notify,
-};
 
 static int lcd_probe(struct plat_lcd_data *pd);
 static void lcd_set_power(struct plat_lcd_data *pd, unsigned int power);
@@ -237,9 +212,6 @@ static void __init exynos5_dt_machine_init(void)
 	}
 
 	if (of_machine_is_compatible("samsung,exynos5250")) {
-		gpio_request_one(EXYNOS5_GPX3(0), GPIOF_OUT_INIT_HIGH,
-								"lcd_bl_en");
-		samsung_bl_set(&smdk5250_bl_gpio_info, &smdk5250_bl_data);
 		exynos5_fimd1_gpio_setup_24bpp();
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
