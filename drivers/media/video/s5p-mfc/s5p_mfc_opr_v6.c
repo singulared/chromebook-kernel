@@ -67,6 +67,7 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned int mb_width, mb_height;
+	size_t bank1_size = 0;
 	int ret;
 
 	mb_width = MB_WIDTH(ctx->img_width);
@@ -107,7 +108,7 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size =
+		bank1_size =
 			ctx->scratch_buf_size +
 			(ctx->mv_count * ctx->mv_size);
 		break;
@@ -118,7 +119,7 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size = ctx->scratch_buf_size;
+		bank1_size = ctx->scratch_buf_size;
 		break;
 	case S5P_MFC_CODEC_VC1RCV_DEC:
 	case S5P_MFC_CODEC_VC1_DEC:
@@ -128,11 +129,10 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size = ctx->scratch_buf_size;
+		bank1_size = ctx->scratch_buf_size;
 		break;
 	case S5P_MFC_CODEC_MPEG2_DEC:
-		ctx->bank1.size = 0;
-		ctx->bank2.size = 0;
+		bank1_size = 0;
 		break;
 	case S5P_MFC_CODEC_H263_DEC:
 		ctx->scratch_buf_size =
@@ -141,7 +141,7 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size = ctx->scratch_buf_size;
+		bank1_size = ctx->scratch_buf_size;
 		break;
 	case S5P_MFC_CODEC_VP8_DEC:
 		ctx->scratch_buf_size =
@@ -150,15 +150,16 @@ static int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size = ctx->scratch_buf_size;
+		bank1_size = ctx->scratch_buf_size;
 		break;
 	default:
 		break;
 	}
 
 	/* Allocate only if memory from bank 1 is necessary */
-	if (ctx->bank1.size > 0 && (ctx->type == MFCINST_DECODER)) {
-		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1);
+	if (bank1_size > 0 && (ctx->type == MFCINST_DECODER)) {
+		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
+						bank1_size);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 memory\n");
 			return ret;
@@ -180,6 +181,7 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf_size_v6 *buf_size = dev->variant->buf_size->priv;
+	size_t ctx_size;
 	int ret;
 
 	mfc_debug_enter();
@@ -187,7 +189,7 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 	switch (ctx->codec_mode) {
 	case S5P_MFC_CODEC_H264_DEC:
 	case S5P_MFC_CODEC_H264_MVC_DEC:
-		ctx->ctx.size = buf_size->h264_dec_ctx;
+		ctx_size = buf_size->h264_dec_ctx;
 		break;
 	case S5P_MFC_CODEC_MPEG4_DEC:
 	case S5P_MFC_CODEC_H263_DEC:
@@ -195,22 +197,22 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 	case S5P_MFC_CODEC_VC1_DEC:
 	case S5P_MFC_CODEC_MPEG2_DEC:
 	case S5P_MFC_CODEC_VP8_DEC:
-		ctx->ctx.size = buf_size->other_dec_ctx;
+		ctx_size = buf_size->other_dec_ctx;
 		break;
 	case S5P_MFC_CODEC_H264_ENC:
-		ctx->ctx.size = buf_size->h264_enc_ctx;
+		ctx_size = buf_size->h264_enc_ctx;
 		break;
 	case S5P_MFC_CODEC_MPEG4_ENC:
 	case S5P_MFC_CODEC_H263_ENC:
-		ctx->ctx.size = buf_size->other_enc_ctx;
+		ctx_size = buf_size->other_enc_ctx;
 		break;
 	default:
-		ctx->ctx.size = 0;
+		ctx_size = 0;
 		mfc_err("Codec type(%d) should be checked!\n", ctx->codec_mode);
 		break;
 	}
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
@@ -238,14 +240,14 @@ static int s5p_mfc_alloc_dev_context_buffer_v6(struct s5p_mfc_dev *dev)
 
 	mfc_debug_enter();
 
-	dev->ctx_buf.size = buf_size->dev_ctx;
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &dev->ctx_buf);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &dev->ctx_buf,
+					buf_size->dev_ctx);
 	if (ret) {
 		mfc_err("Failed to allocate device context buffer\n");
 		return ret;
 	}
 
-	memset(dev->ctx_buf.virt, 0, buf_size->dev_ctx);
+	memset(dev->ctx_buf.virt, 0, dev->ctx_buf.size);
 	wmb();
 
 	mfc_debug_leave();
@@ -1506,6 +1508,7 @@ static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned int mb_width, mb_height;
+	size_t bank1_size = 0;
 	int ret;
 
 	mb_width = MB_WIDTH(ctx->img_width);
@@ -1520,11 +1523,10 @@ static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size =
+		bank1_size =
 			ctx->scratch_buf_size + ctx->tmv_buffer_size +
 			(ctx->dpb_count * (ctx->luma_dpb_size +
 			ctx->chroma_dpb_size + ctx->me_buffer_size));
-		ctx->bank2.size = 0;
 		break;
 	case S5P_MFC_CODEC_MPEG4_ENC:
 	case S5P_MFC_CODEC_H263_ENC:
@@ -1534,19 +1536,19 @@ static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 					mb_height);
 		ctx->scratch_buf_size = ALIGN(ctx->scratch_buf_size,
 				S5P_FIMV_SCRATCH_BUFFER_ALIGN_V6);
-		ctx->bank1.size =
+		bank1_size =
 			ctx->scratch_buf_size + ctx->tmv_buffer_size +
 			(ctx->dpb_count * (ctx->luma_dpb_size +
 			ctx->chroma_dpb_size + ctx->me_buffer_size));
-		ctx->bank2.size = 0;
 		break;
 	default:
 		break;
 	}
 
 	/* Allocate bank1 memory */
-	if (ctx->bank1.size > 0) {
-		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1);
+	if (bank1_size > 0) {
+		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
+						bank1_size);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 memory\n");
 			return ret;
