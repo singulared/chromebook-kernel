@@ -148,6 +148,7 @@ struct hdmi_context {
 	unsigned int			curr_irq;
 	struct timer_list		hotplug_timer;
 
+	struct device_node		*ddc_node;
 	struct i2c_client		*ddc_port;
 	struct i2c_client		*hdmiphy_port;
 	int				hpd_gpio;
@@ -898,8 +899,17 @@ static struct edid *hdmi_get_edid(void *ctx, struct drm_connector *connector)
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
 			drm_get_connector_name(connector));
 
-	if (!hdata->ddc_port)
-		return ERR_PTR(-ENODEV);
+	/*
+	 * TODO: find DDC port at probe time once its initialization can be
+	 * guaranteed by then.
+	 */
+	if (!hdata->ddc_port) {
+		hdata->ddc_port = of_find_i2c_device_by_node(hdata->ddc_node);
+		if (!hdata->ddc_port) {
+			DRM_DEBUG("Failed to get ddc i2c client by node\n");
+			return ERR_PTR(-ENODEV);
+		}
+	}
 
 	edid = drm_get_edid(connector, hdata->ddc_port->adapter);
 	if (!edid)
@@ -2291,7 +2301,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	struct hdmi_context *hdata;
 	struct exynos_drm_hdmi_pdata *pdata;
 	struct resource *res;
-	struct device_node *ddc_node, *phy_node;
+	struct device_node *phy_node;
 	int ret;
 	enum of_gpio_flags flags;
 
@@ -2348,15 +2358,9 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	}
 
 	/* DDC i2c driver */
-	ddc_node = of_find_node_by_name(NULL, "exynos_ddc");
-	if (!ddc_node) {
+	hdata->ddc_node = of_find_node_by_name(NULL, "exynos_ddc");
+	if (!hdata->ddc_node) {
 		DRM_ERROR("Failed to find ddc node in device tree\n");
-		ret = -ENODEV;
-		goto err_iomap;
-	}
-	hdata->ddc_port = of_find_i2c_device_by_node(ddc_node);
-	if (!hdata->ddc_port) {
-		DRM_ERROR("Failed to get ddc i2c client by node\n");
 		ret = -ENODEV;
 		goto err_iomap;
 	}
@@ -2366,13 +2370,13 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	if (!phy_node) {
 		DRM_ERROR("Failed to find hdmiphy node in device tree\n");
 		ret = -ENODEV;
-		goto err_ddc;
+		goto err_iomap;
 	}
 	hdata->hdmiphy_port = of_find_i2c_device_by_node(phy_node);
 	if (!hdata->hdmiphy_port) {
 		DRM_ERROR("Failed to get hdmi phy i2c client from node\n");
 		ret = -ENODEV;
-		goto err_ddc;
+		goto err_iomap;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -2442,8 +2446,6 @@ err_int_irq:
 	free_irq(hdata->internal_irq, hdata);
 err_hdmiphy:
 	put_device(&hdata->hdmiphy_port->dev);
-err_ddc:
-	put_device(&hdata->ddc_port->dev);
 err_iomap:
 	iounmap(hdata->regs);
 err_req_region:
@@ -2483,7 +2485,8 @@ static int __devexit hdmi_remove(struct platform_device *pdev)
 			resource_size(hdata->regs_res));
 
 	put_device(&hdata->hdmiphy_port->dev);
-	put_device(&hdata->ddc_port->dev);
+	if (hdata->ddc_port)
+		put_device(&hdata->ddc_port->dev);
 
 	kfree(hdata);
 
