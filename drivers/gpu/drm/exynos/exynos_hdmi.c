@@ -2301,7 +2301,7 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	struct hdmi_context *hdata;
 	struct exynos_drm_hdmi_pdata *pdata;
 	struct resource *res;
-	struct device_node *phy_node;
+	struct device_node *phy_node, *hdmi_node;
 	int ret;
 	enum of_gpio_flags flags;
 
@@ -2358,7 +2358,13 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	}
 
 	/* DDC i2c driver */
-	hdata->ddc_node = of_find_node_by_name(NULL, "exynos_ddc");
+	hdmi_node = of_find_compatible_node(NULL, NULL, "samsung,exynos5-hdmi");
+	if (!hdmi_node) {
+		DRM_ERROR("Failed to find hdmi node in device tree\n");
+		ret = -ENODEV;
+		goto err_iomap;
+	}
+	hdata->ddc_node = of_parse_phandle(hdmi_node, "hdmi-ddc", 0);
 	if (!hdata->ddc_node) {
 		DRM_ERROR("Failed to find ddc node in device tree\n");
 		ret = -ENODEV;
