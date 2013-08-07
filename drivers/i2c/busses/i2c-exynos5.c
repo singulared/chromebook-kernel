@@ -400,8 +400,8 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 		}
 
 		len = HSI2C_FIFO_MAX - fifo_level;
-		if (len > i2c->msg->len)
-			len = i2c->msg->len;
+		if (len > i2c->msg->len - i2c->msg_ptr)
+			len = i2c->msg->len - i2c->msg_ptr;
 
 		i2c->msg_len += len;
 		while (len > 0) {
@@ -419,11 +419,7 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 	if (int_status & (HSI2C_INT_RX_OVERRUN | HSI2C_INT_TRAILING |
 		HSI2C_INT_RX_UNDERRUN | HSI2C_INT_RX_ALMOSTFULL)) {
 		fifo_level = HSI2C_RX_FIFO_LVL(fifo_status);
-
-		if (fifo_level >= i2c->msg->len)
-			len = i2c->msg->len;
-		else
-			len = fifo_level;
+		len = min(fifo_level, i2c->msg->len - i2c->msg_ptr);
 
 		i2c->msg_len += len;
 		while (len > 0) {
