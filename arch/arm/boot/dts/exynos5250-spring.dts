@@ -411,6 +411,11 @@
 			reset-gpio = <&gpe0 7 1 0 0>;
 			cable-det-gpio = <&gpx0 7 0 0 0>;
 			intp-gpio = <&gpf0 0 0 0 0>;
+
+			anx7808_ddc: anx7808_ddc@50 {
+				compatible = "analogix,7808_ddc";
+				reg = <0x50>;
+			};
 		};
 
 	};
@@ -570,5 +575,9 @@
 		gpz: gpio-controller@03860000 {
 			powerdown-settings = <6 3 6 6 6 3 3>;
 		};
+	};
+
+	hdmi {
+		hdmi-ddc = <&anx7808_ddc>;
 	};
 };
