@@ -2550,6 +2550,13 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 	hdmiphy_poweron(hdata);
 
 	hdata->powered = true;
+	/*
+	 * In hdmi poweroff sequence we have cleared
+	 * all the hdmi configuration.
+	 * For the next poweron we need to restore the
+	 * lost configuration.
+	 */
+	hdmi_commit(hdata);
 }
 
 static void hdmi_poweroff(struct hdmi_context *hdata)

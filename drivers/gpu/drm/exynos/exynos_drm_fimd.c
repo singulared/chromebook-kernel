@@ -803,6 +803,13 @@ static int fimd_poweron(struct fimd_context *ctx)
 	}
 
 	fimd_window_resume(ctx);
+	/*
+	 * Restore the lost configuration of fimd
+	 * as in case flips are not called reqularly
+	 * it may cause display failure
+	 */
+	fimd_commit(ctx);
+
 	return 0;
 
 enable_vblank_err:
