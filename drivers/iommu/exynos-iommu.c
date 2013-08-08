@@ -223,6 +223,7 @@ struct sysmmu_drvdata {
 	struct device *master;	/* Client device that needs System MMU */
 	int nsfrs;
 	struct clk *clk;
+	struct clk *clk_master;
 	int activations;
 	spinlock_t lock;
 	struct sysmmu_prefbuf pbufs[MAX_NUM_PBUF];
@@ -565,6 +566,8 @@ void exynos_sysmmu_set_pbuf(struct device *dev, int nbufs,
 			continue;
 		}
 
+		clk_enable(data->clk_master);
+
 		for (nsfrs = 0; nsfrs < data->nsfrs; nsfrs++) {
 			unsigned int maj, min;
 
@@ -578,6 +581,8 @@ void exynos_sysmmu_set_pbuf(struct device *dev, int nbufs,
 				sysmmu_unblock(data->sfrbases[nsfrs]);
 			}
 		} /* while (nsfrs < data->nsfrs) */
+
+		clk_disable(data->clk_master);
 		spin_unlock_irqrestore(&data->lock, flags);
 	}
 }
@@ -585,6 +590,8 @@ void exynos_sysmmu_set_pbuf(struct device *dev, int nbufs,
 static void __sysmmu_restore_state(struct sysmmu_drvdata *data)
 {
 	int i, min;
+
+	clk_enable(data->clk_master);
 
 	for (i = 0; i < data->nsfrs; i++) {
 		if (__sysmmu_version(data, i, &min) == 3) {
@@ -595,6 +602,8 @@ static void __sysmmu_restore_state(struct sysmmu_drvdata *data)
 			}
 		}
 	}
+
+	clk_disable(data->clk_master);
 }
 
 static void __show_fault_information(unsigned long *pgtable, unsigned long iova,
@@ -642,6 +651,8 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 			break;
 	}
 
+	clk_enable(data->clk_master);
+
 	if (i < data->nsfrs) {
 		itype = (enum exynos_sysmmu_inttype)
 			__ffs(__raw_readl(data->sfrbases[i] + REG_INT_STATUS));
@@ -680,6 +691,8 @@ static irqreturn_t exynos_sysmmu_irq(int irq, void *dev_id)
 
 	sysmmu_unblock(data->sfrbases[i]);
 
+	clk_disable(data->clk_master);
+
 	if (owner)
 		spin_unlock(&owner->lock);
 
@@ -690,9 +703,13 @@ static void __sysmmu_disable_nocount(struct sysmmu_drvdata *data)
 {
 	int i;
 
+	clk_enable(data->clk_master);
+
 	for (i = 0; i < data->nsfrs; i++)
 		__raw_writel(CTRL_DISABLE,
 			data->sfrbases[i] + REG_MMU_CTRL);
+
+	clk_disable(data->clk_master);
 
 	clk_disable(data->clk);
 }
@@ -762,6 +779,8 @@ static void __sysmmu_enable_nocount(struct sysmmu_drvdata *data, bool init)
 
 	clk_enable(data->clk);
 
+	clk_enable(data->clk_master);
+
 	for (i = 0; i < data->nsfrs; i++) {
 		/*
 		 * MMU_CTRL has a reset value during bootup and system resume
@@ -779,6 +798,8 @@ static void __sysmmu_enable_nocount(struct sysmmu_drvdata *data, bool init)
 
 		__raw_writel(CTRL_ENABLE, data->sfrbases[i] + REG_MMU_CTRL);
 	}
+
+	clk_disable(data->clk_master);
 }
 
 static int __sysmmu_enable(struct sysmmu_drvdata *data,
@@ -892,6 +913,7 @@ static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
 		if (is_sysmmu_active(data) &&
 				data->runtime_active) {
 			int i;
+			clk_enable(data->clk_master);
 			for (i = 0; i < data->nsfrs; i++) {
 				if (sysmmu_block(data->sfrbases[i])) {
 					__sysmmu_tlb_invalidate_entry(
@@ -903,6 +925,7 @@ static void sysmmu_tlb_invalidate_entry(struct device *dev, unsigned long iova)
 					__func__);
 				}
 			}
+			clk_disable(data->clk_master);
 		} else {
 			dev_dbg(dev,
 			"Disabled. Skipping TLB invalidation for %#lx\n", iova);
@@ -924,6 +947,7 @@ void exynos_sysmmu_tlb_invalidate(struct device *dev)
 		spin_lock_irqsave(&data->lock, flags);
 		if (is_sysmmu_active(data)) {
 			int i;
+			clk_enable(data->clk_master);
 			for (i = 0; i < data->nsfrs; i++) {
 				if (sysmmu_block(data->sfrbases[i])) {
 					__sysmmu_tlb_invalidate(
@@ -935,6 +959,7 @@ void exynos_sysmmu_tlb_invalidate(struct device *dev)
 					__func__);
 				}
 			}
+			clk_disable(data->clk_master);
 		} else {
 			dev_dbg(dev, "Disabled. Skipping TLB invalidation\n");
 		}
@@ -958,6 +983,18 @@ static int __init __sysmmu_init_clock(struct device *sysmmu,
 	}
 
 	clk_prepare(drvdata->clk);
+
+	drvdata->clk_master = devm_clk_get(sysmmu, "master");
+	if (IS_ERR(drvdata->clk_master))
+		drvdata->clk_master = NULL;
+
+	ret = clk_prepare(drvdata->clk_master);
+	if (ret) {
+		clk_unprepare(drvdata->clk);
+		clk_put(drvdata->clk);
+		dev_err(sysmmu, "Failed to prepare master's clk\n");
+		return ret;
+	}
 
 	if (!master)
 		return 0;
@@ -1734,7 +1771,9 @@ static int debug_sysmmu_list_show(struct seq_file *s, void *unused)
 		if (!res)
 			break;
 
+		clk_enable(drvdata->clk_master);
 		maj = __sysmmu_version(drvdata, idx, &min);
+		clk_disable(drvdata->clk_master);
 
 		if (drvdata->mmuname) {
 			if (maj == 0)
