@@ -243,6 +243,13 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+
+		backlight_pwm: backlight-pwm {
+			samsung,pins = "gpb2-0";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	gpio-keys {
@@ -983,6 +990,7 @@
 			sleep-gpio = <&gpx3 5 0>;
 			reset-gpio = <&gpy7 7 0>;
 			lane-count = <2>;
+			use-external-pwm;
 			pinctrl-names = "default";
 			pinctrl-0 = <&ps8625_sleep &ps8625_reset>;
 		};
@@ -1192,6 +1200,15 @@
 			pulldown-ohm = <0>;
 			io-channels = <&adc 6>;
 		};
+	};
+
+	backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 0 1000000 0>;
+		max-brightness = <2800>;
+		default-brightness-level = <2800>;
+		pinctrl-0 = <&backlight_pwm>;
+		pinctrl-names = "default";
 	};
 
 	pinctrl@13400000 {
