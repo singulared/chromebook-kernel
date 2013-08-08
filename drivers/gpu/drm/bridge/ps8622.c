@@ -153,10 +153,16 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 						  * revision '01' */
 	err |= ps8622_set(cl, 0x01, 0xcb, 0x05); /* DPCD40B, Initial Code minor
 						  * revision '05' */
-	err |= ps8622_set(cl, 0x01, 0xa5, 0xa0); /* DPCD720, internal PWM */
-	err |= ps8622_set(cl, 0x01, 0xa7, bridge->bl->props.brightness);
+	if (bridge->bl) {
+		err |= ps8622_set(cl, 0x01, 0xa5, 0xa0);
+						/* DPCD720, internal PWM */
+		err |= ps8622_set(cl, 0x01, 0xa7, bridge->bl->props.brightness);
 						 /* FFh for 100% brightness,
 						  *  0h for 0% brightness */
+	} else {
+		err |= ps8622_set(cl, 0x01, 0xa5, 0x80);
+						/* DPCD720, external PWM */
+	}
 	err |= ps8622_set(cl, 0x01, 0xcc, 0x13); /* Set LVDS output as 6bit-VESA
 						  * mapping, single LVDS channel
 						  * */
@@ -347,16 +353,18 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 		bridge->lane_count = bridge->max_lane_count;
 	}
 
-	bridge->bl = backlight_device_register("ps8622-backlight", dev->dev,
-			bridge, &ps8622_backlight_ops, NULL);
-	if (IS_ERR(bridge->bl)) {
-		DRM_ERROR("failed to register backlight\n");
-		ret = PTR_ERR(bridge->bl);
-		bridge->bl = NULL;
-		goto err;
+	if (!of_find_property(node, "use-external-pwm", NULL)) {
+		bridge->bl = backlight_device_register("ps8622-backlight",
+				dev->dev, bridge, &ps8622_backlight_ops, NULL);
+		if (IS_ERR(bridge->bl)) {
+			DRM_ERROR("failed to register backlight\n");
+			ret = PTR_ERR(bridge->bl);
+			bridge->bl = NULL;
+			goto err;
+		}
+		bridge->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
+		bridge->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
 	}
-	bridge->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
-	bridge->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
 
 	ret = drm_bridge_init(dev, (struct drm_bridge *)bridge,
 			&ps8622_bridge_funcs);

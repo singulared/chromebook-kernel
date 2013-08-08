@@ -8,6 +8,7 @@ Required properties:
 
 Optional properties:
 	- lane-count: number of DP lanes to use
+	- use-external-pwm: backlight will be controlled by an external PWM
 
 Example:
 	ps8622-bridge@48 {
