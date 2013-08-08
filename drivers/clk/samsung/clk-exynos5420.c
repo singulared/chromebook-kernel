@@ -682,6 +682,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(sclk_pcm2, "sclk_pcm2", "dout_pcm2", SRC_MASK_PERIC1, 16, 0, 0),
 	GATE(wdt, "wdt", "aclk66_psgen", GATE_BUS_PERIS1, 3, 0, 0),
 	GATE(rtc, "rtc", "aclk66_psgen", GATE_BUS_PERIS1, 4, 0, 0),
+	GATE(pwm, "pwm", "aclk66_peric", GATE_BUS_PERIC, 27, 0, 0),
 
 	/* MMC */
 	GATE(mmc0, "mmc0", "aclk200_fsys2", GATE_BUS_FSYS0, 12,
