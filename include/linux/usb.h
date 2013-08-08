@@ -331,6 +331,7 @@ struct usb_bus {
 	u8 otg_port;			/* 0, or number of OTG/HNP port */
 	unsigned is_b_host:1;		/* true during some HNP roleswitches */
 	unsigned b_hnp_enable:1;	/* OTG: did A-Host enable HNP? */
+	unsigned no_sg_constraint:1;	/* no sg constraint */
 	unsigned sg_tablesize;		/* 0 or largest number of sg list entries */
 
 	int devnum_next;		/* Next open device number in
@@ -582,6 +583,12 @@ static inline void usb_autopm_put_interface_no_suspend(
 static inline void usb_mark_last_busy(struct usb_device *udev)
 { }
 #endif
+
+static inline bool usb_device_no_sg_constraint(struct usb_device *udev)
+{
+	return udev && udev->bus && udev->bus->no_sg_constraint;
+}
+
 
 /*-------------------------------------------------------------------------*/
 
@@ -1118,7 +1125,9 @@ typedef void (*usb_complete_t)(struct urb *);
  *	the device driver is saying that it provided this DMA address,
  *	which the host controller driver should use in preference to the
  *	transfer_buffer.
- * @sg: scatter gather buffer list
+ * @sg: scatter gather buffer list, the buffer size of each element in
+ * 	the list (except the last) must be divisible by the endpoint's
+ * 	max packet size if no_sg_constraint isn't set in 'struct usb_bus'
  * @num_mapped_sgs: (internal) number of mapped sg entries
  * @num_sgs: number of entries in the sg list
  * @transfer_buffer_length: How big is transfer_buffer.  The transfer may
