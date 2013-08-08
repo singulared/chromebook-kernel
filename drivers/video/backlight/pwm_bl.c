@@ -99,7 +99,6 @@ static int pwm_backlight_parse_dt(struct device *dev,
 				  struct platform_pwm_backlight_data *data)
 {
 	struct device_node *node = dev->of_node;
-	struct property *prop;
 	int length;
 	u32 value;
 	int ret;
@@ -109,40 +108,50 @@ static int pwm_backlight_parse_dt(struct device *dev,
 
 	memset(data, 0, sizeof(*data));
 
-	/* determine the number of brightness levels */
-	prop = of_find_property(node, "brightness-levels", &length);
-	if (!prop)
-		return -EINVAL;
+	if (of_find_property(node, "brightness-levels", &length)) {
+		data->max_brightness = length / sizeof(u32);
 
-	data->max_brightness = length / sizeof(u32);
+		/* read brightness levels from DT property */
+		if (data->max_brightness > 0) {
+			size_t size = sizeof(*data->levels) *
+					data->max_brightness;
 
-	/* read brightness levels from DT property */
-	if (data->max_brightness > 0) {
-		size_t size = sizeof(*data->levels) * data->max_brightness;
+			data->levels = devm_kzalloc(dev, size, GFP_KERNEL);
+			if (!data->levels)
+				return -ENOMEM;
 
-		data->levels = devm_kzalloc(dev, size, GFP_KERNEL);
-		if (!data->levels)
-			return -ENOMEM;
-
-		ret = of_property_read_u32_array(node, "brightness-levels",
+			ret = of_property_read_u32_array(node,
+						"brightness-levels",
 						 data->levels,
 						 data->max_brightness);
+			if (ret < 0)
+				return ret;
+
+			data->max_brightness--;
+		}
+	} else {
+		ret = of_property_read_u32(node, "max-brightness",
+					   &value);
 		if (ret < 0)
 			return ret;
 
+		/* brightness values are 0 to max-brightness */
+		data->max_brightness = value;
+	}
+
+	if (data->max_brightness > 0) {
 		ret = of_property_read_u32(node, "default-brightness-level",
 					   &value);
 		if (ret < 0)
 			return ret;
 
-		if (value >= data->max_brightness) {
-			dev_warn(dev, "invalid default brightness level: %u, using %u\n",
-				 value, data->max_brightness - 1);
-			value = data->max_brightness - 1;
+		if (value > data->max_brightness) {
+			dev_warn(dev, "invalid default brightness: %u, using %u\n",
+				 value, data->max_brightness);
+			value = data->max_brightness;
 		}
 
 		data->dft_brightness = value;
-		data->max_brightness--;
 	}
 
 	/*
