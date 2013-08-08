@@ -742,6 +742,7 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	const struct dw_mci_drv_data *drv_data = slot->host->drv_data;
 	u32 regs;
+	int ret;
 
 	switch (ios->bus_width) {
 	case MMC_BUS_WIDTH_4:
@@ -786,6 +787,18 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	switch (ios->power_mode) {
 	case MMC_POWER_UP:
 		set_bit(DW_MMC_CARD_NEED_INIT, &slot->flags);
+
+		/* Add a refcount to the regulator */
+		if (slot->host->vmmc &&
+		    !test_bit(DW_MMC_CARD_POWERED, &slot->flags)) {
+			ret = regulator_enable(slot->host->vmmc);
+			if (ret)
+				dev_err(slot->host->dev,
+					"Regulator enable failure %d\n", ret);
+			else
+				set_bit(DW_MMC_CARD_POWERED, &slot->flags);
+		}
+
 		/* Power up slot */
 		if (slot->host->pdata->setpower)
 			slot->host->pdata->setpower(slot->id, mmc->ocr_avail);
@@ -800,6 +813,17 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		regs = mci_readl(slot->host, PWREN);
 		regs &= ~(1 << slot->id);
 		mci_writel(slot->host, PWREN, regs);
+
+		/* Turn off the regulator */
+		if (slot->host->vmmc &&
+		    test_bit(DW_MMC_CARD_POWERED, &slot->flags)) {
+			ret = regulator_disable(slot->host->vmmc);
+			if (ret)
+				dev_err(slot->host->dev,
+					"Regulator disable failure %d\n", ret);
+			else
+				clear_bit(DW_MMC_CARD_POWERED, &slot->flags);
+		}
 		break;
 	default:
 		break;
@@ -2271,21 +2295,13 @@ int dw_mci_probe(struct dw_mci *host)
 
 		dev_info(host->dev, "no vmmc regulator found: %d\n", ret);
 		host->vmmc = NULL;
-	} else {
-		ret = regulator_enable(host->vmmc);
-		if (ret) {
-			if (ret != -EPROBE_DEFER)
-				dev_err(host->dev,
-					"regulator_enable fail: %d\n", ret);
-			goto err_clk_ciu;
-		}
 	}
 
 	if (!host->bus_hz) {
 		dev_err(host->dev,
 			"Platform data must supply bus speed\n");
 		ret = -ENODEV;
-		goto err_regulator;
+		goto err_clk_ciu;
 	}
 
 	host->quirks = host->pdata->quirks;
@@ -2464,7 +2480,7 @@ int dw_mci_probe(struct dw_mci *host)
 	} else {
 		dev_dbg(host->dev, "attempted to initialize %d slots, "
 					"but failed on all\n", host->num_slots);
-		goto err_workqueue;
+		goto err_init_slot;
 	}
 
 	if (host->quirks & DW_MCI_QUIRK_IDMAC_DTO)
@@ -2472,16 +2488,21 @@ int dw_mci_probe(struct dw_mci *host)
 
 	return 0;
 
+err_init_slot:
+	if (host->vmmc) {
+		for (i = 0; i < host->num_slots; i++) {
+			struct dw_mci_slot *slot = host->slot[i];
+			if (test_bit(DW_MMC_CARD_POWERED, &slot->flags))
+				regulator_disable(host->vmmc);
+		}
+	}
+
 err_workqueue:
 	destroy_workqueue(host->card_workqueue);
 
 err_dmaunmap:
 	if (host->use_dma && host->dma_ops->exit)
 		host->dma_ops->exit(host);
-
-err_regulator:
-	if (host->vmmc)
-		regulator_disable(host->vmmc);
 
 err_clk_ciu:
 	if (!IS_ERR(host->ciu_clk))
@@ -2514,11 +2535,16 @@ void dw_mci_remove(struct dw_mci *host)
 
 	destroy_workqueue(host->card_workqueue);
 
+	if (host->vmmc) {
+		for (i = 0; i < host->num_slots; i++) {
+			struct dw_mci_slot *slot = host->slot[i];
+			if (test_bit(DW_MMC_CARD_POWERED, &slot->flags))
+				regulator_disable(host->vmmc);
+		}
+	}
+
 	if (host->use_dma && host->dma_ops->exit)
 		host->dma_ops->exit(host);
-
-	if (host->vmmc)
-		regulator_disable(host->vmmc);
 
 	if (!IS_ERR(host->ciu_clk))
 		clk_disable_unprepare(host->ciu_clk);
@@ -2553,9 +2579,6 @@ int dw_mci_suspend(struct dw_mci *host)
 		}
 	}
 
-	if (host->vmmc)
-		regulator_disable(host->vmmc);
-
 	return 0;
 }
 EXPORT_SYMBOL(dw_mci_suspend);
@@ -2565,15 +2588,6 @@ int dw_mci_resume(struct dw_mci *host)
 	const struct dw_mci_drv_data *drv_data = host->drv_data;
 
 	int i, ret;
-
-	if (host->vmmc) {
-		ret = regulator_enable(host->vmmc);
-		if (ret) {
-			dev_err(host->dev,
-				"failed to enable regulator: %d\n", ret);
-			return ret;
-		}
-	}
 
 	if (!mci_wait_reset(host->dev, host)) {
 		ret = -ENODEV;
