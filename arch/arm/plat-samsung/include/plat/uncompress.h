@@ -157,6 +157,14 @@ static inline void arch_enable_uart_fifo(void)
 			if (!(fifocon & S3C2410_UFCON_RESETBOTH))
 				break;
 		}
+
+		/* enable fifo mode */
+		fifocon |= S3C2410_UFCON_FIFOMODE;
+		uart_wr(S3C2410_UFCON, fifocon);
+		uart_wr(S3C2410_UMCON, 0);
+		/* no interrupts, no dma, pure polling */
+		uart_wr(S3C2410_UCON, S3C2410_UCON_RXIRQMODE |
+				      S3C2410_UCON_TXIRQMODE);
 	}
 }
 #else
