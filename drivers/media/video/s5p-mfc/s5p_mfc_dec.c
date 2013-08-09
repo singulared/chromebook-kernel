@@ -849,6 +849,8 @@ static int vidioc_subscribe_event(struct v4l2_fh *fh,
 	switch (sub->type) {
 	case V4L2_EVENT_EOS:
 		return v4l2_event_subscribe(fh, sub, 2);
+	case V4L2_EVENT_RESOLUTION_CHANGE:
+		return v4l2_event_subscribe(fh, sub, 2);
 	default:
 		return -EINVAL;
 	}
