@@ -135,9 +135,12 @@ ENTRY(cpu_v7_do_resume)
 	 * is same for both A15 and A7, only this bit is set explicitly.
 	 */
 	mov	r6, #0x40
+	ldr	r4, =0x10040800
 	mrc	p15, 0, r9, c1, c0, 1
 	orr	r9, r9, #(1 << 6)
-	ldr	r4, __dummy
+#ifdef CONFIG_ARCH_EXYNOS5
+	ldr	r4, [r4]
+#endif
 	and	r4, r4, #0
 	orr	r9, r9, r4
 	mcr	p15, 0, r6, c1, c0, 1
@@ -162,8 +165,6 @@ ENTRY(cpu_v7_do_resume)
 	b	cpu_resume_mmu
 ENDPROC(cpu_v7_do_resume)
 
-__dummy:
-	.space 4
 #endif
 
 	__CPUINIT
