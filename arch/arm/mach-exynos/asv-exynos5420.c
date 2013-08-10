@@ -23,6 +23,7 @@
 #include <mach/asv-exynos5420.h>
 #include <mach/map.h>
 #include <mach/regs-pmu.h>
+#include <mach/regs-clock.h>
 
 #include <plat/cpu.h>
 
@@ -362,6 +363,27 @@ err_mif:
 }
 late_initcall(exynos5420_set_asv_volt_mif_sram);
 
+static void exynos5420_set_ema(void)
+{
+	unsigned int ema_val;
+
+	/* iSRAM EMA Setting */
+	ema_val = __raw_readl(EXYNOS5420_EMA_CON0);
+	ema_val = (ema_val & ~(0x7 << 21)) | (0x5 << 21);
+	__raw_writel(ema_val, EXYNOS5420_EMA_CON0);
+
+	/* ARM EMA - Enable WAS */
+	ema_val = __raw_readl(EXYNOS5420_ARM_EMA_CTRL);
+	ema_val |= EXYNOS5420_ARM_WAS_ENABLE;
+	__raw_writel(ema_val, EXYNOS5420_ARM_EMA_CTRL);
+
+	/* G3D EMA Setting */
+	ema_val = __raw_readl(EXYNOS5420_EMA_CON1);
+	ema_val = (ema_val & ~(0xfff << 9)) | (0x5 << 18) | (0x5 << 15) |
+						(0x5 << 12) | (0x5 << 9);
+	__raw_writel(ema_val, EXYNOS5420_EMA_CON1);
+}
+
 int exynos5420_init_asv(struct asv_common *asv_info)
 {
 	unsigned int chip_id3_value;
@@ -369,6 +391,7 @@ int exynos5420_init_asv(struct asv_common *asv_info)
 
 	pr_debug("EXYNOS5420: Adaptive Supply Voltage init\n");
 
+	exynos5420_set_ema();
 	is_special_lot = exynos5420_check_lot_id(asv_info);
 	if (is_special_lot)
 		goto set_asv_info;
