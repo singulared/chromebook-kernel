@@ -4268,8 +4268,9 @@ static void gen6_init_clock_gating(struct drm_device *dev)
 		   ILK_DPFDUNIT_CLOCK_GATE_ENABLE);
 
 	/* WaMbcDriverBootEnable */
-	I915_WRITE(GEN6_MBCTL, I915_READ(GEN6_MBCTL) |
-		   GEN6_MBCTL_ENABLE_BOOT_FETCH);
+	/* This breaks video on resume */
+/*	I915_WRITE(GEN6_MBCTL, I915_READ(GEN6_MBCTL) |
+		   GEN6_MBCTL_ENABLE_BOOT_FETCH);*/
 
 	for_each_pipe(pipe) {
 		I915_WRITE(DSPCNTR(pipe),
