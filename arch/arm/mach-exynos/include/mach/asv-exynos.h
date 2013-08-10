@@ -62,10 +62,8 @@ enum asv_type_id {
 	ID_INT,
 	ID_MIF,
 	ID_G3D,
-	ID_INT_MIF_L0,
-	ID_INT_MIF_L1,
-	ID_INT_MIF_L2,
-	ID_INT_MIF_L3,
+	ID_MIF_SRAM,
+	ID_G3D_SRAM,
 };
 
 /* define Struct for ASV common */

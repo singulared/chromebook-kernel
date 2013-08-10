@@ -26,6 +26,15 @@
 #define INT_DVFS_LEVEL_NR		7
 #define INT_ASV_GRP_NR			15
 #define INT_MAX_VOLT			1212500
+#define MIF_DVFS_LEVEL_NR		1
+#define MIF_ASV_GRP_NR			15
+#define MIF_MAX_VOLT			1050000
+#define MIF_SRAM_DVFS_LEVEL_NR		1
+#define MIF_SRAM_ASV_GRP_NR		15
+#define MIF_SRAM_MAX_VOLT		1050000
+#define G3D_SRAM_DVFS_LEVEL_NR		1
+#define G3D_SRAM_ASV_GRP_NR		15
+#define G3D_SRAM_MAX_VOLT		1050000
 
 static unsigned int refer_table_get_asv[2][ARM_ASV_GRP_NR] = {
 	{ 0, 11, 15, 20, 24, 29, 36, 43, 52, 63, 76, 91, 100, 110, 999},
@@ -59,6 +68,12 @@ static unsigned int int_asv_abb_info[INT_ASV_GRP_NR] = {
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
+};
+
+static unsigned int mif_asv_abb_info[MIF_ASV_GRP_NR] = {
+	ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130,
+	ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130,
+	ABB_X130,
 };
 
 static unsigned int arm_asv_volt_info[ARM_DVFS_LEVEL_NR][ARM_ASV_GRP_NR + 1] = {
@@ -194,6 +209,21 @@ static unsigned int int_asv_volt_info[INT_DVFS_LEVEL_NR][INT_ASV_GRP_NR + 1] = {
 	900000,  887500,  875000,  862500,  850000,  850000,  850000,  850000},
 	{  83000,  912500,  912500,  900000,  900000,  900000,  900000,  900000,
 	900000,  887500,  875000,  862500,  850000,  850000,  850000,  850000},
+};
+
+static unsigned int mif_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
+	{      0, 1012500, 1012500, 1000000, 1000000,  987500,  987500,  975000,
+	975000,  962500,  962500,  950000,  950000,  937500,  937500,  937500},
+};
+
+static unsigned int mif_sram_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
+	{      0, 1025000, 1025000, 1000000, 1000000, 1000000, 1000000,  975000,
+	975000,  975000,  975000,  950000,  950000,  950000,  950000,  950000},
+};
+
+static unsigned int g3d_sram_asv_volt_info[1][G3D_ASV_GRP_NR + 1] = {
+	{      0, 1025000, 1025000, 1000000, 1000000,  975000,  975000,  950000,
+	950000,  925000,  925000,  900000,  900000,  900000,  900000,  900000},
 };
 
 #endif /* EXYNOS5420_ASV_H */

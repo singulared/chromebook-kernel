@@ -17,6 +17,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/bitrev.h>
+#include <linux/regulator/consumer.h>
 
 #include <mach/asv-exynos.h>
 #include <mach/asv-exynos5420.h>
@@ -66,6 +67,10 @@ void exynos5420_set_abb(struct asv_info *asv_inform)
 	case ID_G3D:
 		target_reg = EXYNOS5420_BIAS_CON_G3D;
 		target_value = g3d_asv_abb_info[asv_inform->result_asv_grp];
+		break;
+	case ID_MIF:
+		target_reg = EXYNOS5420_BIAS_CON_MIF;
+		target_value = mif_asv_abb_info[asv_inform->result_asv_grp];
 		break;
 	default:
 		return;
@@ -133,6 +138,15 @@ static unsigned int exynos5420_set_asv_info(struct asv_info *asv_inform,
 	case ID_INT:
 		asv_volt_info = int_asv_volt_info;
 		break;
+	case ID_MIF:
+		asv_volt_info = mif_asv_volt_info;
+		break;
+	case ID_MIF_SRAM:
+		asv_volt_info = mif_sram_asv_volt_info;
+		break;
+	case ID_G3D_SRAM:
+		asv_volt_info = g3d_sram_asv_volt_info;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -179,6 +193,21 @@ static struct asv_ops exynos5420_asv_ops_int = {
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
+static struct asv_ops exynos5420_asv_ops_mif = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
+static struct asv_ops exynos5420_asv_ops_mif_sram = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
+static struct asv_ops exynos5420_asv_ops_g3d_sram = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
 struct asv_info exynos5420_asv_member[] = {
 	{
 		.asv_type	= ID_ARM,
@@ -208,6 +237,27 @@ struct asv_info exynos5420_asv_member[] = {
 		.asv_group_nr	= ASV_GRP_NR(G3D),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D),
 		.max_volt_value = MAX_VOLT(G3D),
+	}, {
+		.asv_type	= ID_MIF,
+		.name		= "VDD_MIF",
+		.ops		= &exynos5420_asv_ops_mif,
+		.asv_group_nr	= ASV_GRP_NR(MIF),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(MIF),
+		.max_volt_value = MAX_VOLT(MIF),
+	}, {
+		.asv_type	= ID_MIF_SRAM,
+		.name		= "VDD_MIF_SRAM",
+		.ops		= &exynos5420_asv_ops_mif_sram,
+		.asv_group_nr	= ASV_GRP_NR(MIF_SRAM),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(MIF_SRAM),
+		.max_volt_value = MAX_VOLT(MIF_SRAM),
+	}, {
+		.asv_type	= ID_G3D_SRAM,
+		.name		= "VDD_G3D_SRAM",
+		.ops		= &exynos5420_asv_ops_g3d_sram,
+		.asv_group_nr	= ASV_GRP_NR(G3D_SRAM),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_SRAM),
+		.max_volt_value = MAX_VOLT(G3D_SRAM),
 	},
 };
 
@@ -255,6 +305,59 @@ out:
 				is_special_lot ? "Special" : "Non Special");
 	return is_special_lot;
 }
+
+static int __init exynos5420_set_asv_volt_mif_sram(void)
+{
+	unsigned int mif_volt;
+	unsigned int mif_sram_volt;
+	unsigned int g3d_sram_volt;
+	struct regulator *mif_regulator;
+	struct regulator *mif_sram_regulator;
+	struct regulator *g3d_sram_regulator;
+
+	mif_regulator = regulator_get(NULL, "vdd_mif");
+	mif_sram_regulator = regulator_get(NULL, "vdd_mifs");
+	g3d_sram_regulator = regulator_get(NULL, "vdd_g3ds");
+
+	/* Set the voltages based on the ASV group */
+	mif_volt = get_match_volt(ID_MIF, 0);
+	mif_sram_volt = get_match_volt(ID_MIF_SRAM, 0);
+	g3d_sram_volt = get_match_volt(ID_G3D_SRAM, 0);
+
+	pr_info("MIF, MIF_SRAM, G3D_SRAM ASV is %d, %d, %d\n",
+			mif_volt, mif_sram_volt, g3d_sram_volt);
+	if (!IS_ERR(mif_regulator))
+		regulator_set_voltage(mif_regulator, mif_volt, mif_volt);
+	else {
+		pr_err("Regulator get error : mif\n");
+		goto err_mif;
+	}
+
+	if (!IS_ERR(mif_sram_regulator))
+		regulator_set_voltage(mif_sram_regulator, mif_sram_volt,
+							mif_sram_volt);
+	else {
+		pr_err("Regulator get error : mif_sram\n");
+		goto err_mif_sram;
+	}
+
+	if (!IS_ERR(g3d_sram_regulator))
+		regulator_set_voltage(g3d_sram_regulator, g3d_sram_volt,
+							g3d_sram_volt);
+	else {
+		pr_err("Regulator get error : g3d_sram\n");
+		goto err_g3d_sram;
+	}
+
+	regulator_put(g3d_sram_regulator);
+err_g3d_sram:
+	regulator_put(mif_sram_regulator);
+err_mif_sram:
+	regulator_put(mif_regulator);
+err_mif:
+	return 0;
+}
+late_initcall(exynos5420_set_asv_volt_mif_sram);
 
 int exynos5420_init_asv(struct asv_common *asv_info)
 {
