@@ -23,6 +23,9 @@
 
 #include <video/exynos_dp.h>
 
+#include <drm/drmP.h>
+#include <drm/drm_crtc_helper.h>
+
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
 
@@ -864,9 +867,17 @@ static irqreturn_t exynos_dp_irq_handler(int irq, void *arg)
 static void exynos_dp_hotplug(struct work_struct *work)
 {
 	struct exynos_dp_device *dp;
-	int ret;
 
 	dp = container_of(work, struct exynos_dp_device, hotplug_work);
+
+	if (dp->drm_dev)
+		drm_helper_hpd_irq_event(dp->drm_dev);
+}
+
+static void exynos_dp_commit(void *in_ctx)
+{
+	struct exynos_dp_device *dp = in_ctx;
+	int ret;
 
 	ret = exynos_dp_detect_hpd(dp);
 	if (ret) {
@@ -898,6 +909,15 @@ static void exynos_dp_hotplug(struct work_struct *work)
 	ret = exynos_dp_config_video(dp);
 	if (ret)
 		dev_err(dp->dev, "unable to config video\n");
+}
+
+static int exynos_dp_initialize(void *in_ctx, struct drm_device *drm_dev)
+{
+	struct exynos_dp_device *dp = in_ctx;
+
+	dp->drm_dev = drm_dev;
+
+	return 0;
 }
 
 static bool exynos_dp_display_is_connected(void *in_ctx)
@@ -956,6 +976,7 @@ static void exynos_dp_poweron(struct exynos_dp_device *dp)
 	exynos_dp_phy_init(dp);
 	exynos_dp_init_dp(dp);
 	enable_irq(dp->irq);
+	exynos_dp_commit(dp);
 }
 
 static void exynos_dp_poweroff(struct exynos_dp_device *dp)
@@ -989,10 +1010,12 @@ static void exynos_dp_dpms(void *in_ctx, int mode)
 }
 
 static struct exynos_drm_display_ops exynos_dp_display_ops = {
+	.initialize = exynos_dp_initialize,
 	.is_connected = exynos_dp_display_is_connected,
 	.get_panel = exynos_dp_get_panel,
 	.check_mode = exynos_dp_check_mode,
 	.dpms = exynos_dp_dpms,
+	.commit = exynos_dp_commit,
 };
 
 static struct exynos_drm_display exynos_dp_display = {
