@@ -94,7 +94,7 @@ struct s3c24xx_i2c {
 	int			gpios[2];
 	int			arb_gpios[I2C_ARB_GPIO_COUNT];
 	struct pinctrl          *pctrl;
-#ifdef CONFIG_CPU_FREQ
+#if defined(CONFIG_CPU_FREQ) && !defined(CONFIG_ARCH_EXYNOS)
 	struct notifier_block	freq_transition;
 #endif
 	/* Arbitration parameters */
@@ -904,7 +904,7 @@ static int s3c24xx_i2c_clockrate(struct s3c24xx_i2c *i2c, unsigned int *got)
 	return 0;
 }
 
-#ifdef CONFIG_CPU_FREQ
+#if defined(CONFIG_CPU_FREQ) && !defined(CONFIG_ARCH_EXYNOS)
 
 #define freq_to_i2c(_n) container_of(_n, struct s3c24xx_i2c, freq_transition)
 
