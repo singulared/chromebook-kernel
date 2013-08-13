@@ -264,6 +264,7 @@ static int anx7808_aux_wait(struct anx7808_data *anx7808)
 			  status, aux_ctrl);
 		return -EIO;
 	}
+
 	return 0;
 }
 
@@ -533,7 +534,7 @@ static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
 
 static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 {
-	uint8_t sys_status;
+	uint8_t sys_status, hdmi_status, hdmi_enable;
 
 	anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &sys_status);
 	if (!(sys_status & TMDS_CLOCK_DET)) {
@@ -546,6 +547,14 @@ static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 	}
 
 	anx7808_write_reg(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG, 0x00);
+
+	/* If this register write is moved to output config time, infoframes
+	 * are not transmitted, but it is not clear why. */
+	anx7808_read_reg(anx7808, HDMI_RX_HDMI_STATUS_REG, &hdmi_status);
+	hdmi_enable = (hdmi_status & HDMI_MODE) ? 1 : 0;
+	DRM_INFO("HDMI enable: %d\n", hdmi_enable);
+
+	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
 
 	return 0;
 }
@@ -604,14 +613,6 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 
 static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 {
-	uint8_t hdmi_status, hdmi_enable;
-
-	anx7808_read_reg(anx7808, HDMI_RX_HDMI_STATUS_REG, &hdmi_status);
-	hdmi_enable = (hdmi_status & HDMI_MODE) ? 1 : 0;
-	DRM_INFO("HDMI enable: %d\n", hdmi_enable);
-
-	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
-
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
