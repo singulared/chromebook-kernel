@@ -111,7 +111,7 @@ static void exynos_cluster_power_control(unsigned int cluster, int enable)
 		if ((status & EXYNOS_CORE_LOCAL_PWR_EN) == val)
 			return;
 
-		mdelay(1);
+		cpu_relax();
 	}
 	pr_warn("timed out waiting for cluster %u to power %s\n", cluster,
 		enable ? "on" : "off");
