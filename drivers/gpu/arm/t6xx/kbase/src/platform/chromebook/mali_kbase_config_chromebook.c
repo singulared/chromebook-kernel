@@ -135,8 +135,6 @@ static kbase_io_resources io_resources =
 	}
 };
 
-atomic_t mali_memory_pages;
-
 /**
  * Read the CPU clock speed
  */
