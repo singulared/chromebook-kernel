@@ -1770,8 +1770,6 @@ drm_gem_object_handle_reference(struct drm_gem_object *obj)
 	atomic_inc(&obj->handle_count);
 }
 
-void drm_gem_object_handle_unreference_unlocked(struct drm_gem_object *obj);
-
 void drm_gem_free_mmap_offset(struct drm_gem_object *obj);
 int drm_gem_create_mmap_offset(struct drm_gem_object *obj);
 
