@@ -312,8 +312,6 @@ struct exynos_context
 	int t6xx_default_clock;
 };
 
-atomic_t mali_memory_pages;
-
 /**
  * Read the CPU clock speed
  */

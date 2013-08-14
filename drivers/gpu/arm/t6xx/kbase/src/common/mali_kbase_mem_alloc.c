@@ -25,6 +25,8 @@
 #include <linux/mm.h>
 #include <linux/atomic.h>
 
+atomic_t mali_memory_pages;
+
 STATIC int kbase_mem_allocator_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	kbase_mem_allocator * allocator;
@@ -132,7 +134,7 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, u32 nr_page
 	}
 
 	if (i == nr_pages)
-		return MALI_ERROR_NONE;
+		goto alloc_success;
 
 	/* If not all pages were sourced from the pool, request new ones. */
 	for (; i < nr_pages; i++)
@@ -154,6 +156,8 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, u32 nr_page
 		pages[i] = PFN_PHYS(page_to_pfn(p));
 	}
 
+alloc_success:
+	atomic_add(nr_pages, &mali_memory_pages);
 	return MALI_ERROR_NONE;
 
 err_out_roll_back:
@@ -224,6 +228,7 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys
 			page_count++;
 		}
 	}
+	atomic_sub(nr_pages, &mali_memory_pages);
 	mutex_lock(&allocator->free_list_lock);
 	list_splice(&new_free_list_items, &allocator->free_list_head);
 	atomic_add(page_count, &allocator->free_list_size);
