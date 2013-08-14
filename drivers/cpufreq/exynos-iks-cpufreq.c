@@ -605,7 +605,6 @@ static int exynos_cpufreq_reboot_notifier(struct notifier_block *this,
 	for_each_online_cpu(i) {
 		policy = cpufreq_cpu_get(i);
 		exynos_target(policy, bootfreq_ca15, CPUFREQ_RELATION_H);
-		mdelay(10);
 		cpufreq_cpu_put(policy);
 	}
 	return NOTIFY_DONE;
