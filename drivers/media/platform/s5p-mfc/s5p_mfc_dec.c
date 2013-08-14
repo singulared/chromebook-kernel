@@ -504,6 +504,8 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_debug(2, "Freeing buffers\n");
 			s5p_mfc_clock_on();
 			ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
+			s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers,
+					ctx);
 			s5p_mfc_clock_off();
 			return ret;
 		}
