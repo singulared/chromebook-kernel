@@ -335,6 +335,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	struct s5p_mfc_buf *src_buf;
 	unsigned long flags;
 	unsigned int res_change;
+	struct v4l2_event ev;
 
 	unsigned int index;
 
@@ -366,6 +367,11 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		if (ctx->state == MFCINST_RES_CHANGE_FLUSH) {
 			s5p_mfc_handle_frame_all_extracted(ctx);
 			ctx->state = MFCINST_RES_CHANGE_END;
+
+			memset(&ev, 0, sizeof(struct v4l2_event));
+			ev.type = V4L2_EVENT_RESOLUTION_CHANGE;
+			v4l2_event_queue_fh(&ctx->fh, &ev);
+
 			goto leave_handle_frame;
 		} else {
 			s5p_mfc_handle_frame_all_extracted(ctx);
