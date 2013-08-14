@@ -691,7 +691,21 @@ struct drm_gem_object {
 	 */
 	struct dma_buf *dma_buf;
 
-	/* dma buf attachment backing this object */
+	/**
+	 * import_attach - dma buf attachment backing this object
+	 *
+	 * Any foreign dma_buf imported as a gem object has this set to the
+	 * attachment point for the device. This is invariant over the lifetime
+	 * of a gem object.
+	 *
+	 * The driver's ->gem_free_object callback is responsible for cleaning
+	 * up the dma_buf attachment and references acquired at import time.
+	 *
+	 * Note that the drm gem/prime core does not depend upon drivers setting
+	 * this field any more. So for drivers where this doesn't make sense
+	 * (e.g. virtual devices or a displaylink behind an usb bus) they can
+	 * simply leave it as NULL.
+	 */
 	struct dma_buf_attachment *import_attach;
 };
 
