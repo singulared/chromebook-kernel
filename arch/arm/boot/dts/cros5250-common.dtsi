@@ -629,11 +629,8 @@
 		pinctrl-0 = <&mic_det_gpio &hp_det_gpio>;
 	};
 
-	fixed-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "hsichub-reset-l";
-		gpio = <&gpe1 0 0>;
-		enable-active-high;
+	usb2_phy: usbphy@12130000 {
+		samsung,hsic-reset-gpio = <&gpe1 0 1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&hsic_reset>;
 	};
