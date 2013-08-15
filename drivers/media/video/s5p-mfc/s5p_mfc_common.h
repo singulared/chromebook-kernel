@@ -170,10 +170,33 @@ enum s5p_mfc_decode_arg {
 	MFC_DEC_RES_CHANGE,
 };
 
+
+/**
+ * enum s5p_mfc_encoder_param_change - indicates runtime parameter change
+ */
+enum s5p_mfc_encode_param_change {
+	MFC_ENC_GOP_CONFIG_CHANGE,
+	MFC_ENC_FRAME_RATE_CHANGE,
+	MFC_ENC_BIT_RATE_CHANGE,
+	MFC_ENC_FRAME_INSERTION,
+};
+
 #define MFC_BUF_FLAG_USED	(1 << 0)
 #define MFC_BUF_FLAG_EOS	(1 << 1)
 
 struct s5p_mfc_ctx;
+
+/**
+ * struct s5p_mfc_enc_params - runtime modifiable encoding parameters
+ */
+struct s5p_mfc_runtime_enc_params {
+	u32 params_changed;
+	u16 gop_size;
+	u32 rc_framerate_num;
+	u32 rc_framerate_denom;
+	u32 rc_bitrate;
+	enum v4l2_mpeg_mfc51_video_force_frame_type force_frame_type;
+};
 
 /**
  * struct s5p_mfc_buf - MFC buffer
@@ -189,6 +212,7 @@ struct s5p_mfc_buf {
 		size_t stream;
 	} cookie;
 	int flags;
+	struct s5p_mfc_runtime_enc_params runtime_enc_params;
 };
 
 /**
@@ -415,7 +439,6 @@ struct s5p_mfc_enc_params {
 	u16 crop_top_offset;
 	u16 crop_bottom_offset;
 
-	u16 gop_size;
 	enum v4l2_mpeg_video_multi_slice_mode slice_mode;
 	u16 slice_mb;
 	u32 slice_bit;
@@ -426,7 +449,6 @@ struct s5p_mfc_enc_params {
 	u8 pad_cr;
 	int rc_frame;
 	int rc_mb;
-	u32 rc_bitrate;
 	u16 rc_reaction_coeff;
 	u16 vbv_size;
 	u32 vbv_delay;
@@ -436,14 +458,12 @@ struct s5p_mfc_enc_params {
 	int fixed_target_bit;
 
 	u8 num_b_frame;
-	u32 rc_framerate_num;
-	u32 rc_framerate_denom;
 
 	struct {
+		struct s5p_mfc_runtime_enc_params runtime;
 		struct s5p_mfc_h264_enc_params h264;
 		struct s5p_mfc_mpeg4_enc_params mpeg4;
 	} codec;
-
 };
 
 /**
@@ -618,8 +638,6 @@ struct s5p_mfc_ctx {
 	size_t chroma_dpb_size;
 	size_t me_buffer_size;
 	size_t tmv_buffer_size;
-
-	enum v4l2_mpeg_mfc51_video_force_frame_type force_frame_type;
 
 	struct list_head ref_queue;
 	unsigned int ref_queue_cnt;

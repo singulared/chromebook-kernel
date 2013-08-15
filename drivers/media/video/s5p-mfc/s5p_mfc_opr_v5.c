@@ -40,8 +40,7 @@ static int s5p_mfc_alloc_dec_temp_buffers_v5(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf_size_v5 *buf_size = dev->variant->buf_size->priv;
 	int ret;
 
-	ctx->dsc.size = buf_size->dsc;
-	ret =  s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->dsc);
+	ret =  s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->dsc, buf_size->dsc);
 	if (ret) {
 		mfc_err("Failed to allocate temporary buffer\n");
 		return ret;
@@ -67,6 +66,8 @@ static int s5p_mfc_alloc_codec_buffers_v5(struct s5p_mfc_ctx *ctx)
 	unsigned int enc_ref_y_size = 0;
 	unsigned int enc_ref_c_size = 0;
 	unsigned int guard_width, guard_height;
+	size_t bank1_size = 0;
+	size_t bank2_size = 0;
 	int ret;
 
 	if (ctx->type == MFCINST_DECODER) {
@@ -101,78 +102,79 @@ static int s5p_mfc_alloc_codec_buffers_v5(struct s5p_mfc_ctx *ctx)
 	/* Codecs have different memory requirements */
 	switch (ctx->codec_mode) {
 	case S5P_MFC_CODEC_H264_DEC:
-		ctx->bank1.size =
+		bank1_size =
 		    ALIGN(S5P_FIMV_DEC_NB_IP_SIZE +
 					S5P_FIMV_DEC_VERT_NB_MV_SIZE,
 					S5P_FIMV_DEC_BUF_ALIGN);
-		ctx->bank2.size = ctx->total_dpb_count * ctx->mv_size;
+		bank2_size = ctx->total_dpb_count * ctx->mv_size;
 		break;
 	case S5P_MFC_CODEC_MPEG4_DEC:
-		ctx->bank1.size =
+		bank1_size =
 		    ALIGN(S5P_FIMV_DEC_NB_DCAC_SIZE +
 				     S5P_FIMV_DEC_UPNB_MV_SIZE +
 				     S5P_FIMV_DEC_SUB_ANCHOR_MV_SIZE +
 				     S5P_FIMV_DEC_STX_PARSER_SIZE +
 				     S5P_FIMV_DEC_OVERLAP_TRANSFORM_SIZE,
 				     S5P_FIMV_DEC_BUF_ALIGN);
-		ctx->bank2.size = 0;
+		bank2_size = 0;
 		break;
 	case S5P_MFC_CODEC_VC1RCV_DEC:
 	case S5P_MFC_CODEC_VC1_DEC:
-		ctx->bank1.size =
+		bank1_size =
 		    ALIGN(S5P_FIMV_DEC_OVERLAP_TRANSFORM_SIZE +
 			     S5P_FIMV_DEC_UPNB_MV_SIZE +
 			     S5P_FIMV_DEC_SUB_ANCHOR_MV_SIZE +
 			     S5P_FIMV_DEC_NB_DCAC_SIZE +
 			     3 * S5P_FIMV_DEC_VC1_BITPLANE_SIZE,
 			     S5P_FIMV_DEC_BUF_ALIGN);
-		ctx->bank2.size = 0;
+		bank2_size = 0;
 		break;
 	case S5P_MFC_CODEC_MPEG2_DEC:
-		ctx->bank1.size = 0;
-		ctx->bank2.size = 0;
+		bank1_size = 0;
+		bank2_size = 0;
 		break;
 	case S5P_MFC_CODEC_H263_DEC:
-		ctx->bank1.size =
+		bank1_size =
 		    ALIGN(S5P_FIMV_DEC_OVERLAP_TRANSFORM_SIZE +
 			     S5P_FIMV_DEC_UPNB_MV_SIZE +
 			     S5P_FIMV_DEC_SUB_ANCHOR_MV_SIZE +
 			     S5P_FIMV_DEC_NB_DCAC_SIZE,
 			     S5P_FIMV_DEC_BUF_ALIGN);
-		ctx->bank2.size = 0;
+		bank2_size = 0;
 		break;
 	case S5P_MFC_CODEC_H264_ENC:
-		ctx->bank1.size = (enc_ref_y_size * 2) +
+		bank1_size = (enc_ref_y_size * 2) +
 				   S5P_FIMV_ENC_UPMV_SIZE +
 				   S5P_FIMV_ENC_COLFLG_SIZE +
 				   S5P_FIMV_ENC_INTRAMD_SIZE +
 				   S5P_FIMV_ENC_NBORINFO_SIZE;
-		ctx->bank2.size = (enc_ref_y_size * 2) +
+		bank2_size = (enc_ref_y_size * 2) +
 				   (enc_ref_c_size * 4) +
 				   S5P_FIMV_ENC_INTRAPRED_SIZE;
 		break;
 	case S5P_MFC_CODEC_MPEG4_ENC:
-		ctx->bank1.size = (enc_ref_y_size * 2) +
+		bank1_size = (enc_ref_y_size * 2) +
 				   S5P_FIMV_ENC_UPMV_SIZE +
 				   S5P_FIMV_ENC_COLFLG_SIZE +
 				   S5P_FIMV_ENC_ACDCCOEF_SIZE;
-		ctx->bank2.size = (enc_ref_y_size * 2) +
+		bank2_size = (enc_ref_y_size * 2) +
 				   (enc_ref_c_size * 4);
 		break;
 	case S5P_MFC_CODEC_H263_ENC:
-		ctx->bank1.size = (enc_ref_y_size * 2) +
+		bank1_size = (enc_ref_y_size * 2) +
 				   S5P_FIMV_ENC_UPMV_SIZE +
 				   S5P_FIMV_ENC_ACDCCOEF_SIZE;
-		ctx->bank2.size = (enc_ref_y_size * 2) +
+		bank2_size = (enc_ref_y_size * 2) +
 				   (enc_ref_c_size * 4);
 		break;
 	default:
 		break;
 	}
 	/* Allocate only if memory from bank 1 is necessary */
-	if (ctx->bank1.size > 0) {
+	if (bank1_size > 0) {
 
-		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1);
+		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
+						bank1_size);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 temporary buffer\n");
 			return ret;
@@ -180,11 +182,13 @@ static int s5p_mfc_alloc_codec_buffers_v5(struct s5p_mfc_ctx *ctx)
 		BUG_ON(ctx->bank1.dma & ((1 << MFC_BANK1_ALIGN_ORDER) - 1));
 	}
 	/* Allocate only if memory from bank 2 is necessary */
-	if (ctx->bank2.size > 0) {
-		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_r, &ctx->bank2);
+	if (bank2_size > 0) {
+		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_r, &ctx->bank2,
+						bank2_size);
 		if (ret) {
 			mfc_err("Failed to allocate Bank2 temporary buffer\n");
-		s5p_mfc_release_priv_buf(ctx->dev->mem_dev_l, &ctx->bank1);
+			s5p_mfc_release_priv_buf(ctx->dev->mem_dev_l,
+							&ctx->bank1);
 			return ret;
 		}
 		BUG_ON(ctx->bank2.dma & ((1 << MFC_BANK2_ALIGN_ORDER) - 1));
@@ -204,15 +208,16 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf_size_v5 *buf_size = dev->variant->buf_size->priv;
+	size_t ctx_size;
 	int ret;
 
 	if (ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
 		ctx->codec_mode == S5P_MFC_CODEC_H264_ENC)
-		ctx->ctx.size = buf_size->h264_ctx;
+		ctx_size = buf_size->h264_ctx;
 	else
-		ctx->ctx.size = buf_size->non_h264_ctx;
+		ctx_size = buf_size->non_h264_ctx;
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
@@ -224,8 +229,7 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 	wmb();
 
 	/* Initialize shared memory */
-	ctx->shm.size = buf_size->shm;
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm, buf_size->shm);
 	if (ret) {
 		mfc_err("Failed to allocate shared memory buffer\n");
 		return ret;
@@ -688,7 +692,7 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	reg = mfc_read(dev, S5P_FIMV_ENC_PIC_TYPE_CTRL);
 	reg |= (1 << 18);
 	reg &= ~(0xFFFF);
-	reg |= p->gop_size;
+	reg |= p->codec.runtime.gop_size;
 	mfc_write(dev, reg, S5P_FIMV_ENC_PIC_TYPE_CTRL);
 	mfc_write(dev, 0, S5P_FIMV_ENC_B_RECON_WRITE_ON);
 	/* multi-slice control */
@@ -736,7 +740,7 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	mfc_write(dev, reg, S5P_FIMV_ENC_RC_CONFIG);
 	/* bit rate */
 	if (p->rc_frame)
-		mfc_write(dev, p->rc_bitrate,
+		mfc_write(dev, p->codec.runtime.rc_bitrate,
 			S5P_FIMV_ENC_RC_BIT_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_BIT_RATE);
@@ -831,9 +835,10 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	reg |= p_264->rc_frame_qp;
 	mfc_write(dev, reg, S5P_FIMV_ENC_RC_CONFIG);
 	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_denom)
-		mfc_write(dev, p->rc_framerate_num * 1000
-			/ p->rc_framerate_denom, S5P_FIMV_ENC_RC_FRAME_RATE);
+	if (p->rc_frame && p->codec.runtime.rc_framerate_denom)
+		mfc_write(dev, p->codec.runtime.rc_framerate_num * 1000
+			/ p->codec.runtime.rc_framerate_denom,
+			S5P_FIMV_ENC_RC_FRAME_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_FRAME_RATE);
 	/* max & min value of QP */
@@ -950,16 +955,17 @@ static int s5p_mfc_set_enc_params_mpeg4(struct s5p_mfc_ctx *ctx)
 	}
 	/* frame rate */
 	if (p->rc_frame) {
-		if (p->rc_framerate_denom > 0) {
-			framerate = p->rc_framerate_num * 1000 /
-						p->rc_framerate_denom;
+		if (p->codec.runtime.rc_framerate_denom > 0) {
+			framerate = p->codec.runtime.rc_framerate_num * 1000 /
+				p->codec.runtime.rc_framerate_denom;
 			mfc_write(dev, framerate,
 				S5P_FIMV_ENC_RC_FRAME_RATE);
 			shm = s5p_mfc_read_info_v5(ctx, RC_VOP_TIMING);
 			shm &= ~(0xFFFFFFFF);
 			shm |= (1 << 31);
-			shm |= ((p->rc_framerate_num & 0x7FFF) << 16);
-			shm |= (p->rc_framerate_denom & 0xFFFF);
+			shm |= ((p->codec.runtime.rc_framerate_num & 0x7FFF)
+				<< 16);
+			shm |= (p->codec.runtime.rc_framerate_denom & 0xFFFF);
 			s5p_mfc_write_info_v5(ctx, shm, RC_VOP_TIMING);
 		}
 	} else {
@@ -1009,9 +1015,10 @@ static int s5p_mfc_set_enc_params_h263(struct s5p_mfc_ctx *ctx)
 		s5p_mfc_write_info_v5(ctx, shm, P_B_FRAME_QP);
 	}
 	/* frame rate */
-	if (p->rc_frame && p->rc_framerate_denom)
-		mfc_write(dev, p->rc_framerate_num * 1000
-			/ p->rc_framerate_denom, S5P_FIMV_ENC_RC_FRAME_RATE);
+	if (p->rc_frame && p->codec.runtime.rc_framerate_denom)
+		mfc_write(dev, p->codec.runtime.rc_framerate_num * 1000
+		/ p->codec.runtime.rc_framerate_denom,
+		S5P_FIMV_ENC_RC_FRAME_RATE);
 	else
 		mfc_write(dev, 0, S5P_FIMV_ENC_RC_FRAME_RATE);
 	/* rate control config. */
