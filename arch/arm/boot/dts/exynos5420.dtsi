@@ -850,8 +850,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 0>;
 		mmu-master = <&gsc_0>;
-		clocks = <&clock 461>;
-		clock-names = "sysmmu";
+		clocks = <&clock 461>, <&clock 465>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
@@ -862,8 +862,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 2>;
 		mmu-master = <&gsc_1>;
-		clocks = <&clock 462>;
-		clock-names = "sysmmu";
+		clocks = <&clock 462>, <&clock 466>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
@@ -883,8 +883,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <8 5>;
 		mmu-master = <&mfc>;
-		clocks = <&clock 402>;
-		clock-names = "sysmmu";
+		clocks = <&clock 402>, <&clock 401>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
@@ -895,8 +895,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <6 2>;
 		mmu-master = <&mfc>;
-		clocks = <&clock 403>;
-		clock-names = "sysmmu";
+		clocks = <&clock 403>, <&clock 401>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
@@ -907,8 +907,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
 		mmu-master = <&fimd>;
-		clocks = <&clock 422>;
-		clock-names = "sysmmu";
+		clocks = <&clock 422>, <&clock 421>;
+		clock-names = "sysmmu", "master";
 	};
 
 	sysmmu-fimd1m1 {
@@ -918,8 +918,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <3 0>;
 		mmu-master = <&fimd>;
-		clocks = <&clock 423>;
-		clock-names = "sysmmu";
+		clocks = <&clock 423>, <&clock 421>;
+		clock-names = "sysmmu", "master";
 	};
 
 	sysmmu-tv {
