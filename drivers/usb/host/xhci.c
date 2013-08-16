@@ -4640,12 +4640,6 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	if (xhci->hci_version > 0x96)
 		xhci->quirks |= XHCI_SPURIOUS_SUCCESS;
 
-	/* If we are resetting upon resume, we must disable runtime PM.
-	 * Otherwise, an open() syscall to a device on our runtime suspended
-	 * controller will trigger controller reset and device re-enumeration */
-	if (xhci->quirks & XHCI_RESET_ON_RESUME)
-		pm_runtime_get_noresume(dev);
-
 	/* Make sure the HC is halted. */
 	retval = xhci_halt(xhci);
 	if (retval)
