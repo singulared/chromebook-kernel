@@ -59,6 +59,7 @@
 #define MFC_NUM_PORTS_V7		1
 
 #define S5P_FIMV_SCRATCH_BUF_SIZE_VP8_ENC_V7(w, h) \
-			(((w) * 48) + (((w) + 1) / 2 * 128) + 144 + 8192)
+			(((w) * 48) + 8192 + ((((w) + 1) / 2) * 128) + 144 + \
+			((((((w) * 16) * ((h) * 16)) * 3) / 2) * 4))
 
 #endif /*_REGS_MFC_V7_H*/
