@@ -26,8 +26,10 @@
 
 #include <asm/mach/arch.h>
 #include <asm/hardware/gic.h>
+#include <asm/smp_plat.h>
 #include <mach/regs-pmu.h>
 #include <mach/devfreq.h>
+#include <mach/regs-debug.h>
 
 #include <plat/cpu.h>
 #include <plat/mfc.h>
@@ -179,11 +181,63 @@ static void __init exynos5_smdk5420_power_init(void)
 }
 #endif
 
+static void __iomem *exynos5_cpu_debug[8];
+
+int exynos5_panic_notify(struct notifier_block *nb, unsigned long event,
+			 void *p)
+{
+	unsigned long dbgpcsr;
+	int i, j, cluster;
+	void *pc = NULL;
+
+	for_each_online_cpu(i) {
+		cluster = (cpu_logical_map(i) >> 8) & 0xff;
+		j = 4 * cluster + i;
+
+		dbgpcsr = __raw_readl(exynos5_cpu_debug[j] + CPU_DBGPCSR);
+
+		if ((dbgpcsr & 3) == 0)
+			pc = (void *)(dbgpcsr - 8);
+		else if ((dbgpcsr & 1) == 1)
+			pc = (void *)((dbgpcsr & ~1) - 4);
+
+		pr_err("CPU%d PC: <%p> %pF\n", i, pc, pc);
+	}
+	return NOTIFY_OK;
+}
+
+struct notifier_block exynos5_panic_nb = {
+	.notifier_call = exynos5_panic_notify,
+};
+
+static void __init exynos5_panic_init(void)
+{
+	int i;
+
+	if (of_machine_is_compatible("samsung,exynos5250")) {
+		for (i = 0; i < 2; i++) {
+			exynos5_cpu_debug[i] =
+				ioremap(EXYNOS5250_DEBUG_PA_CPU(i), SZ_4K);
+		}
+	} else if (of_machine_is_compatible("samsung,exynos5420")) {
+		for (i = 0; i < 4; i++) {
+			exynos5_cpu_debug[i] =
+				ioremap(EXYNOS5420_A15_DEBUG_PA_CPU(i), SZ_4K);
+			exynos5_cpu_debug[i+4] =
+				ioremap(EXYNOS5420_A7_DEBUG_PA_CPU(i), SZ_4K);
+		}
+	}
+
+	atomic_notifier_chain_register(&panic_notifier_list, &exynos5_panic_nb);
+}
+
 static void __init exynos5_dt_machine_init(void)
 {
 	struct device_node *i2c_np;
 	const char *i2c_compat = "samsung,s3c2440-i2c";
 	unsigned int tmp;
+
+	exynos5_panic_init();
 
 	/* XCLKOUT needs to be moved over to the clock interface, but enable it
 	 * here for now.
