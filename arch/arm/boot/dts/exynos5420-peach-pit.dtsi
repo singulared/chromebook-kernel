@@ -631,10 +631,18 @@
 		pinctrl-0 = <&usb3_vbus1_en>;
 	};
 
+	usb3_phy0: usbphy@12100000 {
+		samsung,txpreempamptune = <0x1>;
+	};
+
 	usb2_phy: usbphy@12130000 {
 		samsung,hsic-reset-gpio = <&gpx2 4 1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&hsic_reset>;
+	};
+
+	usb3_phy1: usbphy@12500000 {
+		samsung,txpreempamptune = <0x1>;
 	};
 
 	/* i2c2 */
