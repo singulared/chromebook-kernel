@@ -1087,7 +1087,7 @@ static int gsc_iommu_init(struct gsc_dev *gsc, struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 
 	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
-						SZ_256M, 4);
+						SZ_512M, 4);
 	if (mapping == NULL) {
 		dev_err(dev, "IOMMU mapping failed\n");
 		return -EFAULT;

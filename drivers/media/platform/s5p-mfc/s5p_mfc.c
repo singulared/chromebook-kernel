@@ -1047,7 +1047,7 @@ static int s5p_mfc_alloc_memdevs_iommu(struct s5p_mfc_dev *dev)
 
 	s5p_mfc_clock_on();
 	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
-			SZ_256M, 4);
+			SZ_512M, 4);
 	if (mapping == NULL) {
 		mfc_err("IOMMU mapping failed\n");
 		s5p_mfc_clock_off();
