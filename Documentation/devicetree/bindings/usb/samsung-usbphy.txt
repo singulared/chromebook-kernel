@@ -133,6 +133,15 @@ Optional properties:
           in the aliases node using the following format:
           'usb3phy{n}' where n is a unique number for the alias.
 
+- samsung,txpreempamptune: board specific "HS Transmitter Pre-Emphasis Current
+			   Control".
+			   Allowed values -- (One unit amount is approximately
+			   600uA and is defined as 1X preemphasis current).
+			     0x0 (default) = pre-emphasis is disabled.
+			     0x1 = 1X pre-emphasis current.
+			     0x2 = 2X pre-emphasis current.
+			     0x3 = 3X pre-emphasis current.
+
 Example:
 	usbphy@12100000 {
 		compatible = "samsung,exynos5250-usb3phy";

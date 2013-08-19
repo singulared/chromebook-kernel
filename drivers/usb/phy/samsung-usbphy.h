@@ -215,6 +215,8 @@
 #define PHYPARAM0_REF_USE_PAD			(0x1 << 31)
 #define PHYPARAM0_REF_LOSLEVEL_MASK		(0x1f << 26)
 #define PHYPARAM0_REF_LOSLEVEL			(0x9 << 26)
+#define PHYPARAM0_TXPREEMP_AMPTUNE_MASK		(0x3 << 15)
+#define PHYPARAM0_TXPREEMP_AMPTUNE(_x)		((_x) << 15)
 
 #define EXYNOS5_DRD_PHYPARAM1			(0x20)
 
@@ -314,6 +316,7 @@ struct samsung_usbphy {
 	struct mutex	mutex;
 	int		hsic_reset_gpio;
 	int		channel;
+	u32		tx_preemp_amptune;
 };
 
 #define phy_to_sphy(x)		container_of((x), struct samsung_usbphy, phy)

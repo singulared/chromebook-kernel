@@ -163,6 +163,9 @@ static int samsung_exynos5_usb3phy_enable(struct samsung_usbphy *sphy)
 	/* Set Loss-of-Signal Detector sensitivity */
 	phyparam0 &= ~PHYPARAM0_REF_LOSLEVEL_MASK;
 	phyparam0 |= PHYPARAM0_REF_LOSLEVEL;
+	/* HS Tx Pre-emphasis current control */
+	phyparam0 &= ~PHYPARAM0_TXPREEMP_AMPTUNE_MASK;
+	phyparam0 |= PHYPARAM0_TXPREEMP_AMPTUNE(sphy->tx_preemp_amptune);
 	writel(phyparam0, regs + EXYNOS5_DRD_PHYPARAM0);
 
 	writel(0x0, regs + EXYNOS5_DRD_PHYRESUME);

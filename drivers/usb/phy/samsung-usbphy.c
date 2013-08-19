@@ -69,8 +69,8 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 	 * devices. If they don't, this will just stay at an invalid value and
 	 * the init code will ignore it.
 	 */
-	sphy->hsic_reset_gpio = of_get_named_gpio(sphy->dev->of_node,
-						"samsung,hsic-reset-gpio", 0);
+	sphy->hsic_reset_gpio = of_get_named_gpio(node,
+						  "samsung,hsic-reset-gpio", 0);
 	if (gpio_is_valid(sphy->hsic_reset_gpio)) {
 		if (devm_gpio_request_one(sphy->dev, sphy->hsic_reset_gpio,
 				GPIOF_OUT_INIT_LOW, "samsung_hsic_reset")) {
@@ -79,6 +79,10 @@ int samsung_usbphy_parse_dt(struct samsung_usbphy *sphy)
 			sphy->hsic_reset_gpio = -EINVAL;
 		}
 	}
+
+	if (of_property_read_u32(node, "samsung,txpreempamptune",
+				 &sphy->tx_preemp_amptune))
+		dev_info(sphy->dev, "No HS Tx Pre-Emp current control\n");
 
 	of_node_put(usbphy_sys);
 
