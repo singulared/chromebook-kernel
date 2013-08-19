@@ -1216,20 +1216,16 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_EXYNOS_IOMMU
-	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(&dev->plat_dev->dev);
-#else
-	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(dev->mem_dev_l);
+	dev->mem_dev_l = &dev->plat_dev->dev;
+	dev->mem_dev_r = &dev->plat_dev->dev;
 #endif
+	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(dev->mem_dev_l);
 	if (IS_ERR_OR_NULL(dev->alloc_ctx[0])) {
 		ret = PTR_ERR(dev->alloc_ctx[0]);
 		goto err_cleanupmemdevs;
 	}
 
-#ifdef CONFIG_EXYNOS_IOMMU
-	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx(&dev->plat_dev->dev);
-#else
 	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx(dev->mem_dev_r);
-#endif
 	if (IS_ERR_OR_NULL(dev->alloc_ctx[1])) {
 		ret = PTR_ERR(dev->alloc_ctx[1]);
 		goto err_mem_init_ctx_1;
