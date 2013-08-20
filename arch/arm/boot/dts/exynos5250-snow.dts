@@ -89,6 +89,13 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+
+		backlight_pwm: backlight-pwm {
+			samsung,pins = "gpb2-0";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	pinctrl@13400000 {
@@ -372,6 +379,15 @@
 		pinctrl-0 = <&audio_detection>;
 	};
 
+	backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 0 1000000 0>;
+		max-brightness = <2800>;
+		default-brightness-level = <2800>;
+		pinctrl-0 = <&backlight_pwm>;
+		pinctrl-names = "default";
+	};
+
 	i2c@12C90000 {
 		tpm {
 			compatible = "infineon,slb9635tt";
@@ -515,4 +531,8 @@
 		};
 	};
 
+};
+
+&pwm {
+	status = "okay";
 };
