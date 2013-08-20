@@ -197,7 +197,7 @@ static notrace u32 exynos4_read_sched_clock(void)
 static cycle_t exynos4_frc_read(struct clocksource *cs)
 {
 	u32 lo, hi;
-	static u32 hi2;
+	static u32 __suspend_volatile_bss hi2;
 
 	do {
 		hi = hi2;
