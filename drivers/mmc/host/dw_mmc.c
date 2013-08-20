@@ -2215,6 +2215,9 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "supports-hs200-mode", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200;
 
+	if (of_find_property(np, "non-removable", NULL))
+		pdata->caps |= MMC_CAP_NONREMOVABLE;
+
 	return pdata;
 }
 

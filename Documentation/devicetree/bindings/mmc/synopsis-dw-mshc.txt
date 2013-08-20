@@ -73,6 +73,9 @@ Optional properties:
 
 * bypass-smu: Bypass Security Management Unit of eMMC channel 0 and channel 1
 
+* non-removable: This is set for the devices which are non removable from the
+  board like eMMC or SDIO cards.
+
 Aliases:
 
 - All the MSHC controller nodes should be represented in the aliases node using
@@ -98,6 +101,7 @@ board specific portions as listed below.
 		num-slots = <1>;
 		supports-highspeed;
 		broken-cd;
+		non-removable;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
 		vmmc-supply = <&buck8>;
