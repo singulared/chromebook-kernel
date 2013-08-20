@@ -319,6 +319,7 @@
 		bypass-smu;
 		supports-highspeed;	/* >= 25MHz */
 		supports-hs200-mode;	/* 200MHz */
+		non-removable;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		samsung,dw-mshc-ciu-div = <3>;
@@ -346,6 +347,7 @@
 		keep-power-in-suspend;
 		broken-cd;
 		bypass-smu;
+		non-removable;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		clock-frequency = <400000000>;
