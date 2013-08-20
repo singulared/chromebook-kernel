@@ -1099,6 +1099,8 @@
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
 		samsung,fimd-src-clk-rate = <70500000>;
+		samsung,use-fimd-dithering;
+		samsung-rgb-dithpos = <6 6 6>;
 	};
 
 	lcd_dp0: lcd_panel0 {
