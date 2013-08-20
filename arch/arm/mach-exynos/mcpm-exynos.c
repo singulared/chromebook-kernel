@@ -426,6 +426,8 @@ static int __init exynos_mcpm_init(void)
 
 	clear_boot_flag(0, EXYNOS_RESET);
 
+	 __raw_writel(EXYNOS5420_SWRESET_KFC_SEL, S5P_PMU_SPARE3);
+
 	/* disable ARM/KFC L2 Cache retention */
 	for (i = 0; i < MAX_NR_CLUSTERS; i++)
 		writel(0x0, EXYNOS_L2_OPTION(i));

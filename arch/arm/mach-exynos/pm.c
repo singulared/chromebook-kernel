@@ -85,6 +85,7 @@ static struct sleep_save exynos5_sys_save[] = {
 
 static struct sleep_save exynos5420_sys_save[] = {
 	SAVE_ITEM(EXYNOS5_SYS_DISP1_BLK_CFG),
+	SAVE_ITEM(S5P_PMU_SPARE3),
 };
 
 static struct sleep_save exynos5420_cpustate_save[] = {
