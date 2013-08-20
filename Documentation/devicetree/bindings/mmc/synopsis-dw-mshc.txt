@@ -78,6 +78,9 @@ Optional properties:
 * vmmc-supply: The phandle to the regulator to use for vmmc.  If this is
   specified we'll defer probe until we can find this regulator.
 
+* non-removable: This is set for the devices which are non removable from the
+  board like eMMC or SDIO cards.
+
 Aliases:
 
 - All the MSHC controller nodes should be represented in the aliases node using
@@ -105,6 +108,7 @@ board specific portions as listed below.
 		supports-highspeed;
 		caps2-mmc-hs200-1_8v;
 		broken-cd;
+		non-removable;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
 		vmmc-supply = <&buck8>;
