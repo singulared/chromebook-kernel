@@ -37,6 +37,7 @@
 #include <plat/gpio-cfg.h>
 #include <plat/fb.h>
 #include <plat/devs.h>
+#include <plat/pm.h>
 
 #include "common.h"
 #include <video/platform_lcd.h>
@@ -234,6 +235,9 @@ static void __init exynos5_panic_init(void)
 static void __init exynos5_dt_machine_init(void)
 {
 	struct device_node *i2c_np;
+#ifdef CONFIG_SAMSUNG_PM_CHECK
+	struct device_node *fw_np;
+#endif
 	const char *i2c_compat = "samsung,s3c2440-i2c";
 	unsigned int tmp;
 
@@ -270,6 +274,24 @@ static void __init exynos5_dt_machine_init(void)
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
 		platform_device_register(&exynos5_lcd);
+#ifdef CONFIG_SAMSUNG_PM_CHECK
+	/*
+	 * Snow RO firmware 2695.90.0 has a bug where memory can be corrupted
+	 * coming out of resume.  Enable memory checking on the suspend/resume
+	 * path for that bios.  This is a slow (1 second) operation so we do
+	 * not want it on for all devices.
+	 */
+	fw_np = of_find_node_by_path("/firmware/chromeos");
+	if (fw_np) {
+		const char *version;
+
+		if (of_property_read_string(fw_np, "readonly-firmware-version",
+					    &version) == 0) {
+			if (strcmp(version, "Google_Snow.2695.90.0") == 0)
+				s3c_pm_check_set_enable(true);
+		}
+	}
+#endif
 	} else if (of_machine_is_compatible("samsung,exynos5420")) {
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
