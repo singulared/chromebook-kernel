@@ -487,6 +487,8 @@ int tracing_is_on(void);
 extern void tracing_start(void);
 extern void tracing_stop(void);
 extern void ftrace_off_permanent(void);
+extern void ftrace_cpu_off(void);
+extern void ftrace_cpu_on(void);
 struct timespec;
 extern void trace_clock_gettime(struct timespec *);
 extern void trace_clock_getres(struct timespec *);
@@ -568,6 +570,8 @@ extern void ftrace_dump(enum ftrace_dump_mode oops_dump_mode);
 static inline void tracing_start(void) { }
 static inline void tracing_stop(void) { }
 static inline void ftrace_off_permanent(void) { }
+static inline void ftrace_cpu_off(void) { }
+static inline void ftrace_cpu_on(void) { }
 struct timespec;
 static inline void trace_clock_gettime(struct timespec *tp)
 {
