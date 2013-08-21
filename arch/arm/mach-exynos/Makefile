@@ -27,6 +27,7 @@ obj-$(CONFIG_SMP)		+= platsmp.o headsmp.o
 obj-$(CONFIG_HOTPLUG_CPU)	+= hotplug.o
 
 obj-$(CONFIG_MCPM)		+= mcpm-exynos.o mcpm-exynos-setup.o
+CFLAGS_REMOVE_mcpm-exynos.o	= -pg
 
 # machine support
 
