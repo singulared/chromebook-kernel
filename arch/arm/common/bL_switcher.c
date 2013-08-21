@@ -250,6 +250,14 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	__cpuc_flush_dcache_area(&cpu_logical_map(this_cpu),
 				 sizeof(cpu_logical_map(this_cpu)));
 
+	/*
+	 * Once we release the inbound CPU in bL_switchpoint, we will have
+	 * two CPUs executing with the same logical ID.  Per-cpu state in
+	 * ftrace may get modified concurrently by the two CPUs, so disable
+	 * it until we are sure the outbound CPU is down.
+	 */
+	ftrace_cpu_off();
+
 	/* Let's do the actual CPU switch. */
 	ret = cpu_suspend((unsigned long)&handshake_ptr, bL_switchpoint);
 	if (ret > 0)
@@ -278,6 +286,8 @@ static int bL_switch_to(unsigned int new_cluster_id)
 	dsb_sev();
 
 	mcpm_cpu_powered_up(true);
+
+	ftrace_cpu_on();
 
 	if (ret)
 		pr_err("%s exiting with error %d\n", __func__, ret);
