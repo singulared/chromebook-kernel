@@ -1,5 +1,5 @@
 /*
- * Google Peach Pit Rev 4 board device tree source
+ * Google Peach Pit Rev 5 board device tree source
  *
  * Copyright (c) 2013 Google, Inc
  *
@@ -13,15 +13,10 @@
 #include "exynos5420-peach-pit.dtsi"
 
 / {
-	model = "Google Peach Pit Rev 4";
+	model = "Google Peach Pit Rev 5";
 
-	compatible = "google,pit-rev4", "google,pit",
+	compatible = "google,pit-rev5", "google,pit",
 		"google,peach", "samsung,exynos5420";
-
-	/* There's a problem reading the EDID on rev4, so add a quirk. */
-	display-port-controller {
-		samsung,skip-edid-read;
-	};
 
 	/* Avoid suspend/resume problems on non-screened silicon */
 	hsi2c@12CA0000 {
