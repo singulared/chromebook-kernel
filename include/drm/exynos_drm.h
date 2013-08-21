@@ -30,6 +30,12 @@ struct exynos_drm_panel_info {
 	u32 height_mm;
 };
 
+enum dither_mode {
+	USE_NO_DITHERING,
+	USE_MIE_DITHERING,
+	USE_FIMD_DITHERING,
+};
+
 /**
  * Platform Specific Structure for DRM based FIMD.
  *
@@ -44,6 +50,8 @@ struct exynos_drm_fimd_pdata {
 	unsigned int			default_win;
 	unsigned int			bpp;
 	unsigned int			src_clk_rate;
+	enum dither_mode		dither_mode;
+	u32				dither_rgb_bpc[3];
 };
 
 /**

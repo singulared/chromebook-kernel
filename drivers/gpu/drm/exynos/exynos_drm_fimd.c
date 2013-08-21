@@ -122,6 +122,8 @@ struct fimd_context {
 	int				pipe;
 	wait_queue_head_t		wait_vsync_queue;
 	atomic_t			wait_vsync_event;
+	enum dither_mode		dither_mode;
+	u32				dither_rgb_bpc[3];
 };
 
 static struct device *dp_dev;
@@ -276,6 +278,35 @@ static void fimd_win_set_colkey(struct fimd_context *ctx, unsigned int win)
 	writel(keycon1, ctx->regs + WKEYCON1_BASE(win));
 }
 
+static void fimd_set_dithering(struct fimd_context *ctx)
+{
+	u32 val, reg = 0;
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		val = 0;
+		switch (ctx->dither_rgb_bpc[i]) {
+		case 5:
+			val |= 2;
+			break;
+		case 6:
+			val |= 1;
+			break;
+		case 8:
+			break;
+		default:
+			DRM_ERROR("Unsupported bpc value\n");
+			return;
+		}
+		val <<= (2 * (2 - i));
+		reg |= val;
+	}
+
+	reg <<= 1;
+	reg |= DITHMODE_DITH_EN;
+
+	writel(reg, ctx->regs + DITHMODE);
+}
 
 static void mie_set_6bit_dithering(struct fimd_context *ctx)
 {
@@ -307,6 +338,14 @@ static void mie_set_6bit_dithering(struct fimd_context *ctx)
 		writel(0, ctx->regs_mie + 0x100 + i);
 		writel(0, ctx->regs_mie + 0x200 + i);
 	}
+}
+
+static void exynos_set_dithering(struct fimd_context *ctx)
+{
+	if (ctx->dither_mode == USE_FIMD_DITHERING)
+		fimd_set_dithering(ctx);
+	else if (ctx->dither_mode == USE_MIE_DITHERING)
+		mie_set_6bit_dithering(ctx);
 }
 
 static void fimd_win_commit(void *in_ctx, int zpos)
@@ -426,7 +465,7 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 
 	/* only apply dithering on default window */
 	if (win == ctx->default_win)
-		mie_set_6bit_dithering(ctx);
+		exynos_set_dithering(ctx);
 
 	/* Enable DMA channel and unprotect windows */
 	val = readl(ctx->regs + SHADOWCON);
@@ -911,6 +950,17 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 	if (of_get_property(np, "samsung,fimd-inv-vden", NULL))
 		pd->vidcon1 |= VIDCON1_INV_VDEN;
 
+	if (of_get_property(np, "samsung,use-mie-dithering", NULL))
+		pd->dither_mode = USE_MIE_DITHERING;
+	else if (of_get_property(np, "samsung,use-fimd-dithering", NULL)) {
+		pd->dither_mode = USE_FIMD_DITHERING;
+		if (of_property_read_u32_array(np,
+				"samsung-rgb-dithpos", pd->dither_rgb_bpc, 3)) {
+			dev_err(dev, "bpc values needed for dithering\n");
+		}
+	} else
+		pd->dither_mode = USE_NO_DITHERING;
+
 	of_property_read_u32(np, "samsung,default-window", &pd->default_win);
 
 	of_property_read_u32(np, "samsung,fimd-win-bpp", &pd->bpp);
@@ -1013,6 +1063,14 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
 	ctx->dev = dev;
+
+	ctx->dither_mode = pdata->dither_mode;
+	if (ctx->dither_mode == USE_FIMD_DITHERING) {
+		ctx->dither_rgb_bpc[0] = pdata->dither_rgb_bpc[0];
+		ctx->dither_rgb_bpc[1] = pdata->dither_rgb_bpc[1];
+		ctx->dither_rgb_bpc[2] = pdata->dither_rgb_bpc[2];
+	}
+
 	ctx->suspended = true;
 	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);

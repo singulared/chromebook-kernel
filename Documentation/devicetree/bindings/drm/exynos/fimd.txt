@@ -34,6 +34,16 @@ Required properties:
 Optional properties:
  - samsung,fimd-vidout-rgb: Video output format is RGB.
  - samsung,fimd-inv-vclk: invert video clock polarity.
+ - /* Dithering */
+	 - samsung,use-mie-dithering: Use MIE block for dithering.
+	 - samsung,use-fimd-dithering: Use FIMD internal dithering logic.
+	 - samsung-rgb-dithpos: Array of 3 integer values representing
+	   RDithpos, GDithpos and BDithpos respectively.
+	Only one type of dithering can be enabled. So, you can select either
+	"samsung,use-mie-dithering" or "samsung,use-fimd-dithering".
+	"samsung-rgb-dithpos" is needed only in case of FIMD dithering mode.
+	If none of the dithering modes are specified, dithering feature is
+	disabled by default.
 
 Example:
 
