@@ -274,6 +274,11 @@ void __ref cpu_die(void)
 #endif /* CONFIG_HOTPLUG_CPU */
 
 /*
+ * True if any CPU in the system is affected by Cortex-A15 erratum 798181.
+ */
+bool has_erratum_a15_798181 __read_mostly;
+
+/*
  * Called by both boot and secondaries to move global data into
  * per-processor storage.
  */
@@ -285,6 +290,9 @@ static void __cpuinit smp_store_cpu_info(unsigned int cpuid)
 	cpu_info->cpuid = read_cpuid_id();
 
 	store_cpu_topology(cpuid);
+
+	if (erratum_a15_798181())
+		has_erratum_a15_798181 = true;
 }
 
 static void percpu_timer_setup(void);

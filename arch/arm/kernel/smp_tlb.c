@@ -72,7 +72,7 @@ static void ipi_flush_tlb_a15_erratum(void *arg)
 
 static void broadcast_tlb_a15_erratum(void)
 {
-	if (!erratum_a15_798181())
+	if (!has_erratum_a15_798181)
 		return;
 
 	dummy_flush_tlb_a15_erratum();
@@ -84,7 +84,7 @@ static void broadcast_tlb_mm_a15_erratum(struct mm_struct *mm)
 	int this_cpu;
 	cpumask_t mask = { CPU_BITS_NONE };
 
-	if (!erratum_a15_798181())
+	if (!has_erratum_a15_798181)
 		return;
 
 	dummy_flush_tlb_a15_erratum();
