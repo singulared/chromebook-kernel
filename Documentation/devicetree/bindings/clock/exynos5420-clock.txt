@@ -151,9 +151,9 @@ clock which they consume.
   pclk200_fsys		370
 
   aclk400_mscl		380
-  mscl0			381
-  mscl1			382
-  mscl2			383
+  aclk_mscl0		381
+  aclk_mscl1		382
+  aclk_mscl2		383
   smmu_mscl0		384
   smmu_mscl1		385
   smmu_mscl2		386
