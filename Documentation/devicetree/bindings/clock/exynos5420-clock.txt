@@ -125,20 +125,20 @@ clock which they consume.
   pclk66_gpio		330
 
   aclk200_fsys2		350
-  mmc0			351
-  mmc1			352
-  mmc2			353
-  sromc			354
-  ufs			355
+  aclk_mmc0		351
+  aclk_mmc1		352
+  aclk_mmc2		353
+  hclk_sromc		354
+  ufs_unused		355
 
   aclk200_fsys		360
-  tsi			361
-  pdma0			362
-  pdma1			363
-  rtic			364
-  usbh20		365
-  usbd300		366
-  usbd301		367
+  tsi_unused		361
+  aclk_pdma0		362
+  aclk_pdma1		363
+  aclk_rtic		364
+  hclk_usbh20		365
+  hclk_usbd300		366
+  hclk_usbd301		367
 
   pclk200_fsys		370
 
