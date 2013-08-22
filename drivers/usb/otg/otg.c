@@ -26,7 +26,7 @@ static DEFINE_SPINLOCK(phy_lock);
 static struct usb_phy *__usb_find_phy(struct list_head *list,
 	enum usb_phy_type type)
 {
-	struct usb_phy  *phy = NULL;
+	struct usb_phy  *phy;
 
 	list_for_each_entry(phy, list, head) {
 		if (phy->type != type)
@@ -99,7 +99,7 @@ struct usb_phy *devm_usb_get_phy(struct device *dev, enum usb_phy_type type)
 
 	ptr = devres_alloc(devm_usb_phy_release, sizeof(*ptr), GFP_KERNEL);
 	if (!ptr)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	phy = usb_get_phy(type);
 	if (!IS_ERR(phy)) {
@@ -124,7 +124,7 @@ EXPORT_SYMBOL(devm_usb_get_phy);
  */
 struct usb_phy *usb_get_phy(enum usb_phy_type type)
 {
-	struct usb_phy	*phy = NULL;
+	struct usb_phy	*phy;
 	unsigned long	flags;
 
 	spin_lock_irqsave(&phy_lock, flags);
@@ -222,7 +222,7 @@ EXPORT_SYMBOL(devm_usb_get_phy_by_phandle);
  */
 struct usb_phy *usb_get_phy_dev(struct device *dev, u8 index)
 {
-	struct usb_phy	*phy = NULL;
+	struct usb_phy	*phy;
 	unsigned long	flags;
 
 	spin_lock_irqsave(&phy_lock, flags);
@@ -259,7 +259,7 @@ struct usb_phy *devm_usb_get_phy_dev(struct device *dev, u8 index)
 
 	ptr = devres_alloc(devm_usb_phy_release, sizeof(*ptr), GFP_KERNEL);
 	if (!ptr)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	phy = usb_get_phy_dev(dev, index);
 	if (!IS_ERR(phy)) {

@@ -133,7 +133,7 @@ extern void usb_remove_phy(struct usb_phy *);
 /* helpers for direct access thru low-level io interface */
 static inline int usb_phy_io_read(struct usb_phy *x, u32 reg)
 {
-	if (x->io_ops && x->io_ops->read)
+	if (!IS_ERR_OR_NULL(x) && x->io_ops && x->io_ops->read)
 		return x->io_ops->read(x, reg);
 
 	return -EINVAL;
@@ -141,7 +141,7 @@ static inline int usb_phy_io_read(struct usb_phy *x, u32 reg)
 
 static inline int usb_phy_io_write(struct usb_phy *x, u32 val, u32 reg)
 {
-	if (x->io_ops && x->io_ops->write)
+	if (!IS_ERR_OR_NULL(x) && x->io_ops && x->io_ops->write)
 		return x->io_ops->write(x, val, reg);
 
 	return -EINVAL;
@@ -150,7 +150,7 @@ static inline int usb_phy_io_write(struct usb_phy *x, u32 val, u32 reg)
 static inline int
 usb_phy_init(struct usb_phy *x)
 {
-	if (x->init)
+	if (!IS_ERR_OR_NULL(x) && x->init)
 		return x->init(x);
 
 	return 0;
@@ -159,14 +159,14 @@ usb_phy_init(struct usb_phy *x)
 static inline void
 usb_phy_shutdown(struct usb_phy *x)
 {
-	if (x->shutdown)
+	if (!IS_ERR_OR_NULL(x) && x->shutdown)
 		x->shutdown(x);
 }
 
 static inline void
 usb_phy_tune(struct usb_phy *x)
 {
-	if (x && x->tune)
+	if (!IS_ERR_OR_NULL(x) && x->tune)
 		x->tune(x);
 }
 
@@ -229,7 +229,7 @@ static inline int usb_bind_phy(const char *dev_name, u8 index,
 static inline int
 usb_phy_set_power(struct usb_phy *x, unsigned mA)
 {
-	if (x && x->set_power)
+	if (!IS_ERR_OR_NULL(x) && x->set_power)
 		return x->set_power(x, mA);
 	return 0;
 }
@@ -238,7 +238,7 @@ usb_phy_set_power(struct usb_phy *x, unsigned mA)
 static inline int
 usb_phy_set_suspend(struct usb_phy *x, int suspend)
 {
-	if (x->set_suspend != NULL)
+	if (!IS_ERR_OR_NULL(x) && x->set_suspend != NULL)
 		return x->set_suspend(x, suspend);
 	else
 		return 0;
@@ -247,7 +247,7 @@ usb_phy_set_suspend(struct usb_phy *x, int suspend)
 static inline int
 usb_phy_notify_connect(struct usb_phy *x, enum usb_device_speed speed)
 {
-	if (x->notify_connect)
+	if (!IS_ERR_OR_NULL(x) && x->notify_connect)
 		return x->notify_connect(x, speed);
 	else
 		return 0;
@@ -256,7 +256,7 @@ usb_phy_notify_connect(struct usb_phy *x, enum usb_device_speed speed)
 static inline int
 usb_phy_notify_disconnect(struct usb_phy *x, enum usb_device_speed speed)
 {
-	if (x->notify_disconnect)
+	if (!IS_ERR_OR_NULL(x) && x->notify_disconnect)
 		return x->notify_disconnect(x, speed);
 	else
 		return 0;
