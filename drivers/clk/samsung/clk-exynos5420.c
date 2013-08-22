@@ -280,6 +280,7 @@ PNAME(mout_mspll_cpu_p)		= { "sclk_cpll", "sclk_dpll", "sclk_mpll",
 PNAME(mout_cpu_p)		= { "mout_apll" , "mout_mspll_cpu" };
 PNAME(mout_kfc_p)		= { "mout_kpll" , "mout_mspll_kfc" };
 PNAME(mout_apll_p)		= { "fin_pll", "fout_apll", };
+PNAME(mout_bpll_p)		= { "fin_pll", "fout_bpll" };
 PNAME(mout_cpll_p)		= { "fin_pll", "fout_cpll", };
 PNAME(mout_dpll_p)		= { "fin_pll", "fout_dpll", };
 PNAME(mout_epll_p)		= { "fin_pll", "fout_epll", };
@@ -314,6 +315,7 @@ PNAME(mout_sw_aclk100_noc_p)	= { "dout_aclk100_noc", "sclk_spll"};
 PNAME(mout_user_aclk100_noc_p)	= { "fin_pll", "mout_sw_aclk100_noc"};
 
 PNAME(mout_sw_aclk400_wcore_p)	= { "dout_aclk400_wcore", "sclk_spll"};
+PNAME(mout_aclk400_wcore_bpll_p) = { "mout_aclk400_wcore", "sclk_bpll" };
 PNAME(mout_user_aclk400_wcore_p) = { "fin_pll", "mout_sw_aclk400_wcore"};
 
 PNAME(mout_sw_aclk400_isp_p)	= { "dout_aclk400_isp", "sclk_spll"};
@@ -409,6 +411,7 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 					SRC_TOP7, 8, 2, "mout_mspll_kfc"),
 	MUX_A(none, "mout_kpll", mout_kpll_p, SRC_KFC, 0, 1, "mout_kpll"),
 	MUX_A(none, "mout_kfc", mout_kfc_p, SRC_KFC, 16, 1, "mout_kfc"),
+	MUX(none, "sclk_bpll", mout_bpll_p, TOP_SPARE2, 0, 1),
 	MUX_A(none, "sclk_cpll", mout_cpll_p, SRC_TOP6, 28, 1, "mout_cpll"),
 	MUX_A(none, "sclk_dpll", mout_dpll_p, SRC_TOP6, 24, 1, "mout_dpll"),
 	MUX_F(sclk_epll, "sclk_epll", mout_epll_p, SRC_TOP6, 20, 1,
@@ -479,6 +482,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 							SRC_TOP3, 20, 1),
 	MUX_A(none, "mout_aclk400_wcore", mout_group1_p,
 					SRC_TOP0, 16, 2, "aclk400_wcore"),
+	MUX(none, "mout_aclk400_wcore_bpll", mout_aclk400_wcore_bpll_p,
+			TOP_SPARE2, 4, 1),
 	MUX(none, "mout_sw_aclk400_wcore", mout_sw_aclk400_wcore_p,
 							SRC_TOP10, 16, 1),
 	MUX(none, "mout_user_aclk400_wcore", mout_user_aclk400_wcore_p,
@@ -587,10 +592,10 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 };
 
 struct samsung_div_clock exynos5420_div_clks[] __initdata = {
-	DIV(none, "div_arm", "mout_cpu", DIV_CPU0, 0, 3),
-	DIV(none, "armclk2", "div_arm", DIV_CPU0, 28, 3),
+	DIV(none, "dout_armclk1", "mout_cpu", DIV_CPU0, 0, 3),
+	DIV(none, "dout_armclk2", "dout_armclk1", DIV_CPU0, 28, 3),
 	DIV(none, "sclk_apll", "mout_apll", DIV_CPU0, 24, 3),
-	DIV(none, "div_kfc", "mout_kfc", DIV_KFC0, 0, 3),
+	DIV(none, "dout_kfc", "mout_kfc", DIV_KFC0, 0, 3),
 	DIV(none, "sclk_kpll", "mout_kpll", DIV_KFC0, 24, 3),
 	DIV_A(none, "dout_aclk400_mscl", "mout_aclk400_mscl", DIV_TOP0, 4, 3,
 							"aclk400_mscl_d"),
@@ -606,7 +611,7 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 					DIV_TOP1, 0, 3, "aclk333432_gscd"),
 	DIV_A(none, "dout_aclk100_noc", "mout_aclk100_noc", DIV_TOP0, 20, 3,
 							"aclk100_noc_d"),
-	DIV_A(none, "dout_aclk400_wcore", "mout_aclk400_wcore",
+	DIV_A(none, "dout_aclk400_wcore", "mout_aclk400_wcore_bpll",
 					DIV_TOP0, 16, 3, "aclk400_wcore_d"),
 	DIV_A(none, "dout_aclk400_isp", "mout_aclk400_isp", DIV_TOP0,
 							0, 3, "aclk400_isp_d"),
