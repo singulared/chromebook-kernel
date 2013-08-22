@@ -95,32 +95,32 @@ clock which they consume.
   pclk_i2s2		276
   pclk_pcm1		277
   pclk_pcm2		278
-  pwm			279
+  pclk_pwm		279
   pclk_spdif		280
   pclk_usi4		281
   pclk_usi5		282
   pclk_usi6		283
 
   aclk66_psgen		300
-  chipid		301
-  sysreg		302
-  tzpc0			303
-  tzpc1			304
-  tzpc2			305
-  tzpc3			306
-  tzpc4			307
-  tzpc5			308
-  tzpc6			309
-  tzpc7			310
-  tzpc8			311
-  tzpc9			312
+  pclk_chipid		301
+  pclk_sysreg		302
+  pclk_tzpc0		303
+  pclk_tzpc1		304
+  pclk_tzpc2		305
+  pclk_tzpc3		306
+  pclk_tzpc4		307
+  pclk_tzpc5		308
+  pclk_tzpc6		309
+  pclk_tzpc7		310
+  pclk_tzpc8		311
+  pclk_tzpc9		312
   hdmi_cec		313
   seckey		314
-  mct			315
-  wdt			316
-  rtc			317
-  tmu			318
-  tmu_gpu		319
+  pclk_mct		315
+  pclk_wdt		316
+  pclk_rtc		317
+  pclk_tmu		318
+  pclk_tmu_gpu		319
 
   pclk66_gpio		330
 
@@ -170,14 +170,14 @@ clock which they consume.
   mixer			431
 
   aclk266		440
-  rotator		441
+  aclk_rotator		441
   mdma1			442
   smmu_rotator		443
   smmu_mdma1		444
 
   aclk300_jpeg		450
-  jpeg			451
-  jpeg2			452
+  aclk_jpeg		451
+  aclk_jpeg2		452
   smmu_jpeg		453
 
   aclk300_gscl		460
