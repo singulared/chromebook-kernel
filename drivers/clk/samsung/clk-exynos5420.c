@@ -211,6 +211,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	GATE_IP_G3D,
 	GATE_IP_GEN,
 	GATE_IP_FSYS,
+	GATE_IP_PERIC,
 	GATE_IP_MSCL,
 	GATE_TOP_SCLK_GSCL,
 	GATE_TOP_SCLK_DISP1,
