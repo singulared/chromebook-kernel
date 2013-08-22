@@ -172,7 +172,7 @@ clock which they consume.
 
   aclk266		440
   aclk_rotator		441
-  mdma1			442
+  aclk_mdma1		442
   smmu_rotator		443
   smmu_mdma1		444
 
@@ -191,12 +191,12 @@ clock which they consume.
   clk_3aa		467
 
   aclk266_g2d		470
-  sss			471
-  slim_sss		472
-  mdma0			473
+  aclk_sss		471
+  aclk_slim_sss		472
+  aclk_mdma0		473
 
   aclk333_g2d		480
-  g2d			481
+  aclk_g2d		481
 
   aclk333_432_gscl	490
   smmu_3aa		491
