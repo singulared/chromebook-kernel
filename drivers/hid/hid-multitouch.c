@@ -833,6 +833,18 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	 */
 	hdev->quirks |= HID_QUIRK_NO_INPUT_SYNC;
 
+	/*
+	 * Handle special quirks for Windows 8 certified devices.
+	 */
+	if (id->group == HID_GROUP_MULTITOUCH_WIN_8)
+		/*
+		 * Some multitouch screens do not like to be polled for input
+		 * reports. Fortunately, the Win8 spec says that all touches
+		 * should be sent during each report, making the initialization
+		 * of input reports unnecessary.
+		 */
+		hdev->quirks |= HID_QUIRK_NO_INIT_INPUT_REPORTS;
+
 	td = kzalloc(sizeof(struct mt_device), GFP_KERNEL);
 	if (!td) {
 		dev_err(&hdev->dev, "cannot allocate multitouch data\n");
