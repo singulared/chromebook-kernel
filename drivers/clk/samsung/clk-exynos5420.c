@@ -376,9 +376,11 @@ PNAME(mout_audio2_p)		= { "fin_pll", "cdclk2", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
 PNAME(mout_spdif_p)		= { "fin_pll", "dout_audio0", "dout_audio1",
-					"dout_audio2", "spdof_extclk",
+					"dout_audio2", "spdif_extclk",
 					"sclk_ipll", "sclk_epll", "sclk_rpll" };
 PNAME(mout_hdmi_p)		= { "dout_hdmi_pixel", "sclk_hdmiphy" };
+PNAME(mout_mau_epll_clk_p)		= { "sclk_epll", "sclk_dpll",
+						"sclk_mpll", "sclk_spll" };
 PNAME(mout_maudio0_p)		= { "fin_pll", "maudio_clk", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
 					"sclk_epll", "sclk_rpll" };
@@ -454,6 +456,8 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 			SRC_TOP5, 4, 1),
 	MUX(none, "mout_user_aclk66_gpio", mout_user_aclk66_gpio_p,
 			SRC_TOP7, 4, 1),
+	MUX_F(none, "mout_mau_epll_clk", mout_mau_epll_clk_p, SRC_TOP7, 20, 2,
+			CLK_SET_RATE_PARENT, 0),
 	MUX_F(mout_maudio0, "mout_maudio0", mout_maudio0_p, SRC_MAU, 28, 3,
 						CLK_SET_RATE_PARENT, 0),
 	MUX_A(none, "mout_aclk200_fsys", mout_group1_p, SRC_TOP0, 28, 2,
