@@ -42,167 +42,184 @@ static struct gsc_fmt gsc_formats[] = {
 	{
 		.name		= "RGB565",
 		.pixelformat	= V4L2_PIX_FMT_RGB565X,
-		.depth		= { 16 },
 		.color		= GSC_RGB,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 16 },
+		.sampling	= { { 1, 1 } },
 	}, {
 		.name		= "XRGB-8-8-8-8, 32 bpp",
 		.pixelformat	= V4L2_PIX_FMT_RGB32,
-		.depth		= { 32 },
 		.color		= GSC_RGB,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 32 },
+		.sampling	= { { 1, 1 } },
 	}, {
 		.name		= "YUV 4:2:2 packed, YCbYCr",
 		.pixelformat	= V4L2_PIX_FMT_YUYV,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 16 },
+		.sampling	= { { 1, 1 } },
 		.mbus_code	= V4L2_MBUS_FMT_YUYV8_2X8,
 	}, {
 		.name		= "YUV 4:2:2 packed, CbYCrY",
 		.pixelformat	= V4L2_PIX_FMT_UYVY,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_C,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 16 },
+		.sampling	= { { 1, 1 } },
 		.mbus_code	= V4L2_MBUS_FMT_UYVY8_2X8,
 	}, {
 		.name		= "YUV 4:2:2 packed, CrYCbY",
 		.pixelformat	= V4L2_PIX_FMT_VYUY,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_C,
 		.corder		= GSC_CRCB,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 16 },
+		.sampling	= { { 1, 1 } },
 		.mbus_code	= V4L2_MBUS_FMT_VYUY8_2X8,
 	}, {
 		.name		= "YUV 4:2:2 packed, YCrYCb",
 		.pixelformat	= V4L2_PIX_FMT_YVYU,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CRCB,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 16 },
+		.sampling	= { { 1, 1 } },
 		.mbus_code	= V4L2_MBUS_FMT_YVYU8_2X8,
 	}, {
 		.name		= "YUV 4:4:4 planar, YCbYCr",
 		.pixelformat	= V4L2_PIX_FMT_YUV32,
-		.depth		= { 32 },
 		.color		= GSC_YUV444,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 1,
+		.depth		= { 32 },
+		.sampling	= { { 1, 1 } },
 	}, {
 		.name		= "YUV 4:2:2 planar, Y/Cb/Cr",
 		.pixelformat	= V4L2_PIX_FMT_YUV422P,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 3,
+		.depth		= { 8, 8, 8 },
+		.sampling	= { { 1, 1 }, { 2, 1 }, { 2, 1 } },
 	}, {
 		.name		= "YUV 4:2:2 planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV16,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 1 } },
 	}, {
 		.name		= "YUV 4:2:2 planar, Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV61,
-		.depth		= { 16 },
 		.color		= GSC_YUV422,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CRCB,
 		.num_planes	= 1,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 1 } },
 	}, {
 		.name		= "YUV 4:2:0 planar, YCbCr",
 		.pixelformat	= V4L2_PIX_FMT_YUV420,
-		.depth		= { 12 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 3,
+		.depth		= { 8, 8, 8 },
+		.sampling	= { { 1, 1 }, { 2, 2 }, { 2, 2 } },
 	}, {
-		.name		= "YUV 4:2:0 planar, YCbCr",
+		.name		= "YUV 4:2:0 planar, YCrCb",
 		.pixelformat	= V4L2_PIX_FMT_YVU420,
-		.depth		= { 12 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CRCB,
 		.num_planes	= 1,
 		.nr_comp	= 3,
-
+		.depth		= { 8, 8, 8 },
+		.sampling	= { { 1, 1 }, { 2, 2 }, { 2, 2 } },
 	}, {
 		.name		= "YUV 4:2:0 planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV12,
-		.depth		= { 12 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 1,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 2 } },
 	}, {
 		.name		= "YUV 4:2:0 planar, Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV21,
-		.depth		= { 12 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CRCB,
 		.num_planes	= 1,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 2 } },
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 2-planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV12M,
-		.depth		= { 8, 4 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 2,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 2 } },
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 3-planar, Y/Cb/Cr",
 		.pixelformat	= V4L2_PIX_FMT_YUV420M,
-		.depth		= { 8, 2, 2 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 3,
 		.nr_comp	= 3,
+		.depth		= { 8, 8, 8 },
+		.sampling	= { { 1, 1 }, { 2, 2 }, { 2, 2 } },
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 3-planar, Y/Cr/Cb",
 		.pixelformat	= V4L2_PIX_FMT_YVU420M,
-		.depth		= { 8, 2, 2 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CRCB,
 		.num_planes	= 3,
 		.nr_comp	= 3,
+		.depth		= { 8, 8, 8 },
+		.sampling	= { { 1, 1 }, { 2, 2 }, { 2, 2 } },
 	}, {
 		.name		=
 			"YUV 4:2:0 non-contiguous 2-planar, Y/CbCr, tiled",
 		.pixelformat	= V4L2_PIX_FMT_NV12MT_16X16,
-		.depth		= { 8, 4 },
 		.color		= GSC_YUV420,
 		.yorder		= GSC_LSB_Y,
 		.corder		= GSC_CBCR,
 		.num_planes	= 2,
 		.nr_comp	= 2,
+		.depth		= { 8, 16 },
+		.sampling	= { { 1, 1 }, { 2, 2 } },
 	},
 };
 
@@ -395,6 +412,13 @@ void gsc_set_prefbuf(struct gsc_dev *gsc, struct gsc_frame frm)
 		f_chk_addr, f_chk_len, s_chk_addr, s_chk_len);
 }
 
+static void get_format_size(__u32 width, __u32 height, struct gsc_fmt *fmt,
+			int plane, __u16 *bytesperline, __u32 *sizeimage) {
+	__u16 bpl = ((width * fmt->depth[plane]) / fmt->sampling[plane][0]) / 8;
+	*bytesperline = bpl;
+	*sizeimage = (height * bpl) / fmt->sampling[plane][0];
+}
+
 int gsc_try_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 {
 	struct gsc_dev *gsc = ctx->gsc_dev;
@@ -462,14 +486,16 @@ int gsc_try_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 	else	/* SD */
 		pix_mp->colorspace = V4L2_COLORSPACE_SMPTE170M;
 
-
+	/* V4L2 specifies for contiguous planar formats that bytesperline and
+	   sizeimage are set to values appropriate for the first plane. */
 	for (i = 0; i < pix_mp->num_planes; ++i) {
-		int bpl = (pix_mp->width * fmt->depth[i]) >> 3;
-		pix_mp->plane_fmt[i].bytesperline = bpl;
-		pix_mp->plane_fmt[i].sizeimage = bpl * pix_mp->height;
+		get_format_size(pix_mp->width, pix_mp->height, fmt, i,
+				&pix_mp->plane_fmt[i].bytesperline,
+				&pix_mp->plane_fmt[i].sizeimage);
 
-		gsc_dbg("[%d]: bpl: %d, sizeimage: %d",
-		    i, bpl, pix_mp->plane_fmt[i].sizeimage);
+		gsc_dbg("[%d]: bytesperline: %d, sizeimage: %d",
+			i, pix_mp->plane_fmt[i].bytesperline,
+			pix_mp->plane_fmt[i].sizeimage);
 	}
 
 	return 0;
@@ -479,26 +505,27 @@ int gsc_g_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 {
 	struct gsc_frame *frame;
 	struct v4l2_pix_format_mplane *pix_mp;
+	struct gsc_fmt *fmt;
 	int i;
 
 	frame = ctx_get_frame(ctx, f->type);
 	if (IS_ERR(frame))
 		return PTR_ERR(frame);
+	fmt = frame->fmt;
 
 	pix_mp = &f->fmt.pix_mp;
 
 	pix_mp->width		= frame->f_width;
 	pix_mp->height		= frame->f_height;
 	pix_mp->field		= V4L2_FIELD_NONE;
-	pix_mp->pixelformat	= frame->fmt->pixelformat;
+	pix_mp->pixelformat	= fmt->pixelformat;
 	pix_mp->colorspace	= V4L2_COLORSPACE_JPEG;
-	pix_mp->num_planes	= frame->fmt->num_planes;
+	pix_mp->num_planes	= fmt->num_planes;
 
 	for (i = 0; i < pix_mp->num_planes; ++i) {
-		pix_mp->plane_fmt[i].bytesperline = (frame->f_width *
-			frame->fmt->depth[i]) / 8;
-		pix_mp->plane_fmt[i].sizeimage = pix_mp->plane_fmt[i].bytesperline *
-			frame->f_height;
+		get_format_size(pix_mp->width, pix_mp->height, fmt, i,
+				&pix_mp->plane_fmt[i].bytesperline,
+				&pix_mp->plane_fmt[i].sizeimage);
 	}
 
 	return 0;
@@ -941,11 +968,12 @@ void gsc_ctrls_delete(struct gsc_ctx *ctx)
 	}
 }
 
-/* The color format (nr_comp, num_planes) must be already configured. */
+/* The color format (num_planes, nr_comp)  must be already configured. */
 int gsc_prepare_addr(struct gsc_ctx *ctx, struct vb2_buffer *vb,
 			struct gsc_frame *frame, struct gsc_addr *addr)
 {
 	int ret = 0;
+	const struct gsc_fmt *fmt = frame->fmt;
 	u32 pix_size;
 
 	if (!vb) {
@@ -955,39 +983,35 @@ int gsc_prepare_addr(struct gsc_ctx *ctx, struct vb2_buffer *vb,
 
 	pix_size = frame->f_width * frame->f_height;
 
-	gsc_dbg("num_planes= %d, nr_comp= %d, pix_size= %d",
+	gsc_dbg("num_planes=%d, nr_comp=%d, pix_size= %d",
 		frame->fmt->num_planes, frame->fmt->nr_comp, pix_size);
 
 	addr->y = vb2_dma_contig_plane_dma_addr(vb, 0);
+	addr->cb = 0;
+	addr->cr = 0;
 
-	if (frame->fmt->num_planes == 1) {
-		switch (frame->fmt->nr_comp) {
-		case 1:
-			addr->cb = 0;
-			addr->cr = 0;
-			break;
-		case 2:
-			/* decompose Y into Y/Cb */
-			addr->cb = (dma_addr_t)(addr->y + pix_size);
-			addr->cr = 0;
-			break;
-		case 3:
-			addr->cb = (dma_addr_t)(addr->y + pix_size);
-			addr->cr = (dma_addr_t)(addr->cb + (pix_size >> 2));
-			break;
-		default:
-			gsc_err("Invalid the number of color planes");
-			return -EINVAL;
+	if (fmt->num_planes == 1) {
+		if (frame->fmt->nr_comp >= 2) {
+			addr->cb = (dma_addr_t)(addr->y +
+				((pix_size * fmt->depth[0]) /
+				(fmt->sampling[0][0] *
+				 fmt->sampling[0][1]) / 8));
+		}
+		if (frame->fmt->nr_comp >= 3) {
+			addr->cr = (dma_addr_t)(addr->cb +
+				((pix_size * fmt->depth[1]) /
+				(fmt->sampling[1][0] *
+				 fmt->sampling[1][1]) / 8));
 		}
 	} else {
-		if (frame->fmt->num_planes >= 2)
+		if (frame->fmt->nr_comp >= 2)
 			addr->cb = vb2_dma_contig_plane_dma_addr(vb, 1);
 
-		if (frame->fmt->num_planes == 3)
+		if (frame->fmt->nr_comp == 3)
 			addr->cr = vb2_dma_contig_plane_dma_addr(vb, 2);
 	}
 
-	if (frame->fmt->pixelformat == V4L2_PIX_FMT_YVU420) {
+	if (frame->fmt->corder == GSC_CRCB) {
 		u32 t_cb = addr->cb;
 		addr->cb = addr->cr;
 		addr->cr = t_cb;

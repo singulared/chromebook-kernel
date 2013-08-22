@@ -366,6 +366,7 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *dev = ctx->gsc_dev;
 	struct gsc_frame *frame = &ctx->s_frame;
+	struct gsc_fmt *fmt = frame->fmt;
 	u32 i, depth = 0;
 	u32 cfg;
 
@@ -375,21 +376,22 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 		 GSC_IN_TILE_TYPE_MASK | GSC_IN_TILE_MODE);
 	writel(cfg, dev->regs + GSC_IN_CON);
 
-	if (is_rgb(frame->fmt->color)) {
+	if (is_rgb(fmt->color)) {
 		gsc_hw_set_in_image_rgb(ctx);
 		return;
 	}
-	for (i = 0; i < frame->fmt->num_planes; i++)
-		depth += frame->fmt->depth[i];
+	for (i = 0; i < fmt->nr_comp; i++)
+		depth += fmt->depth[i] /
+			(fmt->sampling[i][0] * fmt->sampling[i][1]);
 
-	switch (frame->fmt->nr_comp) {
+	switch (fmt->nr_comp) {
 	case 1:
 		cfg |= GSC_IN_YUV422_1P;
-		if (frame->fmt->yorder == GSC_LSB_Y)
+		if (fmt->yorder == GSC_LSB_Y)
 			cfg |= GSC_IN_YUV422_1P_ORDER_LSB_Y;
 		else
 			cfg |= GSC_IN_YUV422_1P_OEDER_LSB_C;
-		if (frame->fmt->corder == GSC_CBCR)
+		if (fmt->corder == GSC_CBCR)
 			cfg |= GSC_IN_CHROMA_ORDER_CBCR;
 		else
 			cfg |= GSC_IN_CHROMA_ORDER_CRCB;
@@ -399,7 +401,7 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 			cfg |= GSC_IN_YUV420_2P;
 		else
 			cfg |= GSC_IN_YUV422_2P;
-		if (frame->fmt->corder == GSC_CBCR)
+		if (fmt->corder == GSC_CBCR)
 			cfg |= GSC_IN_CHROMA_ORDER_CBCR;
 		else
 			cfg |= GSC_IN_CHROMA_ORDER_CRCB;
@@ -412,7 +414,7 @@ void gsc_hw_set_in_image_format(struct gsc_ctx *ctx)
 		break;
 	};
 
-	if (is_tiled(frame->fmt))
+	if (is_tiled(fmt))
 		cfg |= GSC_IN_TILE_C_16x8 | GSC_IN_TILE_MODE;
 
 	writel(cfg, dev->regs + GSC_IN_CON);
@@ -493,6 +495,7 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *dev = ctx->gsc_dev;
 	struct gsc_frame *frame = &ctx->d_frame;
+	struct gsc_fmt *fmt = frame->fmt;
 	u32 i, depth = 0;
 	u32 cfg;
 
@@ -502,7 +505,7 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 		 GSC_OUT_TILE_TYPE_MASK | GSC_OUT_TILE_MODE);
 	writel(cfg, dev->regs + GSC_OUT_CON);
 
-	if (is_rgb(frame->fmt->color)) {
+	if (is_rgb(fmt->color)) {
 		gsc_hw_set_out_image_rgb(ctx);
 		return;
 	}
@@ -512,17 +515,18 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 		goto end_set;
 	}
 
-	for (i = 0; i < frame->fmt->num_planes; i++)
-		depth += frame->fmt->depth[i];
+	for (i = 0; i < fmt->nr_comp; i++)
+		depth += fmt->depth[i] /
+			(fmt->sampling[i][0] * fmt->sampling[i][1]);
 
-	switch (frame->fmt->nr_comp) {
+	switch (fmt->nr_comp) {
 	case 1:
 		cfg |= GSC_OUT_YUV422_1P;
-		if (frame->fmt->yorder == GSC_LSB_Y)
+		if (fmt->yorder == GSC_LSB_Y)
 			cfg |= GSC_OUT_YUV422_1P_ORDER_LSB_Y;
 		else
 			cfg |= GSC_OUT_YUV422_1P_OEDER_LSB_C;
-		if (frame->fmt->corder == GSC_CBCR)
+		if (fmt->corder == GSC_CBCR)
 			cfg |= GSC_OUT_CHROMA_ORDER_CBCR;
 		else
 			cfg |= GSC_OUT_CHROMA_ORDER_CRCB;
@@ -532,7 +536,7 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 			cfg |= GSC_OUT_YUV420_2P;
 		else
 			cfg |= GSC_OUT_YUV422_2P;
-		if (frame->fmt->corder == GSC_CBCR)
+		if (fmt->corder == GSC_CBCR)
 			cfg |= GSC_OUT_CHROMA_ORDER_CBCR;
 		else
 			cfg |= GSC_OUT_CHROMA_ORDER_CRCB;
@@ -542,7 +546,7 @@ void gsc_hw_set_out_image_format(struct gsc_ctx *ctx)
 		break;
 	};
 
-	if (is_tiled(frame->fmt))
+	if (is_tiled(fmt))
 		cfg |= GSC_OUT_TILE_C_16x8 | GSC_OUT_TILE_MODE;
 
 end_set:
