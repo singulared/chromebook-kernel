@@ -67,6 +67,13 @@ clock which they consume.
   sclk_gscl_wb		157
   sclk_hdmiphy		158
   sclk_mphy_refclk	159
+  sclk_spi0_isp		160
+  sclk_spi1_isp		161
+  sclk_uart_isp		162
+  sclk_isp_sensor0	163
+  sclk_isp_sensor1	164
+  sclk_isp_sensor2	165
+  sclk_pwm_isp		166
 
    [Peripheral Clock Gates]
 
@@ -224,6 +231,10 @@ clock which they consume.
   smmu_sss		516
   smmu_slim_sss		517
   aclk_smmu_slim_sss	518
+  aclk266_isp		519
+  aclk400_isp		520
+  aclk333_432_isp0	521
+  aclk333_432_isp	522
 
   Mux			ID
   ----------------------------
