@@ -505,7 +505,7 @@
 			compatible = "synopsys,dwc3";
 			reg = <0x12000000 0x10000>;
 			interrupts = <0 72 0>;
-			usb-phy = <&usb2_phy &usb3_phy>;
+			usb3-phy = <&usb3_phy>;
 		};
 	};
 

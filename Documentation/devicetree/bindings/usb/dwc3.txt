@@ -6,7 +6,8 @@ Required properties:
  - compatible: must be "synopsys,dwc3"
  - reg : Address and length of the register set for the device
  - interrupts: Interrupts used by the dwc3 controller.
- - usb-phy : array of phandle for the PHY device
+ - usb2-phy : phandle for the USB 2.0 PHY device
+ - usb3-phy : phandle for the USB 3.0 PHY device
 
 Optional properties:
  - tx-fifo-resize: determines if the FIFO *has* to be reallocated.
@@ -17,6 +18,7 @@ dwc3@4a030000 {
 	compatible = "synopsys,dwc3";
 	reg = <0x4a030000 0xcfff>;
 	interrupts = <0 92 4>
-	usb-phy = <&usb2_phy>, <&usb3,phy>;
+	usb2-phy = <&usb2_phy>;
+	usb3-phy = <&usb3_phy>;
 	tx-fifo-resize;
 };

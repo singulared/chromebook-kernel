@@ -413,21 +413,32 @@ static int dwc3_probe(struct platform_device *pdev)
 	}
 
 	if (node) {
-		dwc->usb2_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy", 0);
-		dwc->usb3_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy", 1);
+		dwc->usb2_phy = devm_usb_get_phy_by_phandle(dev, "usb2-phy", 0);
+		dwc->usb3_phy = devm_usb_get_phy_by_phandle(dev, "usb3-phy", 0);
 	} else {
 		dwc->usb2_phy = devm_usb_get_phy(dev, USB_PHY_TYPE_USB2);
 		dwc->usb3_phy = devm_usb_get_phy(dev, USB_PHY_TYPE_USB3);
 	}
 
-	if (IS_ERR_OR_NULL(dwc->usb2_phy)) {
-		dev_err(dev, "no usb2 phy configured\n");
-		return -EPROBE_DEFER;
+	if (IS_ERR(dwc->usb2_phy)) {
+		ret = PTR_ERR(dwc->usb2_phy);
+		if (ret == -EPROBE_DEFER) {
+			dev_err(dev, "no usb2 phy configured\n");
+			return ret;
+		}
 	}
 
-	if (IS_ERR_OR_NULL(dwc->usb3_phy)) {
-		dev_err(dev, "no usb3 phy configured\n");
-		return -EPROBE_DEFER;
+	if (IS_ERR(dwc->usb3_phy)) {
+		ret = PTR_ERR(dwc->usb3_phy);
+		if (ret == -EPROBE_DEFER) {
+			dev_err(dev, "no usb3 phy configured\n");
+			return ret;
+		}
+	}
+
+	if (IS_ERR(dwc->usb2_phy) && IS_ERR(dwc->usb3_phy)) {
+		dev_err(dev, "no usb-phy present\n");
+		return -ENODEV;
 	}
 
 	usb_phy_set_suspend(dwc->usb2_phy, 0);
