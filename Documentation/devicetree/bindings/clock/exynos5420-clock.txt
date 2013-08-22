@@ -73,33 +73,33 @@ clock which they consume.
   ----------------------------
 
   aclk66_peric		256
-  uart0			257
-  uart1			258
-  uart2			259
-  uart3			260
-  i2c0			261
-  i2c1			262
-  i2c2			263
-  i2c3			264
-  i2c4			265
-  i2c5			266
-  i2c6			267
-  i2c7			268
-  i2c_hdmi		269
-  tsadc			270
-  spi0			271
-  spi1			272
-  spi2			273
-  keyif			274
-  i2s1			275
-  i2s2			276
-  pcm1			277
-  pcm2			278
+  pclk_uart0		257
+  pclk_uart1		258
+  pclk_uart2		259
+  pclk_uart3		260
+  pclk_i2c0		261
+  pclk_i2c1		262
+  pclk_i2c2		263
+  pclk_i2c3		264
+  pclk_usi0		265
+  pclk_usi1		266
+  pclk_usi2		267
+  pclk_usi3		268
+  pclk_i2c_hdmi		269
+  pclk_tsadc		270
+  pclk_spi0		271
+  pclk_spi1		272
+  pclk_spi2		273
+  keyif_unused		274
+  pclk_i2s1		275
+  pclk_i2s2		276
+  pclk_pcm1		277
+  pclk_pcm2		278
   pwm			279
-  spdif			280
-  i2c8			281
-  i2c9			282
-  i2c10			283
+  pclk_spdif		280
+  pclk_usi4		281
+  pclk_usi5		282
+  pclk_usi6		283
 
   aclk66_psgen		300
   chipid		301
