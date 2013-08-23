@@ -66,6 +66,7 @@ clock which they consume.
   sclk_gscl_wa		156
   sclk_gscl_wb		157
   sclk_hdmiphy		158
+  sclk_mphy_refclk	159
 
    [Peripheral Clock Gates]
 
@@ -213,6 +214,7 @@ clock which they consume.
   pclk_top_rtc		506
   smmu_jpeg2		507
   pclk_rotator		508
+  smmu_rtic		509
 
   Mux			ID
   ----------------------------
