@@ -254,6 +254,11 @@ clock which they consume.
   mout_sw_aclk333_432_gscl	1034
   mout_user_aclk333_432_gscl	1035
 
+  Divider		ID
+  ----------------------------
+
+  dout_pixel		2048
+
 Example 1: An example of a clock controller node is listed below.
 
 	clock: clock-controller@0x10010000 {

@@ -163,6 +163,9 @@ enum exynos5420_clks {
 	mout_user_aclk300_gscl, mout_sw_aclk333_432_gscl,
 	mout_user_aclk333_432_gscl,
 
+	/* divider clocks */
+	dout_pixel = 2048,
+
 	nr_clks,
 };
 
@@ -656,7 +659,7 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 						CLK_SET_RATE_PARENT, 0),
 	DIV(none, "dout_mipi1", "mout_mipi1", DIV_DISP10, 16, 8),
 	DIV(none, "dout_dp1", "mout_dp1", DIV_DISP10, 24, 4),
-	DIV(sclk_pixel, "dout_hdmi_pixel", "mout_pixel", DIV_DISP10, 28, 4),
+	DIV(dout_pixel, "dout_hdmi_pixel", "mout_pixel", DIV_DISP10, 28, 4),
 	DIV(none, "dout_disp1_blk", "aclk200_disp1", DIV2_RATIO0, 16, 2),
 	/* Audio Blk */
 	DIV(none, "dout_maudio0", "mout_maudio0", DIV_MAU, 20, 4),
@@ -781,7 +784,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(pclk_dsim1, "pclk_dsim1", "dout_disp1_blk",
 			GATE_IP_DISP1, 3, 0, 0),
 	GATE(pclk_dp1, "pclk_dp1", "dout_disp1_blk", GATE_IP_DISP1, 4, 0, 0),
-	GATE(none, "sclk_pixel", "dout_hdmi_pixel",
+	GATE(sclk_pixel, "sclk_pixel", "dout_hdmi_pixel",
 		GATE_TOP_SCLK_DISP1, 10, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_hdmi, "sclk_hdmi", "mout_hdmi",
 		GATE_TOP_SCLK_DISP1, 9, CLK_SET_RATE_PARENT, 0),
