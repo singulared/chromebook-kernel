@@ -235,6 +235,8 @@ clock which they consume.
   aclk400_isp		520
   aclk333_432_isp0	521
   aclk333_432_isp	522
+  aclk_smmu_mixer	523
+  pclk_hdmiphy		524
 
   Mux			ID
   ----------------------------

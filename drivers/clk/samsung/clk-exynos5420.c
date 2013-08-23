@@ -49,6 +49,7 @@
 #define SRC_TOP10		0x10280
 #define SRC_TOP11		0x10284
 #define SRC_TOP12		0x10288
+#define SRC_MASK_TOP2	0x10308
 #define	SRC_MASK_DISP10		0x1032c
 #define SRC_MASK_MAU		0x10334
 #define SRC_MASK_FSYS		0x10340
@@ -72,6 +73,7 @@
 #define DIV2_RATIO0		0x10590
 #define GATE_BUS_TOP		0x10700
 #define GATE_BUS_GSCL1		0x10720
+#define GATE_BUS_DISP1		0x10728
 #define GATE_BUS_GEN		0x1073c
 #define GATE_BUS_FSYS0		0x10740
 #define GATE_BUS_FSYS2		0x10748
@@ -153,7 +155,7 @@ enum exynos5420_clks {
 	pclk_top_rtc, smmu_jpeg2, pclk_rotator, smmu_rtic, pclk_g2d,
 	aclk_smmu_g2d, smmu_g2d, aclk_smmu_mdma0, smmu_mdma0, aclk_smmu_sss,
 	smmu_sss, smmu_slim_sss, aclk_smmu_slim_sss, aclk266_isp, aclk400_isp,
-	aclk333_432_isp0, aclk333_432_isp,
+	aclk333_432_isp0, aclk333_432_isp, aclk_smmu_mixer, pclk_hdmiphy,
 
 	/* mux clocks */
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
@@ -226,6 +228,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	DIV2_RATIO0,
 	GATE_BUS_TOP,
 	GATE_BUS_GSCL1,
+	GATE_BUS_DISP1,
 	GATE_BUS_GEN,
 	GATE_BUS_FSYS0,
 	GATE_BUS_FSYS2,
@@ -253,6 +256,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	TOP_SPARE2,
 	SRC_KFC,
 	DIV_KFC0,
+	SRC_MASK_TOP2,
 };
 
 /* list of all parent clock list */
@@ -706,6 +710,8 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_BUS_TOP, 1, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk333_g2d, "aclk333_g2d", "mout_user_aclk333_g2d",
 			GATE_BUS_TOP, 0, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk300_disp1, "aclk300_disp1", "mout_user_aclk300_disp1",
+			SRC_MASK_TOP2, 24, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk266_isp, "aclk266_isp", "mout_user_aclk266_isp",
 			GATE_BUS_TOP, 13, 0, 0),
 	GATE(aclk400_isp, "aclk400_isp", "mout_user_aclk400_isp",
@@ -781,8 +787,12 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 		GATE_TOP_SCLK_DISP1, 9, CLK_SET_RATE_PARENT, 0),
 	GATE(aclk_mixer, "aclk_mixer", "aclk200_disp1", GATE_IP_DISP1, 5, 0, 0),
 	GATE(pclk_hdmi, "pclk_hdmi", "dout_disp1_blk", GATE_IP_DISP1, 6, 0, 0),
+	GATE(pclk_hdmiphy, "pclk_hdmiphy", "dout_disp1_blk",
+			GATE_BUS_DISP1, 15, CLK_IGNORE_UNUSED, 0),
 	GATE(smmu_mixer, "smmu_mixer", "dout_disp1_blk",
 		GATE_IP_DISP1, 9, 0, 0),
+	GATE(aclk_smmu_mixer, "aclk_smmu_mixer", "aclk200_disp1",
+			GATE_BUS_DISP1, 9, CLK_IGNORE_UNUSED, 0),
 	/* i2c, usi */
 	GATE(pclk_i2c0, "pclk_i2c0", "aclk66_peric", GATE_IP_PERIC, 6, 0, 0),
 	GATE(pclk_i2c1, "pclk_i2c1", "aclk66_peric", GATE_IP_PERIC, 7, 0, 0),
