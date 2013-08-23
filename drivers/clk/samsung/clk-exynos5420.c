@@ -197,6 +197,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	DIV_PERIC2,
 	DIV_PERIC3,
 	DIV_PERIC4,
+	DIV2_RATIO0,
 	GATE_BUS_TOP,
 	GATE_BUS_GSCL1,
 	GATE_BUS_FSYS0,
@@ -596,6 +597,10 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	/* Audio Blk */
 	DIV(none, "dout_maudio0", "mout_maudio0", DIV_MAU, 20, 4),
 	DIV(none, "dout_maupcm0", "dout_maudio0", DIV_MAU, 24, 8),
+	/* Psgen */
+	DIV(none, "dout_gen_blk", "mout_user_aclk266", DIV2_RATIO0, 8, 1),
+	/* Jpeg */
+	DIV(none, "dout_jpg_blk", "aclk166", DIV2_RATIO0, 20, 1),
 };
 
 struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
@@ -727,12 +732,12 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	/* rotator */
 	GATE(aclk_rotator, "aclk_rotator", "mout_user_aclk266",
 			GATE_IP_GEN, 1, 0, 0),
-	GATE(smmu_rotator, "smmu_rotator", "mout_user_aclk266",
+	GATE(smmu_rotator, "smmu_rotator", "dout_gen_blk",
 			GATE_IP_GEN, 6, 0, 0),
 	/* JPEG */
 	GATE(aclk_jpeg, "aclk_jpeg", "aclk300_jpeg", GATE_IP_GEN, 2, 0, 0),
 	GATE(aclk_jpeg2, "aclk_jpeg2", "aclk300_jpeg", GATE_IP_GEN, 3, 0, 0),
-	GATE(smmu_jpeg, "smmu_jpeg", "aclk300_jpeg", GATE_IP_GEN, 7, 0, 0),
+	GATE(smmu_jpeg, "smmu_jpeg", "dout_jpg_blk", GATE_IP_GEN, 7, 0, 0),
 
 	GATE(mscl0, "mscl0", "aclk400_mscl", GATE_IP_MSCL, 0, 0, 0),
 	GATE(mscl1, "mscl1", "aclk400_mscl", GATE_IP_MSCL, 1, 0, 0),
