@@ -840,7 +840,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_BUS_G2D, 5, CLK_IGNORE_UNUSED, 0),
 	GATE(smmu_mdma0, "smmu_mdma0", "aclk266_g2d",
 			GATE_BUS_G2D, 20, CLK_IGNORE_UNUSED, 0),
-	GATE(smmu_mdma1, "smmu_mdma1", "mout_user_aclk266",
+	GATE(smmu_mdma1, "smmu_mdma1", "dout_gen_blk",
 			GATE_IP_GEN, 9, 0, 0),
 	GATE(aclk_mdma1, "aclk_mdma1", "mout_user_aclk266",
 			GATE_IP_GEN, 4, 0, 0),
