@@ -215,6 +215,15 @@ clock which they consume.
   smmu_jpeg2		507
   pclk_rotator		508
   smmu_rtic		509
+  pclk_g2d		510
+  aclk_smmu_g2d		511
+  smmu_g2d		512
+  aclk_smmu_mdma0	513
+  smmu_mdma0		514
+  aclk_smmu_sss		515
+  smmu_sss		516
+  smmu_slim_sss		517
+  aclk_smmu_slim_sss	518
 
   Mux			ID
   ----------------------------

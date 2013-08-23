@@ -24,6 +24,8 @@
 #define GATE_BUS_CPU		0x700
 #define GATE_SCLK_CPU		0x800
 #define CLKOUT_CMU_CPU		0xa00
+#define DIV_G2D			0x8500
+#define GATE_BUS_G2D		0x8700
 #define EPLL_CON0		0x10130
 #define EPLL_CON1		0x10134
 #define EPLL_CON2		0x10138
@@ -140,7 +142,9 @@ enum exynos5420_clks {
 	aclk333_432_gscl = 490, smmu_3aa, smmu_fimcl0, smmu_fimcl1, smmu_fimcl3,
 	fimc_lite3,
 	aclk_g3d = 500, g3d, smmu_tv, pclk_tzpc10, pclk_tzpc11, pclk_mc,
-	pclk_top_rtc, smmu_jpeg2, pclk_rotator, smmu_rtic,
+	pclk_top_rtc, smmu_jpeg2, pclk_rotator, smmu_rtic, pclk_g2d,
+	aclk_smmu_g2d, smmu_g2d, aclk_smmu_mdma0, smmu_mdma0, aclk_smmu_sss,
+	smmu_sss, smmu_slim_sss, aclk_smmu_slim_sss,
 
 	/* mux clocks */
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
@@ -162,6 +166,11 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	GATE_BUS_CPU,
 	GATE_SCLK_CPU,
 	CLKOUT_CMU_CPU,
+	/*
+	* NOTE: DIV_G2D, GATE_BUS_G2D registers are not included in the
+	* list as access to G2D clk regisers is causing hang when G2D block
+	* is power gated.
+	*/
 	EPLL_CON0,
 	EPLL_CON1,
 	EPLL_CON2,
@@ -642,6 +651,10 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 				GATE_BUS_TOP, 4, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk400_mscl, "aclk400_mscl", "mout_user_aclk400_mscl",
 				GATE_BUS_TOP, 17, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk266_g2d, "aclk266_g2d", "mout_user_aclk266_g2d",
+			GATE_BUS_TOP, 1, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk333_g2d, "aclk333_g2d", "mout_user_aclk333_g2d",
+			GATE_BUS_TOP, 0, CLK_IGNORE_UNUSED, 0),
 	/* misc: mct, adc, chipid, wdt, rtc, sysreg etc */
 	GATE(pclk_mct, "pclk_mct", "aclk66_psgen", GATE_BUS_PERIS1, 2, 0, 0),
 	GATE(pclk_tsadc, "pclk_tsadc", "aclk66_peric", GATE_IP_PERIC, 15, 0, 0),
@@ -805,11 +818,46 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(aclk_jpeg2, "aclk_jpeg2", "aclk300_jpeg", GATE_IP_GEN, 3, 0, 0),
 	GATE(smmu_jpeg, "smmu_jpeg", "dout_jpg_blk", GATE_IP_GEN, 7, 0, 0),
 	GATE(smmu_jpeg2, "smmu_jpeg2", "dout_jpg_blk", GATE_BUS_GEN, 28, 0, 0),
+	/*
+	 * G2D
+	 *
+	 * The parent of the G2D pclks is actually dout_acp_clk, but since
+	 * reading DIV_G2D while the G2D block is power-gated generates an
+	 * imprecise external abort, it is omitted.
+	 */
+	GATE(aclk_g2d, "aclk_g2d", "aclk333_g2d",
+			GATE_BUS_G2D, 3, CLK_IGNORE_UNUSED, 0),
+	GATE(pclk_g2d, "pclk_g2d", "aclk266_g2d",
+			GATE_BUS_G2D, 19, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk_smmu_g2d, "aclk_smmu_g2d", "aclk333_g2d",
+			GATE_BUS_G2D, 7, CLK_IGNORE_UNUSED, 0),
+	GATE(smmu_g2d, "smmu_g2d", "aclk266_g2d",
+			GATE_BUS_G2D, 22, CLK_IGNORE_UNUSED, 0),
 	/* mdma */
+	GATE(aclk_mdma0, "aclk_mdma0", "aclk266_g2d",
+			GATE_BUS_G2D, 1, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk_smmu_mdma0, "aclk_smmu_mdma0", "aclk266_g2d",
+			GATE_BUS_G2D, 5, CLK_IGNORE_UNUSED, 0),
+	GATE(smmu_mdma0, "smmu_mdma0", "aclk266_g2d",
+			GATE_BUS_G2D, 20, CLK_IGNORE_UNUSED, 0),
 	GATE(smmu_mdma1, "smmu_mdma1", "mout_user_aclk266",
 			GATE_IP_GEN, 9, 0, 0),
 	GATE(aclk_mdma1, "aclk_mdma1", "mout_user_aclk266",
 			GATE_IP_GEN, 4, 0, 0),
+	/* sss */
+	GATE(aclk_sss, "aclk_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 2, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk_smmu_sss, "aclk_smmu_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 6, CLK_IGNORE_UNUSED, 0),
+	GATE(smmu_sss, "smmu_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 21, CLK_IGNORE_UNUSED, 0),
+	/* slim_sss */
+	GATE(aclk_slim_sss, "aclk_slim_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 12, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk_smmu_slim_sss, "aclk_smmu_slim_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 13, CLK_IGNORE_UNUSED, 0),
+	GATE(smmu_slim_sss, "smmu_slim_sss", "aclk266_g2d",
+			GATE_BUS_G2D, 28, CLK_IGNORE_UNUSED, 0),
 
 	GATE(mscl0, "mscl0", "aclk400_mscl", GATE_IP_MSCL, 0, 0, 0),
 	GATE(mscl1, "mscl1", "aclk400_mscl", GATE_IP_MSCL, 1, 0, 0),
