@@ -96,6 +96,7 @@
 #define GATE_TOP_SCLK_MAU	0x1083c
 #define GATE_TOP_SCLK_FSYS	0x10840
 #define GATE_TOP_SCLK_PERIC	0x10850
+#define TOP_SPARE2		0x10b08
 #define SRC_KFC			0x28200
 #define DIV_KFC0		0x28500
 
@@ -249,6 +250,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	GATE_TOP_SCLK_MAU,
 	GATE_TOP_SCLK_FSYS,
 	GATE_TOP_SCLK_PERIC,
+	TOP_SPARE2,
 	SRC_KFC,
 	DIV_KFC0,
 };
@@ -275,6 +277,8 @@ PNAME(mout_group2_p)		= { "fin_pll", "sclk_cpll", "sclk_dpll",
 PNAME(mout_group3_p)		= { "sclk_rpll", "sclk_spll" };
 PNAME(mout_group4_p)		= { "sclk_ipll", "sclk_dpll", "sclk_mpll" };
 PNAME(mout_group5_p)		= { "sclk_vpll", "sclk_dpll" };
+
+PNAME(mout_fimd1_final_p)	= { "mout_fimd1", "mout_fimd1_opt" };
 
 PNAME(mout_sw_aclk66_p)		= { "dout_aclk66", "sclk_spll" };
 PNAME(mout_user_aclk66_peric_p)	= { "fin_pll", "mout_sw_aclk66" };
@@ -543,6 +547,10 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	/* Disp1 Block*/
 	MUX_F(mout_fimd1, "mout_fimd1", mout_group3_p, SRC_DISP10, 4, 3,
 						CLK_SET_RATE_PARENT, 0),
+	MUX_F(none, "mout_fimd1_opt", mout_group2_p, SRC_DISP10, 8, 3,
+			CLK_SET_RATE_PARENT, 0),
+	MUX_F(none, "mout_fimd1_final", mout_fimd1_final_p, TOP_SPARE2, 8, 1,
+			CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_mipi1", mout_group2_p, SRC_DISP10, 16, 3),
 	MUX(none, "mout_dp1", mout_group2_p, SRC_DISP10, 20, 3),
 	MUX(none, "mout_pixel", mout_group2_p, SRC_DISP10, 24, 3),
@@ -640,11 +648,12 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_usbd300", "mout_usbd300", DIV_FSYS0, 24, 4),
 	DIV(none, "dout_unipro", "mout_unipro", DIV_FSYS2, 24, 8),
 	/* Display */
-	DIV_F(none, "dout_fimd1", "mout_fimd1", DIV_DISP10, 0, 4,
+	DIV_F(none, "dout_fimd1", "mout_fimd1_final", DIV_DISP10, 0, 4,
 						CLK_SET_RATE_PARENT, 0),
 	DIV(none, "dout_mipi1", "mout_mipi1", DIV_DISP10, 16, 8),
 	DIV(none, "dout_dp1", "mout_dp1", DIV_DISP10, 24, 4),
 	DIV(sclk_pixel, "dout_hdmi_pixel", "mout_pixel", DIV_DISP10, 28, 4),
+	DIV(none, "dout_disp1_blk", "aclk200_disp1", DIV2_RATIO0, 16, 2),
 	/* Audio Blk */
 	DIV(none, "dout_maudio0", "mout_maudio0", DIV_MAU, 20, 4),
 	DIV(none, "dout_maupcm0", "dout_maudio0", DIV_MAU, 24, 8),
@@ -747,25 +756,33 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	/* Display */
 	GATE(sclk_fimd1, "sclk_fimd1", "dout_fimd1",
 		GATE_TOP_SCLK_DISP1, 0, CLK_SET_RATE_PARENT, 0),
+	/*
+	* HACK: When aclk_fimd1 is gated, aclk300_disp1 also gets gated as
+	* aclk_fimd1 is the only child node. aclk300_disp1 is connected
+	* to hdmi, mixer IPs through internal busses. gating of aclk300_disp1
+	* breaks HDMI S2R.
+	*/
 	GATE(aclk_fimd1, "aclk_fimd1", "mout_user_aclk300_disp1",
 			GATE_IP_DISP1, 0, 0, 0),
-	GATE(smmu_fimd1m0, "smmu_fimd1m0", "mout_user_aclk300_disp1",
+	GATE(smmu_fimd1m0, "smmu_fimd1m0", "dout_disp1_blk",
 			GATE_IP_DISP1, 7, 0, 0),
-	GATE(smmu_fimd1m1, "smmu_fimd1m1", "mout_user_aclk300_disp1",
+	GATE(smmu_fimd1m1, "smmu_fimd1m1", "dout_disp1_blk",
 			GATE_IP_DISP1, 8, 0, 0),
 	GATE(sclk_mipi1, "sclk_mipi1", "dout_mipi1",
 		GATE_TOP_SCLK_DISP1, 3, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_dp1, "sclk_dp1", "dout_dp1",
 		GATE_TOP_SCLK_DISP1, 20, CLK_SET_RATE_PARENT, 0),
-	GATE(pclk_dsim1, "pclk_dsim1", "aclk200_disp1", GATE_IP_DISP1, 3, 0, 0),
-	GATE(pclk_dp1, "pclk_dp1", "aclk200_disp1", GATE_IP_DISP1, 4, 0, 0),
+	GATE(pclk_dsim1, "pclk_dsim1", "dout_disp1_blk",
+			GATE_IP_DISP1, 3, 0, 0),
+	GATE(pclk_dp1, "pclk_dp1", "dout_disp1_blk", GATE_IP_DISP1, 4, 0, 0),
 	GATE(none, "sclk_pixel", "dout_hdmi_pixel",
 		GATE_TOP_SCLK_DISP1, 10, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_hdmi, "sclk_hdmi", "mout_hdmi",
 		GATE_TOP_SCLK_DISP1, 9, CLK_SET_RATE_PARENT, 0),
 	GATE(aclk_mixer, "aclk_mixer", "aclk200_disp1", GATE_IP_DISP1, 5, 0, 0),
-	GATE(pclk_hdmi, "pclk_hdmi", "aclk200_disp1", GATE_IP_DISP1, 6, 0, 0),
-	GATE(smmu_mixer, "smmu_mixer", "aclk200_disp1", GATE_IP_DISP1, 9, 0, 0),
+	GATE(pclk_hdmi, "pclk_hdmi", "dout_disp1_blk", GATE_IP_DISP1, 6, 0, 0),
+	GATE(smmu_mixer, "smmu_mixer", "dout_disp1_blk",
+		GATE_IP_DISP1, 9, 0, 0),
 	/* i2c, usi */
 	GATE(pclk_i2c0, "pclk_i2c0", "aclk66_peric", GATE_IP_PERIC, 6, 0, 0),
 	GATE(pclk_i2c1, "pclk_i2c1", "aclk66_peric", GATE_IP_PERIC, 7, 0, 0),
