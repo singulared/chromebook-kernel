@@ -67,12 +67,14 @@
 #define DIV2_RATIO0		0x10590
 #define GATE_BUS_TOP		0x10700
 #define GATE_BUS_GSCL1		0x10720
+#define GATE_BUS_GEN		0x1073c
 #define GATE_BUS_FSYS0		0x10740
 #define GATE_BUS_FSYS2		0x10748
 #define GATE_BUS_PERIC		0x10750
 #define GATE_BUS_PERIC1		0x10754
 #define GATE_BUS_PERIS0		0x10760
 #define GATE_BUS_PERIS1		0x10764
+#define GATE_BUS_NOC		0x10770
 #define GATE_IP_GSCL0		0x10910
 #define GATE_IP_GSCL1		0x10920
 #define GATE_IP_MFC		0x1092c
@@ -135,7 +137,8 @@ enum exynos5420_clks {
 	aclk333_g2d = 480, g2d,
 	aclk333_432_gscl = 490, smmu_3aa, smmu_fimcl0, smmu_fimcl1, smmu_fimcl3,
 	fimc_lite3,
-	aclk_g3d = 500, g3d, smmu_tv,
+	aclk_g3d = 500, g3d, smmu_tv, pclk_tzpc10, pclk_tzpc11, pclk_mc,
+	pclk_top_rtc, smmu_jpeg2, pclk_rotator,
 
 	/* mux clocks */
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
@@ -200,12 +203,14 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	DIV2_RATIO0,
 	GATE_BUS_TOP,
 	GATE_BUS_GSCL1,
+	GATE_BUS_GEN,
 	GATE_BUS_FSYS0,
 	GATE_BUS_FSYS2,
 	GATE_BUS_PERIC,
 	GATE_BUS_PERIC1,
 	GATE_BUS_PERIS0,
 	GATE_BUS_PERIS1,
+	GATE_BUS_NOC,
 	GATE_IP_GSCL0,
 	GATE_IP_GSCL1,
 	GATE_IP_MFC,
@@ -608,6 +613,11 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	/* Check how to use with CG_STATUS_bits */
 	GATE(aclk333, "aclk333", "mout_user_aclk333",
 				GATE_BUS_TOP, 15, CLK_IGNORE_UNUSED, 0),
+	GATE(aclk166, "aclk166", "mout_user_aclk166",
+			GATE_BUS_TOP, 14, CLK_IGNORE_UNUSED, 0),
+	/* aclk266 also gates other IPs in psgen. It should not be gated. */
+	GATE(aclk266, "aclk266", "mout_user_aclk266",
+			GATE_BUS_NOC, 22, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk200_disp1, "aclk200_disp1", "mout_aclk200_disp1",
 					GATE_BUS_TOP, 18, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk200_fsys2, "aclk200_fsys2", "mout_user_aclk200_fsys2",
@@ -635,6 +645,15 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 						0, CLK_IGNORE_UNUSED, 0),
 	GATE(pclk_wdt, "pclk_wdt", "aclk66_psgen", GATE_BUS_PERIS1, 3, 0, 0),
 	GATE(pclk_rtc, "pclk_rtc", "aclk66_psgen", GATE_BUS_PERIS1, 4, 0, 0),
+	GATE(pclk_mc, "pclk_mc", "aclk66_psgen", GATE_BUS_GEN, 12, 0, 0),
+	GATE(pclk_tmu, "pclk_tmu", "aclk66_psgen",
+			GATE_IP_PERIS, 21, CLK_IGNORE_UNUSED, 0),
+	GATE(pclk_tmu_gpu, "pclk_tmu_gpu", "aclk66_psgen",
+			GATE_IP_PERIS, 22, 0, 0),
+	GATE(pclk_sysreg, "pclk_sysreg", "aclk66_psgen",
+			GATE_IP_PERIS, 1, CLK_IGNORE_UNUSED, 0),
+	GATE(pclk_top_rtc, "pclk_top_rtc", "aclk66_psgen",
+			GATE_IP_GEN, 5, 0, 0),
 	GATE(pclk_pwm, "pclk_pwm", "aclk66_peric", GATE_BUS_PERIC, 27, 0, 0),
 	/* uart */
 	GATE(pclk_uart0, "pclk_uart0", "aclk66_peric", GATE_BUS_PERIC, 4, 0, 0),
@@ -716,6 +735,21 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_TOP_SCLK_PERIC, 15, 0, 0),
 	GATE(sclk_pcm2, "sclk_pcm2", "dout_pcm2",
 			GATE_TOP_SCLK_PERIC, 16, 0, 0),
+	/*tzpc */
+	GATE(pclk_tzpc0, "pclk_tzpc0", "aclk66_psgen", GATE_IP_PERIS, 6, 0, 0),
+	GATE(pclk_tzpc1, "pclk_tzpc1", "aclk66_psgen", GATE_IP_PERIS, 7, 0, 0),
+	GATE(pclk_tzpc2, "pclk_tzpc2", "aclk66_psgen", GATE_IP_PERIS, 8, 0, 0),
+	GATE(pclk_tzpc3, "pclk_tzpc3", "aclk66_psgen", GATE_IP_PERIS, 9, 0, 0),
+	GATE(pclk_tzpc4, "pclk_tzpc4", "aclk66_psgen", GATE_IP_PERIS, 10, 0, 0),
+	GATE(pclk_tzpc5, "pclk_tzpc5", "aclk66_psgen", GATE_IP_PERIS, 11, 0, 0),
+	GATE(pclk_tzpc6, "pclk_tzpc6", "aclk66_psgen", GATE_IP_PERIS, 12, 0, 0),
+	GATE(pclk_tzpc7, "pclk_tzpc7", "aclk66_psgen", GATE_IP_PERIS, 13, 0, 0),
+	GATE(pclk_tzpc8, "pclk_tzpc8", "aclk66_psgen", GATE_IP_PERIS, 14, 0, 0),
+	GATE(pclk_tzpc9, "pclk_tzpc9", "aclk66_psgen", GATE_IP_PERIS, 15, 0, 0),
+	GATE(pclk_tzpc10, "pclk_tzpc10", "aclk66_psgen",
+			GATE_BUS_GEN, 30, 0, 0),
+	GATE(pclk_tzpc11, "pclk_tzpc11", "aclk66_psgen",
+			GATE_BUS_GEN, 31, 0, 0),
 
 	/* MMC */
 	GATE(mmc0, "mmc0", "aclk200_fsys2", GATE_BUS_FSYS0, 12,
@@ -735,10 +769,13 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_IP_GEN, 1, 0, 0),
 	GATE(smmu_rotator, "smmu_rotator", "dout_gen_blk",
 			GATE_IP_GEN, 6, 0, 0),
+	GATE(pclk_rotator, "pclk_rotator", "dout_gen_blk",
+			GATE_BUS_GEN, 13, 0, 0),
 	/* JPEG */
 	GATE(aclk_jpeg, "aclk_jpeg", "aclk300_jpeg", GATE_IP_GEN, 2, 0, 0),
 	GATE(aclk_jpeg2, "aclk_jpeg2", "aclk300_jpeg", GATE_IP_GEN, 3, 0, 0),
 	GATE(smmu_jpeg, "smmu_jpeg", "dout_jpg_blk", GATE_IP_GEN, 7, 0, 0),
+	GATE(smmu_jpeg2, "smmu_jpeg2", "dout_jpg_blk", GATE_BUS_GEN, 28, 0, 0),
 
 	GATE(mscl0, "mscl0", "aclk400_mscl", GATE_IP_MSCL, 0, 0, 0),
 	GATE(mscl1, "mscl1", "aclk400_mscl", GATE_IP_MSCL, 1, 0, 0),

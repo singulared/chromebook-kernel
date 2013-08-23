@@ -207,6 +207,12 @@ clock which they consume.
   aclk_g3d		500
   g3d			501
   smmu_tv		502
+  pclk_tzpc10		503
+  pclk_tzpc11		504
+  pclk_mc		505
+  pclk_top_rtc		506
+  smmu_jpeg2		507
+  pclk_rotator		508
 
   Mux			ID
   ----------------------------
