@@ -672,6 +672,8 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_gscl_blk_300", "mout_user_aclk300_gscl",
 			DIV2_RATIO0, 4, 2),
 	DIV(none, "dout_gscl_blk_333", "aclk333_432_gscl", DIV2_RATIO0, 6, 2),
+	/* Mscl Blk */
+	DIV(none, "dout_mscl_blk", "aclk400_mscl", DIV2_RATIO0, 28, 2),
 	/* Psgen */
 	DIV(none, "dout_gen_blk", "mout_user_aclk266", DIV2_RATIO0, 8, 1),
 	/* Jpeg */
@@ -890,9 +892,9 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(aclk_mscl0, "aclk_mscl0", "aclk400_mscl", GATE_IP_MSCL, 0, 0, 0),
 	GATE(aclk_mscl1, "aclk_mscl1", "aclk400_mscl", GATE_IP_MSCL, 1, 0, 0),
 	GATE(aclk_mscl2, "aclk_mscl2", "aclk400_mscl", GATE_IP_MSCL, 2, 0, 0),
-	GATE(smmu_mscl0, "smmu_mscl0", "aclk400_mscl", GATE_IP_MSCL, 8, 0, 0),
-	GATE(smmu_mscl1, "smmu_mscl1", "aclk400_mscl", GATE_IP_MSCL, 9, 0, 0),
-	GATE(smmu_mscl2, "smmu_mscl2", "aclk400_mscl", GATE_IP_MSCL, 10, 0, 0),
+	GATE(smmu_mscl0, "smmu_mscl0", "dout_mscl_blk", GATE_IP_MSCL, 8, 0, 0),
+	GATE(smmu_mscl1, "smmu_mscl1", "dout_mscl_blk", GATE_IP_MSCL, 9, 0, 0),
+	GATE(smmu_mscl2, "smmu_mscl2", "dout_mscl_blk", GATE_IP_MSCL, 10, 0, 0),
 	/* 3aa */
 	GATE(smmu_3aa, "smmu_3aa", "dout_gscl_blk_333", GATE_IP_GSCL1, 2, 0, 0),
 	GATE(aclk_fimc_3aa, "aclk_fimc_3aa", "aclk333_432_gscl",
