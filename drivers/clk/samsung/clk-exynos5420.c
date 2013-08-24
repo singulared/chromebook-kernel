@@ -72,6 +72,7 @@
 #define SCLK_DIV_ISP1		0x10584
 #define DIV2_RATIO0		0x10590
 #define GATE_BUS_TOP		0x10700
+#define GATE_BUS_GSCL0		0x10710
 #define GATE_BUS_GSCL1		0x10720
 #define GATE_BUS_DISP1		0x10728
 #define GATE_BUS_GEN		0x1073c
@@ -156,6 +157,8 @@ enum exynos5420_clks {
 	aclk_smmu_g2d, smmu_g2d, aclk_smmu_mdma0, smmu_mdma0, aclk_smmu_sss,
 	smmu_sss, smmu_slim_sss, aclk_smmu_slim_sss, aclk266_isp, aclk400_isp,
 	aclk333_432_isp0, aclk333_432_isp, aclk_smmu_mixer, pclk_hdmiphy,
+	pclk_gscl0, pclk_gscl1, pclk_fimc_3aa, aclk_fimc_lite0, aclk_fimc_lite1,
+	pclk_fimc_lite0, pclk_fimc_lite1, pclk_fimc_lite3,
 
 	/* mux clocks */
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
@@ -230,6 +233,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	SCLK_DIV_ISP1,
 	DIV2_RATIO0,
 	GATE_BUS_TOP,
+	GATE_BUS_GSCL0,
 	GATE_BUS_GSCL1,
 	GATE_BUS_DISP1,
 	GATE_BUS_GEN,
@@ -707,6 +711,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 					GATE_BUS_TOP, 9, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk333_432_gscl, "aclk333_432_gscl", "mout_user_aclk333_432_gscl",
 				GATE_BUS_TOP, 7, CLK_IGNORE_UNUSED, 0),
+	/* gating of aclk300_gscl causes system hang. It should not be gated. */
 	GATE(aclk300_gscl, "aclk300_gscl", "mout_user_aclk300_gscl",
 				GATE_BUS_TOP, 6, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk300_jpeg, "aclk300_jpeg", "mout_user_aclk300_jpeg",
@@ -885,6 +890,8 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(smmu_3aa, "smmu_3aa", "dout_gscl_blk_333", GATE_IP_GSCL1, 2, 0, 0),
 	GATE(aclk_fimc_3aa, "aclk_fimc_3aa", "aclk333_432_gscl",
 			GATE_IP_GSCL0, 4, 0, 0),
+	GATE(pclk_fimc_3aa, "pclk_fimc_3aa", "dout_gscl_blk_333",
+			GATE_IP_GSCL0, 9, 0, 0),
 	/* fimc */
 	GATE(smmu_fimcl0, "smmu_fimcl0", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 3, 0, 0),
@@ -892,9 +899,23 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_IP_GSCL1, 4, 0, 0),
 	GATE(smmu_fimcl3, "smmu_fimcl3,", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 16, 0, 0),
+	GATE(aclk_fimc_lite0, "aclk_fimc_lite0", "aclk333_432_gscl",
+			GATE_IP_GSCL0, 5, 0, 0),
+	GATE(aclk_fimc_lite1, "aclk_fimc_lite1", "aclk333_432_gscl",
+			GATE_IP_GSCL0, 6, 0, 0),
 	GATE(aclk_fimc_lite3, "aclk_fimc_lite3", "aclk333_432_gscl",
 			GATE_IP_GSCL1, 17, 0, 0),
+	GATE(pclk_fimc_lite0, "pclk_fimc_lite0", "dout_gscl_blk_333",
+			GATE_IP_GSCL0, 10, 0, 0),
+	GATE(pclk_fimc_lite1, "pclk_fimc_lite1", "dout_gscl_blk_333",
+			GATE_IP_GSCL0, 11, 0, 0),
+	GATE(pclk_fimc_lite3, "pclk_fimc_lite3", "dout_gscl_blk_333",
+			GATE_BUS_GSCL0, 13, 0, 0),
 	/* gscl */
+	GATE(pclk_gscl0, "pclk_gscl0", "dout_gscl_blk_300",
+			GATE_IP_GSCL0, 14, CLK_IGNORE_UNUSED, 0),
+	GATE(pclk_gscl1, "pclk_gscl1", "dout_gscl_blk_300",
+			GATE_IP_GSCL0, 15, CLK_IGNORE_UNUSED, 0),
 	GATE(smmu_gscl0, "smmu_gscl0", "dout_gscl_blk_300",
 			GATE_IP_GSCL1, 6, 0, 0),
 	GATE(smmu_gscl1, "smmu_gscl1", "dout_gscl_blk_300",

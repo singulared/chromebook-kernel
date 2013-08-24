@@ -237,6 +237,14 @@ clock which they consume.
   aclk333_432_isp	522
   aclk_smmu_mixer	523
   pclk_hdmiphy		524
+  pclk_gscl0		525
+  pclk_gscl1		526
+  pclk_fimc_3aa		527
+  aclk_fimc_lite0	528
+  aclk_fimc_lite1	529
+  pclk_fimc_lite0	530
+  pclk_fimc_lite1	531
+  pclk_fimc_lite3	532
 
   Mux			ID
   ----------------------------
