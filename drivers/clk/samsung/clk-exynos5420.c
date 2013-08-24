@@ -929,7 +929,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(sclk_gscl_wb, "sclk_gscl_wb", "mout_user_aclk333_432_gscl",
 			GATE_TOP_SCLK_GSCL, 7, CLK_SET_RATE_PARENT, 0),
 	GATE(pclk_gscl_wa, "pclk_gscl_wa", "dout_gscl_blk_333",
-			GATE_IP_GSCL1, 12, 0, 0),
+			GATE_BUS_GSCL1, 28, CLK_SET_RATE_PARENT, 0),
 	/* USB */
 	GATE(hclk_usbh20, "hclk_usbh20", "aclk200_fsys",
 			GATE_IP_FSYS, 18, 0, 0),
