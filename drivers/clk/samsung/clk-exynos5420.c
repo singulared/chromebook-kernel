@@ -78,6 +78,7 @@
 #define GATE_BUS_GEN		0x1073c
 #define GATE_BUS_FSYS0		0x10740
 #define GATE_BUS_FSYS2		0x10748
+#define GATE_BUS_MSCL		0x1074C
 #define GATE_BUS_PERIC		0x10750
 #define GATE_BUS_PERIC1		0x10754
 #define GATE_BUS_PERIS0		0x10760
@@ -158,7 +159,8 @@ enum exynos5420_clks {
 	smmu_sss, smmu_slim_sss, aclk_smmu_slim_sss, aclk266_isp, aclk400_isp,
 	aclk333_432_isp0, aclk333_432_isp, aclk_smmu_mixer, pclk_hdmiphy,
 	pclk_gscl0, pclk_gscl1, pclk_fimc_3aa, aclk_fimc_lite0, aclk_fimc_lite1,
-	pclk_fimc_lite0, pclk_fimc_lite1, pclk_fimc_lite3,
+	pclk_fimc_lite0, pclk_fimc_lite1, pclk_fimc_lite3, pclk_mscl0,
+	pclk_mscl1, pclk_mscl2,
 
 	/* mux clocks */
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
@@ -239,6 +241,7 @@ static __initdata unsigned long exynos5420_clk_regs[] = {
 	GATE_BUS_GEN,
 	GATE_BUS_FSYS0,
 	GATE_BUS_FSYS2,
+	GATE_BUS_MSCL,
 	GATE_BUS_PERIC,
 	GATE_BUS_PERIC1,
 	GATE_BUS_PERIS0,
@@ -892,6 +895,10 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(aclk_mscl0, "aclk_mscl0", "aclk400_mscl", GATE_IP_MSCL, 0, 0, 0),
 	GATE(aclk_mscl1, "aclk_mscl1", "aclk400_mscl", GATE_IP_MSCL, 1, 0, 0),
 	GATE(aclk_mscl2, "aclk_mscl2", "aclk400_mscl", GATE_IP_MSCL, 2, 0, 0),
+	GATE(pclk_mscl0, "pclk_mscl0", "dout_mscl_blk", GATE_BUS_MSCL, 8, 0, 0),
+	GATE(pclk_mscl1, "pclk_mscl1", "dout_mscl_blk", GATE_BUS_MSCL, 9, 0, 0),
+	GATE(pclk_mscl2, "pclk_mscl2", "dout_mscl_blk",
+			GATE_BUS_MSCL, 10, 0, 0),
 	GATE(smmu_mscl0, "smmu_mscl0", "dout_mscl_blk", GATE_IP_MSCL, 8, 0, 0),
 	GATE(smmu_mscl1, "smmu_mscl1", "dout_mscl_blk", GATE_IP_MSCL, 9, 0, 0),
 	GATE(smmu_mscl2, "smmu_mscl2", "dout_mscl_blk", GATE_IP_MSCL, 10, 0, 0),

@@ -245,6 +245,9 @@ clock which they consume.
   pclk_fimc_lite0	530
   pclk_fimc_lite1	531
   pclk_fimc_lite3	532
+  pclk_mscl0		533
+  pclk_mscl1		534
+  pclk_mscl2		535
 
   Mux			ID
   ----------------------------
