@@ -159,7 +159,7 @@ clock which they consume.
   smmu_mscl2		386
 
   aclk333		400
-  mfc			401
+  aclk_mfc		401
   smmu_mfcl		402
   smmu_mfcr		403
 
@@ -212,8 +212,8 @@ clock which they consume.
   smmu_fimcl3		494
   aclk_fimc_lite3	495
 
-  aclk_g3d		500
-  g3d			501
+  clk_g3d		500
+  g3d_unused		501
   smmu_mixer		502
   pclk_tzpc10		503
   pclk_tzpc11		504
@@ -264,6 +264,7 @@ clock which they consume.
   mout_user_aclk300_gscl	1033
   mout_sw_aclk333_432_gscl	1034
   mout_user_aclk333_432_gscl	1035
+  mout_g3d		1036
 
   Divider		ID
   ----------------------------
