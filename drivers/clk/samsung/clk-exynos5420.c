@@ -664,6 +664,10 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	/* Audio Blk */
 	DIV(none, "dout_maudio0", "mout_maudio0", DIV_MAU, 20, 4),
 	DIV(none, "dout_maupcm0", "dout_maudio0", DIV_MAU, 24, 8),
+	/* Gscl Blk */
+	DIV(none, "dout_gscl_blk_300", "mout_user_aclk300_gscl",
+			DIV2_RATIO0, 4, 2),
+	DIV(none, "dout_gscl_blk_333", "aclk333_432_gscl", DIV2_RATIO0, 6, 2),
 	/* Psgen */
 	DIV(none, "dout_gen_blk", "mout_user_aclk266", DIV2_RATIO0, 8, 1),
 	/* Jpeg */
@@ -878,22 +882,22 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(sclk_mphy_refclk, "sclk_mphy_refclk", "dout_mphy_refclk",
 			GATE_BUS_TOP, 30, 0, 0),
 	/* 3aa */
-	GATE(smmu_3aa, "smmu_3aa", "aclk333_432_gscl", GATE_IP_GSCL1, 2, 0, 0),
+	GATE(smmu_3aa, "smmu_3aa", "dout_gscl_blk_333", GATE_IP_GSCL1, 2, 0, 0),
 	GATE(aclk_fimc_3aa, "aclk_fimc_3aa", "aclk333_432_gscl",
 			GATE_IP_GSCL0, 4, 0, 0),
 	/* fimc */
-	GATE(smmu_fimcl0, "smmu_fimcl0", "aclk333_432_gscl",
+	GATE(smmu_fimcl0, "smmu_fimcl0", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 3, 0, 0),
-	GATE(smmu_fimcl1, "smmu_fimcl1", "aclk333_432_gscl",
+	GATE(smmu_fimcl1, "smmu_fimcl1", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 4, 0, 0),
-	GATE(smmu_fimcl3, "smmu_fimcl3,", "aclk333_432_gscl",
+	GATE(smmu_fimcl3, "smmu_fimcl3,", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 16, 0, 0),
 	GATE(aclk_fimc_lite3, "aclk_fimc_lite3", "aclk333_432_gscl",
 			GATE_IP_GSCL1, 17, 0, 0),
 	/* gscl */
-	GATE(smmu_gscl0, "smmu_gscl0", "mout_user_aclk300_gscl",
+	GATE(smmu_gscl0, "smmu_gscl0", "dout_gscl_blk_300",
 			GATE_IP_GSCL1, 6, 0, 0),
-	GATE(smmu_gscl1, "smmu_gscl1", "mout_user_aclk300_gscl",
+	GATE(smmu_gscl1, "smmu_gscl1", "dout_gscl_blk_300",
 			GATE_IP_GSCL1, 7, 0, 0),
 	GATE(aclk_gscl0, "aclk_gscl0", "mout_user_aclk300_gscl",
 			GATE_IP_GSCL0, 0, 0, 0),
@@ -903,7 +907,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_TOP_SCLK_GSCL, 6, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_gscl_wb, "sclk_gscl_wb", "mout_user_aclk333_432_gscl",
 			GATE_TOP_SCLK_GSCL, 7, CLK_SET_RATE_PARENT, 0),
-	GATE(pclk_gscl_wa, "pclk_gscl_wa", "mout_user_aclk333_432_gscl",
+	GATE(pclk_gscl_wa, "pclk_gscl_wa", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 12, 0, 0),
 	GATE(gscl_wb, "gscl_wb", "mout_user_aclk333_432_gscl",
 			GATE_IP_GSCL1, 13, 0, 0),
