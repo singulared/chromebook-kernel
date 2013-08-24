@@ -192,7 +192,7 @@ clock which they consume.
   smmu_gscl0		461
   smmu_gscl1		462
   pclk_gscl_wa		463
-  gscl_wb		464
+
   aclk_gscl0		465
   aclk_gscl1		466
   aclk_fimc_3aa		467

@@ -147,7 +147,7 @@ enum exynos5420_clks {
 	aclk266 = 440, aclk_rotator, aclk_mdma1, smmu_rotator, smmu_mdma1,
 	aclk300_jpeg = 450, aclk_jpeg, aclk_jpeg2, smmu_jpeg,
 	aclk300_gscl = 460, smmu_gscl0, smmu_gscl1, pclk_gscl_wa,
-	gscl_wb, aclk_gscl0, aclk_gscl1, aclk_fimc_3aa,
+	aclk_gscl0 = 465, aclk_gscl1, aclk_fimc_3aa,
 	aclk266_g2d = 470, aclk_sss, aclk_slim_sss, aclk_mdma0,
 	aclk333_g2d = 480, aclk_g2d,
 	aclk333_432_gscl = 490, smmu_3aa, smmu_fimcl0, smmu_fimcl1, smmu_fimcl3,
@@ -930,8 +930,6 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_TOP_SCLK_GSCL, 7, CLK_SET_RATE_PARENT, 0),
 	GATE(pclk_gscl_wa, "pclk_gscl_wa", "dout_gscl_blk_333",
 			GATE_IP_GSCL1, 12, 0, 0),
-	GATE(gscl_wb, "gscl_wb", "mout_user_aclk333_432_gscl",
-			GATE_IP_GSCL1, 13, 0, 0),
 	/* USB */
 	GATE(hclk_usbh20, "hclk_usbh20", "aclk200_fsys",
 			GATE_IP_FSYS, 18, 0, 0),
