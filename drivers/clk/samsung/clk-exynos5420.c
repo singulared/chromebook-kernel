@@ -49,8 +49,8 @@
 #define SRC_TOP10		0x10280
 #define SRC_TOP11		0x10284
 #define SRC_TOP12		0x10288
-#define SRC_MASK_TOP2	0x10308
-#define	SRC_MASK_DISP10		0x1032c
+#define SRC_MASK_TOP2		0x10308
+#define SRC_MASK_DISP10		0x1032c
 #define SRC_MASK_MAU		0x10334
 #define SRC_MASK_FSYS		0x10340
 #define SRC_MASK_PERIC0		0x10350
@@ -279,17 +279,17 @@ PNAME(mout_mspll_cpu_p)		= { "sclk_cpll", "sclk_dpll", "sclk_mpll",
 					"sclk_spll" };
 PNAME(mout_cpu_p)		= { "mout_apll" , "mout_mspll_cpu" };
 PNAME(mout_kfc_p)		= { "mout_kpll" , "mout_mspll_kfc" };
-PNAME(mout_apll_p)		= { "fin_pll", "fout_apll", };
+PNAME(mout_apll_p)		= { "fin_pll", "fout_apll" };
 PNAME(mout_bpll_p)		= { "fin_pll", "fout_bpll" };
-PNAME(mout_cpll_p)		= { "fin_pll", "fout_cpll", };
-PNAME(mout_dpll_p)		= { "fin_pll", "fout_dpll", };
-PNAME(mout_epll_p)		= { "fin_pll", "fout_epll", };
-PNAME(mout_kpll_p)		= { "fin_pll", "fout_kpll", };
-PNAME(mout_rpll_p)		= { "fin_pll", "fout_rpll", };
-PNAME(mout_ipll_p)		= { "fin_pll", "fout_ipll", };
-PNAME(mout_spll_p)		= { "fin_pll", "fout_spll", };
-PNAME(mout_vpll_p)		= { "fin_pll", "fout_vpll", };
-PNAME(mout_mpll_p)		= { "fin_pll", "fout_mpll", };
+PNAME(mout_cpll_p)		= { "fin_pll", "fout_cpll" };
+PNAME(mout_dpll_p)		= { "fin_pll", "fout_dpll" };
+PNAME(mout_epll_p)		= { "fin_pll", "fout_epll" };
+PNAME(mout_kpll_p)		= { "fin_pll", "fout_kpll" };
+PNAME(mout_rpll_p)		= { "fin_pll", "fout_rpll" };
+PNAME(mout_ipll_p)		= { "fin_pll", "fout_ipll" };
+PNAME(mout_spll_p)		= { "fin_pll", "fout_spll" };
+PNAME(mout_vpll_p)		= { "fin_pll", "fout_vpll" };
+PNAME(mout_mpll_p)		= { "fin_pll", "fout_mpll" };
 PNAME(mout_group1_p)		= { "sclk_cpll", "sclk_dpll", "sclk_mpll" };
 PNAME(mout_group2_p)		= { "fin_pll", "sclk_cpll", "sclk_dpll",
 					"sclk_mpll", "sclk_spll", "sclk_ipll",
@@ -304,66 +304,66 @@ PNAME(mout_sw_aclk66_p)		= { "dout_aclk66", "sclk_spll" };
 PNAME(mout_user_aclk66_peric_p)	= { "fin_pll", "mout_sw_aclk66" };
 PNAME(mout_user_aclk66_gpio_p)	= { "mout_sw_aclk66", "ffactor_sw_aclk66" };
 
-PNAME(mout_sw_aclk200_fsys_p)	= { "dout_aclk200_fsys", "sclk_spll"};
-PNAME(mout_sw_pclk200_fsys_p)	= { "dout_pclk200_fsys", "sclk_spll"};
-PNAME(mout_user_pclk200_fsys_p)	= { "fin_pll", "mout_sw_pclk200_fsys"};
+PNAME(mout_sw_aclk200_fsys_p)	= { "dout_aclk200_fsys", "sclk_spll" };
+PNAME(mout_sw_pclk200_fsys_p)	= { "dout_pclk200_fsys", "sclk_spll" };
+PNAME(mout_user_pclk200_fsys_p)	= { "fin_pll", "mout_sw_pclk200_fsys" };
 PNAME(mout_user_aclk200_fsys_p)	= { "fin_pll", "mout_sw_aclk200_fsys" };
-PNAME(mout_sw_aclk200_fsys2_p)	= { "dout_aclk200_fsys2", "sclk_spll"};
+PNAME(mout_sw_aclk200_fsys2_p)	= { "dout_aclk200_fsys2", "sclk_spll" };
 PNAME(mout_user_aclk200_fsys2_p) = { "fin_pll", "mout_sw_aclk200_fsys2" };
 
-PNAME(mout_sw_aclk100_noc_p)	= { "dout_aclk100_noc", "sclk_spll"};
-PNAME(mout_user_aclk100_noc_p)	= { "fin_pll", "mout_sw_aclk100_noc"};
+PNAME(mout_sw_aclk100_noc_p)	= { "dout_aclk100_noc", "sclk_spll" };
+PNAME(mout_user_aclk100_noc_p)	= { "fin_pll", "mout_sw_aclk100_noc" };
 
-PNAME(mout_sw_aclk400_wcore_p)	= { "dout_aclk400_wcore", "sclk_spll"};
+PNAME(mout_sw_aclk400_wcore_p)	= { "dout_aclk400_wcore", "sclk_spll" };
 PNAME(mout_aclk400_wcore_bpll_p) = { "mout_aclk400_wcore", "sclk_bpll" };
-PNAME(mout_user_aclk400_wcore_p) = { "fin_pll", "mout_sw_aclk400_wcore"};
+PNAME(mout_user_aclk400_wcore_p) = { "fin_pll", "mout_sw_aclk400_wcore" };
 
-PNAME(mout_sw_aclk400_isp_p)	= { "dout_aclk400_isp", "sclk_spll"};
-PNAME(mout_user_aclk400_isp_p)	= { "fin_pll", "mout_sw_aclk400_isp"};
+PNAME(mout_sw_aclk400_isp_p)	= { "dout_aclk400_isp", "sclk_spll" };
+PNAME(mout_user_aclk400_isp_p)	= { "fin_pll", "mout_sw_aclk400_isp" };
 
 PNAME(mout_sw_aclk333_432_isp0_p) = { "dout_aclk333_432_isp0", "sclk_spll" };
 PNAME(mout_user_aclk333_432_isp0_p) = { "fin_pll", "mout_sw_aclk333_432_isp0" };
 
-PNAME(mout_sw_aclk333_432_isp_p) = { "dout_aclk333_432_isp", "sclk_spll"};
-PNAME(mout_user_aclk333_432_isp_p) = { "fin_pll", "mout_sw_aclk333_432_isp"};
+PNAME(mout_sw_aclk333_432_isp_p) = { "dout_aclk333_432_isp", "sclk_spll" };
+PNAME(mout_user_aclk333_432_isp_p) = { "fin_pll", "mout_sw_aclk333_432_isp" };
 
-PNAME(mout_sw_aclk200_p)	= { "dout_aclk200", "sclk_spll"};
+PNAME(mout_sw_aclk200_p)	= { "dout_aclk200", "sclk_spll" };
 PNAME(mout_aclk200_disp1_p)	= { "fin_pll", "mout_sw_aclk200" };
 
-PNAME(mout_sw_aclk400_mscl_p)	= { "dout_aclk400_mscl", "sclk_spll"};
+PNAME(mout_sw_aclk400_mscl_p)	= { "dout_aclk400_mscl", "sclk_spll" };
 PNAME(mout_user_aclk400_mscl_p)	= { "fin_pll", "mout_sw_aclk400_mscl" };
 
-PNAME(mout_sw_aclk333_p)	= { "dout_aclk333", "sclk_spll"};
+PNAME(mout_sw_aclk333_p)	= { "dout_aclk333", "sclk_spll" };
 PNAME(mout_user_aclk333_p)	= { "fin_pll", "mout_sw_aclk333" };
 
-PNAME(mout_sw_aclk166_p)	= { "dout_aclk166", "sclk_spll"};
+PNAME(mout_sw_aclk166_p)	= { "dout_aclk166", "sclk_spll" };
 PNAME(mout_user_aclk166_p)	= { "fin_pll", "mout_sw_aclk166" };
 
-PNAME(mout_sw_aclk266_p)	= { "dout_aclk266", "sclk_spll"};
+PNAME(mout_sw_aclk266_p)	= { "dout_aclk266", "sclk_spll" };
 PNAME(mout_user_aclk266_p)	= { "fin_pll", "mout_sw_aclk266" };
 PNAME(mout_user_aclk266_isp_p)	= { "fin_pll", "mout_sw_aclk266" };
 
-PNAME(mout_sw_aclk333_432_gscl_p) = { "dout_aclk333_432_gscl", "sclk_spll"};
+PNAME(mout_sw_aclk333_432_gscl_p) = { "dout_aclk333_432_gscl", "sclk_spll" };
 PNAME(mout_user_aclk333_432_gscl_p) = { "fin_pll", "mout_sw_aclk333_432_gscl" };
 
-PNAME(mout_sw_aclk300_gscl_p)	= { "dout_aclk300_gscl", "sclk_spll"};
+PNAME(mout_sw_aclk300_gscl_p)	= { "dout_aclk300_gscl", "sclk_spll" };
 PNAME(mout_user_aclk300_gscl_p)	= { "fin_pll", "mout_sw_aclk300_gscl" };
 
-PNAME(mout_sw_aclk300_disp1_p)	= { "dout_aclk300_disp1", "sclk_spll"};
-PNAME(mout_sw_aclk400_disp1_p)	= { "dout_aclk400_disp1", "sclk_spll"};
+PNAME(mout_sw_aclk300_disp1_p)	= { "dout_aclk300_disp1", "sclk_spll" };
+PNAME(mout_sw_aclk400_disp1_p)	= { "dout_aclk400_disp1", "sclk_spll" };
 PNAME(mout_user_aclk300_disp1_p) = { "fin_pll", "mout_sw_aclk300_disp1" };
 PNAME(mout_user_aclk400_disp1_p) = { "fin_pll", "mout_sw_aclk400_disp1" };
 
-PNAME(mout_sw_aclk300_jpeg_p) = { "dout_aclk300_jpeg", "sclk_spll"};
+PNAME(mout_sw_aclk300_jpeg_p) = { "dout_aclk300_jpeg", "sclk_spll" };
 PNAME(mout_user_aclk300_jpeg_p)	= { "fin_pll", "mout_sw_aclk300_jpeg" };
 
-PNAME(mout_sw_aclk_g3d_p)	= { "dout_aclk_g3d", "sclk_spll"};
+PNAME(mout_sw_aclk_g3d_p)	= { "dout_aclk_g3d", "sclk_spll" };
 PNAME(mout_user_aclk_g3d_p)	= { "fin_pll", "mout_sw_aclk_g3d" };
 
-PNAME(mout_sw_aclk266_g2d_p)	= { "dout_aclk266_g2d", "sclk_spll"};
+PNAME(mout_sw_aclk266_g2d_p)	= { "dout_aclk266_g2d", "sclk_spll" };
 PNAME(mout_user_aclk266_g2d_p)	= { "fin_pll", "mout_sw_aclk266_g2d" };
 
-PNAME(mout_sw_aclk333_g2d_p)	= { "dout_aclk333_g2d", "sclk_spll"};
+PNAME(mout_sw_aclk333_g2d_p)	= { "dout_aclk333_g2d", "sclk_spll" };
 PNAME(mout_user_aclk333_g2d_p)	= { "fin_pll", "mout_sw_aclk333_g2d" };
 
 PNAME(mout_audio0_p)		= { "fin_pll", "cdclk0", "sclk_dpll",
@@ -487,7 +487,7 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX_A(none, "mout_aclk400_wcore", mout_group1_p,
 					SRC_TOP0, 16, 2, "aclk400_wcore"),
 	MUX(none, "mout_aclk400_wcore_bpll", mout_aclk400_wcore_bpll_p,
-			TOP_SPARE2, 4, 1),
+							TOP_SPARE2, 4, 1),
 	MUX(none, "mout_sw_aclk400_wcore", mout_sw_aclk400_wcore_p,
 							SRC_TOP10, 16, 1),
 	MUX(none, "mout_user_aclk400_wcore", mout_user_aclk400_wcore_p,
@@ -498,12 +498,11 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 							SRC_TOP10, 0, 1),
 	MUX(none, "mout_user_aclk400_isp", mout_user_aclk400_isp_p,
 							SRC_TOP3, 0, 1),
-	MUX(none, "mout_aclk333_432_isp0", mout_group4_p,
-					SRC_TOP1, 12, 2),
+	MUX(none, "mout_aclk333_432_isp0", mout_group4_p, SRC_TOP1, 12, 2),
 	MUX(none, "mout_sw_aclk333_432_isp0", mout_sw_aclk333_432_isp0_p,
-					SRC_TOP11, 12, 1),
+							SRC_TOP11, 12, 1),
 	MUX(none, "mout_user_aclk333_432_isp0", mout_user_aclk333_432_isp0_p,
-					SRC_TOP4, 12, 1),
+							SRC_TOP4, 12, 1),
 	MUX_A(none, "mout_aclk333_432_isp", mout_group4_p,
 					SRC_TOP1, 4, 2, "aclk333_432_isp"),
 	MUX(none, "mout_sw_aclk333_432_isp", mout_sw_aclk333_432_isp_p,
@@ -511,8 +510,10 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_user_aclk333_432_isp", mout_user_aclk333_432_isp_p,
 							SRC_TOP4, 4, 1),
 	MUX_A(none, "mout_aclk333", mout_group1_p, SRC_TOP1, 28, 2, "aclk333"),
-	MUX(mout_sw_aclk333, "mout_sw_aclk333", mout_sw_aclk333_p, SRC_TOP11, 28, 1),
-	MUX(mout_user_aclk333, "mout_user_aclk333", mout_user_aclk333_p, SRC_TOP4, 28, 1),
+	MUX(mout_sw_aclk333, "mout_sw_aclk333", mout_sw_aclk333_p,
+							SRC_TOP11, 28, 1),
+	MUX(mout_user_aclk333, "mout_user_aclk333", mout_user_aclk333_p,
+							SRC_TOP4, 28, 1),
 	MUX_A(none, "mout_aclk166", mout_group1_p, SRC_TOP1, 24, 2, "aclk166"),
 	MUX(none, "mout_sw_aclk166", mout_sw_aclk166_p, SRC_TOP11, 24, 1),
 	MUX(none, "mout_user_aclk166", mout_user_aclk166_p, SRC_TOP4, 24, 1),
@@ -520,7 +521,7 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX(none, "mout_sw_aclk266", mout_sw_aclk266_p, SRC_TOP11, 20, 1),
 	MUX(none, "mout_user_aclk266", mout_user_aclk266_p, SRC_TOP4, 20, 1),
 	MUX(none, "mout_user_aclk266_isp", mout_user_aclk266_isp_p,
-					SRC_TOP4, 16, 1),
+							SRC_TOP4, 16, 1),
 	MUX_A(none, "mout_aclk300_disp1", mout_group1_p, SRC_TOP2, 24, 2,
 							"aclk300_disp1"),
 	MUX(none, "mout_sw_aclk300_disp1", mout_sw_aclk300_disp1_p,
@@ -580,9 +581,9 @@ struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
 	MUX_F(mout_fimd1, "mout_fimd1", mout_group3_p, SRC_DISP10, 4, 1,
 						CLK_SET_RATE_PARENT, 0),
 	MUX_F(none, "mout_fimd1_opt", mout_group2_p, SRC_DISP10, 8, 3,
-			CLK_SET_RATE_PARENT, 0),
+						CLK_SET_RATE_PARENT, 0),
 	MUX_F(none, "mout_fimd1_final", mout_fimd1_final_p, TOP_SPARE2, 8, 1,
-			CLK_SET_RATE_PARENT, 0),
+						CLK_SET_RATE_PARENT, 0),
 	MUX(none, "mout_mipi1", mout_group2_p, SRC_DISP10, 16, 3),
 	MUX(none, "mout_dp1", mout_group2_p, SRC_DISP10, 20, 3),
 	MUX(none, "mout_pixel", mout_group2_p, SRC_DISP10, 24, 3),
@@ -639,8 +640,8 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 					DIV_TOP2, 20, 3, "aclk300_jpeg_d"),
 	DIV_A(none, "dout_aclk300_disp1", "mout_aclk300_disp1",
 					DIV_TOP2, 24, 3, "aclk300_disp1_d"),
-	DIV_A(none, "dout_aclk400_disp1", "mout_aclk400_disp1", DIV_TOP2,
-						4, 3, "aclk400_disp1_d"),
+	DIV_A(none, "dout_aclk400_disp1", "mout_aclk400_disp1",
+					DIV_TOP2, 4, 3, "aclk400_disp1_d"),
 	DIV_A(none, "dout_aclk300_gscl", "mout_aclk300_gscl", DIV_TOP2, 28, 3,
 							"aclk300_gscl_d"),
 	DIV(none, "dout_uart0", "mout_uart0", DIV_PERIC0, 8, 4),
@@ -693,7 +694,7 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 	DIV(none, "dout_mfc_blk", "mout_user_aclk333", DIV4_RATIO, 0, 2),
 	/* Gscl Blk */
 	DIV(none, "dout_gscl_blk_300", "mout_user_aclk300_gscl",
-			DIV2_RATIO0, 4, 2),
+						DIV2_RATIO0, 4, 2),
 	DIV(none, "dout_gscl_blk_333", "aclk333_432_gscl", DIV2_RATIO0, 6, 2),
 	/* Mscl Blk */
 	DIV(none, "dout_mscl_blk", "aclk400_mscl", DIV2_RATIO0, 28, 2),
@@ -716,33 +717,33 @@ struct samsung_div_clock exynos5420_div_clks[] __initdata = {
 struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	/* aclk333 gates internal MFC busses and should not be gated. */
 	GATE(aclk333, "aclk333", "mout_user_aclk333",
-				GATE_BUS_TOP, 15, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 15, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk166, "aclk166", "mout_user_aclk166",
 			GATE_BUS_TOP, 14, CLK_IGNORE_UNUSED, 0),
 	/* aclk266 also gates other IPs in psgen. It should not be gated. */
 	GATE(aclk266, "aclk266", "mout_user_aclk266",
 			GATE_BUS_NOC, 22, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk200_disp1, "aclk200_disp1", "mout_aclk200_disp1",
-					GATE_BUS_TOP, 18, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 18, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk200_fsys2, "aclk200_fsys2", "mout_user_aclk200_fsys2",
-				GATE_BUS_FSYS0, 10, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_FSYS0, 10, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk200_fsys, "aclk200_fsys", "mout_user_aclk200_fsys",
-				GATE_BUS_FSYS0, 9, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_FSYS0, 9, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk66_peric, "aclk66_peric", "mout_user_aclk66_peric",
 			GATE_BUS_TOP, 11, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk66_psgen, "aclk66_psgen", "mout_user_aclk66_psgen",
-					GATE_BUS_TOP, 10, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 10, CLK_IGNORE_UNUSED, 0),
 	GATE(pclk66_gpio, "pclk66_gpio", "mout_user_aclk66_gpio",
-					GATE_BUS_TOP, 9, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 9, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk333_432_gscl, "aclk333_432_gscl", "mout_user_aclk333_432_gscl",
-				GATE_BUS_TOP, 7, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 7, CLK_IGNORE_UNUSED, 0),
 	/* gating of aclk300_gscl causes system hang. It should not be gated. */
 	GATE(aclk300_gscl, "aclk300_gscl", "mout_user_aclk300_gscl",
-				GATE_BUS_TOP, 6, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 6, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk300_jpeg, "aclk300_jpeg", "mout_user_aclk300_jpeg",
-				GATE_BUS_TOP, 4, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 4, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk400_mscl, "aclk400_mscl", "mout_user_aclk400_mscl",
-				GATE_BUS_TOP, 17, CLK_IGNORE_UNUSED, 0),
+			GATE_BUS_TOP, 17, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk266_g2d, "aclk266_g2d", "mout_user_aclk266_g2d",
 			GATE_BUS_TOP, 1, CLK_IGNORE_UNUSED, 0),
 	GATE(aclk333_g2d, "aclk333_g2d", "mout_user_aclk333_g2d",
@@ -760,8 +761,8 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	/* misc: mct, adc, chipid, wdt, rtc, sysreg etc */
 	GATE(pclk_mct, "pclk_mct", "aclk66_psgen", GATE_BUS_PERIS1, 2, 0, 0),
 	GATE(pclk_tsadc, "pclk_tsadc", "aclk66_peric", GATE_IP_PERIC, 15, 0, 0),
-	GATE(pclk_chipid, "pclk_chipid", "aclk66_psgen", GATE_IP_PERIS,
-						0, CLK_IGNORE_UNUSED, 0),
+	GATE(pclk_chipid, "pclk_chipid", "aclk66_psgen",
+			GATE_IP_PERIS, 0, CLK_IGNORE_UNUSED, 0),
 	GATE(pclk_wdt, "pclk_wdt", "aclk66_psgen", GATE_IP_PERIS, 19, 0, 0),
 	GATE(pclk_rtc, "pclk_rtc", "aclk66_psgen", GATE_IP_PERIS, 20, 0, 0),
 	GATE(pclk_mc, "pclk_mc", "aclk66_psgen", GATE_BUS_GEN, 12, 0, 0),
@@ -798,7 +799,7 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 			GATE_TOP_SCLK_PERIC, 9, 0, 0),
 	/* Display */
 	GATE(sclk_fimd1, "sclk_fimd1", "dout_fimd1",
-		GATE_TOP_SCLK_DISP1, 0, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_DISP1, 0, CLK_SET_RATE_PARENT, 0),
 	/*
 	* HACK: When aclk_fimd1 is gated, aclk300_disp1 also gets gated as
 	* aclk_fimd1 is the only child node. aclk300_disp1 is connected
@@ -812,24 +813,24 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(smmu_fimd1m1, "smmu_fimd1m1", "dout_disp1_blk",
 			GATE_IP_DISP1, 8, 0, 0),
 	GATE(sclk_mipi1, "sclk_mipi1", "dout_mipi1",
-		GATE_TOP_SCLK_DISP1, 3, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_DISP1, 3, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_dp1, "sclk_dp1", "dout_dp1",
-		GATE_TOP_SCLK_DISP1, 20, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_DISP1, 20, CLK_SET_RATE_PARENT, 0),
 	GATE(pclk_dsim1, "pclk_dsim1", "dout_disp1_blk",
 			GATE_BUS_DISP1, 17, 0, 0),
 	GATE(pclk_dp1, "pclk_dp1", "dout_disp1_blk",
 			GATE_BUS_DISP1, 18, 0, 0),
 	GATE(sclk_pixel, "sclk_pixel", "dout_hdmi_pixel",
-		GATE_TOP_SCLK_DISP1, 10, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_DISP1, 10, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_hdmi, "sclk_hdmi", "mout_hdmi",
-		GATE_TOP_SCLK_DISP1, 9, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_DISP1, 9, CLK_SET_RATE_PARENT, 0),
 	GATE(aclk_mixer, "aclk_mixer", "aclk200_disp1", GATE_IP_DISP1, 5, 0, 0),
 	GATE(pclk_hdmi, "pclk_hdmi", "dout_disp1_blk",
-				GATE_BUS_DISP1, 19, 0, 0),
+			GATE_BUS_DISP1, 19, 0, 0),
 	GATE(pclk_hdmiphy, "pclk_hdmiphy", "dout_disp1_blk",
 			GATE_BUS_DISP1, 15, CLK_IGNORE_UNUSED, 0),
 	GATE(smmu_mixer, "smmu_mixer", "dout_disp1_blk",
-		GATE_IP_DISP1, 9, 0, 0),
+			GATE_IP_DISP1, 9, 0, 0),
 	GATE(aclk_smmu_mixer, "aclk_smmu_mixer", "aclk200_disp1",
 			GATE_BUS_DISP1, 9, CLK_IGNORE_UNUSED, 0),
 	/* i2c, usi */
@@ -847,7 +848,6 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(pclk_i2c_hdmi, "pclk_i2c_hdmi", "aclk66_peric",
 			GATE_BUS_PERIC, 17, 0, 0),
 
-
 	/* SPI */
 	GATE(pclk_spi0, "pclk_spi0", "aclk66_peric", GATE_BUS_PERIC, 19, 0, 0),
 	GATE(pclk_spi1, "pclk_spi1", "aclk66_peric", GATE_BUS_PERIC, 20, 0, 0),
@@ -859,10 +859,10 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(sclk_spi2, "sclk_spi2", "dout_spi2_pre",
 			GATE_TOP_SCLK_PERIC, 8, CLK_SET_RATE_PARENT, 0),
 	/* audio */
-	GATE(sclk_maudio0, "sclk_maudio0", "dout_maudio0", GATE_TOP_SCLK_MAU,
-						0, CLK_SET_RATE_PARENT, 0),
-	GATE(sclk_maupcm0, "sclk_maupcm0", "dout_maupcm0", GATE_TOP_SCLK_MAU,
-						1, CLK_SET_RATE_PARENT, 0),
+	GATE(sclk_maudio0, "sclk_maudio0", "dout_maudio0",
+			GATE_TOP_SCLK_MAU, 0, CLK_SET_RATE_PARENT, 0),
+	GATE(sclk_maupcm0, "sclk_maupcm0", "dout_maupcm0",
+			GATE_TOP_SCLK_MAU, 1, CLK_SET_RATE_PARENT, 0),
 	/*i2s */
 	GATE(pclk_i2s1, "pclk_i2s1", "aclk66_peric", GATE_BUS_PERIC, 23, 0, 0),
 	GATE(pclk_i2s2, "pclk_i2s2", "aclk66_peric", GATE_BUS_PERIC, 24, 0, 0),
@@ -898,17 +898,17 @@ struct samsung_gate_clock exynos5420_gate_clks[] __initdata = {
 	GATE(aclk_mmc1, "aclk_mmc1", "aclk200_fsys2", GATE_BUS_FSYS0, 13, 0, 0),
 	GATE(aclk_mmc2, "aclk_mmc2", "aclk200_fsys2", GATE_BUS_FSYS0, 14, 0, 0),
 	GATE(sclk_mmc0, "sclk_mmc0", "dout_mmc0",
-				GATE_TOP_SCLK_FSYS, 0, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_FSYS, 0, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_mmc1, "sclk_mmc1", "dout_mmc1",
-				GATE_TOP_SCLK_FSYS, 1, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_FSYS, 1, CLK_SET_RATE_PARENT, 0),
 	GATE(sclk_mmc2, "sclk_mmc2", "dout_mmc2",
-				GATE_TOP_SCLK_FSYS, 2, CLK_SET_RATE_PARENT, 0),
+			GATE_TOP_SCLK_FSYS, 2, CLK_SET_RATE_PARENT, 0),
 	/* rtic */
 	GATE(aclk_rtic, "aclk_rtic", "aclk200_fsys2", GATE_IP_FSYS, 9, 0, 0),
 	GATE(smmu_rtic, "smmu_rtic", "aclk200_fsys2", GATE_IP_FSYS, 11, 0, 0),
 	/* sromc */
 	GATE(hclk_sromc, "hclk_sromc", "aclk200_fsys2",
-				GATE_IP_FSYS, 17, CLK_IGNORE_UNUSED, 0),
+			GATE_IP_FSYS, 17, CLK_IGNORE_UNUSED, 0),
 	/* unipro */
 	GATE(sclk_unipro, "sclk_unipro", "dout_unipro",
 			GATE_IP_FSYS, 23, CLK_SET_RATE_PARENT, 0),
