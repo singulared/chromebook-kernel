@@ -217,6 +217,12 @@ clock which they consume.
   mout_spi0		1027
   mout_spi1		1028
   mout_spi2		1029
+  mout_sw_aclk333	1030
+  mout_user_aclk333	1031
+  mout_sw_aclk300_gscl	1032
+  mout_user_aclk300_gscl	1033
+  mout_sw_aclk333_432_gscl	1034
+  mout_user_aclk333_432_gscl	1035
 
 Example 1: An example of a clock controller node is listed below.
 
