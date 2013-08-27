@@ -469,6 +469,8 @@
 	gsc_pd: pd@10044000 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044000 0x20>;
+		clocks = <&clock 1>, <&clock 1032>, <&clock 1033>,  <&clock 1034>, <&clock 1035>;
+		clock-names = "oscclk", "pclk0", "clk0", "pclk1", "clk1";
 	};
 
 	isp_pd: pd@10044020 {
@@ -479,6 +481,8 @@
 	mfc_pd: pd@10044060 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044060 0x20>;
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
+		clock-names = "oscclk", "pclk0", "clk0";
 	};
 
 	g2d_pd: pd@10044100 {
