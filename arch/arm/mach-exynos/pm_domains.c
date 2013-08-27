@@ -53,7 +53,7 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	void __iomem *base;
 	u32 timeout, pwr;
 	char *op;
-	u32 tmp = 0;
+	u32 tmp;
 
 	pd = container_of(domain, struct exynos_pm_domain, pd);
 	base = pd->base;
@@ -64,14 +64,10 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	 * the system is suspended and resumed and not before that. The
 	 * following fix is a temporary workaround which will be removed
 	 * once the exact issue is found and fixed in the hardware.
-	 * The CLK_SRC register is different for exynos5250 and 5420.
 	 */
 	if (!power_on) {
 		/*  save clock source register */
-		if (soc_is_exynos5250())
-			tmp = __raw_readl(EXYNOS5_CLKSRC_TOP3);
-		if (soc_is_exynos5420())
-			tmp = __raw_readl(EXYNOS5420_CLKSRC_TOP4);
+		tmp = __raw_readl(EXYNOS5_CLKSRC_TOP3);
 	}
 
 	pwr = power_on ? S5P_INT_LOCAL_PWR_EN : 0;
@@ -93,10 +89,7 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 
 	if (!power_on) {
 		/*  restore clock source register */
-		if (soc_is_exynos5250())
-			__raw_writel(tmp, EXYNOS5_CLKSRC_TOP3);
-		if (soc_is_exynos5420())
-			__raw_writel(tmp, EXYNOS5420_CLKSRC_TOP4);
+		__raw_writel(tmp, EXYNOS5_CLKSRC_TOP3);
 	}
 
 	return 0;
