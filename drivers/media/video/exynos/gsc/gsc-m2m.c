@@ -38,8 +38,10 @@ static int gsc_ctx_stop_req(struct gsc_ctx *ctx)
 	int ret = 0;
 
 	curr_ctx = v4l2_m2m_get_curr_priv(gsc->m2m.m2m_dev);
-	if (!gsc_m2m_run(gsc) || (curr_ctx != ctx))
+	if (!gsc_m2m_run(gsc) || (curr_ctx != ctx)) {
+		gsc_ctx_state_lock_clear(GSC_CTX_ABORT, ctx);
 		return 0;
+	}
 	gsc_ctx_state_lock_set(GSC_CTX_STOP_REQ, ctx);
 	ret = wait_event_timeout(gsc->irq_queue,
 			!gsc_ctx_state_is_set(GSC_CTX_STOP_REQ, ctx),
@@ -103,9 +105,12 @@ static void gsc_m2m_job_abort(void *priv)
 	struct gsc_ctx *ctx = priv;
 	int ret;
 
+	gsc_ctx_state_lock_set(GSC_CTX_ABORT, ctx);
 	ret = gsc_ctx_stop_req(ctx);
-	if (ret == 0)
+	if ((ret == 0) || (ctx->state & GSC_CTX_ABORT)) {
+		gsc_ctx_state_lock_clear(GSC_CTX_STOP_REQ | GSC_CTX_ABORT, ctx);
 		gsc_m2m_job_finish(ctx, VB2_BUF_STATE_ERROR);
+	}
 }
 
 static int gsc_get_bufs(struct gsc_ctx *ctx)
@@ -154,8 +159,8 @@ static void gsc_m2m_device_run(void *priv)
 		gsc->m2m.ctx = ctx;
 	}
 
-	is_set = (ctx->state & GSC_CTX_STOP_REQ) ? 1 : 0;
-	ctx->state &= ~GSC_CTX_STOP_REQ;
+	is_set = (ctx->state & (GSC_CTX_STOP_REQ | GSC_CTX_ABORT)) ? 1 : 0;
+	ctx->state &= ~(GSC_CTX_STOP_REQ | GSC_CTX_ABORT);
 	if (is_set) {
 		wake_up(&gsc->irq_queue);
 		goto put_device;

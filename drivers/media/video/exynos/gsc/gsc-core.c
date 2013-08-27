@@ -1073,7 +1073,7 @@ static irqreturn_t gsc_irq_handler(int irq, void *priv)
 			/* wake_up job_abort, stop_streaming */
 			spin_lock(&ctx->slock);
 			if (ctx->state & GSC_CTX_STOP_REQ) {
-				ctx->state &= ~GSC_CTX_STOP_REQ;
+				ctx->state &= ~(GSC_CTX_STOP_REQ | GSC_CTX_ABORT);
 				wake_up(&gsc->irq_queue);
 			}
 			spin_unlock(&ctx->slock);

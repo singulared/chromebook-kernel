@@ -92,6 +92,7 @@ extern int gsc_dbg;
 #define	GSC_CTX_OUTPUT			(1 << 4)
 #define	GSC_CTX_START			(1 << 5)
 #define	GSC_CTX_STOP_REQ		(1 << 6)
+#define	GSC_CTX_ABORT			(1 << 7)
 #define	GSC_CTX_CAP			(1 << 10)
 #define MAX_MDEV			2
 
