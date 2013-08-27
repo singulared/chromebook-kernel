@@ -8,6 +8,14 @@ Required Properties:
     * samsung,exynos4210-pd - for exynos4210 type power domain.
 - reg: physical base address of the controller and length of memory mapped
     region.
+- clocks: List of clock handles. The parent clocks of the input clocks to the
+  devices in this power domain are set to oscclk before power gating and
+  restored back after powering on a domain. This is required for all domains
+  which are powered on and off and not required for unused domains.
+  The following clocks can be specified:
+  - oscclk: oscillator clock.
+  - clk(n): input clock to the devices in this power domain
+  - pclk(n): parent clock of input clock to the devices in this power domain
 
 Node of a device using power domains must have a samsung,power-domain property
 defined with a phandle to respective power domain.
@@ -17,6 +25,13 @@ Example:
 	lcd0: power-domain-lcd0 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10023C00 0x10>;
+	};
+
+	mfc_pd: pd@10044060 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044060 0x20>;
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
+		clock-names = "oscclk", "pclk0", "clk0";
 	};
 
 Example of the node using power domain:
