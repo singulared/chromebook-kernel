@@ -344,17 +344,6 @@ static void enable_datapath(struct s3c64xx_spi_driver_data *sdd,
 	chcfg = readl(regs + S3C64XX_SPI_CH_CFG);
 	chcfg &= ~S3C64XX_SPI_CH_TXCH_ON;
 
-	if(sdd->cur_bpw == 32) {
-		/* For word transfer we need to swap bytes */
-		u32 swapcfg = (S3C64XX_SPI_SWAP_TX_EN | S3C64XX_SPI_SWAP_TX_BYTE |
-				S3C64XX_SPI_SWAP_TX_HALF_WORD |
-				S3C64XX_SPI_SWAP_RX_EN |
-				S3C64XX_SPI_SWAP_RX_BYTE |
-				S3C64XX_SPI_SWAP_RX_HALF_WORD);
-		writel(swapcfg, regs + S3C64XX_SPI_SWAP_CFG);
-	} else
-		writel(0, regs + S3C64XX_SPI_SWAP_CFG);
-
 	if (dma_mode) {
 		chcfg &= ~S3C64XX_SPI_CH_RXCH_ON;
 	} else {
@@ -405,6 +394,7 @@ static void enable_datapath(struct s3c64xx_spi_driver_data *sdd,
 			writel(((xfer->len * 8 / sdd->cur_bpw) & 0xffff)
 					| S3C64XX_SPI_PACKET_CNT_EN,
 					regs + S3C64XX_SPI_PACKET_CNT);
+			prepare_dma(&sdd->rx_dma, xfer->len, xfer->rx_dma);
 		}
 	}
 
@@ -674,6 +664,7 @@ static int s3c64xx_spi_transfer_one_message(struct spi_master *master,
 	struct spi_transfer *xfer;
 	int status = 0, cs_toggle = 0;
 	u32 speed;
+	u8 bpw;
 
 	/* If Master's(controller) state differs from that needed by Slave */
 	if (sdd->cur_speed != spi->max_speed_hz
@@ -703,16 +694,21 @@ static int s3c64xx_spi_transfer_one_message(struct spi_master *master,
 
 		INIT_COMPLETION(sdd->xfer_completion);
 
+		/* Only BPW and Speed may change across transfers */
+		bpw = xfer->bits_per_word;
 		speed = xfer->speed_hz ? : spi->max_speed_hz;
 
-		if (speed != sdd->cur_speed)
-			sdd->cur_speed = speed;
+		if (xfer->len % (bpw / 8)) {
+			dev_err(&spi->dev,
+				"Xfer length(%u) not a multiple of word size(%u)\n",
+				xfer->len, bpw / 8);
+			status = -EIO;
+			goto out;
+		}
 
-		if (xfer->len % 4) {
-			sdd->cur_bpw = 8;
-			s3c64xx_spi_config(sdd);
-		} else {
-			sdd->cur_bpw = 32;
+		if (bpw != sdd->cur_bpw || speed != sdd->cur_speed) {
+			sdd->cur_bpw = bpw;
+			sdd->cur_speed = speed;
 			s3c64xx_spi_config(sdd);
 		}
 
@@ -735,9 +731,6 @@ static int s3c64xx_spi_transfer_one_message(struct spi_master *master,
 
 		/* Start the signals */
 		writel(0, sdd->regs + S3C64XX_SPI_SLAVE_SEL);
-
-		if ( use_dma && (xfer->rx_buf != NULL))
-			 prepare_dma(&sdd->rx_dma, xfer->len, xfer->rx_dma);
 
 		spin_unlock_irqrestore(&sdd->lock, flags);
 
@@ -1176,7 +1169,7 @@ static int __init s3c64xx_spi_probe(struct platform_device *pdev)
 		sdd->port_id = pdev->id;
 	}
 
-	sdd->cur_bpw = 32;
+	sdd->cur_bpw = 8;
 
 	if (!sdd->pdev->dev.of_node) {
 		res = platform_get_resource(pdev, IORESOURCE_DMA,  0);
