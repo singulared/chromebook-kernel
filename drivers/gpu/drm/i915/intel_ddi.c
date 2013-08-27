@@ -42,7 +42,7 @@ static const u32 hsw_ddi_translations_dp[] = {
 	0x80C30FFF, 0x000B0000,
 	0x00FFFFFF, 0x00040006,
 	0x80D75FFF, 0x000B0000,
-	0x00FFFFFF, 0x00040006		/* HDMI parameters */
+	0x80E79FFF, 0x00030002		/* HDMI parameters */
 };
 
 static const u32 hsw_ddi_translations_fdi[] = {
