@@ -1381,11 +1381,17 @@ static int s5p_mfc_suspend(struct device *dev)
 
 		if (ret == 0) {
 			mfc_err("Waiting for hardware to finish timed out\n");
+			clear_bit(0, &m_dev->enter_suspend);
 			return -EIO;
 		}
 	}
 
-	return s5p_mfc_sleep(m_dev);
+	ret = s5p_mfc_sleep(m_dev);
+	if (ret) {
+		clear_bit(0, &m_dev->enter_suspend);
+		clear_bit(0, &m_dev->hw_lock);
+	}
+	return ret;
 }
 
 static int s5p_mfc_resume(struct device *dev)
