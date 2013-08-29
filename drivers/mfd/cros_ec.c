@@ -209,3 +209,6 @@ int cros_ec_resume(struct cros_ec_device *ec_dev)
 	return 0;
 }
 #endif
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("ChromeOS EC core driver");
