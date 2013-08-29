@@ -459,11 +459,13 @@
 	isparm_pd: pd@10042480 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10042480 0x20>;
+		enable = <0x1>;
 	};
 
 	xusbxti_pd: pd@10043400 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10043400 0x20>;
+		enable = <0x1>;
 	};
 
 	gsc_pd: pd@10044000 {
