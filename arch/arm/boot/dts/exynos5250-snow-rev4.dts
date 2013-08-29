@@ -1,0 +1,35 @@
+/*
+ * Google Snow Rev 0-4 board device tree source
+ *
+ * Copyright (c) 2012 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+#include "exynos5250.dtsi"
+#include "cros5250-common.dtsi"
+#include "exynos5250-snow.dtsi"
+
+/ {
+	model = "Google Snow Rev 0-4";
+
+	/*
+	 * Define with revisions this tree is compatible with.
+	 * - Any real rev 0-3 boards in the field will match "google,snow",
+	 *   since older U-Boots don't look for a revision specific device tree.
+	 * - Any real rev 4 boards in the field will match "google,snow-rev4"
+	 *   first.  If that's not present they will pick the first
+	 *   "google,snow" device tree that they find (ignoring the kernel
+	 *   ordering).
+	 * - We put an ugly "google,snow-any" here to provide the kernel a way
+	 *   to test for any snow device.
+	 * - Note that revision here is logical revision (monotonically
+	 *   increasing) which means it's not exactly what's read from board
+	 *   strappings.
+	 */
+	compatible = "google,snow-rev4", "google,snow", "google,snow-any",
+		"samsung,exynos5250";
+};
