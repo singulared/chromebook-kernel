@@ -8,14 +8,7 @@
  * published by the Free Software Foundation.
 */
 
-/dts-v1/;
-/include/ "exynos5250.dtsi"
-/include/ "cros5250-common.dtsi"
-
 / {
-	model = "Google Snow";
-	compatible = "google,snow", "samsung,exynos5250";
-
 	mipi {
 		status = "disabled";
 	};
