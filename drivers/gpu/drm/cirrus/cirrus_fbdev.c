@@ -198,6 +198,9 @@ static int cirrusfb_create(struct cirrus_fbdev *gfbdev,
 	info->screen_base = sysram;
 	info->screen_size = size;
 
+	info->fix.smem_start = cdev->dev->mode_config.fb_base;
+	info->fix.smem_len = size;
+
 	info->fix.mmio_start = 0;
 	info->fix.mmio_len = 0;
 
