@@ -644,9 +644,10 @@
 	};
 
 	hdmi {
-		vdd-supply = <&ldo8_reg>;
-		vdd_osc-supply = <&ldo10_reg>;
-		vdd_pll-supply = <&ldo8_reg>;
+		hdmi-en-supply = <&s5m_ldo8_reg>;
+		vdd-supply = <&s5m_ldo8_reg>;
+		vdd_osc-supply = <&s5m_ldo10_reg>;
+		vdd_pll-supply = <&s5m_ldo8_reg>;
 	};
 
 	sound {
