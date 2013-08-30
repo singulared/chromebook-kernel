@@ -100,16 +100,15 @@ clock which they consume.
   pclk_spi0		271
   pclk_spi1		272
   pclk_spi2		273
-  keyif_unused		274
-  pclk_i2s1		275
-  pclk_i2s2		276
-  pclk_pcm1		277
-  pclk_pcm2		278
-  pclk_pwm		279
-  pclk_spdif		280
-  pclk_usi4		281
-  pclk_usi5		282
-  pclk_usi6		283
+  pclk_i2s1		274
+  pclk_i2s2		275
+  pclk_pcm1		276
+  pclk_pcm2		277
+  pclk_pwm		278
+  pclk_spdif		279
+  pclk_usi4		280
+  pclk_usi5		281
+  pclk_usi6		282
 
   aclk66_psgen		300
   pclk_chipid		301
@@ -139,16 +138,14 @@ clock which they consume.
   aclk_mmc1		352
   aclk_mmc2		353
   hclk_sromc		354
-  ufs_unused		355
 
   aclk200_fsys		360
-  tsi_unused		361
-  aclk_pdma0		362
-  aclk_pdma1		363
-  aclk_rtic		364
-  hclk_usbh20		365
-  hclk_usbd300		366
-  hclk_usbd301		367
+  aclk_pdma0		361
+  aclk_pdma1		362
+  aclk_rtic		363
+  hclk_usbh20		364
+  hclk_usbd300		365
+  hclk_usbd301		366
 
   pclk200_fsys		370
 
@@ -215,42 +212,41 @@ clock which they consume.
   aclk_fimc_lite3	495
 
   clk_g3d		500
-  g3d_unused		501
-  smmu_mixer		502
-  pclk_tzpc10		503
-  pclk_tzpc11		504
-  pclk_mc		505
-  pclk_top_rtc		506
-  smmu_jpeg2		507
-  pclk_rotator		508
-  smmu_rtic		509
-  pclk_g2d		510
-  aclk_smmu_g2d		511
-  smmu_g2d		512
-  aclk_smmu_mdma0	513
-  smmu_mdma0		514
-  aclk_smmu_sss		515
-  smmu_sss		516
-  smmu_slim_sss		517
-  aclk_smmu_slim_sss	518
-  aclk266_isp		519
-  aclk400_isp		520
-  aclk333_432_isp0	521
-  aclk333_432_isp	522
-  aclk_smmu_mixer	523
-  pclk_hdmiphy		524
-  pclk_gscl0		525
-  pclk_gscl1		526
-  pclk_fimc_3aa		527
-  aclk_fimc_lite0	528
-  aclk_fimc_lite1	529
-  pclk_fimc_lite0	530
-  pclk_fimc_lite1	531
-  pclk_fimc_lite3	532
-  pclk_mscl0		533
-  pclk_mscl1		534
-  pclk_mscl2		535
-  pclk_mfc		536
+  smmu_mixer		501
+  pclk_tzpc10		502
+  pclk_tzpc11		503
+  pclk_mc		504
+  pclk_top_rtc		505
+  smmu_jpeg2		506
+  pclk_rotator		507
+  smmu_rtic		508
+  pclk_g2d		509
+  aclk_smmu_g2d		510
+  smmu_g2d		511
+  aclk_smmu_mdma0	512
+  smmu_mdma0		513
+  aclk_smmu_sss		514
+  smmu_sss		515
+  smmu_slim_sss		516
+  aclk_smmu_slim_sss	517
+  aclk266_isp		518
+  aclk400_isp		519
+  aclk333_432_isp0	520
+  aclk333_432_isp	521
+  aclk_smmu_mixer	522
+  pclk_hdmiphy		523
+  pclk_gscl0		524
+  pclk_gscl1		525
+  pclk_fimc_3aa		526
+  aclk_fimc_lite0	527
+  aclk_fimc_lite1	528
+  pclk_fimc_lite0	529
+  pclk_fimc_lite1	530
+  pclk_fimc_lite3	531
+  pclk_mscl0		532
+  pclk_mscl1		533
+  pclk_mscl2		534
+  pclk_mfc		535
 
   Mux			ID
   ----------------------------
