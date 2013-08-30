@@ -387,7 +387,7 @@
 		reg = <0x12dd0000 0x100>;
 		samsung,pwm-outputs = <0>, <1>, <2>, <3>;
 		#pwm-cells = <3>;
-		clocks = <&clock 279>;
+		clocks = <&clock 278>;
 		clock-names = "timers";
 	};
 
@@ -402,7 +402,7 @@
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x121A0000 0x1000>;
 			interrupts = <0 34 0>;
-			clocks = <&clock 362>;
+			clocks = <&clock 361>;
 			clock-names = "apb_pclk";
 			#dma-cells = <1>;
 			#dma-channels = <8>;
@@ -413,7 +413,7 @@
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x121B0000 0x1000>;
 			interrupts = <0 35 0>;
-			clocks = <&clock 363>;
+			clocks = <&clock 362>;
 			clock-names = "apb_pclk";
 			#dma-cells = <1>;
 			#dma-channels = <8>;
@@ -660,7 +660,7 @@
 		#size-cells = <0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c8_hs_bus>;
-		clocks = <&clock 281>;
+		clocks = <&clock 280>;
 		clock-names = "hsi2c";
 		status = "disabled";
 	};
@@ -673,7 +673,7 @@
 		#size-cells = <0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c9_hs_bus>;
-		clocks = <&clock 282>;
+		clocks = <&clock 281>;
 		clock-names = "hsi2c";
 		status = "disabled";
 	};
@@ -686,7 +686,7 @@
 		#size-cells = <0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2c10_hs_bus>;
-		clocks = <&clock 283>;
+		clocks = <&clock 282>;
 		clock-names = "hsi2c";
 		status = "disabled";
 	};
@@ -718,7 +718,7 @@
 		dmas = <&pdma1 12
 			&pdma1 11>;
 		dma-names = "tx", "rx";
-		clocks = <&clock 275>, <&clock 138>;
+		clocks = <&clock 274>, <&clock 138>;
 		clock-names = "iis", "i2s_opclk0";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s1_bus>;
@@ -731,7 +731,7 @@
 		dmas = <&pdma0 12
 			&pdma0 11>;
 		dma-names = "tx", "rx";
-		clocks = <&clock 276>, <&clock 139>;
+		clocks = <&clock 275>, <&clock 139>;
 		clock-names = "iis", "i2s_opclk0";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s2_bus>;
@@ -740,7 +740,7 @@
 
 	usb@12000000 {
 		compatible = "samsung,exynos5250-dwusb3";
-		clocks = <&clock 366>;
+		clocks = <&clock 365>;
 		clock-names = "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -758,7 +758,7 @@
 	usb3_phy0: usbphy@12100000 {
 		compatible = "samsung,exynos5420-usb3phy";
 		reg = <0x12100000 0x100>;
-		clocks = <&clock 1>, <&clock 366>;
+		clocks = <&clock 1>, <&clock 365>;
 		clock-names = "ext_xtal", "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -773,7 +773,7 @@
 		compatible = "samsung,exynos4210-ehci";
 		reg = <0x12110000 0x100>;
 		interrupts = <0 71 0>;
-		clocks = <&clock 365>;
+		clocks = <&clock 364>;
 		clock-names = "usbhost";
 		status = "disabled";
 	};
@@ -782,14 +782,14 @@
 		compatible = "samsung,exynos4210-ohci";
 		reg = <0x12120000 0x100>;
 		interrupts = <0 71 0>;
-		clocks = <&clock 365>;
+		clocks = <&clock 364>;
 		clock-names = "usbhost";
 	};
 
 	usb2_phy: usbphy@12130000 {
 		compatible = "samsung,exynos5420-usb2phy";
 		reg = <0x12130000 0x100>;
-		clocks = <&clock 1>, <&clock 365>;
+		clocks = <&clock 1>, <&clock 364>;
 		clock-names = "ext_xtal", "usbhost";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -803,7 +803,7 @@
 
 	usb@12400000 {
 		compatible = "samsung,exynos5250-dwusb3";
-		clocks = <&clock 367>;
+		clocks = <&clock 366>;
 		clock-names = "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -821,7 +821,7 @@
 	usb3_phy1: usbphy@12500000 {
 		compatible = "samsung,exynos5420-usb3phy";
 		reg = <0x12500000 0x100>;
-		clocks = <&clock 1>, <&clock 367>;
+		clocks = <&clock 1>, <&clock 366>;
 		clock-names = "ext_xtal", "usbdrd30";
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -929,7 +929,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <7 4>;
 		mmu-master = <&mixer>;
-		clocks = <&clock 502>;
+		clocks = <&clock 501>;
 		clock-names = "sysmmu";
 	};
 
