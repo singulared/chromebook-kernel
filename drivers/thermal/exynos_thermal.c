@@ -912,11 +912,11 @@ static struct exynos_tmu_platform_data const exynos5420_default_tmu_data = {
 	.cal_type = TYPE_ONE_POINT_TRIMMING,
 	.efuse_value = 55,
 	.freq_tab[0] = {
-		.freq_clip_max = 800 * 1000,
+		.freq_clip_max = 700 * 1000,
 		.temp_level = 85,
 	},
 	.freq_tab[1] = {
-		.freq_clip_max = 200 * 1000,
+		.freq_clip_max = 300 * 1000,
 		.temp_level = 103,
 	},
 	.freq_tab_count = 2,
