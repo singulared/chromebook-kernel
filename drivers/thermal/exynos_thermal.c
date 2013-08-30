@@ -464,7 +464,7 @@ static int exynos_register_thermal(struct thermal_sensor_conf *sensor_conf,
 		return -ENOMEM;
 
 	th_zone->sensor_conf = sensor_conf;
-	cpumask_set_cpu(0, &mask_val);
+	cpumask_setall(&mask_val);
 	th_zone->cool_dev[0] = cpufreq_cooling_register(&mask_val);
 	if (IS_ERR(th_zone->cool_dev[0])) {
 		pr_err("Failed to register cpufreq cooling device\n");
