@@ -40,7 +40,7 @@ static int gsc_ctx_stop_req(struct gsc_ctx *ctx)
 	curr_ctx = v4l2_m2m_get_curr_priv(gsc->m2m.m2m_dev);
 	if (!gsc_m2m_run(gsc) || (curr_ctx != ctx))
 		return 0;
-	ctx->state |= GSC_CTX_STOP_REQ;
+	gsc_ctx_state_lock_set(GSC_CTX_STOP_REQ, ctx);
 	ret = wait_event_timeout(gsc->irq_queue,
 			!gsc_ctx_state_is_set(GSC_CTX_STOP_REQ, ctx),
 			GSC_SHUTDOWN_TIMEOUT);
