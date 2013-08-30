@@ -146,6 +146,8 @@ struct	thermal_cooling_conf {
 	int freq_clip_count;
 };
 
+static int thermal_sensor_count;
+
 struct thermal_sensor_conf {
 	char name[SENSOR_NAME_LEN];
 	int (*read_temperature)(void *data);
@@ -835,10 +837,6 @@ static irqreturn_t exynos_tmu_irq(int irq, void *id)
 
 	return IRQ_HANDLED;
 }
-static struct thermal_sensor_conf exynos_sensor_conf = {
-	.name			= "exynos-therm",
-	.read_temperature	= (int (*)(void *))exynos_tmu_read,
-};
 
 #if defined(CONFIG_CPU_EXYNOS4210)
 static struct exynos_tmu_platform_data const exynos4210_default_tmu_data = {
@@ -987,6 +985,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 {
 	struct exynos_tmu_data *data;
 	struct exynos_tmu_platform_data *pdata = pdev->dev.platform_data;
+	struct thermal_sensor_conf *sensor_conf;
 	int ret, i;
 
 	if (!pdata)
@@ -1000,6 +999,13 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 					GFP_KERNEL);
 	if (!data) {
 		dev_err(&pdev->dev, "Failed to allocate driver structure\n");
+		return -ENOMEM;
+	}
+
+	sensor_conf = devm_kzalloc(&pdev->dev, sizeof(*sensor_conf),
+					GFP_KERNEL);
+	if (!sensor_conf) {
+		dev_err(&pdev->dev, "Failed to allocate sensor config\n");
 		return -ENOMEM;
 	}
 
@@ -1062,29 +1068,31 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	}
 
 	/* Register the sensor with thermal management interface */
-	(&exynos_sensor_conf)->private_data = data;
-	exynos_sensor_conf.trip_data.trip_count = pdata->trigger_level0_en +
+	snprintf(sensor_conf->name, sizeof(sensor_conf->name),
+			"exynos_therm%d", thermal_sensor_count++);
+	sensor_conf->read_temperature = (int (*)(void *))exynos_tmu_read;
+	sensor_conf->private_data = data;
+	sensor_conf->trip_data.trip_count = pdata->trigger_level0_en +
 			pdata->trigger_level1_en + pdata->trigger_level2_en +
 			pdata->trigger_level3_en;
 
-	for (i = 0; i < exynos_sensor_conf.trip_data.trip_count; i++)
-		exynos_sensor_conf.trip_data.trip_val[i] =
+	for (i = 0; i < sensor_conf->trip_data.trip_count; i++)
+		sensor_conf->trip_data.trip_val[i] =
 			pdata->threshold + pdata->trigger_levels[i];
 
-	exynos_sensor_conf.trip_data.trigger_falling = pdata->threshold_falling;
+	sensor_conf->trip_data.trigger_falling = pdata->threshold_falling;
 
-	exynos_sensor_conf.cooling_data.freq_clip_count =
-						pdata->freq_tab_count;
+	sensor_conf->cooling_data.freq_clip_count = pdata->freq_tab_count;
 	for (i = 0; i < pdata->freq_tab_count; i++) {
-		exynos_sensor_conf.cooling_data.freq_data[i].freq_clip_max =
+		sensor_conf->cooling_data.freq_data[i].freq_clip_max =
 					pdata->freq_tab[i].freq_clip_max;
-		exynos_sensor_conf.cooling_data.freq_data[i].temp_level =
+		sensor_conf->cooling_data.freq_data[i].temp_level =
 					pdata->freq_tab[i].temp_level;
 	}
 
 	exynos_tmu_control(pdev, true);
 
-	ret = exynos_register_thermal(&exynos_sensor_conf, data);
+	ret = exynos_register_thermal(sensor_conf, data);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register thermal interface\n");
 		goto err_clk;
