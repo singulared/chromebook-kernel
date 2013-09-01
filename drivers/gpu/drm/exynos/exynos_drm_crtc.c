@@ -486,6 +486,9 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 	struct drm_crtc *crtc =  callback_extra_parameter;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 
+	trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
+			"wait_apply");
+
 	/*
 	 * Under rare circumstances (modeset followed by flip) it is possible
 	 * to have two fbs ready in time for the same vblank. We don't want to
@@ -504,6 +507,8 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 		overlay = get_exynos_drm_overlay(exynos_crtc->plane);
 		exynos_drm_crtc_update(crtc, fb);
 		exynos_drm_crtc_apply(crtc, overlay);
+		trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
+				"wait_flip");
 		to_exynos_fb(fb)->prepared = true;
 	}
 }
@@ -572,6 +577,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		BUG_ON(exynos_fb->dma_buf !=  buf);
 
 		/* Waiting for the KDS resource*/
+		trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
+				"wait_kds");
 		ret = kds_async_waitall(&flip_desc.kds,
 					&dev_priv->kds_cb, fb, crtc, 1,
 					&shared, &res_list);
@@ -632,6 +639,8 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 		return;
 
 	trace_exynos_flip_complete(crtc_idx);
+	trace_exynos_page_flip_state(crtc_idx, DRM_BASE_ID(next_desc.fb),
+			"flipped");
 
 	if (cur_descp->fb)
 		exynos_drm_fb_put(to_exynos_fb(cur_descp->fb));
@@ -658,6 +667,9 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 			exynos_drm_crtc_update(crtc, next_desc.fb);
 			exynos_drm_crtc_apply(crtc, overlay);
 			to_exynos_fb(next_desc.fb)->prepared = true;
+			trace_exynos_page_flip_state(crtc_idx,
+					DRM_BASE_ID(next_desc.fb),
+					"wait_flip");
 		}
 	}
 

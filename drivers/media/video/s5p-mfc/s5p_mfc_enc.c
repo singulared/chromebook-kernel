@@ -726,6 +726,9 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 	int slice_type;
 	unsigned int strm_size;
 	unsigned long flags;
+	struct timeval src_timestamp;
+	struct v4l2_timecode src_timecode;
+
 
 	slice_type = s5p_mfc_hw_call(dev->mfc_ops, get_enc_slice_type, dev);
 	strm_size = s5p_mfc_hw_call(dev->mfc_ops, get_enc_strm_size, dev);
@@ -743,6 +746,8 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 			if ((enc_y_addr == mb_y_addr) &&
 						(enc_c_addr == mb_c_addr)) {
 				list_del(&mb_entry->list);
+				src_timestamp = mb_entry->b->v4l2_buf.timestamp;
+				src_timecode = mb_entry->b->v4l2_buf.timecode;
 				ctx->src_queue_cnt--;
 				vb2_buffer_done(mb_entry->b,
 							VB2_BUF_STATE_DONE);
@@ -755,6 +760,8 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 			if ((enc_y_addr == mb_y_addr) &&
 						(enc_c_addr == mb_c_addr)) {
 				list_del(&mb_entry->list);
+				src_timestamp = mb_entry->b->v4l2_buf.timestamp;
+				src_timecode = mb_entry->b->v4l2_buf.timecode;
 				ctx->ref_queue_cnt--;
 				vb2_buffer_done(mb_entry->b,
 							VB2_BUF_STATE_DONE);
@@ -789,6 +796,10 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 		case S5P_FIMV_ENC_SI_SLICE_TYPE_B:
 			mb_entry->b->v4l2_buf.flags |= V4L2_BUF_FLAG_BFRAME;
 			break;
+		}
+		if (slice_type) {
+			mb_entry->b->v4l2_buf.timestamp = src_timestamp;
+			mb_entry->b->v4l2_buf.timecode = src_timecode;
 		}
 		vb2_set_plane_payload(mb_entry->b, 0, strm_size);
 		vb2_buffer_done(mb_entry->b, VB2_BUF_STATE_DONE);
@@ -1042,7 +1053,7 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 		(reqbufs->memory != V4L2_MEMORY_USERPTR))
 		return -EINVAL;
 	if (reqbufs->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		if (ctx->capture_state != QUEUE_FREE) {
+		if (reqbufs->count != 0 && ctx->capture_state != QUEUE_FREE) {
 			mfc_err("invalid capture state: %d\n",
 							ctx->capture_state);
 			return -EINVAL;
@@ -1052,8 +1063,20 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_err("error in vb2_reqbufs() for E(D)\n");
 			return ret;
 		}
+
+		if (reqbufs->count == 0) {
+			/*
+			 * No need to release codec buffers, because
+			 * alloc_codec_buffers below doesn't really allocate
+			 * anything
+			 */
+			ctx->capture_state = QUEUE_FREE;
+			return ret;
+		}
+
 		ctx->capture_state = QUEUE_BUFS_REQUESTED;
 
+		/* This doesn't really allocate anything. */
 		ret = s5p_mfc_hw_call(ctx->dev->mfc_ops,
 				alloc_codec_buffers, ctx);
 		if (ret) {
@@ -1063,6 +1086,20 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			return -ENOMEM;
 		}
 	} else if (reqbufs->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (reqbufs->count == 0) {
+			ret = vb2_reqbufs(&ctx->vq_src, reqbufs);
+			if (ret)
+				mfc_err("error in vb2_reqbufs() for E(S)\n");
+			/*
+			 * Release buffers here, because init_enc_buffers
+			 * below actually allocates them.
+			 */
+			s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers,
+					ctx);
+			ctx->output_state = QUEUE_FREE;
+			return ret;
+		}
+
 		if (ctx->output_state != QUEUE_FREE) {
 			mfc_err("invalid output state: %d\n",
 							ctx->output_state);
@@ -1075,6 +1112,7 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 						"done first\n");
 				return -EINVAL;
 			}
+
 			/* Check for min encoder buffers */
 			if (reqbufs->count < ctx->dpb_count) {
 				reqbufs->count = ctx->dpb_count;
@@ -1086,10 +1124,11 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_err("error in vb2_reqbufs() for E(S)\n");
 			return ret;
 		}
+
 		ctx->output_state = QUEUE_BUFS_REQUESTED;
 
 		if (IS_MFCV6(dev)) {
-			/* Run init encoder buffers */
+			/* This actually allocates codec buffers. */
 			s5p_mfc_hw_call(dev->mfc_ops, init_enc_buffers, ctx);
 			set_work_bit_irqsave(ctx);
 			s5p_mfc_clean_ctx_int_flags(ctx);

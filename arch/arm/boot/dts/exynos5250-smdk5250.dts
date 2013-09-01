@@ -156,7 +156,7 @@
 			reg = <0x3a>;
 		};
 
-		exynos_ddc@50 {
+		exynos_ddc: exynos_ddc@50 {
 			compatible = "samsung,s5p_ddc";
 			reg = <0x50>;
 		};
@@ -281,6 +281,10 @@
 
 	display-port-controller {
 		status = "disabled";
+	};
+
+	hdmi {
+		hdmi-ddc = <&exynos_ddc>;
 	};
 
 	xhci {

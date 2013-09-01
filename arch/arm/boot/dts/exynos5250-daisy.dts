@@ -149,6 +149,10 @@
 		compatible = "google,daisy-audio-max98095";
 	};
 
+	hdmi {
+		hdmi-ddc = <&exynos_ddc>;
+	};
+
 	xhci {
 		phy {
 			compatible = "samsung,exynos-usbphy";

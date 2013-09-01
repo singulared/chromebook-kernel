@@ -411,6 +411,11 @@
 			reset-gpio = <&gpe0 7 1 0 0>;
 			cable-det-gpio = <&gpx0 7 0 0 0>;
 			intp-gpio = <&gpf0 0 0 0 0>;
+
+			anx7808_ddc: anx7808_ddc@50 {
+				compatible = "analogix,7808_ddc";
+				reg = <0x50>;
+			};
 		};
 
 	};
@@ -423,7 +428,7 @@
 
 	gpio-controllers {
 		gpa0: gpio-controller@11400000 {
-			powerdown-settings = <6 6 6 6 3 3 2 2>;
+			powerdown-settings = <3 3 3 3 3 3 2 2>;
 		};
 
 		gpa1: gpio-controller@11400020 {
@@ -459,11 +464,11 @@
 		};
 
 		gpc2: gpio-controller@11400120 {
-			powerdown-settings = <3 1 3 3 3 3 3>;
+			powerdown-settings = <6 2 3 2 2 2 2>;
 		};
 
 		gpc3: gpio-controller@11400140 {
-			powerdown-settings = <6 2 1 2 2 2 3>;
+			powerdown-settings = <3 2 3 3 3 3 3>;
 		};
 
 		gpc4: gpio-controller@114002E0 {
@@ -471,7 +476,7 @@
 		};
 
 		gpd0: gpio-controller@11400160 {
-			powerdown-settings = <6 6 3 3>;
+			powerdown-settings = <6 6 6 3>;
 		};
 
 		gpd1: gpio-controller@11400180 {
@@ -479,7 +484,7 @@
 		};
 
 		gpy0: gpio-controller@114001A0 {
-			powerdown-settings = <3 3 6 3 3 3>;
+			powerdown-settings = <3 3 3 3 3 3>;
 		};
 
 		gpy1: gpio-controller@114001C0 {
@@ -487,7 +492,7 @@
 		};
 
 		gpy2: gpio-controller@114001E0 {
-			powerdown-settings = <3 3 3 3 3 2>;
+			powerdown-settings = <3 3 3 3 3 3>;
 		};
 
 		gpy3: gpio-controller@11400200 {
@@ -512,7 +517,7 @@
 		/* gpx3: No powerdown mode, uses active mode on suspend */
 
 		gpe0: gpio-controller@13400000 {
-			powerdown-settings = <5 3 3 3 2 2 3 3>;
+			powerdown-settings = <3 3 3 3 3 3 4 3>;
 		};
 
 		gpe1: gpio-controller@13400020 {
@@ -520,7 +525,7 @@
 		};
 
 		gpf0: gpio-controller@13400040 {
-			powerdown-settings = <3 3 1 2>;
+			powerdown-settings = <2 3 3 3>;
 		};
 
 		gpf1: gpio-controller@13400060 {
@@ -570,5 +575,9 @@
 		gpz: gpio-controller@03860000 {
 			powerdown-settings = <6 3 6 6 6 3 3>;
 		};
+	};
+
+	hdmi {
+		hdmi-ddc = <&anx7808_ddc>;
 	};
 };

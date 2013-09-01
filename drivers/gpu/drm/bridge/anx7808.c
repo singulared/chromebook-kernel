@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of_gpio.h>
+#include <linux/of_i2c.h>
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 #include "drmP.h"
@@ -74,6 +75,9 @@ struct anx7808_data {
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
 	bool suspended;
+	struct mutex aux_mutex;
+	struct i2c_algorithm i2c_algorithm;
+	struct i2c_adapter ddc_adapter;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -234,27 +238,38 @@ static int anx7808_chip_located(struct anx7808_data *anx7808)
 static int anx7808_aux_wait(struct anx7808_data *anx7808)
 {
 	int err;
-	uint8_t status;
+	uint8_t status, aux_ctrl;
 	unsigned long start = jiffies;
 
 	while ((jiffies - start) <= msecs_to_jiffies(AUX_WAIT_MS)) {
+		usleep_range(100, 200);
+
+		err = anx7808_read_reg(anx7808, SP_TX_AUX_CTRL_REG2, &aux_ctrl);
+		if (err)
+			return err;
+		if (aux_ctrl & AUX_OP_EN)
+			continue;
+
 		err = anx7808_read_reg(anx7808, SP_TX_AUX_STATUS, &status);
 		if (err)
 			return err;
-		if (!(status & AUX_BUSY))
-			break;
-		usleep_range(100, 200);
+		if (status & AUX_BUSY)
+			continue;
+
+		break;
 	}
 
-	if (status) {
-		DRM_ERROR("Failed to read AUX channel: 0x%02x\n", status);
+	if (status || (aux_ctrl & AUX_OP_EN)) {
+		DRM_ERROR("Failed to read AUX channel: 0x%02x 0x%02x\n",
+			  status, aux_ctrl);
 		return -EIO;
 	}
+
 	return 0;
 }
 
-static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
-			    uint8_t cmd, uint8_t count, uint8_t *buf)
+static int anx7808_aux_read_block(struct anx7808_data *anx7808, uint32_t addr,
+				  uint8_t cmd, uint8_t count, uint8_t *buf)
 {
 	int i;
 	int err = 0;
@@ -289,8 +304,8 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 	return 0;
 }
 
-static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
-			     uint8_t cmd, uint8_t count, uint8_t *buf)
+static int anx7808_aux_write_block(struct anx7808_data *anx7808, uint32_t addr,
+				   uint8_t cmd, uint8_t count, uint8_t *buf)
 {
 	int i;
 	int err = 0;
@@ -318,6 +333,44 @@ static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
 	return anx7808_aux_wait(anx7808);
 }
 
+static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
+			    uint8_t cmd, uint8_t count, uint8_t *buf)
+{
+	int ret = 0;
+	int offset, blocksize;
+
+	mutex_lock(&anx7808->aux_mutex);
+	for (offset = 0; offset < count; offset += AUX_BUFFER_SIZE) {
+		blocksize = (count - offset > AUX_BUFFER_SIZE) ?
+			     AUX_BUFFER_SIZE : count - offset;
+		ret = anx7808_aux_read_block(anx7808, addr, cmd, blocksize,
+					     &buf[offset]);
+		if (ret)
+			break;
+	}
+	mutex_unlock(&anx7808->aux_mutex);
+	return ret;
+}
+
+static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
+			     uint8_t cmd, uint8_t count, uint8_t *buf)
+{
+	int ret = 0;
+	int offset, blocksize;
+
+	mutex_lock(&anx7808->aux_mutex);
+	for (offset = 0; offset < count; offset += AUX_BUFFER_SIZE) {
+		blocksize = (count - offset > AUX_BUFFER_SIZE) ?
+			     AUX_BUFFER_SIZE : count - offset;
+		ret = anx7808_aux_write_block(anx7808, addr, cmd, blocksize,
+					      &buf[offset]);
+		if (ret)
+			break;
+	}
+	mutex_unlock(&anx7808->aux_mutex);
+	return ret;
+}
+
 static int anx7808_aux_dpcd_read(struct anx7808_data *anx7808, uint32_t addr,
 				 uint8_t count, uint8_t *buf)
 {
@@ -328,6 +381,18 @@ static int anx7808_aux_dpcd_write(struct anx7808_data *anx7808, uint32_t addr,
 				  uint8_t count, uint8_t *buf)
 {
 	return anx7808_aux_write(anx7808, addr, AUX_DPCD, count, buf);
+}
+
+static int anx7808_aux_ddc_read(struct anx7808_data *anx7808, uint32_t addr,
+				uint8_t count, uint8_t *buf)
+{
+	return anx7808_aux_read(anx7808, addr, AUX_DDC, count, buf);
+}
+
+static int anx7808_aux_ddc_write(struct anx7808_data *anx7808, uint32_t addr,
+				 uint8_t count, uint8_t *buf)
+{
+	return anx7808_aux_write(anx7808, addr, AUX_DDC, count, buf);
 }
 
 static void anx7808_set_hpd(struct anx7808_data *anx7808, bool enable)
@@ -469,7 +534,7 @@ static int anx7808_detect_dp_hotplug(struct anx7808_data *anx7808)
 
 static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 {
-	uint8_t sys_status;
+	uint8_t sys_status, hdmi_status, hdmi_enable;
 
 	anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &sys_status);
 	if (!(sys_status & TMDS_CLOCK_DET)) {
@@ -482,6 +547,14 @@ static int anx7808_detect_hdmi_input(struct anx7808_data *anx7808)
 	}
 
 	anx7808_write_reg(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG, 0x00);
+
+	/* If this register write is moved to output config time, infoframes
+	 * are not transmitted, but it is not clear why. */
+	anx7808_read_reg(anx7808, HDMI_RX_HDMI_STATUS_REG, &hdmi_status);
+	hdmi_enable = (hdmi_status & HDMI_MODE) ? 1 : 0;
+	DRM_INFO("HDMI enable: %d\n", hdmi_enable);
+
+	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
 
 	return 0;
 }
@@ -540,14 +613,6 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 
 static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 {
-	uint8_t hdmi_status, hdmi_enable;
-
-	anx7808_read_reg(anx7808, HDMI_RX_HDMI_STATUS_REG, &hdmi_status);
-	hdmi_enable = (hdmi_status & HDMI_MODE) ? 1 : 0;
-	DRM_INFO("HDMI enable: %d\n", hdmi_enable);
-
-	anx7808_aux_dpcd_write(anx7808, US_COMM_5, 1, &hdmi_enable);
-
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
@@ -846,6 +911,59 @@ static int anx7808_resume(struct device *dev)
 	return 0;
 }
 
+static uint32_t anx7808_functionality(struct i2c_adapter *adap)
+{
+	return I2C_FUNC_I2C;
+}
+
+static int anx7808_master_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
+			       int num)
+{
+	int err;
+	int i;
+	struct i2c_msg *msg;
+	struct anx7808_data *anx7808 = adap->dev.platform_data;
+
+	for (i = 0; i < num; i++) {
+		msg = &msgs[i];
+		if (msg->flags & I2C_M_RD)
+			err = anx7808_aux_ddc_read(anx7808, msg->addr,
+						   msg->len, msg->buf);
+		else
+			err = anx7808_aux_ddc_write(anx7808, msg->addr,
+						    msg->len, msg->buf);
+		if (err)
+			return i;
+	}
+	return num;
+}
+
+static int anx7808_init_ddc_adapter(struct anx7808_data *anx7808,
+				    struct device *dev)
+{
+	int ret;
+	struct i2c_adapter *adap;
+
+	anx7808->i2c_algorithm.functionality = &anx7808_functionality;
+	anx7808->i2c_algorithm.master_xfer = &anx7808_master_xfer;
+	anx7808->ddc_adapter.algo = &anx7808->i2c_algorithm;
+	adap = &anx7808->ddc_adapter;
+
+	adap->owner = THIS_MODULE;
+	snprintf(adap->name, sizeof(adap->name), "anx7808_ddc");
+	adap->dev.parent = dev;
+	adap->dev.of_node = dev->of_node;
+	adap->dev.platform_data = anx7808;
+
+	ret = i2c_add_adapter(adap);
+	if (ret)
+		return ret;
+
+	of_i2c_register_devices(adap);
+
+	return 0;
+}
+
 static int anx7808_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
@@ -997,6 +1115,11 @@ static int anx7808_probe(struct i2c_client *client,
 			goto err_sysfs;
 		}
 	}
+
+	mutex_init(&anx7808->aux_mutex);
+
+	if (anx7808_init_ddc_adapter(anx7808, &client->dev))
+		goto err_sysfs;
 
 	DRM_INFO("ANX7808 initialization successful.\n");
 

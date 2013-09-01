@@ -325,6 +325,10 @@
 		};
 	};
 
+	hdmi {
+		hdmi-ddc = <&exynos_ddc>;
+	};
+
 	xhci {
 		phy {
 			compatible = "samsung,exynos-usbphy";
