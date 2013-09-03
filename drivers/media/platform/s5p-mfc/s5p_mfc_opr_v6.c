@@ -1180,7 +1180,7 @@ static int s5p_mfc_set_enc_params_vp8(struct s5p_mfc_ctx *ctx)
 	reg |= ((p->num_b_frame & 0x3) << 16);
 	WRITEL(reg, S5P_FIMV_E_GOP_CONFIG_V6);
 
-	/** profile - 0 ~ 3 */
+	/* profile - 0 ~ 3 */
 	reg = p_vp8->profile & 0x3;
 	WRITEL(reg, S5P_FIMV_E_PICTURE_PROFILE_V6);
 
@@ -1190,6 +1190,12 @@ static int s5p_mfc_set_enc_params_vp8(struct s5p_mfc_ctx *ctx)
 	reg &= ~(0x1 << 8);
 	reg |= ((p->rc_mb & 0x1) << 8);
 	WRITEL(reg, S5P_FIMV_E_RC_CONFIG_V6);
+
+	/* max QP */
+	reg = ((p_vp8->rc_max_qp & 0x7F) << 8);
+	/* min QP */
+	reg |= p_vp8->rc_min_qp & 0x7F;
+	WRITEL(reg, S5P_FIMV_E_RC_QP_BOUND_V6);
 
 	/* vbv buffer size */
 	if (p->frame_skip_mode ==

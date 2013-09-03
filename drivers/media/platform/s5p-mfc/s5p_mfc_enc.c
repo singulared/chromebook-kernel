@@ -582,6 +582,22 @@ static struct mfc_control controls[] = {
 		.step = 1,
 		.default_value = 0,
 	},
+	{
+		.id = V4L2_CID_VPX_MAX_QP,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 115,
+		.maximum = 127,
+		.step = 1,
+		.default_value = 127,
+	},
+	{
+		.id = V4L2_CID_VPX_MIN_QP,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = 11,
+		.step = 1,
+		.default_value = 0,
+	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(controls)
@@ -1548,6 +1564,12 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_VPX_PROFILE:
 		p->codec.vp8.profile = ctrl->val;
+		break;
+	case V4L2_CID_VPX_MIN_QP:
+		p->codec.vp8.rc_min_qp = ctrl->val;
+		break;
+	case V4L2_CID_VPX_MAX_QP:
+		p->codec.vp8.rc_max_qp = ctrl->val;
 		break;
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control, id=%d, val=%d\n",

@@ -447,6 +447,8 @@ struct s5p_mfc_vp8_enc_params {
 	u32 golden_frame_ref_period;
 	u8 golden_frame_sel;
 	u8 profile;
+	u8 rc_min_qp;
+	u8 rc_max_qp;
 };
 
 /**
