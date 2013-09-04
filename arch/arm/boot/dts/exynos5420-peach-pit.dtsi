@@ -793,7 +793,7 @@
 				ldo17_reg: LDO17 {
 					regulator-name = "vdd_g3ds";
 					regulator-min-microvolt = <900000>;
-					regulator-max-microvolt = <1050000>;
+					regulator-max-microvolt = <1400000>;
 					regulator-always-on;
 					regulator-op-mode = <1>;
 				};
