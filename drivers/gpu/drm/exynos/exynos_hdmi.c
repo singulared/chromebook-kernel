@@ -2514,6 +2514,8 @@ static int hdmi_set_property(void *ctx, struct drm_property *property,
 	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
 	int ret = 0;
 
+	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+
 	if (property != mode_config->content_protection_property)
 		return 0;
 
@@ -2522,12 +2524,10 @@ static int hdmi_set_property(void *ctx, struct drm_property *property,
 	if (!hdata->powered)
 		return 0;
 
-	mutex_lock(&mode_config->mutex);
 	if (hdata->hdcp_desired)
 		ret = hdcp_start(hdata);
 	else
 		hdcp_stop(hdata);
-	mutex_unlock(&mode_config->mutex);
 
 	return ret;
 }
