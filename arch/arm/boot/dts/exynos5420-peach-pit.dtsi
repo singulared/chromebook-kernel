@@ -409,8 +409,7 @@
 		ec: cros-ec@0 {
 			compatible = "google,cros-ec-spi";
 
-			/* TODO: Run faster than 1MHz */
-			spi-max-frequency = <1000000>;
+			spi-max-frequency = <4000000>;
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&ec_spi_cs &ec_irq>;
