@@ -61,7 +61,7 @@ struct anx7808_data {
 	int intp_gpio;
 	int cable_det_gpio;
 	int cable_det_irq;
-	struct timer_list cable_det_timer;
+	atomic_t cable_det_oneshot;
 	struct regulator *vdd_mydp;
 	struct i2c_client *tx_p0;
 	struct i2c_client *tx_p1;
@@ -209,6 +209,7 @@ static int anx7808_power_off(struct anx7808_data *anx7808)
 		return ret;
 	}
 	usleep_range(5000, 10000);
+	atomic_set(&anx7808->cable_det_oneshot, 1);
 	gpio_set_value(anx7808->pd_gpio, 1);
 	usleep_range(1000, 2000);
 	return ret;
@@ -784,29 +785,13 @@ static void anx7808_play_video(struct work_struct *work)
 	anx7808_power_off(anx7808);
 }
 
-static void anx7808_cable_det_timer(unsigned long data)
-{
-	struct anx7808_data *anx7808 = (struct anx7808_data *)data;
-	DRM_DEBUG("anx7808_cable_det_timer called.\n");
-	schedule_work(&anx7808->play_video);
-}
-
-static void anx7808_cable_det(struct anx7808_data *anx7808)
-{
-	if (gpio_get_value(anx7808->cable_det_gpio)) {
-		DRM_DEBUG("Cable detected; Setting cable_det_timer.\n");
-		mod_timer(&anx7808->cable_det_timer,
-			  jiffies + msecs_to_jiffies(CABLE_DET_TIME_MS));
-	} else {
-		DRM_DEBUG("Cable unplugged; Deleting cable_det_timer.\n");
-		del_timer(&anx7808->cable_det_timer);
-	}
-}
-
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
 	struct anx7808_data *anx7808 = data;
-	anx7808_cable_det(anx7808);
+
+	if (atomic_dec_and_test(&anx7808->cable_det_oneshot))
+		schedule_work(&anx7808->play_video);
+
 	return IRQ_HANDLED;
 }
 
@@ -995,10 +980,8 @@ int anx7808_init(struct drm_encoder *encoder)
 		goto err_client;
 	}
 
+	atomic_set(&anx7808->cable_det_oneshot, 1);
 	INIT_WORK(&anx7808->play_video, anx7808_play_video);
-
-	setup_timer(&anx7808->cable_det_timer, anx7808_cable_det_timer,
-		    (unsigned long)anx7808);
 
 	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
@@ -1104,8 +1087,7 @@ int anx7808_init(struct drm_encoder *encoder)
 	ret = devm_request_irq(dev->dev,
 			       anx7808->cable_det_irq,
 			       anx7808_cable_det_isr,
-			       IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-			       "anx7808_cable_det",
+			       IRQF_TRIGGER_RISING, "anx7808_cable_det",
 			       anx7808);
 	if (ret < 0) {
 		DRM_ERROR("Failed to request irq: %d\n", ret);
