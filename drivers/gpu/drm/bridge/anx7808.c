@@ -68,8 +68,7 @@ struct anx7808_data {
 	struct i2c_client *tx_p2;
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
-	struct delayed_work play_video;
-	struct workqueue_struct *wq;
+	struct work_struct play_video;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
@@ -711,11 +710,10 @@ static int anx7808_get_cable_type(struct anx7808_data *anx7808)
 
 static void anx7808_play_video(struct work_struct *work)
 {
-	struct delayed_work *dw =
-		container_of(work, struct delayed_work, work);
-	struct anx7808_data *anx7808 =
-		container_of(dw, struct anx7808_data, play_video);
+	struct anx7808_data *anx7808;
 	enum anx7808_state state = STATE_CABLE_DETECTED;
+
+	anx7808 = container_of(work, struct anx7808_data, play_video);
 
 	if (anx7808_power_on(anx7808))
 		return;
@@ -790,7 +788,7 @@ static void anx7808_cable_det_timer(unsigned long data)
 {
 	struct anx7808_data *anx7808 = (struct anx7808_data *)data;
 	DRM_DEBUG("anx7808_cable_det_timer called.\n");
-	queue_delayed_work(anx7808->wq, &anx7808->play_video, 0);
+	schedule_work(&anx7808->play_video);
 }
 
 static void anx7808_cable_det(struct anx7808_data *anx7808)
@@ -945,11 +943,11 @@ void anx7808_destroy(struct drm_bridge *bridge)
 	struct anx7808_data *anx7808 = bridge->driver_private;
 
 	drm_bridge_cleanup(bridge);
+	cancel_work_sync(&anx7808->play_video);
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
 		device_remove_file(bridge->dev->dev, &anx7808_device_attrs[i]);
 
-	destroy_workqueue(anx7808->wq);
 	unregister_i2c_clients(anx7808);
 	anx7808_free_gpios(anx7808);
 	regulator_put(anx7808->vdd_mydp);
@@ -997,7 +995,7 @@ int anx7808_init(struct drm_encoder *encoder)
 		goto err_client;
 	}
 
-	INIT_DELAYED_WORK(&anx7808->play_video, anx7808_play_video);
+	INIT_WORK(&anx7808->play_video, anx7808_play_video);
 
 	setup_timer(&anx7808->cable_det_timer, anx7808_cable_det_timer,
 		    (unsigned long)anx7808);
@@ -1006,7 +1004,7 @@ int anx7808_init(struct drm_encoder *encoder)
 	if (IS_ERR(anx7808->vdd_mydp)) {
 		DRM_ERROR("Failed to find regulator vdd_mydp.\n");
 		ret = PTR_ERR(anx7808->vdd_mydp);
-		goto err_client;
+		goto err_work;
 	}
 
 	anx7808->pd_gpio = of_get_named_gpio(node, "pd-gpio", 0);
@@ -1103,13 +1101,6 @@ int anx7808_init(struct drm_encoder *encoder)
 		goto err_i2c;
 	}
 
-	anx7808->wq = create_singlethread_workqueue("anx7808_work");
-	if (anx7808->wq == NULL) {
-		DRM_ERROR("Failed to create work queue.\n");
-		ret = -ENOMEM;
-		goto err_i2c;
-	}
-
 	ret = devm_request_irq(dev->dev,
 			       anx7808->cable_det_irq,
 			       anx7808_cable_det_isr,
@@ -1118,7 +1109,7 @@ int anx7808_init(struct drm_encoder *encoder)
 			       anx7808);
 	if (ret < 0) {
 		DRM_ERROR("Failed to request irq: %d\n", ret);
-		goto err_wq;
+		goto err_i2c;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++) {
@@ -1149,14 +1140,14 @@ int anx7808_init(struct drm_encoder *encoder)
 err_sysfs:
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
 		device_remove_file(dev->dev, &anx7808_device_attrs[i]);
-err_wq:
-	destroy_workqueue(anx7808->wq);
 err_i2c:
 	unregister_i2c_clients(anx7808);
 err_gpio:
 	anx7808_free_gpios(anx7808);
 err_reg:
 	regulator_put(anx7808->vdd_mydp);
+err_work:
+	cancel_work_sync(&anx7808->play_video);
 
 err_client:
 	put_device(&client->dev);
