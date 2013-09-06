@@ -27,18 +27,33 @@
 #include "drmP.h"
 #include "anx7808regs.h"
 
+#define _wait_for(COND, TO_MS, INTVL_MS) ({ \
+	unsigned long timeout__ = jiffies + msecs_to_jiffies(TO_MS);	\
+	int ret__ = 0;							\
+	while (!(COND)) {						\
+		if (time_after(jiffies, timeout__)) {			\
+			ret__ = -ETIMEDOUT;				\
+			break;						\
+		}							\
+		if (drm_can_sleep())  {					\
+			usleep_range(INTVL_MS * 1000,			\
+				(INTVL_MS + 5) * 1000);			\
+		} else {						\
+			cpu_relax();					\
+		}							\
+	}								\
+	ret__;								\
+})
+
+#define wait_for(COND, TO_MS, INTVL_MS) _wait_for(COND, TO_MS, INTVL_MS)
+
+#define HDMI_DETECT_TIMEOUT_MS 5000
+#define HDMI_DETECT_INTERVAL_MS 100
+#define LINK_TRAIN_TIMEOUT_MS 2000
+#define LINK_TRAIN_INTERVAL_MS 100
 #define AUX_WAIT_MS 100
 #define AUX_BUFFER_SIZE 0x10
-#define CABLE_DET_TIME_MS 1000
-
-enum anx7808_state {
-	STATE_CABLE_NOT_DETECTED,
-	STATE_CABLE_DETECTED,
-	STATE_HPD_DETECTED,
-	STATE_HDMI_OK,
-	STATE_DP_OK,
-	STATE_PLAY,
-};
+#define CABLE_DET_DEBOUNCE_MS 500
 
 enum dp_link_bw {
 	BW_OVER = 0xFF,
@@ -69,6 +84,7 @@ struct anx7808_data {
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
 	struct work_struct play_video;
+	struct delayed_work cable_det_work;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
@@ -712,71 +728,31 @@ static int anx7808_get_cable_type(struct anx7808_data *anx7808)
 static void anx7808_play_video(struct work_struct *work)
 {
 	struct anx7808_data *anx7808;
-	enum anx7808_state state = STATE_CABLE_DETECTED;
 
 	anx7808 = container_of(work, struct anx7808_data, play_video);
 
-	if (anx7808_power_on(anx7808))
-		return;
-
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
-	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
-	anx7808_init_pipeline(anx7808);
-
 	anx7808->dp_manual_bw_changed = 0;
 
-	while (true) {
-		/* Make progress towards playback state. */
-		if (anx7808->dp_manual_bw_changed)
-			break;
+	while (!anx7808->dp_manual_bw_changed) {
 
-		switch (state) {
-		case STATE_CABLE_DETECTED:
-			if (anx7808_get_cable_type(anx7808))
-				break;
-			if (anx7808_detect_dp_hotplug(anx7808))
-				break;
-			anx7808_set_hpd(anx7808, 1);
-			state = STATE_HPD_DETECTED;
+		/* Manually update infoframes */
+		anx7808_update_infoframes(anx7808, false);
+		anx7808_update_audio(anx7808);
 
-		case STATE_HPD_DETECTED:
-			if (anx7808_detect_hdmi_input(anx7808))
-				break;
-			state = STATE_HDMI_OK;
-
-		case STATE_HDMI_OK:
-			if (anx7808_dp_link_training(anx7808))
-				break;
-			state = STATE_DP_OK;
-
-		case STATE_DP_OK:
-			anx7808_config_dp_output(anx7808);
-			anx7808_update_infoframes(anx7808, true);
-			DRM_INFO("Video playback successful.\n");
-			state = STATE_PLAY;
-
-		case STATE_PLAY:
-			anx7808_update_infoframes(anx7808, false);
-			anx7808_update_audio(anx7808);
-			if (anx7808_check_dp_link(anx7808))
-				state = STATE_HDMI_OK;
-
-		default:
+		if (anx7808_check_dp_link(anx7808)) {
+			DRM_INFO("DP link needs re-train.\n");
 			break;
 		}
 
-		/* Check for failures */
 		if (anx7808_check_polling_err(anx7808)) {
 			DRM_INFO("Cable connection lost.\n");
 			break;
 		}
 
-		if (state > STATE_CABLE_DETECTED) {
-			if (anx7808_detect_dp_hotplug(anx7808)) {
-				DRM_INFO("Hotplug detection lost.\n");
-				anx7808_set_hpd(anx7808, 0);
-				state = STATE_CABLE_DETECTED;
-			}
+		if (anx7808_detect_dp_hotplug(anx7808)) {
+			DRM_INFO("Hotplug detection lost.\n");
+			anx7808_set_hpd(anx7808, 0);
+			break;
 		}
 
 		msleep(300);
@@ -785,12 +761,43 @@ static void anx7808_play_video(struct work_struct *work)
 	anx7808_power_off(anx7808);
 }
 
+static void anx7808_cable_det_work(struct work_struct *work)
+{
+	struct anx7808_data *anx7808;
+
+	anx7808 = container_of(work, struct anx7808_data, cable_det_work.work);
+
+	if (!gpio_get_value(anx7808->cable_det_gpio))
+		return;
+
+	if (anx7808_power_on(anx7808))
+		return;
+
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
+	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
+	anx7808_init_pipeline(anx7808);
+
+	while (true) {
+		if (anx7808_check_polling_err(anx7808))
+			return;
+
+		if (!anx7808_get_cable_type(anx7808) &&
+		    !anx7808_detect_dp_hotplug(anx7808))
+			break;
+
+		msleep(300);
+	}
+
+	anx7808_set_hpd(anx7808, 1);
+}
+
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
 {
 	struct anx7808_data *anx7808 = data;
 
 	if (atomic_dec_and_test(&anx7808->cable_det_oneshot))
-		schedule_work(&anx7808->play_video);
+		mod_delayed_work(system_wq, &anx7808->cable_det_work,
+				msecs_to_jiffies(CABLE_DET_DEBOUNCE_MS));
 
 	return IRQ_HANDLED;
 }
@@ -920,6 +927,31 @@ void anx7808_pre_enable(struct drm_bridge *bridge)
 
 void anx7808_enable(struct drm_bridge *bridge)
 {
+	struct anx7808_data *anx7808 = bridge->driver_private;
+	int ret;
+
+	ret = wait_for(!anx7808_detect_hdmi_input(anx7808),
+			HDMI_DETECT_TIMEOUT_MS, HDMI_DETECT_INTERVAL_MS);
+	if (ret) {
+		DRM_ERROR("Timed out waiting for hdmi input\n");
+		goto err;
+	}
+
+	ret = wait_for(!anx7808_dp_link_training(anx7808),
+			LINK_TRAIN_TIMEOUT_MS, LINK_TRAIN_INTERVAL_MS);
+	if (ret) {
+		DRM_ERROR("Timed out trying to initiate link train\n");
+		goto err;
+	}
+
+	anx7808_config_dp_output(anx7808);
+	anx7808_update_infoframes(anx7808, true);
+	anx7808_update_audio(anx7808);
+	schedule_work(&anx7808->play_video);
+
+	return;
+err:
+	anx7808_power_off(anx7808);
 }
 
 void anx7808_destroy(struct drm_bridge *bridge)
@@ -929,6 +961,7 @@ void anx7808_destroy(struct drm_bridge *bridge)
 
 	drm_bridge_cleanup(bridge);
 	cancel_work_sync(&anx7808->play_video);
+	cancel_delayed_work_sync(&anx7808->cable_det_work);
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
 		device_remove_file(bridge->dev->dev, &anx7808_device_attrs[i]);
@@ -981,6 +1014,7 @@ int anx7808_init(struct drm_encoder *encoder)
 	}
 
 	atomic_set(&anx7808->cable_det_oneshot, 1);
+	INIT_WORK(&anx7808->cable_det_work, anx7808_cable_det_work);
 	INIT_WORK(&anx7808->play_video, anx7808_play_video);
 
 	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
@@ -1130,6 +1164,7 @@ err_reg:
 	regulator_put(anx7808->vdd_mydp);
 err_work:
 	cancel_work_sync(&anx7808->play_video);
+	cancel_delayed_work_sync(&anx7808->cable_det_work);
 
 err_client:
 	put_device(&client->dev);
