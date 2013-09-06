@@ -74,7 +74,6 @@ struct anx7808_data {
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
-	bool suspended;
 	struct mutex aux_mutex;
 	struct i2c_algorithm i2c_algorithm;
 	struct i2c_adapter ddc_adapter;
@@ -748,9 +747,6 @@ static void anx7808_play_video(struct work_struct *work)
 
 	while (true) {
 		/* Make progress towards playback state. */
-		if (anx7808->suspended)
-			break;
-
 		if (anx7808->dp_manual_bw_changed)
 			break;
 
@@ -893,24 +889,6 @@ static void unregister_i2c_clients(struct anx7808_data *anx7808)
 		i2c_unregister_device(anx7808->tx_p1);
 }
 
-static int anx7808_suspend(struct device *dev)
-{
-	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
-
-	anx7808->suspended = true;
-	flush_delayed_work(&anx7808->play_video);
-	return 0;
-}
-
-static int anx7808_resume(struct device *dev)
-{
-	struct anx7808_data *anx7808 = i2c_get_clientdata(to_i2c_client(dev));
-
-	anx7808_cable_det(anx7808);
-	anx7808->suspended = false;
-	return 0;
-}
-
 static uint32_t anx7808_functionality(struct i2c_adapter *adap)
 {
 	return I2C_FUNC_I2C;
@@ -964,30 +942,90 @@ static int anx7808_init_ddc_adapter(struct anx7808_data *anx7808,
 	return 0;
 }
 
-static int anx7808_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+void anx7808_disable(struct drm_bridge *bridge)
 {
-	int i, ret = 0;
-	struct device_node *node = client->dev.of_node;
-	struct anx7808_data *anx7808;
+}
 
-	anx7808 = devm_kzalloc(&client->dev, sizeof(struct anx7808_data),
+void anx7808_post_disable(struct drm_bridge *bridge)
+{
+}
+
+void anx7808_pre_enable(struct drm_bridge *bridge)
+{
+}
+
+void anx7808_enable(struct drm_bridge *bridge)
+{
+}
+
+void anx7808_destroy(struct drm_bridge *bridge)
+{
+	int i;
+	struct anx7808_data *anx7808 = bridge->driver_private;
+
+	drm_bridge_cleanup(bridge);
+
+	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
+		device_remove_file(bridge->dev->dev, &anx7808_device_attrs[i]);
+
+	destroy_workqueue(anx7808->wq);
+	unregister_i2c_clients(anx7808);
+	anx7808_free_gpios(anx7808);
+	regulator_put(anx7808->vdd_mydp);
+}
+
+
+struct drm_bridge_funcs anx7808_bridge_funcs = {
+	.disable = anx7808_disable,
+	.post_disable = anx7808_post_disable,
+	.pre_enable = anx7808_pre_enable,
+	.enable = anx7808_enable,
+	.destroy = anx7808_destroy,
+};
+
+int anx7808_init(struct drm_encoder *encoder)
+{
+	struct drm_bridge *bridge;
+	struct device_node *node;
+	struct i2c_client *client;
+	struct drm_device *dev = encoder->dev;
+	struct anx7808_data *anx7808;
+	int ret, i;
+
+	node = of_find_compatible_node(NULL, NULL, "analogix,anx7808");
+	if (!node)
+		return -ENODEV;
+
+	client = of_find_i2c_device_by_node(node);
+	of_node_put(node);
+	if (!client)
+		return -ENODEV;
+
+	bridge = devm_kzalloc(dev->dev, sizeof(*bridge), GFP_KERNEL);
+	if (!bridge) {
+		DRM_ERROR("Failed to allocate drm bridge\n");
+		ret = -ENOMEM;
+		goto err_client;
+	}
+
+	anx7808 = devm_kzalloc(dev->dev, sizeof(struct anx7808_data),
 			       GFP_KERNEL);
 	if (!anx7808) {
 		DRM_ERROR("Failed to allocate platform_data.\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_client;
 	}
-	i2c_set_clientdata(client, anx7808);
 
 	INIT_DELAYED_WORK(&anx7808->play_video, anx7808_play_video);
 
 	setup_timer(&anx7808->cable_det_timer, anx7808_cable_det_timer,
 		    (unsigned long)anx7808);
 
-	anx7808->vdd_mydp = regulator_get(&client->dev, "vdd_mydp");
+	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
 		DRM_ERROR("Failed to find regulator vdd_mydp.\n");
-		return PTR_ERR(anx7808->vdd_mydp);
+		ret = PTR_ERR(anx7808->vdd_mydp);
+		goto err_client;
 	}
 
 	anx7808->pd_gpio = of_get_named_gpio(node, "pd-gpio", 0);
@@ -1064,6 +1102,7 @@ static int anx7808_probe(struct i2c_client *client,
 		ret = -EINVAL;
 		goto err_i2c;
 	}
+
 	anx7808->rx_p0 = i2c_new_dummy(client->adapter, RX_P0 >> 1);
 	if (!anx7808->rx_p0) {
 		DRM_ERROR("Failed to reserve i2c bus %02x.\n", RX_P0 >> 1);
@@ -1096,7 +1135,7 @@ static int anx7808_probe(struct i2c_client *client,
 		goto err_i2c;
 	}
 
-	ret = devm_request_irq(&client->dev,
+	ret = devm_request_irq(dev->dev,
 			       anx7808->cable_det_irq,
 			       anx7808_cable_det_isr,
 			       IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -1109,7 +1148,7 @@ static int anx7808_probe(struct i2c_client *client,
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++) {
 		ret = device_create_file(
-			&client->dev, &anx7808_device_attrs[i]);
+			dev->dev, &anx7808_device_attrs[i]);
 		if (ret) {
 			DRM_ERROR("anx7808 sysfs register failed.\n");
 			goto err_sysfs;
@@ -1118,15 +1157,23 @@ static int anx7808_probe(struct i2c_client *client,
 
 	mutex_init(&anx7808->aux_mutex);
 
-	if (anx7808_init_ddc_adapter(anx7808, &client->dev))
+	if (anx7808_init_ddc_adapter(anx7808, dev->dev))
 		goto err_sysfs;
 
-	DRM_INFO("ANX7808 initialization successful.\n");
+	bridge->driver_private = anx7808;
+	encoder->bridge = bridge;
+
+	ret = drm_bridge_init(dev, bridge, &anx7808_bridge_funcs);
+	if (ret) {
+		DRM_ERROR("Failed to initialize bridge with drm\n");
+		goto err_sysfs;
+	}
 
 	return 0;
+
 err_sysfs:
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
-		device_remove_file(&client->dev, &anx7808_device_attrs[i]);
+		device_remove_file(dev->dev, &anx7808_device_attrs[i]);
 err_wq:
 	destroy_workqueue(anx7808->wq);
 err_i2c:
@@ -1135,63 +1182,9 @@ err_gpio:
 	anx7808_free_gpios(anx7808);
 err_reg:
 	regulator_put(anx7808->vdd_mydp);
+
+err_client:
+	put_device(&client->dev);
+	DRM_ERROR("Failed to initialize anx7808 ret=%d\n", ret);
 	return ret;
 }
-
-static int anx7808_remove(struct i2c_client *client)
-{
-	int i;
-	struct anx7808_data *anx7808 = i2c_get_clientdata(client);
-
-	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
-		device_remove_file(&client->dev, &anx7808_device_attrs[i]);
-	destroy_workqueue(anx7808->wq);
-	unregister_i2c_clients(anx7808);
-	anx7808_free_gpios(anx7808);
-	regulator_put(anx7808->vdd_mydp);
-	return 0;
-}
-
-static const struct i2c_device_id anx7808_id[] = {
-	{ "anx7808", 0 },
-	{ }
-};
-
-MODULE_DEVICE_TABLE(i2c, anx7808_id);
-
-static const struct dev_pm_ops anx7808_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(anx7808_suspend, anx7808_resume)
-};
-
-static struct i2c_driver anx7808_driver = {
-	.driver = {
-		.name = "anx7808",
-		.owner = THIS_MODULE,
-		.pm = &anx7808_pm_ops,
-	},
-	.probe = anx7808_probe,
-	.remove = anx7808_remove,
-	.id_table = anx7808_id,
-};
-
-static int __init anx7808_init(void)
-{
-	int ret = 0;
-
-	ret = i2c_add_driver(&anx7808_driver);
-	if (ret < 0)
-		DRM_ERROR("Failed to register anx7808 i2c driver.\n");
-	return ret;
-}
-
-static void __exit anx7808_exit(void)
-{
-	i2c_del_driver(&anx7808_driver);
-}
-
-module_init(anx7808_init);
-module_exit(anx7808_exit);
-
-MODULE_DESCRIPTION("ANX7808 driver");
-MODULE_AUTHOR("Jeremy Thorpe <jeremyt@chromium.org>");
-MODULE_LICENSE("GPL");
