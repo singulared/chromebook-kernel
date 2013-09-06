@@ -27,7 +27,6 @@
 #include "drmP.h"
 #include "anx7808regs.h"
 
-#define ANX7808_DEVICE_ID 0x7808
 #define AUX_WAIT_MS 100
 #define AUX_BUFFER_SIZE 0x10
 #define CABLE_DET_TIME_MS 1000
@@ -214,24 +213,6 @@ static int anx7808_power_off(struct anx7808_data *anx7808)
 	gpio_set_value(anx7808->pd_gpio, 1);
 	usleep_range(1000, 2000);
 	return ret;
-}
-
-static int anx7808_chip_located(struct anx7808_data *anx7808)
-{
-	int ret = 0;
-	uint16_t id;
-	uint8_t idh = 0, idl = 0;
-	ret |= anx7808_read_reg(anx7808, SP_TX_DEV_IDL_REG, &idl);
-	ret |= anx7808_read_reg(anx7808, SP_TX_DEV_IDH_REG, &idh);
-	if (ret)
-		return ret;
-	id = idl | (idh << 8);
-	if (id != ANX7808_DEVICE_ID) {
-		DRM_ERROR("ANX7808 not found.  ID reg contains: %04x\n", id);
-		return -ENODEV;
-	}
-	DRM_DEBUG("ANX7808 found.\n");
-	return 0;
 }
 
 static int anx7808_aux_wait(struct anx7808_data *anx7808)
@@ -1115,12 +1096,6 @@ int anx7808_init(struct drm_encoder *encoder)
 		ret = -EINVAL;
 		goto err_i2c;
 	}
-
-	anx7808_power_on(anx7808);
-	ret = anx7808_chip_located(anx7808);
-	anx7808_power_off(anx7808);
-	if (ret)
-		goto err_i2c;
 
 	anx7808->cable_det_irq = gpio_to_irq(anx7808->cable_det_gpio);
 	if (anx7808->cable_det_irq < 0) {
