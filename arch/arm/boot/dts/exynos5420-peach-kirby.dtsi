@@ -301,6 +301,21 @@
 		};
 	};
 
+	/* hsi2c9 */
+	hsi2c@12E10000 {
+		status = "okay";
+		clock-frequency = <400000>;
+
+		tpm@20 {
+			/* Unused irq; but still need to configure the pins */
+			pinctrl-names = "default";
+			pinctrl-0 = <&tpm_irq>;
+
+			compatible = "infineon,slb9645tt";
+			reg = <0x20>;
+		};
+	};
+
 	vbat: fixed-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vbat-supply";
