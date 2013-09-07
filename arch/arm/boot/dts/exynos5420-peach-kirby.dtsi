@@ -365,6 +365,15 @@
 		regulator-always-on;
 	};
 
+	backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 0 1000000 0>;
+		max-brightness = <2800>;
+		default-brightness-level = <2800>;
+		pinctrl-0 = <&backlight_pwm>;
+		pinctrl-names = "default";
+	};
+
 	pinctrl@13400000 {
 		gpy7: gpy7 {
 			powerdown-settings = <3 3 3 3 3 3 6 2>;
