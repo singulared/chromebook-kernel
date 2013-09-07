@@ -23,6 +23,22 @@
 		};
 	};
 
+	pinctrl@14010000 {
+		usb3_vbus0_en: usb30vbus0-en {
+			samsung,pins = "gph0-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		usb3_vbus1_en: usb30vbus1-en {
+			samsung,pins = "gph0-5";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
 	ramoops {
 		compatible = "ramoops";
 		reg = <0x41f00000 0x00100000>;
@@ -76,29 +92,19 @@
 		};
 	};
 
-	dwmmc2@12220000 {
-		status = "okay";
-		num-slots = <1>;
-		supports-highspeed;
-		fifo-depth = <0x40>;
-		card-detect-delay = <200>;
-		samsung,dw-mshc-ciu-div = <3>;
-		samsung,dw-mshc-sdr-timing = <2 3>;
-		samsung,dw-mshc-ddr-timing = <1 2>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_cd &sd2_bus4>;
-		slot@0 {
-			reg = <0>;
-			bus-width = <4>;
-			wp-gpios = <&gpc4 0 0>;
-		};
-	};
-
 	/* TODO: Add fimd, display port, etc */
 
 	/* i2s_0 */
 	i2s@03830000 {
 		status = "okay";
+	};
+
+	/* dw usb3_0 */
+	usb@12000000 {
+		status = "okay";
+		samsung,vbus-gpio = <&gph0 0 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_vbus0_en>;
 	};
 
 	/* ehci */
@@ -109,6 +115,14 @@
 	/* ohci */
 	usb@12120000 {
 		status = "okay";
+	};
+
+	/* dw usb3_1 */
+	usb@12400000 {
+		status = "okay";
+		samsung,vbus-gpio = <&gph0 5 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb3_vbus1_en>;
 	};
 
 	usb3_phy0: usbphy@12100000 {
