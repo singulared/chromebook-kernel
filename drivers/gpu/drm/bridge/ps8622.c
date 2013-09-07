@@ -38,6 +38,7 @@ struct ps8622_bridge {
 	struct regulator *lcd_fet;
 	struct backlight_device *bl;
 
+	ktime_t last_power_down;
 	int gpio_slp_n;
 	int gpio_rst_n;
 
@@ -56,6 +57,15 @@ struct ps8622_bridge {
  */
 #define PS8625_MAX_LANE_COUNT 2
 #define PS8622_MAX_LANE_COUNT 1
+
+/* Timings taken from the version 1.7 datasheet for the PS8622/PS8625 */
+#define PS8622_POWER_RISE_T1_MIN_US 10
+#define PS8622_POWER_RISE_T1_MAX_US 10000
+#define PS8622_RST_HIGH_T2_MIN_US 3000
+#define PS8622_RST_HIGH_T2_MAX_US 30000
+#define PS8622_PWMO_END_T12_MS 200
+#define PS8622_POWER_FALL_T16_MAX_US 10000
+#define PS8622_POWER_OFF_T17_MS 500
 
 static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 {
@@ -181,23 +191,36 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 
 static void ps8622_power_up(struct ps8622_bridge *bridge)
 {
+	ktime_t now, diff;
 	int ret;
 
 	if (bridge->enabled)
 		return;
+
+	/*
+	 * The datasheet for the PS8622 indicates that there should be at least
+	 * T17 between power down of the bridge and power up. This sleep should
+	 * be very rare.
+	 */
+	now = ktime_get();
+	diff = ktime_sub(now, bridge->last_power_down);
+	if (ktime_to_ms(bridge->last_power_down) != 0 &&
+	    ktime_to_ms(diff) < PS8622_POWER_OFF_T17_MS)
+		msleep(PS8622_POWER_OFF_T17_MS - ktime_to_ms(diff));
+
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_set_value(bridge->gpio_rst_n, 0);
 
 	if (bridge->v12)
 		regulator_enable(bridge->v12);
 	regulator_enable(bridge->bck_fet);
 	regulator_enable(bridge->lcd_fet);
 
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 0);
-
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 1);
 
-	usleep_range(3000, 30000);
+	usleep_range(PS8622_RST_HIGH_T2_MIN_US + PS8622_POWER_RISE_T1_MAX_US,
+		     PS8622_RST_HIGH_T2_MAX_US + PS8622_POWER_RISE_T1_MIN_US);
 
 	if (gpio_is_valid(bridge->gpio_rst_n))
 		gpio_set_value(bridge->gpio_rst_n, 1);
@@ -216,16 +239,31 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 
 	bridge->enabled = false;
 
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 1);
+	regulator_disable(bridge->bck_fet);
+	msleep(PS8622_PWMO_END_T12_MS);
 
+	/*
+	 * This doesn't matter if the regulators are turned off, but something
+	 * else might keep them on. In that case, we want to assert the slp gpio
+	 * to lower power.
+	 */
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 0);
 
 	regulator_disable(bridge->lcd_fet);
-	regulator_disable(bridge->bck_fet);
 	if (bridge->v12)
 		regulator_disable(bridge->v12);
+
+	/*
+	 * Sleep for at least the amount of time that it takes the power rail to
+	 * fall to prevent asserting the rst gpio from doing anything.
+	 */
+	usleep_range(PS8622_POWER_FALL_T16_MAX_US,
+		     2 * PS8622_POWER_FALL_T16_MAX_US);
+	if (gpio_is_valid(bridge->gpio_rst_n))
+		gpio_set_value(bridge->gpio_rst_n, 0);
+
+	bridge->last_power_down = ktime_get();
 }
 
 static int ps8622_backlight_update(struct backlight_device *bl)
@@ -331,11 +369,11 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 	bridge->gpio_rst_n = of_get_named_gpio(node, "reset-gpio", 0);
 	if (gpio_is_valid(bridge->gpio_rst_n)) {
 		/*
-		 * Request the reset pin low to avoid the bridge being
+		 * Assert the reset pin high to avoid the bridge being
 		 * initialized prematurely
 		 */
 		ret = devm_gpio_request_one(&client->dev, bridge->gpio_rst_n,
-					    GPIOF_OUT_INIT_LOW,
+					    GPIOF_OUT_INIT_HIGH,
 					    "PS8622_RST_N");
 		if (ret)
 			goto err;
@@ -376,6 +414,7 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 			&ps8622_bridge_helper_funcs);
 	bridge->bridge.connector_type = DRM_MODE_CONNECTOR_eDP;
 	bridge->enabled = false;
+	bridge->last_power_down = ktime_set(0, 0);
 
 	return 0;
 
