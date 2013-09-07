@@ -154,6 +154,20 @@
 	};
 
 	pinctrl@14010000 {
+		ec_spi_cs: ec-spi-cs {
+			samsung,pins = "gpb1-2";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <3>;
+		};
+
+		spi_flash_cs: spi-flash-cs {
+			samsung,pins = "gpa2-5";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <3>;
+		};
+
 		usb3_vbus0_en: usb30vbus0-en {
 			samsung,pins = "gph0-0";
 			samsung,pin-function = <1>;
@@ -164,6 +178,13 @@
 		usb3_vbus1_en: usb30vbus1-en {
 			samsung,pins = "gph0-5";
 			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+
+		backlight_pwm: backlight-pwm {
+			samsung,pins = "gpb2-0";
+			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
