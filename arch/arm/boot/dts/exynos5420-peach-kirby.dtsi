@@ -157,6 +157,15 @@
 		};
 	};
 
+	pinctrl@13410000 {
+		mask_tpm_reset: mask-tpm-reset {
+			samsung,pins = "gpy0-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
 	pinctrl@14010000 {
 		ec_spi_cs: ec-spi-cs {
 			samsung,pins = "gpb1-2";
@@ -519,6 +528,18 @@
 		pinctrl-0 = <&mic_det_gpio &hp_det_gpio>;
 	};
 
+	/* We need GPY0_0 to be low at sleep time; just keep it low always */
+	mask_tpm_reset_regulator: mask-tpm-reset-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "mask-tpm-reset";
+		gpio = <&gpy0 0 0>;
+		enable-active-low;
+		regulator-boot-on;
+		regulator-always-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mask_tpm_reset>;
+	};
+
 	vbat: fixed-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vbat-supply";
@@ -560,7 +581,7 @@
 			powerdown-settings = <2 6 6 6 2 2 2 2>;
 		};
 		gpy0: gpy0 {
-			powerdown-settings = <2 2 2 2 2 2>;
+			powerdown-settings = <3 2 2 2 2 2>;
 		};
 		gpy1: gpy1 {
 			powerdown-settings = <2 2 2 2>;
