@@ -343,6 +343,24 @@
 		};
 	};
 
+	/* hsi2c7 */
+	hsi2c@12CD0000 {
+		status = "okay";
+		clock-frequency = <400000>;
+
+		max98090: codec@10 {
+			compatible = "maxim,max98090";
+			reg = <0x10>;
+			interrupts = <2 0>;
+			interrupt-parent = <&gpx0>;
+			mic-left-digital;
+			mic-right-digital;
+			mclk-pin = <2>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&max98090_irq>;
+		};
+	};
+
 	/* hsi2c9 */
 	hsi2c@12E10000 {
 		status = "okay";
@@ -356,6 +374,21 @@
 			compatible = "infineon,slb9645tt";
 			reg = <0x20>;
 		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98090";
+		samsung,i2s-controller = <&i2s_0>;
+		samsung,audio-codec = <&max98090>;
+		samsung,mic-det-gpios = <&gpx1 7 1>;
+		samsung,hp-det-gpios = <&gpx2 1 0>;
+		clocks = <&clock 3>, <&clock 4>, <&clock 1025>,
+			<&clock 148>, <&clock_audss EXYNOS_MOUT_AUDSS>,
+			<&clock_audss EXYNOS_MOUT_I2S>;
+		clock-names = "fout_epll", "sclk_epll", "mout_audio0",
+			"sclk_audio0", "mout_audss", "mout_i2s";
+		pinctrl-names = "default";
+		pinctrl-0 = <&mic_det_gpio &hp_det_gpio>;
 	};
 
 	vbat: fixed-regulator {
