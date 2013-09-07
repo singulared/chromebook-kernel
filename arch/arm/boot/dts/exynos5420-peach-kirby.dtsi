@@ -158,6 +158,20 @@
 	};
 
 	pinctrl@13410000 {
+		/* Adjust WiFi drive strengths lower for EMI */
+		sd1_clk: sd1-clk {
+			samsung,pin-drv = <0>;
+		};
+		sd1_cmd: sd1-cmd {
+			samsung,pin-drv = <0>;
+		};
+		sd1_bus4: sd1-bus-width4 {
+			samsung,pin-drv = <0>;
+		};
+		sd1_bus8: sd1-bus-width8 {
+			samsung,pin-drv = <0>;
+		};
+
 		mask_tpm_reset: mask-tpm-reset {
 			samsung,pins = "gpy0-0";
 			samsung,pin-function = <1>;
@@ -276,6 +290,35 @@
 		slot@0 {
 			reg = <0>;
 			bus-width = <8>;
+		};
+	};
+
+	dwmmc1@12210000 {
+		/*
+		 * The current best way to ensure that reset/enable and clocks
+		 * are available before we try to probe the WiFi card is through
+		 * a chain of regulators.
+		 */
+		vmmc-supply = <&wifi_en_regulator>;
+
+		status = "okay";
+		num-slots = <1>;
+		supports-highspeed;
+		keep-power-in-suspend;
+		/* not-removable NOT set so mwifiex driver can use reset trick */
+		broken-cd;
+		bypass-smu;
+		fifo-depth = <0x40>;
+		card-detect-delay = <200>;
+		clock-frequency = <400000000>;
+		samsung,dw-mshc-ciu-div = <3>;
+		samsung,dw-mshc-sdr-timing = <4 4>;
+		samsung,dw-mshc-ddr-timing = <0 2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_int &sd1_bus4 &sd1_bus8>;
+		slot@0 {
+			reg = <0>;
+			bus-width = <4>;
 		};
 	};
 
@@ -538,6 +581,37 @@
 		regulator-always-on;
 		pinctrl-names = "default";
 		pinctrl-0 = <&mask_tpm_reset>;
+	};
+
+	/* Chain regulators to ensure proper Wifi turn on sequence */
+	wifi_rst_regulator: wifi-rst-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "wifi-rst-l";
+		gpio = <&gpx0 1 0>;
+		enable-active-high;
+		startup-delay-us = <1500>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_rst>;
+
+		/*
+		 * Technically we should have a vin-supply of the 32k clock.
+		 * ...but that causes a deferred probe of this regulator
+		 * despite the fact that we don't need to enable it until
+		 * much later.  Skip the dependency since we know that the
+		 * 32k clock will always be kept on from early boot.
+		 *
+		 * vin-supply = <&en32khz_cp>;
+		 */
+	};
+
+	wifi_en_regulator: wifi-en-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "wifi-en";
+		gpio = <&gpx0 0 0>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_en>;
+		vin-supply = <&wifi_rst_regulator>;
 	};
 
 	vbat: fixed-regulator {
