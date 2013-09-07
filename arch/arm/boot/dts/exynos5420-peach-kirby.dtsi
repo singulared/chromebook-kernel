@@ -16,6 +16,15 @@
 		bootargs = "";
 	};
 
+	firmware {
+		chromeos {
+			write-protect-gpio = <&gpx3 0 1>;
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&wp_gpio>;
+		};
+	};
+
 	fixed-rate-clocks {
 		xxti {
 			compatible = "samsung,clock-xxti";
