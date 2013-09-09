@@ -27,11 +27,11 @@
 
 #define MEMPOOL_PAGES 16384
 
+
 /**
  * @brief Create a kernel base context.
  *
- * Allocate and init a kernel base context. Calls
- * kbase_create_os_context() to setup OS specific structures.
+ * Allocate and init a kernel base context.
  */
 kbase_context *kbase_create_context(kbase_device *kbdev)
 {
@@ -93,8 +93,9 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	if (MALI_ERROR_NONE != kbase_mem_allocator_alloc(&kctx->osalloc, 1, &kctx->aliasing_sink_page))
 		goto no_sink_page;
 
-	if (kbase_create_os_context(&kctx->osctx))
-		goto no_os_context;
+	kctx->tgid = current->tgid;
+	kctx->pid = current->pid; 
+	init_waitqueue_head(&kctx->event_queue);
 
 	kctx->cookies = KBASE_COOKIE_MASK;
 
@@ -111,10 +112,8 @@ kbase_context *kbase_create_context(kbase_device *kbdev)
 	return kctx;
 
 no_region_tracker:
-	kbase_destroy_os_context(&kctx->osctx);
 no_sink_page:
 	kbase_mem_allocator_free(&kctx->osalloc, 1, &kctx->aliasing_sink_page, 0);
-no_os_context:
 	kbase_mmu_free_pgd(kctx);
 free_mmu:
 	kbase_mmu_term(kctx);
@@ -127,7 +126,7 @@ free_jd:
 free_allocator:
 	kbase_mem_allocator_term(&kctx->osalloc);
 free_kctx:
-    vfree(kctx);
+	vfree(kctx);
 out:
 	return NULL;
 
@@ -136,7 +135,7 @@ KBASE_EXPORT_SYMBOL(kbase_create_context)
 
 static void kbase_reg_pending_dtor(struct kbase_va_region *reg)
 {
-	pr_info("Freeing pending unmapped region\n");
+	KBASE_LOG(2, reg->kctx->kbdev->dev, "Freeing pending unmapped region\n");
 	kbase_mem_phy_alloc_put(reg->alloc);
 	kfree(reg);
 }
@@ -168,7 +167,7 @@ void kbase_destroy_context(kbase_context *kctx)
 	if (kbdev->hwcnt.kctx == kctx) {
 		/* disable the use of the hw counters if the app didn't use the API correctly or crashed */
 		KBASE_TRACE_ADD(kbdev, CORE_CTX_HWINSTR_TERM, kctx, NULL, 0u, 0u);
-		KBASE_DEBUG_PRINT_WARN(KBASE_CTX, "The privileged process asking for instrumentation forgot to disable it " "before exiting. Will end instrumentation for them");
+		dev_warn(kbdev->dev, "The privileged process asking for instrumentation forgot to disable it " "before exiting. Will end instrumentation for them");
 		kbase_instr_hwcnt_disable(kctx);
 	}
 
@@ -196,7 +195,6 @@ void kbase_destroy_context(kbase_context *kctx)
 	}
 
 	kbase_region_tracker_term(kctx);
-	kbase_destroy_os_context(&kctx->osctx);
 	kbase_gpu_vm_unlock(kctx);
 
 	/* Safe to call this one even when didn't initialize (assuming kctx was sufficiently zeroed) */
@@ -210,7 +208,7 @@ void kbase_destroy_context(kbase_context *kctx)
 
 	pages = atomic_read(&kctx->used_pages);
 	if (pages != 0)
-		dev_warn(kbdev->osdev.dev, "%s: %d pages in use!\n", __func__, pages);
+		dev_warn(kbdev->dev, "%s: %d pages in use!\n", __func__, pages);
 
 	if (kctx->keep_gpu_powered) {
 		atomic_dec(&kbdev->keep_gpu_powered_count);

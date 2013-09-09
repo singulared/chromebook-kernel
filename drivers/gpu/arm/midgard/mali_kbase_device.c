@@ -351,7 +351,8 @@ void kbase_reg_write(kbase_device *kbdev, u16 offset, u32 value, kbase_context *
 {
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_powered);
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
-	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "w: reg %04x val %08x", offset, value);
+	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
+	KBASE_LOG(4, kbdev->dev, "w: reg %04x val %08x", offset, value);
 	kbase_os_reg_write(kbdev, offset, value);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_WRITE, offset, value);
@@ -364,8 +365,9 @@ u32 kbase_reg_read(kbase_device *kbdev, u16 offset, kbase_context *kctx)
 	u32 val;
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_powered);
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
+	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
 	val = kbase_os_reg_read(kbdev, offset);
-	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "r: reg %04x val %08x", offset, val);
+	KBASE_LOG(4, kbdev->dev, "r: reg %04x val %08x", offset, val);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_READ, offset, val);
 	return val;
@@ -382,9 +384,9 @@ void kbase_report_gpu_fault(kbase_device *kbdev, int multiple)
 	address = (u64) kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_FAULTADDRESS_HI), NULL) << 32;
 	address |= kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_FAULTADDRESS_LO), NULL);
 
-	KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "GPU Fault 0x%08x (%s) at 0x%016llx", status, kbase_exception_name(status), address);
+	dev_warn(kbdev->dev, "GPU Fault 0x%08x (%s) at 0x%016llx", status & 0xFF, kbase_exception_name(status), address);
 	if (multiple)
-		KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "There were multiple GPU faults - some have not been reported");
+		dev_warn(kbdev->dev, "There were multiple GPU faults - some have not been reported\n");
 }
 
 void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)
@@ -509,12 +511,12 @@ void kbasep_trace_format_msg(kbase_trace *trace_msg, char *buffer, int len)
 
 }
 
-void kbasep_trace_dump_msg(kbase_trace *trace_msg)
+void kbasep_trace_dump_msg(kbase_device *kbdev, kbase_trace *trace_msg)
 {
 	char buffer[DEBUG_MESSAGE_SIZE];
 
 	kbasep_trace_format_msg(trace_msg, buffer, DEBUG_MESSAGE_SIZE);
-	KBASE_DEBUG_PRINT(KBASE_CORE, "%s", buffer);
+	KBASE_LOG(1, kbdev->dev, "%s", buffer);
 }
 
 void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val)
@@ -574,18 +576,18 @@ void kbasep_trace_dump(kbase_device *kbdev)
 	u32 start;
 	u32 end;
 
-	KBASE_DEBUG_PRINT(KBASE_CORE, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
+	KBASE_LOG(1, kbdev->dev, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
 	spin_lock_irqsave(&kbdev->trace_lock, flags);
 	start = kbdev->trace_first_out;
 	end = kbdev->trace_next_in;
 
 	while (start != end) {
 		kbase_trace *trace_msg = &kbdev->trace_rbuf[start];
-		kbasep_trace_dump_msg(trace_msg);
+		kbasep_trace_dump_msg(kbdev, trace_msg);
 
 		start = (start + 1) & KBASE_TRACE_MASK;
 	}
-	KBASE_DEBUG_PRINT(KBASE_CORE, "TRACE_END");
+	KBASE_LOG(1, kbdev->dev, "TRACE_END");
 
 	spin_unlock_irqrestore(&kbdev->trace_lock, flags);
 
@@ -751,7 +753,7 @@ void kbase_set_profiling_control(struct kbase_device *kbdev, u32 control, u32 va
 		kbdev->kbase_profiling_controls[control] = value;
 		break;
 	default:
-		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		dev_err(kbdev->dev, "Profiling control %d not found\n", control);
 		break;
 	}
 }
@@ -771,7 +773,7 @@ u32 kbase_get_profiling_control(struct kbase_device *kbdev, u32 control)
 		ret_value = kbdev->kbase_profiling_controls[control];
 		break;
 	default:
-		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		dev_err(kbdev->dev, "Profiling control %d not found\n", control);
 		break;
 	}
 

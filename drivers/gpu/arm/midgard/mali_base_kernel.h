@@ -384,6 +384,44 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_SOFT_FENCE_WAIT             (BASE_JD_REQ_SOFT_JOB | 0x3)
 
 /**
+ * SW Only requirement : Replay job.
+ *
+ * If the preceeding job fails, the replay job will cause the jobs specified in
+ * the list of base_jd_replay_payload pointed to by the jc pointer to be
+ * replayed.
+ *
+ * A replay job will only cause jobs to be replayed up to BASEP_JD_REPLAY_LIMIT
+ * times. If a job fails more than BASEP_JD_REPLAY_LIMIT times then the replay
+ * job is failed, as well as any following dependencies.
+ *
+ * The replayed jobs will require a number of atom IDs. If there are not enough
+ * free atom IDs then the replay job will fail.
+ *
+ * If the preceeding job does not fail, then the replay job is returned as
+ * completed.
+ *
+ * The replayed jobs will never be returned to userspace. The preceeding failed
+ * job will be returned to userspace as failed; the status of this job should
+ * be ignored. Completion should be determined by the status of the replay soft
+ * job.
+ *
+ * In order for the jobs to be replayed, the job headers will have to be
+ * modified. The Status field will be reset to NOT_STARTED. If the Job Type
+ * field indicates a Vertex Shader Job then it will be changed to Null Job.
+ *
+ * The replayed jobs have the following assumptions :
+ *
+ * - No external resources. Any required external resources will be held by the
+ *   replay atom.
+ * - Pre-dependencies are created based on job order.
+ * - Atom numbers are automatically assigned.
+ * - device_nr is set to 0. This is not relevant as
+ *   BASE_JD_REQ_SPECIFIC_COHERENT_GROUP should not be set.
+ * - Priority is inherited from the replay job.
+ */
+#define BASE_JD_REQ_SOFT_REPLAY                 (BASE_JD_REQ_SOFT_JOB | 0x4)
+
+/**
  * HW Requirement: Requires Compute shaders (but not Vertex or Geometry Shaders)
  *
  * This indicates that the Job Chain contains Midgard Jobs of the 'Compute Shaders' type.
@@ -416,11 +454,16 @@ typedef u16 base_jd_core_req;
 #define BASE_JD_REQ_EVENT_ONLY_ON_FAILURE   (1U << 12)
 
 /**
+ * SW Flag: If this bit is set then completion of this atom will not cause an
+ * event to be sent to userspace, whether successful or not.
+ */
+#define BASEP_JD_REQ_EVENT_NEVER (1U << 14)
+
+/**
 * These requirement bits are currently unused in base_jd_core_req (currently a u16)
 */
 
 #define BASEP_JD_REQ_RESERVED_BIT5 (1U << 5)
-#define BASEP_JD_REQ_RESERVED_BIT14 (1U << 14)
 #define BASEP_JD_REQ_RESERVED_BIT15 (1U << 15)
 
 /**
@@ -428,7 +471,6 @@ typedef u16 base_jd_core_req;
 */
 
 #define BASEP_JD_REQ_RESERVED (BASEP_JD_REQ_RESERVED_BIT5 | \
-				BASEP_JD_REQ_RESERVED_BIT14 | \
 				BASEP_JD_REQ_RESERVED_BIT15)
 
 /**
@@ -437,7 +479,7 @@ typedef u16 base_jd_core_req;
  * This allows dependency only atoms to have flags set
  */
 #define BASEP_JD_REQ_ATOM_TYPE (~(BASEP_JD_REQ_RESERVED | BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
-				BASE_JD_REQ_EXTERNAL_RESOURCES))
+				BASE_JD_REQ_EXTERNAL_RESOURCES | BASEP_JD_REQ_EVENT_NEVER))
 
 #if BASE_LEGACY_JD_API
 /**
@@ -1619,6 +1661,78 @@ typedef struct base_cpu_props {
 	u32 padding;
 } base_cpu_props;
 /** @} end group basecpuprops */
+
+/**
+ * @brief The payload for a replay job. This must be in GPU memory.
+ */
+typedef struct base_jd_replay_payload {
+	/**
+	 * Pointer to the first entry in the base_jd_replay_jc list.  These
+	 * will be replayed in @b reverse order (so that extra ones can be added
+	 * to the head in future soft jobs without affecting this soft job)
+	 */
+	mali_addr64 tiler_jc_list;
+
+	/**
+	 * Pointer to the fragment job chain.
+	 */
+	mali_addr64 fragment_jc;
+
+	/**
+	 * Pointer to the tiler heap free FBD field to be modified.
+	 */
+	mali_addr64 tiler_heap_free;
+
+	/**
+	 * Hierarchy mask for the replayed fragment jobs. May be zero.
+	 */
+	u16 fragment_hierarchy_mask;
+
+	/**
+	 * Hierarchy mask for the replayed tiler jobs. May be zero.
+	 */
+	u16 tiler_hierarchy_mask;
+
+	/**
+	 * Default weight to be used for hierarchy levels not in the original
+	 * mask.
+	 */
+	u32 hierarchy_default_weight;
+
+	/**
+	 * Core requirements for the tiler job chain
+	 */
+	base_jd_core_req tiler_core_req;
+
+	/**
+	 * Core requirements for the fragment job chain
+	 */
+	base_jd_core_req fragment_core_req;
+
+	u8 padding[4];
+} base_jd_replay_payload;
+
+/**
+ * @brief An entry in the linked list of job chains to be replayed. This must
+ *        be in GPU memory.
+ */
+typedef struct base_jd_replay_jc {
+	/**
+	 * Pointer to next entry in the list. A setting of NULL indicates the
+	 * end of the list.
+	 */
+	mali_addr64 next;
+
+	/**
+	 * Pointer to the job chain.
+	 */
+	mali_addr64 jc;
+
+} base_jd_replay_jc;
+
+/* Maximum number of jobs allowed in a fragment chain in the payload of a
+ * replay job */
+#define BASE_JD_REPLAY_F_CHAIN_JOB_LIMIT 256
 
 /** @} end group base_api */
 

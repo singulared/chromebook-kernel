@@ -482,14 +482,6 @@ enum {
 	KBASE_CONFIG_ATTR_AWID_LIMIT,
 
 	/**
-	 * Enable alternative hardware counter capture for the Mali shader cores.
-	 *
-	 * Attached value: mali_bool value
-	 * Default value: @ref MALI_FALSE
-	 */
-	KBASE_CONFIG_ATTR_ALTERNATIVE_HWC,
-
-	/**
 	 * Rate at which dvfs data should be collected.
 	 *
 	 * Attached value: u32 value

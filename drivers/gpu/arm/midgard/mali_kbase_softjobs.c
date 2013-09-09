@@ -274,7 +274,8 @@ static void kbase_fence_cancel_wait(kbase_jd_atom *katom)
 
 int kbase_process_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	int status;
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		return kbase_dump_cpu_gpu_time(katom);
 #ifdef CONFIG_SYNC
@@ -288,6 +289,11 @@ int kbase_process_soft_job(kbase_jd_atom *katom)
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
 		return kbase_fence_wait(katom);
 #endif				/* CONFIG_SYNC */
+	case BASE_JD_REQ_SOFT_REPLAY:
+		status = kbase_replay_process(katom);
+		if (status & MALI_REPLAY_FLAG_JS_RESCHED)
+			pr_err("replay called from kbase_process_soft_job - missing resched!\n");
+		return status & MALI_REPLAY_STATUS_MASK;
 	}
 
 	/* Atom is complete */
@@ -296,7 +302,7 @@ int kbase_process_soft_job(kbase_jd_atom *katom)
 
 void kbase_cancel_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 #ifdef CONFIG_SYNC
 	case BASE_JD_REQ_SOFT_FENCE_WAIT:
 		kbase_fence_cancel_wait(katom);
@@ -310,7 +316,7 @@ void kbase_cancel_soft_job(kbase_jd_atom *katom)
 
 mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		{
 			if(0 != (katom->jc & KBASE_CACHE_ALIGNMENT_MASK))
@@ -357,6 +363,8 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 		}
 		break;
 #endif				/* CONFIG_SYNC */
+	case BASE_JD_REQ_SOFT_REPLAY:
+		break;
 	default:
 		/* Unsupported soft-job */
 		return MALI_ERROR_FUNCTION_FAILED;
@@ -366,7 +374,7 @@ mali_error kbase_prepare_soft_job(kbase_jd_atom *katom)
 
 void kbase_finish_soft_job(kbase_jd_atom *katom)
 {
-	switch (katom->core_req) {
+	switch (katom->core_req & BASEP_JD_REQ_ATOM_TYPE) {
 	case BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME:
 		/* Nothing to do */
 		break;
@@ -421,6 +429,8 @@ void kbase_resume_suspended_soft_jobs(kbase_device *kbdev)
 			resched |= jd_done_nolock(katom_iter);
 		} else {
 			/* The job has not completed */
+			KBASE_DEBUG_ASSERT((katom_iter->core_req & BASEP_JD_REQ_ATOM_TYPE)
+						  		!= BASE_JD_REQ_SOFT_REPLAY);
 			list_add_tail(&katom_iter->dep_item[0], &kctx->waiting_soft_jobs);
 		}
 

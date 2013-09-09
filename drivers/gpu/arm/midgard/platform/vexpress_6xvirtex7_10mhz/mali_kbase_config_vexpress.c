@@ -303,9 +303,6 @@ kbase_attribute config_attributes_hw_issue_8408[] = {
 	 KBASE_CONFIG_ATTR_END,
 	 0}
 };
-#ifdef MALI_PLATFORM_FAKE_MODULE
-EXPORT_SYMBOL(config_attributes_hw_issue_8408);
-#endif
 
 static kbase_platform_config versatile_platform_config = {
 	.attributes = config_attributes,
@@ -324,3 +321,4 @@ int kbase_platform_early_init(void)
 	/* Nothing needed at this stage */
 	return 0;
 }
+

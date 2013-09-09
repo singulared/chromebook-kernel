@@ -67,9 +67,9 @@ static void obtain_kds_if_currently_displayed(struct drm_device *dev,
 		if (pl111_crtc->displaying_fb) {
 			struct pl111_drm_framebuffer *pl111_fb;
 			struct drm_framebuffer *fb = pl111_crtc->displaying_fb;
-			
+
 			pl111_fb = PL111_FB_FROM_FRAMEBUFFER(fb);
-			
+
 			if (pl111_fb->bo == bo) {
 				DRM_DEBUG_KMS("Initial KDS resource for bo %p", bo);
 				DRM_DEBUG_KMS(" is being displayed, keeping\n");
@@ -289,6 +289,7 @@ static struct sg_table *pl111_dma_buf_map_dma_buf(struct dma_buf_attachment
 		sg_dma_address(sgt->sgl) = bo->backing_data.dma.fb_dev_addr;
 	} else { /* PL111_BOT_SHM */
 		struct page **pages;
+		int pg = 0;
 
 		mutex_lock(&dev->struct_mutex);
 		pages = get_pages(obj);
@@ -303,17 +304,33 @@ static struct sg_table *pl111_dma_buf_map_dma_buf(struct dma_buf_attachment
 
 		pl111_gem_sync_to_dma(bo);
 
-		/* 
+		/*
 		 * At this point the pages have been dma-mapped by either
 		 * get_pages() for non cached maps or pl111_gem_sync_to_dma()
 		 * for cached. So the physical addresses can be assigned
 		 * to the sg entries.
+		 * drm_prime_pages_to_sg() may have combined contiguous pages
+		 * into chunks so we assign the physical address of the first
+		 * page of a chunk to the chunk and check that the physical
+		 * addresses of the rest of the pages in that chunk are also
+		 * contiguous.
 		 */
 		sg = sgt->sgl;
 		nents = sgt->nents;
-		BUG_ON(nents != n_pages);
-		for_each_sg(sg, s, nents, i)
-			s->dma_address = bo->backing_data.shm.dma_addrs[i];
+
+		for_each_sg(sg, s, nents, i) {
+			int j, n_pages_in_chunk = sg_dma_len(s) >> PAGE_SHIFT;
+
+			sg_dma_address(s) = bo->backing_data.shm.dma_addrs[pg];
+
+			for (j = pg+1; j < pg+n_pages_in_chunk; j++) {
+				BUG_ON(bo->backing_data.shm.dma_addrs[j] !=
+						bo->backing_data.shm.dma_addrs[j-1]+PAGE_SIZE);
+			}
+
+			pg += n_pages_in_chunk;
+		}
+
 		mutex_unlock(&dev->struct_mutex);
 	}
 	bo->sgt = sgt;
@@ -335,7 +352,7 @@ static void pl111_dma_buf_unmap_dma_buf(struct dma_buf_attachment *attach,
 	bo->sgt = NULL;
 }
 
-/* 
+/*
  * There isn't any operation here that can sleep or fail so this callback can
  * be used for both kmap and kmap_atomic implementations.
  */
@@ -358,7 +375,7 @@ static void *pl111_dma_buf_kmap(struct dma_buf *dma_buf, unsigned long pageno)
 	return vaddr;
 }
 
-/* 
+/*
  * Find a scatterlist that starts in "start" and has "len"
  * or return a NULL dma_handle.
  */
@@ -479,7 +496,7 @@ struct drm_gem_object *pl111_gem_prime_import(struct drm_device *dev,
 
 	attachment = dma_buf_attach(dma_buf, dev->dev);
 	if (IS_ERR(attachment))
-	        return ERR_CAST(attachment);
+		return ERR_CAST(attachment);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
 	/* from 3.10.0 we assume the caller has not taken a ref so we take one here */
@@ -488,15 +505,15 @@ struct drm_gem_object *pl111_gem_prime_import(struct drm_device *dev,
 
 	sgt = dma_buf_map_attachment(attachment, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(sgt)) {
-	        ret = PTR_ERR(sgt);
-	        goto err_buf_detach;
+		ret = PTR_ERR(sgt);
+		goto err_buf_detach;
 	}
 
 	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
 	if (!bo) {
-	        DRM_ERROR("%s: failed to allocate buffer object.\n", __func__);
-	        ret = -ENOMEM;
-	        goto err_unmap_attach;
+		DRM_ERROR("%s: failed to allocate buffer object.\n", __func__);
+		ret = -ENOMEM;
+		goto err_unmap_attach;
 	}
 
 	/* Find out whether the buffer is contiguous or not */
@@ -505,7 +522,7 @@ struct drm_gem_object *pl111_gem_prime_import(struct drm_device *dev,
 	bo->type |= PL111_BOT_DMA;
 	for_each_sg(sgt->sgl, sgl, sgt->nents, i) {
 		dma_addr_t real_phys = sg_phys(sgl);
-		if (real_phys != cont_phys) { 
+		if (real_phys != cont_phys) {
 			bo->type &= ~PL111_BOT_DMA;
 			break;
 		}
@@ -543,7 +560,7 @@ err_buf_detach:
 	/* from 3.10.0 we will have taken a ref so drop it here */
 	dma_buf_put(dma_buf);
 #endif
-        return ERR_PTR(ret);
+	return ERR_PTR(ret);
 }
 
 struct dma_buf *pl111_gem_prime_export(struct drm_device *dev,

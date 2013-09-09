@@ -154,6 +154,11 @@ typedef struct kbase_device kbase_device;
 
 #include "mali_kbase_js_defs.h"
 
+#define KBASEP_FORCE_REPLAY_DISABLED 0
+
+/* Maximum force replay limit when randomization is enabled */
+#define KBASEP_FORCE_REPLAY_RANDOM_LIMIT 16
+
 /**
  * @brief States to model state machine processed by kbasep_js_job_check_ref_cores(), which
  * handles retaining cores for power management and affinity management.
@@ -269,6 +274,10 @@ struct kbase_jd_atom {
 	int slot_nr;
 
 	u32 atom_flags;
+
+	/* Number of times this atom has been retried. Used by replay soft job.
+	 */
+	int retry_count;
 };
 
 /*
@@ -548,11 +557,36 @@ typedef struct kbasep_kctx_list_element {
 	kbase_context    *kctx;
 } kbasep_kctx_list_element;
 
+#define DEVNAME_SIZE	16
+
 struct kbase_device {
 	/** jm_slots is protected by kbasep_js_device_data::runpool_irq::lock */
 	kbase_jm_slot jm_slots[BASE_JM_MAX_NR_SLOTS];
 	s8 slot_submit_count_irq[BASE_JM_MAX_NR_SLOTS];
-	kbase_os_device osdev;
+
+	struct list_head entry;
+	struct device *dev;
+	struct miscdevice mdev;
+	u64 reg_start;
+	size_t reg_size;
+	void __iomem *reg;
+	struct resource *reg_res;
+	struct {
+		int irq;
+		int flags;
+	} irqs[3];
+	char devname[DEVNAME_SIZE];
+
+#ifdef CONFIG_MALI_NO_MALI
+	void *model;
+	struct kmem_cache *irq_slab;
+	struct workqueue_struct *irq_workq;
+	atomic_t serving_job_irq;
+	atomic_t serving_gpu_irq;
+	atomic_t serving_mmu_irq;
+	spinlock_t reg_op_lock;
+#endif				/* CONFIG_MALI_NO_MALI */
+
 	kbase_pm_device_data pm;
 	kbasep_js_device_data js_data;
 	kbasep_mem_device memdev;
@@ -715,6 +749,24 @@ struct kbase_device {
 
 	/* fbdump profiling controls set by gator */
 	u32 kbase_profiling_controls[FBDUMP_CONTROL_MAX];
+
+
+#if MALI_CUSTOMER_RELEASE == 0
+	/* Number of jobs that are run before a job is forced to fail and
+	 * replay. May be KBASEP_FORCE_REPLAY_DISABLED, to disable forced
+	 * failures. */
+	int force_replay_limit;
+	/* Count of jobs between forced failures. Incremented on each job. A
+	 * job is forced to fail once this is greater than or equal to
+	 * force_replay_limit. */
+	int force_replay_count;
+	/* Core requirement for jobs to be failed and replayed. May be zero. */
+	base_jd_core_req force_replay_core_req;
+	/* MALI_TRUE if force_replay_limit should be randomized. The random
+	 * value will be in the range of 1 - KBASEP_FORCE_REPLAY_RANDOM_LIMIT.
+	 */
+	mali_bool force_replay_random;
+#endif
 };
 
 struct kbase_context {
@@ -741,8 +793,11 @@ struct kbase_context {
 
 	unsigned long    cookies;
 	struct kbase_va_region *pending_regions[BITS_PER_LONG];
+	
+	wait_queue_head_t event_queue;
+	pid_t tgid;
+	pid_t pid;
 
-	kbase_os_context osctx;
 	kbase_jd_context jctx;
 	atomic_t used_pages;
 	atomic_t         nonmapped_pages;
@@ -800,5 +855,19 @@ typedef enum kbase_share_attr_bits {
 #define KBASE_CLEAN_CACHE_MAX_LOOPS     100000
 /* Maximum number of loops polling the GPU for an AS flush to complete before we assume the GPU has hung */
 #define KBASE_AS_FLUSH_MAX_LOOPS        100000
+
+/* Return values from kbase_replay_process */
+
+/* Replay job has completed */
+#define MALI_REPLAY_STATUS_COMPLETE  0
+/* Replay job is replaying and will continue once replayed jobs have completed.
+ */
+#define MALI_REPLAY_STATUS_REPLAYING 1
+#define MALI_REPLAY_STATUS_MASK      0xff
+/* Caller must call kbasep_js_try_schedule_head_ctx */
+#define MALI_REPLAY_FLAG_JS_RESCHED  0x100
+
+/* Maximum number of times a job can be replayed */
+#define BASEP_JD_REPLAY_LIMIT 15
 
 #endif				/* _KBASE_DEFS_H_ */

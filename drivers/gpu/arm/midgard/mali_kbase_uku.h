@@ -46,8 +46,8 @@
 
 #include "mali_kbase_gpuprops_types.h"
 
-#define BASE_UK_VERSION_MAJOR 5
-#define BASE_UK_VERSION_MINOR 1
+#define BASE_UK_VERSION_MAJOR 6
+#define BASE_UK_VERSION_MINOR 0
 
 typedef struct kbase_uk_mem_alloc {
 	uk_header header;
@@ -207,16 +207,15 @@ typedef struct kbase_uk_mem_commit {
 	u32 padding;
 } kbase_uk_mem_commit;
 
-typedef struct kbase_uk_find_cpu_mapping {
+typedef struct kbase_uk_find_cpu_offset {
 	uk_header header;
 	/* IN */
 	mali_addr64 gpu_addr;
 	u64 cpu_addr;
 	u64 size;
 	/* OUT */
-	u64 uaddr;
-	mali_size64 page_off;
-} kbase_uk_find_cpu_mapping;
+	mali_size64 offset;
+} kbase_uk_find_cpu_offset;
 
 #define KBASE_GET_VERSION_BUFFER_SIZE 64
 typedef struct kbase_uk_get_ddk_version {
@@ -298,6 +297,7 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_MEM_QUERY,
 	KBASE_FUNC_MEM_FREE,
 	KBASE_FUNC_MEM_FLAGS_CHANGE,
+	KBASE_FUNC_MEM_ALIAS,
 
 	KBASE_FUNC_JOB_SUBMIT,
 
@@ -312,7 +312,7 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_CPU_PROPS_REG_DUMP,
 	KBASE_FUNC_GPU_PROPS_REG_DUMP,
 
-	KBASE_FUNC_FIND_CPU_MAPPING,
+	KBASE_FUNC_FIND_CPU_OFFSET,
 
 	KBASE_FUNC_GET_VERSION,
 	KBASE_FUNC_EXT_BUFFER_LOCK,
@@ -327,9 +327,9 @@ typedef enum kbase_uk_function_id {
 	KBASE_FUNC_FENCE_VALIDATE,
 	KBASE_FUNC_STREAM_CREATE,
 	KBASE_FUNC_GET_PROFILING_CONTROLS,
-	KBASE_FUNC_SET_PROFILING_CONTROLS, /* to be used only for testing purposes, otherwise these controls are set through gator API */
-
-	KBASE_FUNC_MEM_ALIAS /* can be moved up along with the other MEM functions on the next API major version upgrade */
+	KBASE_FUNC_SET_PROFILING_CONTROLS /* to be used only for testing
+					   * purposes, otherwise these controls
+					   * are set through gator API */
 } kbase_uk_function_id;
 
 #endif				/* _KBASE_UKU_H_ */

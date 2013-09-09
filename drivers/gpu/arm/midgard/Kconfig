@@ -81,7 +81,7 @@ config MALI_DEBUG_SHADER_SPLIT_FS
 	  core affinity masks.
 
 config MALI_PLATFORM_FAKE
-	tristate "Enable fake platform device support"
+	bool "Enable fake platform device support"
 	depends on MALI_MIDGARD && MALI_EXPERT
 	default n
 	help

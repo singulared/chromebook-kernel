@@ -64,11 +64,13 @@ updates and generates duplicate page faults as the page table information used b
 typedef struct kbase_cpu_mapping {
 	struct  list_head mappings_list;
 	struct  kbase_mem_phy_alloc *alloc;
-	struct  vm_area_struct *vma;
 	struct  kbase_context *kctx;
 	struct  kbase_va_region *region;
 	pgoff_t page_off;
 	int     count;
+
+	unsigned long vm_start;
+	unsigned long vm_end;
 } kbase_cpu_mapping;
 
 enum kbase_memory_type {
@@ -148,7 +150,7 @@ static inline void kbase_mem_phy_alloc_gpu_unmapped(struct kbase_mem_phy_alloc *
 	/* we only track mappings of NATIVE buffers */
 	if (alloc->type == KBASE_MEM_TYPE_NATIVE)
 		if (0 > atomic_dec_return(&alloc->gpu_mappings)) {
-			printk(KERN_ERR "Mismatched %s:\n", __func__);
+			pr_err("Mismatched %s:\n", __func__);
 			dump_stack();
 		}
 }
@@ -550,23 +552,31 @@ static INLINE void kbase_process_page_usage_dec( struct kbase_context *kctx, int
 }
 
 /**
- * @brief Find a CPU mapping of a memory allocation containing a given address range
+ * @brief Find the offset of the CPU mapping of a memory allocation containing
+ *        a given address range
  *
- * Searches for a CPU mapping of any part of the region starting at @p gpu_addr that
- * fully encloses the CPU virtual address range specified by @p uaddr and @p size.
- * Returns a failure indication if only part of the address range lies within a
- * CPU mapping, or the address range lies within a CPU mapping of a different region.
+ * Searches for a CPU mapping of any part of the region starting at @p gpu_addr
+ * that fully encloses the CPU virtual address range specified by @p uaddr and
+ * @p size. Returns a failure indication if only part of the address range lies
+ * within a CPU mapping, or the address range lies within a CPU mapping of a
+ * different region.
  *
  * @param[in,out] kctx      The kernel base context used for the allocation.
  * @param[in]     gpu_addr  GPU address of the start of the allocated region
  *                          within which to search.
  * @param[in]     uaddr     Start of the CPU virtual address range.
  * @param[in]     size      Size of the CPU virtual address range (in bytes).
+ * @param[out]    offset    The offset from the start of the allocation to the
+ *                          specified CPU virtual address.
  *
- * @return A pointer to a descriptor of the CPU mapping that fully encloses
- *         the specified address range, or NULL if none was found.
+ * @return MALI_ERROR_NONE if offset was obtained successfully. Error code
+ *         otherwise.
  */
-struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(kbase_context *kctx, mali_addr64 gpu_addr, unsigned long uaddr, size_t size);
+mali_error kbasep_find_enclosing_cpu_mapping_offset(kbase_context *kctx,
+							mali_addr64 gpu_addr,
+							unsigned long uaddr,
+							size_t size,
+							mali_size64 *offset);
 
 enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer);
 void kbase_as_poking_timer_retain_atom(kbase_device *kbdev, kbase_context *kctx, kbase_jd_atom *katom);

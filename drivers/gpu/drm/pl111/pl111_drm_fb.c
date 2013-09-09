@@ -121,6 +121,13 @@ struct drm_framebuffer *pl111_fb_create(struct drm_device *dev,
 
 	bo = PL111_BO_FROM_GEM(gem_obj);
 	drm_fb_get_bpp_depth(mode_cmd->pixel_format, &depth, &bpp);
+
+	if (mode_cmd->pitches[0] < mode_cmd->width * (bpp >> 3)) {
+		DRM_ERROR("bad pitch %u for plane 0\n", mode_cmd->pitches[0]);
+		err = -EINVAL;
+		goto error;
+	}
+
 	min_size = (mode_cmd->height - 1) * mode_cmd->pitches[0]
 				+ mode_cmd->width * (bpp >> 3);
 
@@ -172,7 +179,7 @@ struct drm_framebuffer *pl111_fb_create(struct drm_device *dev,
 	 */
 	if (!((fb->bits_per_pixel == 16) ||
 		  (fb->bits_per_pixel == 32 && fb->depth == 24))) {
-		DRM_ERROR("unsupported pixel format\n");
+		DRM_ERROR("unsupported pixel format bpp=%d, depth=%d\n", fb->bits_per_pixel, fb->depth);
 		drm_framebuffer_cleanup(fb);
 		kfree(fb);
 		fb = NULL;

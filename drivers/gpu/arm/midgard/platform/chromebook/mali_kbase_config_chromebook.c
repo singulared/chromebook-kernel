@@ -362,7 +362,7 @@ int get_cpu_clock_speed(u32* cpu_clock)
 static int pm_callback_power_on(kbase_device *kbdev)
 {
 #ifdef CONFIG_PM_RUNTIME
-	pm_runtime_resume(kbdev->osdev.dev);
+	pm_runtime_resume(kbdev->dev);
 #endif /* CONFIG_PM_RUNTIME */
 	return 0;
 }
@@ -373,7 +373,7 @@ static int pm_callback_power_on(kbase_device *kbdev)
 static void pm_callback_power_off(kbase_device *kbdev)
 {
 #ifdef CONFIG_PM_RUNTIME
-	pm_schedule_suspend(kbdev->osdev.dev, RUNTIME_PM_DELAY_TIME);
+	pm_schedule_suspend(kbdev->dev, RUNTIME_PM_DELAY_TIME);
 #endif /* CONFIG_PM_RUNTIME */
 }
 
@@ -401,7 +401,7 @@ mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 	if(MALI_ERROR_NONE == kbase_platform_init(kbdev))
 	{
 #ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
-		if(kbase_platform_create_sysfs_file(kbdev->osdev.dev))
+		if(kbase_platform_create_sysfs_file(kbdev->dev))
 		{
 			return MALI_TRUE;
 		}
@@ -418,7 +418,7 @@ mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 void kbase_platform_exynos5_term(kbase_device *kbdev)
 {
 #ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
-	kbase_platform_remove_sysfs_file(kbdev->osdev.dev);
+	kbase_platform_remove_sysfs_file(kbdev->dev);
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 	kbase_platform_term(kbdev);
 }
@@ -525,7 +525,7 @@ static struct clk *clk_g3d = NULL;
  */
 static int kbase_platform_power_clock_init(kbase_device *kbdev)
 {
-	struct device *dev =  kbdev->osdev.dev;
+	struct device *dev =  kbdev->dev;
 	int timeout;
 	struct exynos_context *platform;
 	void *g3d_status_reg;
@@ -1701,13 +1701,13 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 
 	if (mout_gpll == NULL) {
 		if (soc_is_exynos5250()) {
-			mout_gpll = clk_get(kbdev->osdev.dev, "mout_gpll");
-			fin_gpll = clk_get(kbdev->osdev.dev, "ext_xtal");
-			fout_gpll = clk_get(kbdev->osdev.dev, "fout_gpll");
+			mout_gpll = clk_get(kbdev->dev, "mout_gpll");
+			fin_gpll = clk_get(kbdev->dev, "ext_xtal");
+			fout_gpll = clk_get(kbdev->dev, "fout_gpll");
 		} else if (soc_is_exynos542x()) {
-			mout_gpll = clk_get(kbdev->osdev.dev, "mout_vpll");
-			fin_gpll = clk_get(kbdev->osdev.dev, "ext_xtal");
-			fout_gpll = clk_get(kbdev->osdev.dev, "fout_vpll");
+			mout_gpll = clk_get(kbdev->dev, "mout_vpll");
+			fin_gpll = clk_get(kbdev->dev, "ext_xtal");
+			fout_gpll = clk_get(kbdev->dev, "fout_vpll");
 		}
 		if (IS_ERR(mout_gpll) || IS_ERR(fin_gpll) || IS_ERR(fout_gpll))
 			panic("clk_get ERROR");

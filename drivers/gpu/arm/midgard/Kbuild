@@ -15,7 +15,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "not_released"
+MALI_RELEASE_NAME ?= "r4p0-02rel0"
 
 # Paths required for build
 KBASE_PATH = $(src)
@@ -57,10 +57,6 @@ DEFINES = \
 	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\" \
 	-DMALI_GCC_WORKAROUND_MIDCOM_4598=$(MALI_GCC_WORKAROUND_MIDCOM_4598)
-
-ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
-	DEFINES += -DMALI_PLATFORM_FAKE_MODULE=1
-endif
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
@@ -112,6 +108,7 @@ SRC := \
 	mali_kbase_core_linux.c \
 	mali_kbase_sync.c \
 	mali_kbase_sync_user.c \
+	mali_kbase_replay.c \
 
 ifeq ($(MALI_CUSTOMER_RELEASE),0)
 SRC += \
@@ -210,59 +207,6 @@ ifeq ($(CONFIG_MALI_PLATFORM_FAKE),y)
 	endif
 	endif
 endif # CONFIG_MALI_PLATFORM_FAKE=y
-
-ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
-	PSRC := mali_kbase_platform_fake.c
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
-		PSRC += platform/vexpress/mali_kbase_config_vexpress.c \
-		platform/vexpress/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE),y)
-		PSRC += platform/rtsm_ve/mali_kbase_config_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_JUNO),y)
-		PSRC += platform/juno/mali_kbase_config_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
-		PSRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
-		platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_6XVIRTEX7_10MHZ),y)
-		PSRC += platform/vexpress_6xvirtex7_10mhz/mali_kbase_config_vexpress.c \
-		platform/vexpress_6xvirtex7_10mhz/mali_kbase_cpu_vexpress.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
-		PSRC += platform/goldfish/mali_kbase_config_goldfish.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
-		PSRC += platform/pbx/mali_kbase_config_pbx.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
-		PSRC += platform/panda/mali_kbase_config_panda.c
-	endif
-
-	ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-	ifeq ($(CONFIG_MALI_MIDGARD),m)
-	# remove begin and end quotes from the Kconfig string type
-	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-	MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
-	include  $(src)/platform/$(platform_name)/Kbuild
-	else ifeq ($(CONFIG_MALI_MIDGARD),y)
-	obj-$(CONFIG_MALI_MIDGARD) += platform/
-	endif
-	endif
-
-	obj-m := mali_platform_fake.o
-	mali_platform_fake-y := $(PSRC:.c=.o)
-endif
 
 ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
 ifeq ($(CONFIG_MALI_MIDGARD),m)
