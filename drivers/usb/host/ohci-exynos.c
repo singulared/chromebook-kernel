@@ -200,6 +200,8 @@ static int exynos_ohci_probe(struct platform_device *pdev)
 		goto fail_add_hcd;
 	}
 
+	device_enable_async_suspend(&pdev->dev);
+
 	platform_set_drvdata(pdev, exynos_ohci);
 
 	return 0;
