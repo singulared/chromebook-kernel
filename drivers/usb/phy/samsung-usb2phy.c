@@ -52,17 +52,6 @@ static void samsung_exynos5_usb2phy_enable(struct samsung_usbphy *sphy)
 	u32 ehcictrl;
 	u32 ohcictrl;
 
-	/*
-	 * phy_usage helps in keeping usage count for phy
-	 * so that the first consumer enabling the phy is also
-	 * the last consumer to disable it.
-	 */
-
-	if (atomic_inc_return(&sphy->phy_usage) != 1) {
-		dev_info(sphy->dev, "USB PHY already initialized\n");
-		return;
-	}
-
 	/* Host configuration */
 	phyhost = readl(regs + EXYNOS5_PHY_HOST_CTRL0);
 
@@ -195,11 +184,6 @@ static void samsung_exynos5_usb2phy_disable(struct samsung_usbphy *sphy)
 	u32 phyotg;
 	u32 phyhsic;
 
-	if (atomic_dec_return(&sphy->phy_usage) > 0) {
-		dev_info(sphy->dev, "still being used\n");
-		return;
-	}
-
 	phyhsic = (HSIC_CTRL_REFCLKDIV_12 |
 			HSIC_CTRL_REFCLKSEL |
 			HSIC_CTRL_SIDDQ |
@@ -269,6 +253,16 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 
 	mutex_lock(&sphy->mutex);
 
+	/*
+	 * phy_usage helps in keeping usage count for phy
+	 * so that the first consumer enabling the phy is also
+	 * the last consumer to disable it.
+	 */
+	if (atomic_inc_return(&sphy->phy_usage) != 1) {
+		dev_info(sphy->dev, "USB PHY already initialized\n");
+		goto out;
+	}
+
 	/* Selecting Host/OTG mode; After reset USB2.0PHY_CFG: HOST */
 	if (host) {
 		if (!strstr(dev_name(host->controller), "ehci") ||
@@ -300,6 +294,7 @@ static int samsung_usb2phy_init(struct usb_phy *phy)
 		break;
 	}
 
+out:
 	mutex_unlock(&sphy->mutex);
 
 	/* Disable the phy clock */
@@ -327,6 +322,11 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 
 	mutex_lock(&sphy->mutex);
 
+	if (atomic_dec_return(&sphy->phy_usage) > 0) {
+		dev_info(sphy->dev, "still being used\n");
+		goto out;
+	}
+
 	/* De-initialize usb phy registers */
 	switch (sphy->drv_data->cpu_type) {
 	case TYPE_EXYNOS5420:
@@ -349,6 +349,7 @@ static void samsung_usb2phy_shutdown(struct usb_phy *phy)
 	else
 		samsung_usbphy_set_isolation(sphy, true);
 
+out:
 	mutex_unlock(&sphy->mutex);
 
 	clk_disable_unprepare(sphy->clk);
