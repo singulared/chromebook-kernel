@@ -213,6 +213,8 @@ static int s5p_ehci_probe(struct platform_device *pdev)
 		goto fail_add_hcd;
 	}
 
+	device_enable_async_suspend(&pdev->dev);
+
 	platform_set_drvdata(pdev, s5p_ehci);
 
 	return 0;
