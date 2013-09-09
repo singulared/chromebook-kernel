@@ -84,13 +84,14 @@ struct anx7808_data {
 	struct i2c_client *tx_p2;
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
-	struct work_struct play_video;
 	struct delayed_work cable_det_work;
 	struct work_struct intp_work;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
 	bool powered;
+	bool recv_audio;
+	bool recv_cts;
 	struct mutex aux_mutex;
 	struct mutex power_mutex;
 	struct i2c_algorithm i2c_algorithm;
@@ -235,9 +236,14 @@ static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK3_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK4_REG, 0x00);
-	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK5_REG, 0x00);
-	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK6_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK7_REG, 0x00);
+
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK5_REG, AUDIO_RCV);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS5_REG, AUDIO_RCV);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK6_REG,
+			CTS_RCV | NEW_AUD | NEW_AVI);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG,
+			CTS_RCV | NEW_AUD | NEW_AVI);
 
 	anx7808_set_bits(anx7808, HDMI_RX_VID_DATA_RNG_CTRL_REG,
 			 R2Y_INPUT_LIMIT);
@@ -374,7 +380,6 @@ static int anx7808_power_off(struct anx7808_data *anx7808, bool cancel_intp,
 	DRM_INFO("Powering off ANX7808.\n");
 
 	anx7808->powered = false;
-
 
 	gpio_set_value(anx7808->reset_gpio, 0);
 	usleep_range(1000, 2000);
@@ -641,50 +646,36 @@ static void anx7808_config_dp_output(struct anx7808_data *anx7808)
 	anx7808_set_bits(anx7808, SP_TX_VID_CTRL1_REG, VIDEO_EN);
 }
 
-static void anx7808_update_infoframes(struct anx7808_data *anx7808, bool force)
+static void anx7808_update_video_infoframe(struct anx7808_data *anx7808)
 {
-	uint8_t status6;
+	anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
+	anx7808_write_reg(anx7808, SP_TX_AVI_TYPE, SP_TX_AVI_KTYPE);
+	anx7808_write_reg(anx7808, SP_TX_AVI_VER, SP_TX_AVI_KVER);
+	anx7808_write_reg(anx7808, SP_TX_AVI_LEN, SP_TX_AVI_KLEN);
+	anx7808_copy_regs(anx7808, HDMI_RX_AVI_DATA00_REG, SP_TX_AVI_DB0,
+			SP_TX_AVI_KLEN);
+	anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_UD);
+	anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
+}
 
-	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &status6);
-
-	if (status6 & NEW_AVI || force) {
-		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
-		anx7808_write_reg(anx7808, SP_TX_AVI_TYPE, SP_TX_AVI_KTYPE);
-		anx7808_write_reg(anx7808, SP_TX_AVI_VER, SP_TX_AVI_KVER);
-		anx7808_write_reg(anx7808, SP_TX_AVI_LEN, SP_TX_AVI_KLEN);
-		anx7808_copy_regs(anx7808, HDMI_RX_AVI_DATA00_REG,
-				  SP_TX_AVI_DB0, SP_TX_AVI_KLEN);
-		anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_UD);
-		anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AVI_IF_EN);
-		anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, NEW_AVI);
-	}
-
-	if (status6 & NEW_AUD || force) {
-		anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
-		anx7808_write_reg(anx7808, SP_TX_AUD_TYPE, SP_TX_AUD_KTYPE);
-		anx7808_write_reg(anx7808, SP_TX_AUD_VER, SP_TX_AUD_KVER);
-		anx7808_write_reg(anx7808, SP_TX_AUD_LEN, SP_TX_AUD_KLEN);
-		anx7808_copy_regs(anx7808, HDMI_RX_AUDIO_DATA00_REG,
-				  SP_TX_AUD_DB0, SP_TX_AUD_KLEN);
-		anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_UP);
-		anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
-		anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, NEW_AUD);
-	}
+static void anx7808_update_audio_infoframe(struct anx7808_data *anx7808)
+{
+	anx7808_clear_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
+	anx7808_write_reg(anx7808, SP_TX_AUD_TYPE, SP_TX_AUD_KTYPE);
+	anx7808_write_reg(anx7808, SP_TX_AUD_VER, SP_TX_AUD_KVER);
+	anx7808_write_reg(anx7808, SP_TX_AUD_LEN, SP_TX_AUD_KLEN);
+	anx7808_copy_regs(anx7808, HDMI_RX_AUDIO_DATA00_REG, SP_TX_AUD_DB0,
+			SP_TX_AUD_KLEN);
+	anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_UP);
+	anx7808_set_bits(anx7808, SP_TX_PKT_EN_REG, AUD_IF_EN);
 }
 
 static void anx7808_update_audio(struct anx7808_data *anx7808)
 {
-	uint8_t c5, c6;
 	uint8_t force_audio[3] = {0x06, 0x85, 0x08};
-	bool has_audio;
 
-	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS5_REG, &c5);
-	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS5_REG, c5 & AUDIO_RCV);
-	anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &c6);
-	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, c6 & CTS_RCV);
-	has_audio = (c6 & CTS_RCV && c5 & AUDIO_RCV);
-	if (!has_audio)
-		return;
+	anx7808->recv_cts = false;
+	anx7808->recv_audio = false;
 
 	anx7808_clear_bits(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG,
 			   AUD_MUTE);
@@ -753,22 +744,40 @@ static int anx7808_handle_cable_insertion(struct anx7808_data *anx7808)
 	return 0;
 }
 
-static void anx7808_play_video(struct work_struct *work)
+static void anx7808_handle_hdmi_int_5(struct anx7808_data *anx7808, uint8_t irq)
 {
-	struct anx7808_data *anx7808;
+	int ret;
 
-	anx7808 = container_of(work, struct anx7808_data, play_video);
+	ret = anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS5_REG, irq);
+	if (ret)
+		DRM_ERROR("Write hdmi int 5 failed %d\n", ret);
 
-	anx7808->dp_manual_bw_changed = 0;
+	if (irq & AUDIO_RCV)
+		anx7808->recv_audio = true;
 
-	while (anx7808->powered && !anx7808->dp_manual_bw_changed) {
+	if (anx7808->recv_audio && anx7808->recv_cts)
+		anx7808_update_audio(anx7808);
+}
 
-		/* Manually update infoframes */
-		anx7808_update_infoframes(anx7808, false);
+static void anx7808_handle_hdmi_int_6(struct anx7808_data *anx7808, uint8_t irq)
+{
+	int ret;
+
+	ret = anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS6_REG, irq);
+	if (ret)
+		DRM_ERROR("Write hdmi int 6 failed %d\n", ret);
+
+	if (irq & CTS_RCV)
+		anx7808->recv_cts = true;
+
+	if (anx7808->recv_audio && anx7808->recv_cts)
 		anx7808_update_audio(anx7808);
 
-		msleep(300);
-	}
+	if (irq & NEW_AVI)
+		anx7808_update_video_infoframe(anx7808);
+
+	if (irq & NEW_AUD)
+		anx7808_update_audio_infoframe(anx7808);
 }
 
 static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
@@ -793,10 +802,8 @@ static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 			DRM_ERROR("handle_cable_insertion failed [%d]\n", ret);
 	}
 
-	if (irq[0] & DWN_STREAM_DISCONNECTED) {
-		/* TODO: terminate play video loop here */
+	if (irq[0] & DWN_STREAM_DISCONNECTED)
 		anx7808_set_hpd(anx7808, 0);
-	}
 }
 
 static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
@@ -862,6 +869,18 @@ static void anx7808_intp_work(struct work_struct *work)
 	 */
 	if (!anx7808->powered)
 		return;
+
+	ret = anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &irq);
+	if (ret)
+		DRM_ERROR("Failed to read RX_INT_STATUS6 %d\n", ret);
+	else if (irq)
+		anx7808_handle_hdmi_int_6(anx7808, irq);
+
+	ret = anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS5_REG, &irq);
+	if (ret)
+		DRM_ERROR("Failed to read RX_INT_STATUS5 %d\n", ret);
+	else if (irq)
+		anx7808_handle_hdmi_int_5(anx7808, irq);
 }
 
 static irqreturn_t anx7808_intp_isr(int irq, void *data)
@@ -1076,9 +1095,9 @@ void anx7808_enable(struct drm_bridge *bridge)
 	}
 
 	anx7808_config_dp_output(anx7808);
-	anx7808_update_infoframes(anx7808, true);
+	anx7808_update_video_infoframe(anx7808);
+	anx7808_update_audio_infoframe(anx7808);
 	anx7808_update_audio(anx7808);
-	schedule_work(&anx7808->play_video);
 
 	return;
 err:
@@ -1091,7 +1110,6 @@ void anx7808_destroy(struct drm_bridge *bridge)
 	struct anx7808_data *anx7808 = bridge->driver_private;
 
 	drm_bridge_cleanup(bridge);
-	cancel_work_sync(&anx7808->play_video);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
 	cancel_work_sync(&anx7808->intp_work);
 
@@ -1148,7 +1166,6 @@ int anx7808_init(struct drm_encoder *encoder)
 	atomic_set(&anx7808->cable_det_oneshot, 1);
 	INIT_DELAYED_WORK(&anx7808->cable_det_work, anx7808_cable_det_work);
 	INIT_WORK(&anx7808->intp_work, anx7808_intp_work);
-	INIT_WORK(&anx7808->play_video, anx7808_play_video);
 
 	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
@@ -1325,7 +1342,6 @@ err_gpio:
 err_reg:
 	regulator_put(anx7808->vdd_mydp);
 err_work:
-	cancel_work_sync(&anx7808->play_video);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
 	cancel_work_sync(&anx7808->intp_work);
 
