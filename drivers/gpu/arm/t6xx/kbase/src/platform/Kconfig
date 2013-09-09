@@ -14,6 +14,7 @@
 
 
 
+
 # Add your platform specific Kconfig file here
 #
 # "drivers/gpu/arm/t6xx/kbase/src/platform/xxx/Kconfig"

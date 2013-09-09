@@ -13,6 +13,7 @@
 #
 
 
+
 menuconfig MALI_T6XX
 	tristate "Mali-T6XX support"
 	default n
@@ -136,7 +137,7 @@ config MALI_NO_MALI
 	  whereby the hardware is not physically present. If the hardware is physically
 	  present it will not be used. This can be used to test the majority of the
 	  driver without needing actual hardware or for software benchmarking.
-	  All calls to the simulated hardware will complete immediatly as if the hardware
+	  All calls to the simulated hardware will complete immediately as if the hardware
 	  completed the task.
 
 config MALI_ERROR_INJECT
@@ -145,7 +146,7 @@ config MALI_ERROR_INJECT
 	default n
 	help
 	  Enables insertion of errors to test module failure and recovery mechanisms.
-
+	
 config MALI_TRACE_TIMELINE
 	bool "Timeline tracing"
 	depends on MALI_T6XX && MALI_EXPERT

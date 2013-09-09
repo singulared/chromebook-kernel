@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_pm_demand.c
  * A simple demand based power management policy

@@ -15,6 +15,8 @@
 
 
 
+
+
 /* ***** IMPORTANT: THIS IS NOT A NORMAL HEADER FILE         *****
  * *****            DO NOT INCLUDE DIRECTLY                  *****
  * *****            THE LACK OF HEADER GUARDS IS INTENTIONAL ***** */
@@ -117,6 +119,8 @@
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_TILER_END,   "SW: PM CheckTrans from kbase_pm_release_cores(tiler)", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_release_cores_tiler"),
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_SHADER_TILER_START, "SW: PM CheckTrans from kbase_pm_release_cores(shader+tiler)", "%d,%d", "_tgid,_writerof_pm_checktrans_pm_release_cores_shader_tiler"),
 	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_SHADER_TILER_END,   "SW: PM CheckTrans from kbase_pm_release_cores(shader+tiler)", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_release_cores_shader_tiler"),
+	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_START, "SW: PM CheckTrans from kbasep_pm_do_shader_poweroff_callback", "%d,%d", "_tgid,_writerof_pm_checktrans_pm_do_shader_poweroff_callback"),
+	KBASE_TIMELINE_TRACE_CODE(SW_FLOW_PM_CHECKTRANS_PM_RELEASE_CORES_DEFERRED_END,   "SW: PM CheckTrans from kbasep_pm_do_shader_poweroff_callback", "%d,%d", "_tgid,_finalconsumerof_pm_checktrans_pm_do_shader_poweroff_callback"),
 	/*
 	 * END: SW Functions that call kbase_pm_check_transitions_nolock()
 	 */

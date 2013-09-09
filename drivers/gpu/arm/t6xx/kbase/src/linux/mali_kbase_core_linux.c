@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_core_linux.c
  * Base kernel driver init.
@@ -49,7 +51,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/compat.h>	/* is_compat_task */
-#include <kbase/src/common/mali_kbase_8401_workaround.h>
 #include <kbase/src/common/mali_kbase_hw.h>
 #ifdef CONFIG_SYNC
 #include <kbase/src/linux/mali_kbase_sync.h>
@@ -2222,15 +2223,13 @@ static int kbase_common_device_init(kbase_device *kbdev)
 #if MALI_CUSTOMER_RELEASE == 0
 		    , inited_js_timeouts = (1u << 7)
 #endif /* MALI_CUSTOMER_RELEASE == 0 */
-		    /* BASE_HW_ISSUE_8401 */
-		    , inited_workaround = (1u << 8)
-		    , inited_pm_runtime_init = (1u << 9)
-		    , inited_gpu_memory = (1u << 10)
+		    , inited_pm_runtime_init = (1u << 8)
+		    , inited_gpu_memory = (1u << 9)
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
-		,inited_sc_split        = (1u << 11)
+		,inited_sc_split        = (1u << 10)
 #endif /* CONFIG_MALI_DEBUG_SHADER_SPLIT_FS */
 #ifdef CONFIG_MALI_TRACE_TIMELINE
-		,inited_timeline = (1u << 12)
+		,inited_timeline = (1u << 11)
 #endif /* CONFIG_MALI_TRACE_LINE */
 	};
 
@@ -2355,13 +2354,6 @@ static int kbase_common_device_init(kbase_device *kbdev)
 	inited |= inited_timeline;
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401)) {
-		if (MALI_ERROR_NONE != kbasep_8401_workaround_init(kbdev))
-			goto out_partial;
-
-		inited |= inited_workaround;
-	}
-
 	mali_err = kbase_pm_powerup(kbdev);
 	if (MALI_ERROR_NONE == mali_err) {
 #ifdef CONFIG_MALI_DEBUG
@@ -2380,12 +2372,7 @@ static int kbase_common_device_init(kbase_device *kbdev)
 		return 0;
 	}
 
-out_partial:
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401)) {
-		if (inited & inited_workaround)
-			kbasep_8401_workaround_term(kbdev);
-	}
-
+ out_partial:
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	if (inited & inited_timeline)
 		kbasep_trace_timeline_debugfs_term(kbdev);
@@ -2477,7 +2464,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 	kbase_platform_config *config;
 	int attribute_count;
 
-	config = kbasep_get_platform_config();
+	config = kbase_get_platform_config();
 	attribute_count = kbasep_get_config_attribute_count(config->attributes);
 
 	err = platform_device_add_data(pdev, config->attributes,
@@ -2588,9 +2575,6 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 
 static int kbase_common_device_remove(struct kbase_device *kbdev)
 {
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401))
-		kbasep_8401_workaround_term(kbdev);
-
 	if (kbdev->pm.callback_power_runtime_term)
 		kbdev->pm.callback_power_runtime_term(kbdev);
 

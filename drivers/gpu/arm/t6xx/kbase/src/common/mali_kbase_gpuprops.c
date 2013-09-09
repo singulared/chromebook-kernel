@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_gpuprops.c
  * Base kernel property query APIs
@@ -280,16 +282,16 @@ static void kbase_gpuprops_calculate_props(base_gpu_props * const gpu_props, kba
 	else
 		gpu_props->thread_props.max_barrier_size = gpu_props->raw_props.thread_max_barrier_size;
 
-	if (gpu_props->raw_props.thread_features == 0) {
+	gpu_props->thread_props.max_registers = KBASE_UBFX32(gpu_props->raw_props.thread_features, 0U, 16);
+	gpu_props->thread_props.max_task_queue = KBASE_UBFX32(gpu_props->raw_props.thread_features, 16U, 8);
+	gpu_props->thread_props.max_thread_group_split = KBASE_UBFX32(gpu_props->raw_props.thread_features, 24U, 6);
+	gpu_props->thread_props.impl_tech = KBASE_UBFX32(gpu_props->raw_props.thread_features, 30U, 2);
+
+	/* If values are not specified, then use defaults */
+	if (gpu_props->thread_props.max_registers == 0) {
 		gpu_props->thread_props.max_registers = THREAD_MR_DEFAULT;
 		gpu_props->thread_props.max_task_queue = THREAD_MTQ_DEFAULT;
 		gpu_props->thread_props.max_thread_group_split = THREAD_MTGS_DEFAULT;
-		gpu_props->thread_props.impl_tech = THREAD_IT_DEFAULT;
-	} else {
-		gpu_props->thread_props.max_registers = KBASE_UBFX32(gpu_props->raw_props.thread_features, 0U, 16);
-		gpu_props->thread_props.max_task_queue = KBASE_UBFX32(gpu_props->raw_props.thread_features, 16U, 8);
-		gpu_props->thread_props.max_thread_group_split = KBASE_UBFX32(gpu_props->raw_props.thread_features, 24U, 6);
-		gpu_props->thread_props.impl_tech = KBASE_UBFX32(gpu_props->raw_props.thread_features, 30U, 2);
 	}
 	/* Initialize the coherent_group structure for each group */
 	kbase_gpuprops_construct_coherent_groups(gpu_props);

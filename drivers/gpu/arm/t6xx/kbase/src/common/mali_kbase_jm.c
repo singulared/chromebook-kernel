@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_jm.c
  * Base kernel job manager APIs
@@ -24,7 +26,6 @@
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/common/mali_kbase_gator.h>
 #include <kbase/src/common/mali_kbase_js_affinity.h>
-#include <kbase/src/common/mali_kbase_8401_workaround.h>
 #include <kbase/src/common/mali_kbase_hw.h>
 
 #include "mali_kbase_jm.h"
@@ -100,6 +101,17 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 
 	/* start MMU, medium priority, cache clean/flush on end, clean/flush on start */
 	cfg = kctx->as_nr | JSn_CONFIG_END_FLUSH_CLEAN_INVALIDATE | JSn_CONFIG_START_MMU | JSn_CONFIG_START_FLUSH_CLEAN_INVALIDATE | JSn_CONFIG_THREAD_PRI(8);
+
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION)) {
+		if (!kbdev->jm_slots[js].job_chain_flag) {
+			cfg |= JSn_CONFIG_JOB_CHAIN_FLAG;
+			katom->atom_flags |= KBASE_KATOM_FLAGS_JOBCHAIN;
+			kbdev->jm_slots[js].job_chain_flag = MALI_TRUE;
+		} else {
+			katom->atom_flags &= ~KBASE_KATOM_FLAGS_JOBCHAIN;
+			kbdev->jm_slots[js].job_chain_flag = MALI_FALSE;
+		}
+	}
 
 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_CONFIG_NEXT), cfg, kctx);
 
@@ -524,9 +536,18 @@ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int
 		}
 	}
 
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION)) {
+		if (action == JSn_COMMAND_SOFT_STOP)
+			action = (target_katom->atom_flags & KBASE_KATOM_FLAGS_JOBCHAIN) ? 
+				 JSn_COMMAND_SOFT_STOP_1:
+		         JSn_COMMAND_SOFT_STOP_0;
+		else
+			action = (target_katom->atom_flags & KBASE_KATOM_FLAGS_JOBCHAIN) ? 
+				 JSn_COMMAND_HARD_STOP_1:
+		         JSn_COMMAND_HARD_STOP_0;
+	}
+
 	kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND), action, kctx);
-
-
 
 #if KBASE_TRACE_ENABLE
 	status_reg_after = kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_STATUS), NULL);
@@ -548,20 +569,58 @@ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int
 		else
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_CHECK_HEAD, NULL, NULL, 0, js);
 
-		if (action == JSn_COMMAND_SOFT_STOP)
+		switch(action) {
+		case JSn_COMMAND_SOFT_STOP:
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP, head_kctx, head, head->jc, js);
-		else
+			break;
+		case JSn_COMMAND_SOFT_STOP_0:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP_0, head_kctx, head, head->jc, js);
+			break;
+		case JSn_COMMAND_SOFT_STOP_1:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP_1, head_kctx, head, head->jc, js);
+			break;
+		case JSn_COMMAND_HARD_STOP:
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP, head_kctx, head, head->jc, js);
+			break;
+		case JSn_COMMAND_HARD_STOP_0:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP_0, head_kctx, head, head->jc, js);
+			break;
+		case JSn_COMMAND_HARD_STOP_1:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP_1, head_kctx, head, head->jc, js);
+			break;
+		default:
+			BUG();
+			break;
+		}
 	} else {
 		if (status_reg_before == BASE_JD_EVENT_ACTIVE)
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_CHECK_HEAD, NULL, NULL, job_in_head_before, js);
 		else
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_CHECK_HEAD, NULL, NULL, 0, js);
 
-		if (action == JSn_COMMAND_SOFT_STOP)
+		switch(action) {
+		case JSn_COMMAND_SOFT_STOP:
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP, NULL, NULL, 0, js);
-		else
+			break;
+		case JSn_COMMAND_SOFT_STOP_0:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP_0, NULL, NULL, 0, js);
+			break;
+		case JSn_COMMAND_SOFT_STOP_1:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_SOFTSTOP_1, NULL, NULL, 0, js);
+			break;
+		case JSn_COMMAND_HARD_STOP:
 			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP, NULL, NULL, 0, js);
+			break;
+		case JSn_COMMAND_HARD_STOP_0:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP_0, NULL, NULL, 0, js);
+			break;
+		case JSn_COMMAND_HARD_STOP_1:
+			KBASE_TRACE_ADD_SLOT(kbdev, JM_HARDSTOP_1, NULL, NULL, 0, js);
+			break;
+		default:
+			BUG();
+			break;
+		}
 	}
 #endif
 }
@@ -592,6 +651,7 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 	kbase_jm_slot *slot;
 	u16 core_reqs;
 	kbasep_js_device_data *js_devdata;
+	mali_bool can_safely_stop = kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION);
 
 	KBASE_DEBUG_ASSERT(action == JSn_COMMAND_HARD_STOP || action == JSn_COMMAND_SOFT_STOP);
 	KBASE_DEBUG_ASSERT(kbdev);
@@ -625,16 +685,15 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 			continue;
 
 		core_reqs = katom->core_req;
-
+	
 		if (JM_JOB_IS_CURRENT_JOB_INDEX(jobs_submitted - i)) {
 			/* The last job in the slot, check if there is a job in the next register */
-			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0) {
+			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) == 0)
 				kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, action, core_reqs, katom);
-			} else {
+			else {
 				/* The job is in the next registers */
 				beenthere("clearing job from next registers on slot %d", js);
 				kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
-
 				/* Check to see if we did remove a job from the next registers */
 				if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
 					/* The job was successfully cleared from the next registers, requeue it */
@@ -645,6 +704,11 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 					/* Set the next registers to NULL */
 					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), 0, NULL);
 					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), 0, NULL);
+
+					/* As the job is removed from the next registers we undo the associated
+					 * update to the job_chain_flag for the job slot. */
+					if (can_safely_stop)
+						slot->job_chain_flag = !slot->job_chain_flag;
 
 					KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
 
@@ -658,16 +722,21 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 				}
 			}
 		} else if (JM_JOB_IS_NEXT_JOB_INDEX(jobs_submitted - i)) {
-			/* There's a job after this one, check to see if that job is in the next registers */
+			/* There's a job after this one, check to see if that job is in the next registers.
+             * If so, we need to pay attention to not accidently stop that one when issueing
+             * the command to stop the one pointed to by the head registers (as the one in the head
+             * may finish in the mean time and the one in the next moves to the head). Either the hardware
+			 * has support for this using job chain disambiguation or we need to evict the job
+			 * from the next registers first to ensure we can safely stop the one pointed to by
+			 * the head registers. */
 			if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), NULL) != 0) {
 				kbase_jd_atom *check_next_atom;
 				/* It is - we should remove that job and soft/hard-stop the slot */
 
-				/* Only proceed when the next jobs isn't a HW workaround 'dummy' job
+				/* Only proceed when the next job isn't a HW workaround 'dummy' job
 				 *
 				 * This can't be an ASSERT due to MMU fault code:
 				 * - This first hard-stops the job that caused the fault
-				 *  - Under HW Issue 8401, this inserts a dummy workaround job into NEXT
 				 * - Under HW Issue 8245, it will then reset the GPU
 				 *  - This causes a Soft-stop to occur on all slots
 				 * - By the time of the soft-stop, we may (depending on timing) still have:
@@ -684,28 +753,30 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 				if (kbasep_jm_is_dummy_workaround_job(kbdev, check_next_atom) != MALI_FALSE)
 					continue;
 
-				beenthere("clearing job from next registers on slot %d", js);
-				kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
+				if (!can_safely_stop) {
+					beenthere("clearing job from next registers on slot %d", js);
+					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_COMMAND_NEXT), JSn_COMMAND_NOP, NULL);
 
-				/* Check to see if we did remove a job from the next registers */
-				if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
-					/* We did remove a job from the next registers, requeue it */
-					kbase_jd_atom *dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
-					KBASE_DEBUG_ASSERT(dequeued_katom != NULL);
-					jobs_submitted--;
+					/* Check to see if we did remove a job from the next registers */
+					if (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), NULL) != 0 || kbase_reg_read(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), NULL) != 0) {
+						/* We did remove a job from the next registers, requeue it */
+						kbase_jd_atom *dequeued_katom = kbasep_jm_dequeue_tail_submit_slot(slot);
+						KBASE_DEBUG_ASSERT(dequeued_katom != NULL);
+						jobs_submitted--;
 
-					/* Set the next registers to NULL */
-					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), 0, NULL);
-					kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), 0, NULL);
+						/* Set the next registers to NULL */
+						kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_LO), 0, NULL);
+						kbase_reg_write(kbdev, JOB_SLOT_REG(js, JSn_HEAD_NEXT_HI), 0, NULL);
 
-					KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
+						KBASE_TRACE_ADD_SLOT(kbdev, JM_SLOT_EVICT, dequeued_katom->kctx, dequeued_katom, dequeued_katom->jc, js);
 
-					/* Complete the job, indicate it took no time, but don't submit any more at this point */
-					kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
-				} else {
-					/* We missed the job, that means the job we're interested in left the hardware before
-					 * we managed to do anything, so we can proceed to the next job */
-					continue;
+						/* Complete the job, indicate it took no time, but don't submit any more at this point */
+						kbase_jd_done(dequeued_katom, js, NULL, KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT);
+					} else {
+						/* We missed the job, that means the job we're interested in left the hardware before
+						 * we managed to do anything, so we can proceed to the next job */
+						continue;
+					}
 				}
 
 				/* Next is now free, so we can soft/hard-stop the slot */

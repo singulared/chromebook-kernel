@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_pm_coarse_demand.c
  * "Coarse Demand" power management policy

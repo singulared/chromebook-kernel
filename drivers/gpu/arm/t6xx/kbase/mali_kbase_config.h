@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_config.h
  * Configuration API and Attributes for KBase
@@ -485,8 +487,40 @@ enum {
 	 * Attached value: u32 value
 	 * Default value: 500 Milliseconds
 	 */
-
 	KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
+
+	/**
+	 * Power Management poweroff tick granuality. This is in nanoseconds to
+	 * allow HR timer support.
+	 *
+	 * On each scheduling tick, the power manager core may decide to:
+	 * -# Power off one or more shader cores
+	 * -# Power off the entire GPU
+	 *
+	 * Attached value: number in nanoseconds
+	 * Default value: @ref DEFAULT_PM_GPU_POWEROFF_TICK_NS,
+	 */
+	KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS,
+
+	/**
+	 * Power Manager number of ticks before shader cores are powered off
+	 *
+	 * Attached value: unsigned 32-bit kbasep_pm_device_data::poweroff_shader_ticks<br>
+	 * Default value: @ref DEFAULT_PM_POWEROFF_TICK_SHADER
+	 *
+	 * @see KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS
+	 */
+	KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_SHADER,
+
+	/**
+	 * Power Manager number of ticks before GPU is powered off
+	 *
+	 * Attached value: unsigned 32-bit kbasep_pm_device_data::poweroff_gpu_ticks<br>
+	 * Default value: @ref DEFAULT_PM_POWEROFF_TICK_GPU
+	 *
+	 * @see KBASE_CONFIG_ATTR_PM_GPU_POWEROFF_TICK_NS
+	 */
+	KBASE_CONFIG_ATTR_PM_POWEROFF_TICK_GPU,
 
 	/**
 	 * End of attribute list indicator.
@@ -797,7 +831,7 @@ mali_bool kbasep_validate_configuration_attributes(struct kbase_device *kbdev, c
  *
  * @return Pointer to the platform config
  */
-kbase_platform_config *kbasep_get_platform_config(void);
+kbase_platform_config *kbase_get_platform_config(void);
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
 
 /**

@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_mem.h
  * Base kernel memory APIs
@@ -77,7 +79,7 @@ typedef struct kbase_va_region {
 #define KBASE_REG_FREE       (1ul << 0)	/* Free region */
 #define KBASE_REG_CPU_WR     (1ul << 1)	/* CPU write access */
 #define KBASE_REG_GPU_WR     (1ul << 2)	/* GPU write access */
-#define KBASE_REG_GPU_NX     (1ul << 3)	/* No eXectue flag */
+#define KBASE_REG_GPU_NX     (1ul << 3)	/* No eXecute flag */
 #define KBASE_REG_CPU_CACHED (1ul << 4)	/* Is CPU cached? */
 #define KBASE_REG_GPU_CACHED (1ul << 5)	/* Is GPU cached? */
 

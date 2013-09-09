@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_jm.h
  * Job Manager Low-level APIs.
@@ -23,7 +25,6 @@
 #ifndef _KBASE_JM_H_
 #define _KBASE_JM_H_
 
-#include <kbase/src/common/mali_kbase_8401_workaround.h>
 #include <kbase/src/common/mali_kbase_hw.h>
 #include <linux/atomic.h>
 
@@ -171,12 +172,7 @@ static INLINE void kbasep_jm_enqueue_submit_slot(kbase_jm_slot *slot, kbase_jd_a
 static INLINE mali_bool kbasep_jm_is_dummy_workaround_job(kbase_device *kbdev, kbase_jd_atom *atom)
 {
 	/* Query the set of workaround jobs here */
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8401)) {
-		if (kbasep_8401_is_workaround_job(atom) != MALI_FALSE)
-			return MALI_TRUE;
-	}
-
-	/* This job is not a workaround job, so it will be processed as normal */
+	/* none exists today */
 	return MALI_FALSE;
 }
 

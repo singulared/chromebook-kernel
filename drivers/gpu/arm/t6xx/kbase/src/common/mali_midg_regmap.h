@@ -15,6 +15,8 @@
 
 
 
+
+
 #ifndef _MIDGARD_REGMAP_H_
 #define _MIDGARD_REGMAP_H_
 
@@ -319,6 +321,10 @@
 #define JSn_COMMAND_START       0x01	/* Start processing a job chain. Writing this value is ignored */
 #define JSn_COMMAND_SOFT_STOP   0x02	/* Gently stop processing a job chain */
 #define JSn_COMMAND_HARD_STOP   0x03	/* Rudely stop processing a job chain */
+#define JSn_COMMAND_SOFT_STOP_0 0x04	/* Execute SOFT_STOP if JOB_CHAIN_FLAG is 0 */
+#define JSn_COMMAND_HARD_STOP_0 0x05	/* Execute HARD_STOP if JOB_CHAIN_FLAG is 0 */
+#define JSn_COMMAND_SOFT_STOP_1 0x06	/* Execute SOFT_STOP if JOB_CHAIN_FLAG is 1 */
+#define JSn_COMMAND_HARD_STOP_1 0x07	/* Execute HARD_STOP if JOB_CHAIN_FLAG is 1 */
 
 /* ASn_COMMAND register commands */
 #define ASn_COMMAND_NOP         0x00	/* NOP Operation */
@@ -336,6 +342,7 @@
 #define JSn_CONFIG_START_FLUSH_CLEAN            (1u << 8)
 #define JSn_CONFIG_START_FLUSH_CLEAN_INVALIDATE (3u << 8)
 #define JSn_CONFIG_START_MMU                    (1u << 10)
+#define JSn_CONFIG_JOB_CHAIN_FLAG               (1u << 11)
 #define JSn_CONFIG_END_FLUSH_NO_ACTION          JSn_CONFIG_START_FLUSH_NO_ACTION
 #define JSn_CONFIG_END_FLUSH_CLEAN              (1u << 12)
 #define JSn_CONFIG_END_FLUSH_CLEAN_INVALIDATE   (3u << 12)
@@ -466,6 +473,12 @@
 
 /* THREAD_* registers */
 
+/* THREAD_FEATURES IMPLEMENTATION_TECHNOLOGY values */
+#define IMPLEMENTATION_UNSPECIFIED  0
+#define IMPLEMENTATION_SILICON      1
+#define IMPLEMENTATION_FPGA         2
+#define IMPLEMENTATION_MODEL        3
+
 /* Default values when registers are not supported by the implemented hardware */
 #define THREAD_MT_DEFAULT     256
 #define THREAD_MWS_DEFAULT    256
@@ -473,7 +486,6 @@
 #define THREAD_MR_DEFAULT     1024
 #define THREAD_MTQ_DEFAULT    4
 #define THREAD_MTGS_DEFAULT   10
-#define THREAD_IT_DEFAULT     1
 
 /* End THREAD_* registers */
 

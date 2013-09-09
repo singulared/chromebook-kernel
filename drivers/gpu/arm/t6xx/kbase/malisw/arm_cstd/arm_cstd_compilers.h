@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2005-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2005-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -12,6 +12,8 @@
  * Boston, MA  02110-1301, USA.
  *
  */
+
+
 
 
 
@@ -212,6 +214,12 @@
 /* ============================================================================
 	Determine the compiler in use
 ============================================================================ */
+
+/* Default empty definitions of compiler-specific option enable/disable.  This will be overridden 
+ * if applicable by preprocessor defines below. */
+#define CSTD_PUSH_WARNING_GCC_WADDRESS
+#define CSTD_POP_WARNING_GCC_WADDRESS
+
 #if defined(_MSC_VER)
 	#undef CSTD_TOOLCHAIN_MSVC
 	#define CSTD_TOOLCHAIN_MSVC         1
@@ -224,6 +232,27 @@
 	#if defined(__ARMCC_VERSION)
 		#undef CSTD_TOOLCHAIN_RVCT_GCC_MODE
 		#define CSTD_TOOLCHAIN_RVCT_GCC_MODE    1
+	#endif
+
+	#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6 && MALI_GCC_WORKAROUND_MIDCOM_4598 == 0)
+		/* As a workaround to MIDCOM-4598 (GCC internal defect), these pragmas are not compiled if the GCC version 
+		 * is within a certain range, or if a #define is enabled by the build system.  For more, see a comment 
+		 * in the build system also referring to the MIDCOM issue mentioned, where the environment is updated 
+		 * for the GNU toolchain.  */
+		#undef CSTD_PUSH_WARNING_GCC_WADDRESS
+		#define CSTD_PUSH_WARNING_GCC_WADDRESS \
+			do\
+			{\
+				_Pragma("GCC diagnostic push")\
+				_Pragma("GCC diagnostic ignored \"-Waddress\"")\
+			}while(MALI_FALSE)
+
+		#undef CSTD_POP_WARNING_GCC_WADDRESS
+		#define CSTD_POP_WARNING_GCC_WADDRESS \
+			do\
+			{\
+				_Pragma("GCC diagnostic pop")\
+			}while(MALI_FALSE)
 	#endif
 
 #elif defined(__ARMCC_VERSION)

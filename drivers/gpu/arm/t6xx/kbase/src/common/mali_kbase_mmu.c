@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_mmu.c
  * Base kernel MMU management.
@@ -745,6 +747,11 @@ mali_error kbase_mmu_update_pages(kbase_context* kctx, u64 vpfn, phys_addr_t* ph
 
 	mmu_flags = kbase_mmu_get_mmu_flags(flags);
 
+	dev_warn( kctx->kbdev->osdev.dev, "kbase_mmu_update_pages(): updating page share flags "\
+			"on GPU PFN 0x%llx from phys %p, %u pages", 
+			vpfn, phys, nr);
+
+
 	while(nr)
 	{
 		u32 i;
@@ -755,13 +762,13 @@ mali_error kbase_mmu_update_pages(kbase_context* kctx, u64 vpfn, phys_addr_t* ph
 
 		pgd = mmu_get_bottom_pgd(kctx, vpfn);
 		if (!pgd) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_update_pages: mmu_get_bottom_pgd failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_bottom_pgd failure\n");
 			return MALI_ERROR_FUNCTION_FAILED;
 		}
 
 		pgd_page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 		if (!pgd_page) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_update_pages: kmap failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kmap failure\n");
 			return MALI_ERROR_OUT_OF_MEMORY;
 		}
 

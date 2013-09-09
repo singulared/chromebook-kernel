@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -12,6 +12,8 @@
  * Boston, MA  02110-1301, USA.
  *
  */
+
+
 
 
 
@@ -193,6 +195,8 @@ typedef enum
 	MALI_ERROR_MCLP_INVALID_BUFFER_SIZE,
 	MALI_ERROR_MCLP_INVALID_MIP_LEVEL,
 	MALI_ERROR_MCLP_INVALID_GLOBAL_WORK_SIZE,
+	MALI_ERROR_MCLP_INVALID_GL_SHAREGROUP_REFERENCE_KHR,
+	MALI_ERROR_MCLP_INVALID_EGL_OBJECT,
 	/* @} */
 	/**
 	 * @brief Mali errors for the BASE module
@@ -201,8 +205,21 @@ typedef enum
 	 * These are errors in the mali error space specifically for the BASE module, hence the BASEP prefix.
 	 * @{
 	 */
-	MALI_ERROR_BASEP_INVALID_FUNCTION
+	MALI_ERROR_BASEP_INVALID_FUNCTION,
 	/* @} */
+	/** A dependency exists upon a resource that the client application wants to modify, so the driver must either
+	 * create a copy of the resource (if possible) or block until the dependency has been satisfied.
+	 */
+	MALI_ERROR_RESOURCE_IN_USE,
+
+	/**
+	 * @brief A stride value was too big.
+	 *
+	 * A surface descriptor can store strides of up to 2<sup>31</sup>-1 bytes but strides greater than
+	 * 2<sup>28</sup>-1 bytes cannot be expressed in bits without overflow.
+	 */
+	MALI_ERROR_STRIDE_TOO_BIG
+
 } mali_error;
 /* @} */
 

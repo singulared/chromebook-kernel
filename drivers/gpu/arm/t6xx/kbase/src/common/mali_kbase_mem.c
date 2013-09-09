@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_mem.c
  * Base kernel memory APIs
@@ -22,7 +24,6 @@
 #ifdef CONFIG_DMA_SHARED_BUFFER
 #include <linux/dma-buf.h>
 #endif				/* CONFIG_DMA_SHARED_BUFFER */
-
 #include <kbase/mali_kbase_config.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_midg_regmap.h>
@@ -885,15 +886,17 @@ static mali_error kbase_do_syncset(kbase_context *kctx, struct base_syncset *set
 	struct basep_syncset *sset = &set->basep_sset;
 	struct kbase_va_region *reg;
 	struct kbase_cpu_mapping *map;
-	phys_addr_t *pa;
-	u64 page_off, page_count;
 	void *start;
 	size_t size;
+	phys_addr_t base_phy_addr = 0;
+#ifdef CONFIG_OUTER_CACHE
+	phys_addr_t *pa;
+	u64 page_off, page_count;
 	u64 i;
 	u32 offset_within_page;
-	phys_addr_t base_phy_addr = 0;
 	void *base_virt_addr = 0;
 	size_t area_size = 0;
+#endif /* CONFIG_OUTER_CACHE */
 
 	kbase_os_mem_map_lock(kctx);
 
@@ -918,37 +921,41 @@ static mali_error kbase_do_syncset(kbase_context *kctx, struct base_syncset *set
 		goto out_unlock;
 	}
 
-	offset_within_page = (uintptr_t) start & (PAGE_SIZE - 1);
-	page_off = map->page_off + (((uintptr_t) start - (uintptr_t) map->uaddr) >> PAGE_SHIFT);
-	page_count = ((size + offset_within_page + (PAGE_SIZE - 1)) & PAGE_MASK) >> PAGE_SHIFT;
-	pa = kbase_get_phy_pages(reg);
+	#ifndef CONFIG_OUTER_CACHE
+		sync_fn(base_phy_addr, start, size);
+	#else
+		offset_within_page = (uintptr_t) start & (PAGE_SIZE - 1);
+		page_off = map->page_off + (((uintptr_t) start - (uintptr_t) map->uaddr) >> PAGE_SHIFT);
+		page_count = ((size + offset_within_page + (PAGE_SIZE - 1)) & PAGE_MASK) >> PAGE_SHIFT;
+		pa = kbase_get_phy_pages(reg);
 
-	for (i = 0; i < page_count; i++) {
-		u32 offset = (uintptr_t) start & (PAGE_SIZE - 1);
-		phys_addr_t paddr = pa[page_off + i] + offset;
-		size_t sz = MIN(((size_t) PAGE_SIZE - offset), size);
+		for (i = 0; i < page_count; i++) {
+			u32 offset = (uintptr_t) start & (PAGE_SIZE - 1);
+			phys_addr_t paddr = pa[page_off + i] + offset;
+			size_t sz = MIN(((size_t) PAGE_SIZE - offset), size);
 
-		if (paddr == base_phy_addr + area_size && start == (void *)((uintptr_t) base_virt_addr + area_size)) {
-			area_size += sz;
-		} else if (area_size > 0) {
+			if (paddr == base_phy_addr + area_size && start == (void *)((uintptr_t) base_virt_addr + area_size)) {
+				area_size += sz;
+			} else if (area_size > 0) {
+				sync_fn(base_phy_addr, base_virt_addr, area_size);
+				area_size = 0;
+			}
+
+			if (area_size == 0) {
+				base_phy_addr = paddr;
+				base_virt_addr = start;
+				area_size = sz;
+			}
+
+			start = (void *)((uintptr_t) start + sz);
+			size -= sz;
+		}
+
+		if (area_size > 0)
 			sync_fn(base_phy_addr, base_virt_addr, area_size);
-			area_size = 0;
-		}
 
-		if (area_size == 0) {
-			base_phy_addr = paddr;
-			base_virt_addr = start;
-			area_size = sz;
-		}
-
-		start = (void *)((uintptr_t) start + sz);
-		size -= sz;
-	}
-
-	if (area_size > 0)
-		sync_fn(base_phy_addr, base_virt_addr, area_size);
-
-	KBASE_DEBUG_ASSERT(size == 0);
+		KBASE_DEBUG_ASSERT(size == 0);
+	#endif /* CONFIG_OUTER_CACHE */
 
  out_unlock:
 	kbase_gpu_vm_unlock(kctx);
@@ -1911,6 +1918,11 @@ mali_error kbase_tmem_set_attributes(kbase_context *kctx, mali_addr64 gpu_addr, 
 	if( !(reg->flags & KBASE_REG_ZONE_TMEM) )
 		goto out_unlock;
 
+	/* Verify if this is an imported tmem region, even if the flags are not
+	 * being updated */
+	if( reg->imported_type == BASE_TMEM_IMPORT_TYPE_INVALID )
+		goto out_unlock;
+
 	/* Verify if there is anything to be updated and if the attributes are valid */
 
 	/* Get the attributes ( only ) */
@@ -1956,6 +1968,7 @@ mali_error kbase_tmem_set_attributes(kbase_context *kctx, mali_addr64 gpu_addr, 
 		break;
 #endif
 	default:
+		KBASE_DEBUG_ASSERT_MSG(0,"Unreachable");
 		break;
 	}
 
@@ -1995,20 +2008,20 @@ mali_error kbase_tmem_get_attributes(kbase_context *kctx, mali_addr64 gpu_addr, 
 		goto out_unlock;
 
 	/* Verify if this is an imported memory */
-	if(BASE_TMEM_IMPORT_TYPE_INVALID != reg->imported_type)
-	{
-		/* Get the attributes ( only ) */
-		if( KBASE_REG_GPU_WR & reg->flags )
-			current_attributes |= BASE_MEM_PROT_GPU_WR;
-		if( KBASE_REG_GPU_RD & reg->flags )
-			current_attributes |= BASE_MEM_PROT_GPU_RD;
-		if( KBASE_REG_GPU_NX & reg->flags )
-			current_attributes |= BASE_MEM_PROT_GPU_EX;
-		if( KBASE_REG_SHARE_BOTH & reg->flags )
-			current_attributes |= BASE_MEM_COHERENT_SYSTEM;
-		if ( KBASE_REG_SHARE_IN & reg->flags )
-			current_attributes |= BASE_MEM_COHERENT_LOCAL;
-	}
+	if(reg->imported_type == BASE_TMEM_IMPORT_TYPE_INVALID)
+		goto out_unlock;
+
+	/* Get the attributes ( only ) */
+	if( KBASE_REG_GPU_WR & reg->flags )
+		current_attributes |= BASE_MEM_PROT_GPU_WR;
+	if( KBASE_REG_GPU_RD & reg->flags )
+		current_attributes |= BASE_MEM_PROT_GPU_RD;
+	if( ! (KBASE_REG_GPU_NX & reg->flags) )
+		current_attributes |= BASE_MEM_PROT_GPU_EX;
+	if( KBASE_REG_SHARE_BOTH & reg->flags )
+		current_attributes |= BASE_MEM_COHERENT_SYSTEM;
+	if ( KBASE_REG_SHARE_IN & reg->flags )
+		current_attributes |= BASE_MEM_COHERENT_LOCAL;
 
 	*attributes = current_attributes;
 	ret = MALI_ERROR_NONE;

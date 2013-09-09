@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -12,6 +12,8 @@
  * Boston, MA  02110-1301, USA.
  *
  */
+
+
 
 
 
@@ -32,8 +34,19 @@
 	test_bit(issue, &(kbdev)->hw_issues_mask[0])
 
 /**
+ * @brief Tell whether a feature is supported
+ */
+#define kbase_hw_has_feature(kbdev, feature)\
+	test_bit(feature, &(kbdev)->hw_features_mask[0])
+
+/**
  * @brief Set the HW issues mask depending on the GPU ID
  */
 mali_error kbase_hw_set_issues_mask(kbase_device *kbdev);
+
+/**
+ * @brief Set the features mask depending on the GPU ID
+ */
+void kbase_hw_set_features_mask(kbase_device *kbdev);
 
 #endif				/* _KBASE_HW_H_ */

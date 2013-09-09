@@ -15,6 +15,8 @@
 
 
 
+
+
 /*
  * Job Scheduler Implementation
  */
@@ -766,9 +768,10 @@ STATIC void kbasep_js_runpool_attempt_fast_start_ctx(kbase_device *kbdev, kbase_
 
 	mutex_lock(&js_devdata->runpool_mutex);
 
-	/* If the runpool is full and it's not dying, attempt to fast start our context */
-	if (check_is_runpool_full(kbdev, kctx_new) != MALI_FALSE
-		&& !js_kctx_new->ctx.is_dying) {
+	/* If the runpool is full and either there is no specified context or the specified context is not dying, then
+	   attempt to fast start the specified context or evict the first context with no running jobs. */
+	if (check_is_runpool_full(kbdev, kctx_new) && 
+            (!js_kctx_new || (js_kctx_new && !js_kctx_new->ctx.is_dying))) {
 		/* No free address spaces - attempt to evict non-running lower priority context */
 		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
 		for (evict_as_nr = 0; evict_as_nr < kbdev->nr_hw_address_spaces; evict_as_nr++) {

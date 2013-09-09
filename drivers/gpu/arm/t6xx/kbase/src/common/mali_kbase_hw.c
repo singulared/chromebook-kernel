@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file
  * Run-time work-arounds helpers
@@ -25,51 +27,72 @@
 #include "mali_kbase.h"
 #include "mali_kbase_hw.h"
 
+void kbase_hw_set_features_mask(kbase_device *kbdev)
+{
+}
+
 mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 {
 	const base_hw_issue *issues;
 	u32 gpu_id;
+	u32 impl_tech;
 
 	gpu_id = kbdev->gpu_props.props.raw_props.gpu_id;
+	impl_tech = kbdev->gpu_props.props.thread_props.impl_tech;
 
-	switch (gpu_id) {
-	case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 0, GPU_ID_S_15DEV0):
-		issues = base_hw_issues_t60x_r0p0_15dev0;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 0, GPU_ID_S_EAC):
-		issues = base_hw_issues_t60x_r0p0_eac;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 1, 0):
-		issues = base_hw_issues_t60x_r0p1;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T65X, 0, 1, 0):
-		issues = base_hw_issues_t65x_r0p1;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 0):
-	case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 1):
-		issues = base_hw_issues_t62x_r0p0;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 1, 0):
-		issues = base_hw_issues_t62x_r0p1;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T62X, 1, 0, 0):
-	case GPU_ID_MAKE(GPU_ID_PI_T62X, 1, 0, 1):
-		issues = base_hw_issues_t62x_r1p0;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 0, 0):
-	case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 0, 1):
-		issues = base_hw_issues_t67x_r0p0;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 1, 0):
-		issues = base_hw_issues_t67x_r0p1;
-		break;
-	case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 0):
-	case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 1):
-		issues = base_hw_issues_t67x_r1p0;
-		break;
-	default:
-		KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
-		return MALI_ERROR_FUNCTION_FAILED;
+	if (impl_tech != IMPLEMENTATION_MODEL) {
+		switch (gpu_id) {
+		case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 0, GPU_ID_S_15DEV0):
+			issues = base_hw_issues_t60x_r0p0_15dev0;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 0, GPU_ID_S_EAC):
+			issues = base_hw_issues_t60x_r0p0_eac;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T60X, 0, 1, 0):
+			issues = base_hw_issues_t60x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T65X, 0, 1, 0):
+			issues = base_hw_issues_t65x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 0):
+		case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 0, 1):
+			issues = base_hw_issues_t62x_r0p0;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T62X, 0, 1, 0):
+			issues = base_hw_issues_t62x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T62X, 1, 0, 0):
+		case GPU_ID_MAKE(GPU_ID_PI_T62X, 1, 0, 1):
+			issues = base_hw_issues_t62x_r1p0;
+	 		break;
+		case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 0, 0):
+		case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 0, 1):
+			issues = base_hw_issues_t67x_r0p0;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T67X, 0, 1, 0):
+			issues = base_hw_issues_t67x_r0p1;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 0):
+		case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 1):
+			issues = base_hw_issues_t67x_r1p0;
+			break;
+		default:
+			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
+			return MALI_ERROR_FUNCTION_FAILED;
+		}
+	} else {
+		/* Software model */
+		switch (gpu_id >> GPU_ID_VERSION_PRODUCT_ID_SHIFT) {
+		case GPU_ID_PI_T60X:
+		case GPU_ID_PI_T62X:
+		case GPU_ID_PI_T65X:
+		case GPU_ID_PI_T67X:
+			issues = base_hw_issues_model_t6xx;
+			break;
+		default:
+			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
+			return MALI_ERROR_FUNCTION_FAILED;
+		}
 	}
 
 	KBASE_DEBUG_PRINT_INFO(KBASE_CORE, "GPU identified as 0x%04x r%dp%d status %d", (gpu_id & GPU_ID_VERSION_PRODUCT_ID) >> GPU_ID_VERSION_PRODUCT_ID_SHIFT, (gpu_id & GPU_ID_VERSION_MAJOR) >> GPU_ID_VERSION_MAJOR_SHIFT, (gpu_id & GPU_ID_VERSION_MINOR) >> GPU_ID_VERSION_MINOR_SHIFT, (gpu_id & GPU_ID_VERSION_STATUS) >> GPU_ID_VERSION_STATUS_SHIFT);

@@ -15,6 +15,8 @@
 
 
 
+
+
 /* ***** IMPORTANT: THIS IS NOT A NORMAL HEADER FILE         *****
  * *****            DO NOT INCLUDE DIRECTLY                  *****
  * *****            THE LACK OF HEADER GUARDS IS INTENTIONAL ***** */
@@ -95,7 +97,11 @@ int dummy_array[] = {
  * - If JSn_STATUS active after soft-stop, val==gpu addr written to JSn_HEAD on submit
  * - otherwise gpu_addr==0 */
 	KBASE_TRACE_CODE_MAKE_CODE(JM_SOFTSTOP),
+	KBASE_TRACE_CODE_MAKE_CODE(JM_SOFTSTOP_0),
+	KBASE_TRACE_CODE_MAKE_CODE(JM_SOFTSTOP_1),
 	KBASE_TRACE_CODE_MAKE_CODE(JM_HARDSTOP),	/* gpu_addr==JSn_HEAD read */
+	KBASE_TRACE_CODE_MAKE_CODE(JM_HARDSTOP_0),	/* gpu_addr==JSn_HEAD read */
+	KBASE_TRACE_CODE_MAKE_CODE(JM_HARDSTOP_1),	/* gpu_addr==JSn_HEAD read */
 	KBASE_TRACE_CODE_MAKE_CODE(JM_UPDATE_HEAD),	/* gpu_addr==JSn_TAIL read */
 /* gpu_addr is as follows:
  * - If JSn_STATUS active before soft-stop, val==JSn_HEAD

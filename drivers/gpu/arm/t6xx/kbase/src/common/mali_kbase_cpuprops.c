@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,7 +25,10 @@
 #include "mali_kbase_uku.h"
 #include <kbase/mali_kbase_config.h>
 #include <linux/cache.h>
+#include <linux/cpufreq.h>
 #include <asm/cputype.h>
+
+#define KBASE_DEFAULT_CPU_NUM 0
 
 #define L1_DCACHE_LINE_SIZE_LOG2 L1_CACHE_SHIFT
 
@@ -72,8 +75,7 @@ int kbase_cpuprops_get_default_clock_speed(u32 * const clock_speed)
 
 mali_error kbase_cpuprops_uk_get_props(kbase_context *kctx, kbase_uk_cpuprops * const kbase_props)
 {
-	int result;
-	kbase_cpuprops_clock_speed_function kbase_cpuprops_uk_get_clock_speed;
+	unsigned int max_cpu_freq;
 
 	kbase_props->props.cpu_l1_dcache_line_size_log2 = L1_DCACHE_LINE_SIZE_LOG2;
 	kbase_props->props.cpu_l1_dcache_size = L1_DCACHE_SIZE;
@@ -85,10 +87,24 @@ mali_error kbase_cpuprops_uk_get_props(kbase_context *kctx, kbase_uk_cpuprops * 
 
 	kbasep_cpuprops_uk_get_cpu_id_info(kbase_props, read_cpuid_id());
 
-	kbase_cpuprops_uk_get_clock_speed = (kbase_cpuprops_clock_speed_function) kbasep_get_config_value(kctx->kbdev, kctx->kbdev->config_attributes, KBASE_CONFIG_ATTR_CPU_SPEED_FUNC);
-	result = kbase_cpuprops_uk_get_clock_speed(&kbase_props->props.max_cpu_clock_speed_mhz);
-	if (result != 0)
-		return MALI_ERROR_FUNCTION_FAILED;
+	/* check if kernel supports dynamic frequency scaling */
+	max_cpu_freq = cpufreq_quick_get_max( KBASE_DEFAULT_CPU_NUM );
+	if ( max_cpu_freq != 0 )
+	{
+		/* convert from kHz to mHz */
+		kbase_props->props.max_cpu_clock_speed_mhz = max_cpu_freq / 1000 ;
+	}
+	else 
+	{
+		/* fallback if CONFIG_CPU_FREQ turned off */
+		int result;
+		kbase_cpuprops_clock_speed_function kbase_cpuprops_uk_get_clock_speed;
+
+		kbase_cpuprops_uk_get_clock_speed = (kbase_cpuprops_clock_speed_function) kbasep_get_config_value(kctx->kbdev, kctx->kbdev->config_attributes, KBASE_CONFIG_ATTR_CPU_SPEED_FUNC);
+		result = kbase_cpuprops_uk_get_clock_speed(&kbase_props->props.max_cpu_clock_speed_mhz);
+		if (result != 0)
+			return MALI_ERROR_FUNCTION_FAILED;
+	}
 
 	return MALI_ERROR_NONE;
 }

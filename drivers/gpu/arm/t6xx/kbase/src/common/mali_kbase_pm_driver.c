@@ -15,6 +15,8 @@
 
 
 
+
+
 /**
  * @file mali_kbase_pm_driver.c
  * Base kernel Power Management hardware control
@@ -323,9 +325,22 @@ STATIC mali_bool kbase_pm_transition_core_type(kbase_device *kbdev, kbase_pm_cor
 	powerup &= ~ready;
 	powerdown &= ready;
 
-	/* Don't transition any cores that are already transitioning */
-	powerup &= ~trans;
+	/* Don't transition any cores that are already transitioning, except for
+	 * Mali cores that support the following case:
+	 *
+	 * If the SHADER_PWRON or TILER_PWRON registers are written to turn on
+	 * a core that is currently transitioning to power off, then this is 
+	 * remembered and the shader core is automatically powered up again once
+	 * the original transition completes. Once the automatic power on is
+	 * complete any job scheduled on the shader core should start.
+	 */
 	powerdown &= ~trans;
+
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PWRON_DURING_PWROFF_TRANS))
+		if (KBASE_PM_CORE_SHADER == type || KBASE_PM_CORE_TILER == type)
+			trans = powering_on_trans; /* for exception cases, only mask off cores in power on transitions */
+
+	powerup &= ~trans;
 
 	/* Perform transitions if any */
 	kbase_pm_invoke(kbdev, type, powerup, ACTION_PWRON);
