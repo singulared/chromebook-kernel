@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010, 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -35,12 +35,16 @@
 
 /** A HWC dump mapping */
 typedef struct kbase_hwc_dma_mapping {
-	void *     cpu_va;
-	dma_addr_t dma_pa;
-	size_t     size;
+	void       *cpu_va;
+	dma_addr_t  dma_pa;
+	size_t      size;
 } kbase_hwc_dma_mapping;
 
-struct kbase_va_region *kbase_pmem_alloc(kbase_context *kctx, u32 size, u32 flags, u16 * const pmem_cookie);
+struct kbase_va_region * kbase_mem_alloc(kbase_context * kctx, u64 va_pages, u64 commit_pages, u64 extent, u64 * flags, u64 * gpu_va, u16 * va_alignment);
+mali_error kbase_mem_query(kbase_context *kctx, mali_addr64 gpu_addr, int query, u64 * const pages);
+int kbase_mem_import(kbase_context *kctx, base_mem_import_type type, int handle, mali_addr64 * gpu_va, u64 * va_pages, u64 * flags);
+mali_error kbase_mem_flags_change(kbase_context *kctx, mali_addr64 gpu_addr, unsigned int flags, unsigned int mask);
+int kbase_mem_commit(kbase_context * kctx, mali_addr64 gpu_addr, u64 new_pages, base_backing_threshold_status * failure_reason);
 int kbase_mmap(struct file *file, struct vm_area_struct *vma);
 
 /** @brief Allocate memory from kernel space and map it onto the GPU
@@ -50,13 +54,13 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma);
  * @param handle An opaque structure used to contain the state needed to free the memory
  * @return the VA for kernel space and GPU MMU
  */
-void * kbase_va_alloc(kbase_context *kctx, u32 size, kbase_hwc_dma_mapping * handle);
+void *kbase_va_alloc(kbase_context *kctx, u32 size, kbase_hwc_dma_mapping *handle);
 
 /** @brief Free/unmap memory allocated by kbase_va_alloc
  *
  * @param kctx   The context used for the allocation/mapping
  * @param handle An opaque structure returned by the kbase_va_alloc function.
  */
-void kbase_va_free(kbase_context *kctx, kbase_hwc_dma_mapping * handle);
+void kbase_va_free(kbase_context *kctx, kbase_hwc_dma_mapping *handle);
 
 #endif				/* _KBASE_MEM_LINUX_H_ */

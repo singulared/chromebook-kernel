@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -239,7 +239,7 @@ static void kbasep_pm_do_gpu_poweroff_wq(struct work_struct *data)
 	if (do_poweroff != MALI_FALSE) {
 		kbdev->pm.poweroff_timer_running = MALI_FALSE;
 		/* Power off the GPU */
-		kbase_pm_do_poweroff(kbdev);
+		kbase_pm_do_poweroff(kbdev, MALI_FALSE);
 		hrtimer_cancel(&kbdev->pm.gpu_poweroff_timer);
 	}
 
@@ -325,7 +325,7 @@ void kbase_pm_update_active(kbase_device *kbdev)
 		}
 
 		/* Power on the GPU and any cores requested by the policy */
-		kbase_pm_do_poweron(kbdev);
+		kbase_pm_do_poweron(kbdev, MALI_FALSE);
 	} else {
 		/* It is an error for the power policy to power off the GPU
 		 * when there are contexts active */

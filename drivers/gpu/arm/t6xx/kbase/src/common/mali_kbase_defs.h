@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -139,7 +139,7 @@ typedef struct kbase_device kbase_device;
 #define MIDGARD_MMU_TOPLEVEL    1
 #endif
 
-#define GROWABLE_FLAGS_REQUIRED (KBASE_REG_PF_GROW | KBASE_REG_ZONE_TMEM)
+#define GROWABLE_FLAGS_REQUIRED (KBASE_REG_PF_GROW)
 #define GROWABLE_FLAGS_MASK     (GROWABLE_FLAGS_REQUIRED | KBASE_REG_FREE)
 
 /** setting in kbase_context::as_nr that indicates it's invalid */
@@ -212,6 +212,12 @@ typedef enum {
 
 typedef struct kbase_jd_atom kbase_jd_atom;
 
+struct kbase_ext_res
+{
+	mali_addr64 gpu_address;
+	struct kbase_mem_phy_alloc * alloc;
+};
+
 struct kbase_jd_atom {
 	struct work_struct work;
 	ktime_t start_timestamp;
@@ -224,7 +230,7 @@ struct kbase_jd_atom {
 	struct kbase_jd_atom *dep_atom[2];
 
 	u16 nr_extres;
-	struct base_external_resource *extres;
+	struct kbase_ext_res * extres;
 
 	u32 device_nr;
 	u64 affinity;
@@ -261,6 +267,7 @@ struct kbase_jd_atom {
 #endif
 	/* Assigned after atom is completed. Used to check whether PRLAM-10676 workaround should be applied */
 	int slot_nr;
+
 	u32 atom_flags;
 };
 
@@ -371,6 +378,7 @@ typedef struct kbase_as {
 	struct work_struct work_pagefault;
 	struct work_struct work_busfault;
 	mali_addr64 fault_addr;
+	u32 fault_status;
 	struct mutex transaction_mutex;
 
 	/* BASE_HW_ISSUE_8316  */
@@ -456,7 +464,7 @@ typedef struct kbase_trace {
 	int atom_number;
 	u64 atom_udata[2];
 	u64 gpu_addr;
-	u32 info_val;
+	unsigned long info_val;
 	u8 code;
 	u8 jobslot;
 	u8 refcount;
@@ -703,6 +711,16 @@ struct kbase_device {
 #ifdef CONFIG_MALI_TRACE_TIMELINE
 	kbase_trace_kbdev_timeline timeline;
 #endif
+
+#ifdef CONFIG_DEBUG_FS
+	/* directory for debugfs entries */
+	struct dentry *mali_debugfs_directory;
+	/* debugfs entry for gpu_memory */
+	struct dentry *gpu_memory_dentry;
+#endif /* CONFIG_DEBUG_FS */
+
+	/* fbdump profiling controls set by gator */
+	u32 kbase_profiling_controls[FBDUMP_CONTROL_MAX];
 };
 
 struct kbase_context {

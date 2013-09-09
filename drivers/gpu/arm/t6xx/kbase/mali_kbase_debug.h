@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -59,6 +59,7 @@ typedef enum {
 	KBASE_EVENT,	   /**< @brief ID of Base Event */
 	KBASE_CTX,	   /**< @brief ID of Base Context */
 	KBASE_PM,	   /**< @brief ID of Base Power Management */
+	KBASE_DEV, /**< @brief ID of Base Device */
 	KBASE_MODULES_ALL  /**< @brief Select all the modules at once / Also gives the number of modules in the enum */
 } kbase_module;
 

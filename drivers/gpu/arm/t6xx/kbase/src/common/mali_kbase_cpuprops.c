@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -26,7 +26,9 @@
 #include <kbase/mali_kbase_config.h>
 #include <linux/cache.h>
 #include <linux/cpufreq.h>
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 #include <asm/cputype.h>
+#endif
 
 #define KBASE_DEFAULT_CPU_NUM 0
 
@@ -50,20 +52,32 @@
  * @brief Retrieves detailed CPU info from given cpu_val ( ID reg )
  *
  * @param kbase_props CPU props to be filled-in with cpu id info
- * @param cpu_val     CPU ID info
  *
  */
-static void kbasep_cpuprops_uk_get_cpu_id_info(kbase_uk_cpuprops * const kbase_props, u32 cpu_val)
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
+static void kbasep_cpuprops_uk_get_cpu_id_info(kbase_uk_cpuprops * const kbase_props)
 {
-	kbase_props->props.cpu_id.id           = cpu_val;
+	kbase_props->props.cpu_id.id           = read_cpuid_id();
 
-	kbase_props->props.cpu_id.rev          = KBASE_CPUPROPS_ID_GET_REV(cpu_val);
-	kbase_props->props.cpu_id.part         = KBASE_CPUPROPS_ID_GET_PART_NR(cpu_val);
-	kbase_props->props.cpu_id.arch         = KBASE_CPUPROPS_ID_GET_ARCH(cpu_val);
-	kbase_props->props.cpu_id.variant      = KBASE_CPUPROPS_ID_GET_VARIANT(cpu_val);
-	kbase_props->props.cpu_id.implementer  = KBASE_CPUPROPS_ID_GET_CODE(cpu_val);
-
+	kbase_props->props.cpu_id.valid        = 1;
+	kbase_props->props.cpu_id.rev          = KBASE_CPUPROPS_ID_GET_REV(kbase_props->props.cpu_id.id);
+	kbase_props->props.cpu_id.part         = KBASE_CPUPROPS_ID_GET_PART_NR(kbase_props->props.cpu_id.id);
+	kbase_props->props.cpu_id.arch         = KBASE_CPUPROPS_ID_GET_ARCH(kbase_props->props.cpu_id.id);
+	kbase_props->props.cpu_id.variant      = KBASE_CPUPROPS_ID_GET_VARIANT(kbase_props->props.cpu_id.id);
+	kbase_props->props.cpu_id.implementer  = KBASE_CPUPROPS_ID_GET_CODE(kbase_props->props.cpu_id.id);
 }
+#else
+static void kbasep_cpuprops_uk_get_cpu_id_info(kbase_uk_cpuprops * const kbase_props)
+{
+	kbase_props->props.cpu_id.id           = 0;
+	kbase_props->props.cpu_id.valid        = 0;
+	kbase_props->props.cpu_id.rev          = 0;
+	kbase_props->props.cpu_id.part         = 0;
+	kbase_props->props.cpu_id.arch         = 0;
+	kbase_props->props.cpu_id.variant      = 0;
+	kbase_props->props.cpu_id.implementer  = 'N';
+}
+#endif
 
 int kbase_cpuprops_get_default_clock_speed(u32 * const clock_speed)
 {
@@ -85,7 +99,7 @@ mali_error kbase_cpuprops_uk_get_props(kbase_context *kctx, kbase_uk_cpuprops * 
 	kbase_props->props.cpu_page_size_log2 = PAGE_SHIFT;
 	kbase_props->props.available_memory_size = totalram_pages << PAGE_SHIFT;
 
-	kbasep_cpuprops_uk_get_cpu_id_info(kbase_props, read_cpuid_id());
+	kbasep_cpuprops_uk_get_cpu_id_info(kbase_props);
 
 	/* check if kernel supports dynamic frequency scaling */
 	max_cpu_freq = cpufreq_quick_get_max( KBASE_DEFAULT_CPU_NUM );

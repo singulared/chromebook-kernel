@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2008-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -46,42 +46,22 @@
 
 #include "mali_kbase_gpuprops_types.h"
 
-#define BASE_UK_VERSION_MAJOR 4
+#define BASE_UK_VERSION_MAJOR 5
 #define BASE_UK_VERSION_MINOR 0
 
-typedef struct kbase_uk_tmem_alloc {
+typedef struct kbase_uk_mem_alloc {
 	uk_header header;
 	/* IN */
-	u32 vsize;
-	u32 psize;
-	u32 extent;
-	u32 flags;
-	u32 is_growable;
-	u32 padding;
+	u64 va_pages;
+	u64 commit_pages;
+	u64 extent;
+	/* IN/OUT */
+	u64 flags;
 	/* OUT */
-	mali_addr64 gpu_addr;
-} kbase_uk_tmem_alloc;
-
-typedef struct kbase_uk_tmem_import {
-	uk_header header;
-	/* IN */
-	kbase_pointer phandle;
-	u32 type;
-	u32 padding;
-	/* OUT */
-	mali_addr64 gpu_addr;
-	u64 pages;
-} kbase_uk_tmem_import;
-
-typedef struct kbase_uk_pmem_alloc {
-	uk_header header;
-	/* IN */
-	u32 vsize;
-	u32 flags;
-	/* OUT */
-	u16 cookie;
-	u16 padding[3];
-} kbase_uk_pmem_alloc;
+	u64 gpu_va;
+	u16 va_alignment;
+	u8  padding[6];
+} kbase_uk_mem_alloc;
 
 typedef struct kbase_uk_mem_free {
 	uk_header header;
@@ -89,6 +69,29 @@ typedef struct kbase_uk_mem_free {
 	mali_addr64 gpu_addr;
 	/* OUT */
 } kbase_uk_mem_free;
+
+typedef struct kbase_uk_mem_import {
+	uk_header header;
+	/* IN */
+	kbase_pointer phandle;
+	u32 type;
+	u32 padding;
+	/* IN/OUT */
+#define KBASE_MEM_IMPORT_MMAP         (1UL << BASE_MEM_FLAGS_NR_BITS)
+#define KBASE_MEM_IMPORT_HAVE_PAGES   (1UL << (BASE_MEM_FLAGS_NR_BITS + 1))
+	u64         flags;
+	/* OUT */
+	mali_addr64 gpu_va;
+	u64         va_pages;
+} kbase_uk_mem_import;
+
+typedef struct kbase_uk_mem_flags_change {
+	uk_header header;
+	/* IN */
+	mali_addr64 gpu_va;
+	u64 flags;
+	u64 mask;
+} kbase_uk_mem_flags_change;
 
 typedef struct kbase_uk_job_submit {
 	uk_header header;
@@ -167,54 +170,27 @@ typedef struct kbase_uk_gpuprops {
 	/* OUT */
 } kbase_uk_gpuprops;
 
-typedef struct kbase_uk_tmem_get_size {
+typedef struct kbase_uk_mem_query {
 	uk_header header;
 	/* IN */
 	mali_addr64 gpu_addr;
+#define KBASE_MEM_QUERY_COMMIT_SIZE  1
+#define KBASE_MEM_QUERY_VA_SIZE      2
+#define KBASE_MEM_QUERY_FLAGS        3
+	u64         query;
 	/* OUT */
-	u32 actual_size;
-	u32 padding;
-} kbase_uk_tmem_get_size;
-
-typedef struct kbase_uk_tmem_set_size {
+	u64         value;
+} kbase_uk_mem_query;
+	
+typedef struct kbase_uk_mem_commit {
 	uk_header header;
 	/* IN */
 	mali_addr64 gpu_addr;
-	u32 size;
+	u64         pages;
 	/* OUT */
-	u32 actual_size;
-	base_backing_threshold_status result_subcode;
+	u32 result_subcode;
 	u32 padding;
-} kbase_uk_tmem_set_size;
-
-typedef struct kbase_uk_tmem_resize {
-	uk_header header;
-	/* IN */
-	mali_addr64 gpu_addr;
-	s32 delta;
-	/* OUT */
-	u32 actual_size;
-	base_backing_threshold_status result_subcode;
-	u32 padding;
-} kbase_uk_tmem_resize;
-
-typedef struct kbase_uk_tmem_set_attributes {
-	uk_header header;
-	/* IN */
-	mali_addr64 gpu_addr;
-	u32 attributes;
-	u32 padding;
-	/* OUT */
-} kbase_uk_tmem_set_attributes;
-
-typedef struct kbase_uk_tmem_get_attributes {
-	uk_header header;
-	/* IN */
-	mali_addr64 gpu_addr;
-	/* OUT */
-	u32 attributes;
-	u32 padding;
-} kbase_uk_tmem_get_attributes;
+} kbase_uk_mem_commit;
 
 typedef struct kbase_uk_find_cpu_mapping {
 	uk_header header;
@@ -224,8 +200,6 @@ typedef struct kbase_uk_find_cpu_mapping {
 	u64 size;
 	/* OUT */
 	u64 uaddr;
-	u32 nr_pages;
-	u32 padding;
 	mali_size64 page_off;
 } kbase_uk_find_cpu_mapping;
 
@@ -297,11 +271,18 @@ typedef struct kbase_uk_keep_gpu_powered {
 	u32       padding;
 } kbase_uk_keep_gpu_powered;
 
+typedef struct kbase_uk_profiling_controls {
+	uk_header header;
+	u32 profiling_controls[FBDUMP_CONTROL_MAX];
+} kbase_uk_profiling_controls;
+
 typedef enum kbase_uk_function_id {
-	KBASE_FUNC_TMEM_ALLOC = (UK_FUNC_ID + 0),
-	KBASE_FUNC_TMEM_IMPORT,
-	KBASE_FUNC_PMEM_ALLOC,
+	KBASE_FUNC_MEM_ALLOC = (UK_FUNC_ID + 0),
+	KBASE_FUNC_MEM_IMPORT,
+	KBASE_FUNC_MEM_COMMIT,
+	KBASE_FUNC_MEM_QUERY,
 	KBASE_FUNC_MEM_FREE,
+	KBASE_FUNC_MEM_FLAGS_CHANGE,
 
 	KBASE_FUNC_JOB_SUBMIT,
 
@@ -315,8 +296,6 @@ typedef enum kbase_uk_function_id {
 
 	KBASE_FUNC_CPU_PROPS_REG_DUMP,
 	KBASE_FUNC_GPU_PROPS_REG_DUMP,
-
-	KBASE_FUNC_TMEM_RESIZE,
 
 	KBASE_FUNC_FIND_CPU_MAPPING,
 
@@ -332,10 +311,8 @@ typedef enum kbase_uk_function_id {
 
 	KBASE_FUNC_FENCE_VALIDATE,
 	KBASE_FUNC_STREAM_CREATE,
-	KBASE_FUNC_TMEM_SETSIZE,
-	KBASE_FUNC_TMEM_GETSIZE,
-	KBASE_FUNC_TMEM_SET_ATTRIBUTES,
-	KBASE_FUNC_TMEM_GET_ATTRIBUTES
+	KBASE_FUNC_GET_PROFILING_CONTROLS,
+	KBASE_FUNC_SET_PROFILING_CONTROLS /* to be used only for testing purposes, otherwise these controls are set through gator API */
 } kbase_uk_function_id;
 
 #endif				/* _KBASE_UKU_H_ */

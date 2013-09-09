@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -429,6 +429,8 @@
 #define GPU_ID_PI_T65X                    0x3456
 #define GPU_ID_PI_T62X                    0x0620
 #define GPU_ID_PI_T67X                    0x0670
+#define GPU_ID_PI_T76X                    0x0750
+#define GPU_ID_PI_T72X                    0x0720
 
 /* Values for GPU_ID_VERSION_STATUS field for PRODUCT_ID GPU_ID_PI_T60X and GPU_ID_PI_T65X */
 #define GPU_ID_S_15DEV0                   0x1
@@ -495,7 +497,7 @@
 #define SC_OVERRIDE_FWD_PIXEL_KILL  (1ul << 4)
 #define SC_SDC_DISABLE_OQ_DISCARD   (1ul << 6)
 #define SC_LS_PAUSEBUFFER_DISABLE   (1ul << 16)
-
+#define SC_ENABLE_TEXGRD_FLAGS      (1ul << 25)
 /* End SHADER_CONFIG register */
 
 #endif				/* _MIDGARD_REGMAP_H_ */

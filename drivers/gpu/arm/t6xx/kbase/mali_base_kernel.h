@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -31,6 +31,7 @@
 typedef mali_addr64 base_mem_handle;
 
 #include <kbase/src/mali_base_mem_priv.h>
+#include <kbase/src/mali_kbase_profiling_gator_api.h>
 
 /*
  * Dependency stuff, keep it private for now. May want to expose it if
@@ -126,16 +127,17 @@ enum {
 	BASE_MEM_HINT_GPU_RD = (1U << 7),      /**< Heavily read GPU side  - OBSOLETE */
 	BASE_MEM_HINT_GPU_WR = (1U << 8),      /**< Heavily written GPU side - OBSOLETE */
 
-	BASEP_MEM_GROWABLE = (1U << 9),	       /**< Growable memory. This is a private flag that is set automatically. Not valid for PMEM. */
-	BASE_MEM_GROW_ON_GPF = (1U << 10),	/**< Grow backing store on GPU Page Fault */
+	BASE_MEM_GROW_ON_GPF = (1U << 9),      /**< Grow backing store on GPU Page Fault */
 
-	BASE_MEM_COHERENT_SYSTEM = (1U << 11), /**< Page coherence Outer shareable */
-	BASE_MEM_COHERENT_LOCAL = (1U << 12),  /**< Page coherence Inner shareable */
-	BASE_MEM_CACHED_CPU = (1U << 13)       /**< Should be cached on the CPU */
+	BASE_MEM_COHERENT_SYSTEM = (1U << 10), /**< Page coherence Outer shareable */
+	BASE_MEM_COHERENT_LOCAL = (1U << 11),  /**< Page coherence Inner shareable */
+	BASE_MEM_CACHED_CPU = (1U << 12),      /**< Should be cached on the CPU */
+
+	BASE_MEM_SAME_VA = (1U << 13) /**< Must have same VA on both the GPU and the CPU */
 };
 
 /**
- * @brief Memory types supported by @a base_tmem_import
+ * @brief Memory types supported by @a base_mem_import
  *
  * Each type defines what the supported handle type is.
  *
@@ -145,13 +147,19 @@ enum {
  * as future releases from ARM might include other new types
  * which could clash with your custom types.
  */
-typedef enum base_tmem_import_type {
-	BASE_TMEM_IMPORT_TYPE_INVALID = 0,
+typedef enum base_mem_import_type {
+	BASE_MEM_IMPORT_TYPE_INVALID = 0,
 	/** UMP import. Handle type is ump_secure_id. */
-	BASE_TMEM_IMPORT_TYPE_UMP = 1,
+	BASE_MEM_IMPORT_TYPE_UMP = 1,
 	/** UMM import. Handle type is a file descriptor (int) */
-	BASE_TMEM_IMPORT_TYPE_UMM = 2
-} base_tmem_import_type;
+	BASE_MEM_IMPORT_TYPE_UMM = 2
+} base_mem_import_type;
+
+/* legacy API wrappers */
+#define base_tmem_import_type          base_mem_import_type
+#define BASE_TMEM_IMPORT_TYPE_INVALID  BASE_MEM_IMPORT_TYPE_INVALID
+#define BASE_TMEM_IMPORT_TYPE_UMP      BASE_MEM_IMPORT_TYPE_UMP
+#define BASE_TMEM_IMPORT_TYPE_UMM      BASE_MEM_IMPORT_TYPE_UMM
 
 /**
  * @brief Number of bits used as flags for base memory management
@@ -446,14 +454,15 @@ typedef u8 base_atom_id; /**< Type big enough to store an atom number in */
 
 typedef struct base_jd_atom_v2 {
 	mali_addr64 jc;			    /**< job-chain GPU address */
-	base_jd_core_req core_req;	    /**< core requirements */
 	base_jd_udata udata;		    /**< user data */
 	kbase_pointer extres_list;	    /**< list of external resources */
 	u16 nr_extres;			    /**< nr of external resources */
+	base_jd_core_req core_req;	    /**< core requirements */
 	base_atom_id pre_dep[2];	    /**< pre-dependencies */
 	base_atom_id atom_number;	    /**< unique number to identify the atom */
 	s8 prio;			    /**< priority - smaller is higher priority */
 	u8 device_nr;			    /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
+	u8 padding[7];
 } base_jd_atom_v2;
 
 #if BASE_LEGACY_JD_API
@@ -1304,7 +1313,7 @@ struct midg_raw_gpu_props {
 	u32 texture_features[3];
 
 	u32 gpu_id;
-
+	
 	u32 thread_max_threads;
 	u32 thread_max_workgroup_size;
 	u32 thread_max_barrier_size;
@@ -1489,8 +1498,14 @@ typedef struct base_cpu_id_props
 	 * CPU revision
 	 */
 	u8 rev;
+	
+	/**
+	Validity of CPU id where 0-invalid and
+	1-valid only if ALL the cpu_id props are valid
+	*/
+	u8 valid;  
 
-	u16 padding;
+	u8 padding[1];
 }base_cpu_id_props;
 
 
@@ -1558,5 +1573,9 @@ typedef struct base_cpu_props {
 /** @} end group basecpuprops */
 
 /** @} end group base_api */
+
+typedef struct base_profiling_controls {
+	u32 profiling_controls[FBDUMP_CONTROL_MAX];
+} base_profiling_controls;
 
 #endif				/* _BASE_KERNEL_H_ */

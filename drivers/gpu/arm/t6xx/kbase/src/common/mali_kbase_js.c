@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -159,10 +159,12 @@ STATIC INLINE void runpool_inc_context_count(kbase_device *kbdev, kbase_context 
 	BUG_ON(!mutex_is_locked(&js_devdata->runpool_mutex));
 
 	/* Track total contexts */
+	KBASE_DEBUG_ASSERT(js_devdata->nr_all_contexts_running < S8_MAX);
 	++(js_devdata->nr_all_contexts_running);
 
 	if ((js_kctx_info->ctx.flags & KBASE_CTX_FLAG_SUBMIT_DISABLED) == 0) {
 		/* Track contexts that can submit jobs */
+		KBASE_DEBUG_ASSERT(js_devdata->nr_user_contexts_running < S8_MAX);
 		++(js_devdata->nr_user_contexts_running);
 	}
 }
@@ -187,10 +189,12 @@ STATIC INLINE void runpool_dec_context_count(kbase_device *kbdev, kbase_context 
 
 	/* Track total contexts */
 	--(js_devdata->nr_all_contexts_running);
+	KBASE_DEBUG_ASSERT(js_devdata->nr_all_contexts_running >= 0);
 
 	if ((js_kctx_info->ctx.flags & KBASE_CTX_FLAG_SUBMIT_DISABLED) == 0) {
 		/* Track contexts that can submit jobs */
 		--(js_devdata->nr_user_contexts_running);
+		KBASE_DEBUG_ASSERT(js_devdata->nr_user_contexts_running >= 0);
 	}
 }
 
@@ -788,7 +792,7 @@ STATIC void kbasep_js_runpool_attempt_fast_start_ctx(kbase_device *kbdev, kbase_
 				if ((kctx_new == NULL) || kbasep_js_policy_ctx_has_priority(js_policy, kctx_evict, kctx_new)) {
 					mali_bool retain_result;
 					kbasep_js_release_result release_result;
-					KBASE_TRACE_ADD(kbdev, JS_FAST_START_EVICTS_CTX, kctx_evict, NULL, 0u, (u32) kctx_new);
+					KBASE_TRACE_ADD(kbdev, JS_FAST_START_EVICTS_CTX, kctx_evict, NULL, 0u, (uintptr_t)kctx_new);
 
 					/* Retain the ctx to work on it - this shouldn't be able to fail */
 					retain_result = kbasep_js_runpool_retain_ctx_nolock(kbdev, kctx_evict);

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2005-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -76,6 +76,13 @@
  * Defined with value of 1 if processor is an ARM machine, 0 otherwise.
  */
 #define CSTD_CPU_ARM                0
+
+/**
+ * @hideinitializer
+ * Defined with value of 1 if processor is an AARCH64 machine, 0 otherwise.
+ */
+#define CSTD_CPU_AARCH64            0
+
 
 /**
  * @hideinitializer
@@ -302,6 +309,10 @@
 		#undef CSTD_CPU_ARM
 		#define CSTD_CPU_ARM            1
 
+	#elif defined(__aarch64__)
+		#undef CSTD_CPU_AARCH64
+		#define CSTD_CPU_AARCH64        1
+
 	#elif defined(__mips__)
 		#undef CSTD_CPU_MIPS
 		#define CSTD_CPU_MIPS           1
@@ -326,6 +337,9 @@
 
 #if ((1 == CSTD_CPU_X86_32) || (1 == CSTD_CPU_X86_64))
 	/* Note: x86 and x86-64 are always little endian, so leave at default. */
+
+#elif 1 == CSTD_CPU_AARCH64
+	/* No big endian support? */
 
 #elif 1 == CSTD_TOOLCHAIN_RVCT
 	#if defined(__BIG_ENDIAN)

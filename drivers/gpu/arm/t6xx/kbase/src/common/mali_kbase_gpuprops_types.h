@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -28,7 +28,7 @@
 #include <kbase/mali_base_kernel.h>
 
 #define KBASE_GPU_SPEED_MHZ    123
-#define KBASE_GPU_PC_SIZE_LOG2 16U
+#define KBASE_GPU_PC_SIZE_LOG2 24U
 
 typedef struct kbase_gpuprops_regdump {
 	u32 gpu_id;

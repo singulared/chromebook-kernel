@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -25,10 +25,14 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/seq_file.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
 
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_defs.h>
 #include <kbase/src/common/mali_kbase_hw.h>
+
+#include <kbase/src/mali_kbase_profiling_gator_api.h>
 
 /* NOTE: Magic - 0x45435254 (TRCE in ASCII).
  * Supports tracing feature provided in the base module.
@@ -182,7 +186,11 @@ mali_error kbase_device_init(kbase_device * const kbdev)
 		atomic_set(&kbdev->timeline.pm_event_uid[i], 0);
 #endif /* CONFIG_MALI_TRACE_TIMELINE */
 
-	kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
+	/* fbdump profiling controls set to 0 - fbdump not enabled until changed by gator */
+	for (i = 0; i < FBDUMP_CONTROL_MAX; i++)
+		kbdev->kbase_profiling_controls[i] = 0;
+
+		kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
 
 #if defined(CONFIG_MALI_PLATFORM_VEXPRESS) || defined(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ)
 #ifdef CONFIG_MALI_PLATFORM_FAKE
@@ -495,7 +503,7 @@ void kbasep_trace_format_msg(kbase_trace *trace_msg, char *buffer, int len)
 	written += MAX(snprintf(buffer + written, MAX(len - written, 0), ","), 0);
 
 	/* Rest of message */
-	written += MAX(snprintf(buffer + written, MAX(len - written, 0), "0x%.8x", trace_msg->info_val), 0);
+	written += MAX(snprintf(buffer + written, MAX(len - written, 0), "0x%.8lx", trace_msg->info_val), 0);
 
 }
 
@@ -507,7 +515,7 @@ void kbasep_trace_dump_msg(kbase_trace *trace_msg)
 	KBASE_DEBUG_PRINT(KBASE_CORE, "%s", buffer);
 }
 
-void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, u32 info_val)
+void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val)
 {
 	unsigned long irqflags;
 	kbase_trace *trace_msg;
@@ -697,7 +705,7 @@ STATIC void kbasep_trace_hook_wrapper(void *param)
 	CSTD_UNUSED(param);
 }
 
-void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, u32 info_val)
+void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val)
 {
 	CSTD_UNUSED(kbdev);
 	CSTD_UNUSED(code);
@@ -720,3 +728,62 @@ void kbasep_trace_dump(kbase_device *kbdev)
 	CSTD_UNUSED(kbdev);
 }
 #endif				/* KBASE_TRACE_ENABLE != 0 */
+
+void kbase_set_profiling_control(struct kbase_device *kbdev, u32 control, u32 value)
+{
+	switch (control) {
+	case FBDUMP_CONTROL_ENABLE:
+		/* fall through */
+	case FBDUMP_CONTROL_RATE:
+		/* fall through */
+	case SW_COUNTER_ENABLE:
+		/* fall through */
+	case FBDUMP_CONTROL_RESIZE_FACTOR:
+		kbdev->kbase_profiling_controls[control] = value;
+		break;
+	default:
+		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		break;
+	}
+}
+
+u32 kbase_get_profiling_control(struct kbase_device *kbdev, u32 control)
+{
+	u32 ret_value = 0;
+
+	switch (control) {
+	case FBDUMP_CONTROL_ENABLE:
+		/* fall through */
+	case FBDUMP_CONTROL_RATE:
+		/* fall through */
+	case SW_COUNTER_ENABLE:
+		/* fall through */
+	case FBDUMP_CONTROL_RESIZE_FACTOR:
+		ret_value = kbdev->kbase_profiling_controls[control];
+		break;
+	default:
+		KBASE_DEBUG_PRINT_ERROR(KBASE_DEV, "Profiling control %d not found\n", control);
+		break;
+	}
+
+	return ret_value;
+}
+
+/*
+ * Called by gator to control the production of
+ * profiling information at runtime
+ * */
+
+void _mali_profiling_control(u32 action, u32 value)
+{
+	struct kbase_device *kbdev = NULL;
+
+	/* find the first i.e. call with -1 */
+	kbdev = kbase_find_device(-1);
+
+	if (NULL != kbdev) {
+		kbase_set_profiling_control(kbdev, action, value);
+	}
+}
+
+KBASE_EXPORT_SYMBOL(_mali_profiling_control);

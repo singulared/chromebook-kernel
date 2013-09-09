@@ -15,7 +15,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r4p0-00alp0"
+MALI_RELEASE_NAME ?= "r4p0-00dev0"
 
 # Paths required for build
 KBASE_PATH = $(src)/../..
@@ -40,7 +40,7 @@ MALI_INSTRUMENTATION_LEVEL ?= 0
 # the "_Pragma" syntax, where an error message is returned:
 #
 # "internal compiler error: unspellable token PRAGMA"
-#
+# 
 # This regression has thus far only been seen on the GCC 4.7 compiler bundled
 # with AOSP 4.3.0.  So this makefile, intended for in-tree kernel builds
 # which are not known to be used with AOSP, is hardcoded to disable the
@@ -58,6 +58,10 @@ DEFINES = \
 	-DMALI_INSTRUMENTATION_LEVEL=$(MALI_INSTRUMENTATION_LEVEL) \
 	-DMALI_RELEASE_NAME=\"$(MALI_RELEASE_NAME)\" \
 	-DMALI_GCC_WORKAROUND_MIDCOM_4598=$(MALI_GCC_WORKAROUND_MIDCOM_4598)
+
+ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
+	DEFINES += -DMALI_PLATFORM_FAKE_MODULE=1
+endif
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
@@ -104,9 +108,9 @@ SRC := \
 	common/mali_kbase_mem_lowlevel.c \
 	common/mali_kbase_debug.c \
 	common/mali_kbase_trace_timeline.c \
+	linux/mali_kbase_gpu_memory_debugfs.c \
 	linux/mali_kbase_mem_linux.c \
 	linux/mali_kbase_core_linux.c \
-	linux/mali_kbase_config_linux.c \
 	linux/mali_kbase_sync.c \
 	linux/mali_kbase_sync_user.c \
 
@@ -158,37 +162,107 @@ else
 	SRC += linux/mali_kbase_pm_metrics_linux.c
 endif
 
-ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
-	SRC += platform/vexpress/mali_kbase_config_vexpress.c \
-	       platform/vexpress/mali_kbase_cpu_vexpress.c
-endif
+ifeq ($(CONFIG_MALI_PLATFORM_FAKE),y)
+	SRC += linux/mali_kbase_platform_fake.c
 
-ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
-	SRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
-	       platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
-endif
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
+		SRC += platform/vexpress/mali_kbase_config_vexpress.c \
+		platform/vexpress/mali_kbase_cpu_vexpress.c
+	endif
 
-ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
-	SRC += platform/goldfish/mali_kbase_config_goldfish.c
-endif
+	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE_AEMV8A),y)
+		SRC += platform/rtsm_ve_aemv8a/mali_kbase_config_vexpress.c
+	endif
 
-ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
-	SRC += platform/pbx/mali_kbase_config_pbx.c
-endif
+	ifeq ($(CONFIG_MALI_PLATFORM_JUNO),y)
+		SRC += platform/juno/mali_kbase_config_vexpress.c
+	endif
 
-ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
-	SRC += platform/panda/mali_kbase_config_panda.c
-endif
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
+		SRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
+		platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
+	endif
 
-ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
-ifeq ($(CONFIG_MALI_T6XX),m)
-# remove begin and end quotes from the Kconfig string type
-    platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
-    MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
-    include  $(src)/platform/$(platform_name)/Kbuild
-else ifeq ($(CONFIG_MALI_T6XX),y)
-    obj-$(CONFIG_MALI_T6XX) += platform/
-endif
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_6XVIRTEX7_10MHZ),y)
+		SRC += platform/vexpress_6xvirtex7_10mhz/mali_kbase_config_vexpress.c \
+		platform/vexpress_6xvirtex7_10mhz/mali_kbase_cpu_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
+		SRC += platform/goldfish/mali_kbase_config_goldfish.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
+		SRC += platform/pbx/mali_kbase_config_pbx.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
+		SRC += platform/panda/mali_kbase_config_panda.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
+	ifeq ($(CONFIG_MALI_T6XX),m)
+	# remove begin and end quotes from the Kconfig string type
+	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+	MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
+	include  $(src)/platform/$(platform_name)/Kbuild
+	else ifeq ($(CONFIG_MALI_T6XX),y)  
+	obj-$(CONFIG_MALI_T6XX) += platform/
+	endif
+	endif
+endif # CONFIG_MALI_PLATFORM_FAKE=y
+
+ifeq ($(CONFIG_MALI_PLATFORM_FAKE),m)
+	PSRC := linux/mali_kbase_platform_fake.c
+		
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS),y)
+		PSRC += platform/vexpress/mali_kbase_config_vexpress.c \
+		platform/vexpress/mali_kbase_cpu_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_RTSM_VE_AEMV8A),y)
+		PSRC += platform/rtsm_ve_aemv8a/mali_kbase_config_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_JUNO),y)
+		PSRC += platform/juno/mali_kbase_config_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_VIRTEX7_40MHZ),y)
+		PSRC += platform/vexpress_virtex7_40mhz/mali_kbase_config_vexpress.c \
+		platform/vexpress_virtex7_40mhz/mali_kbase_cpu_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_VEXPRESS_6XVIRTEX7_10MHZ),y)
+		PSRC += platform/vexpress_6xvirtex7_10mhz/mali_kbase_config_vexpress.c \
+		platform/vexpress_6xvirtex7_10mhz/mali_kbase_cpu_vexpress.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_GOLDFISH),y)
+		PSRC += platform/goldfish/mali_kbase_config_goldfish.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_PBX),y)
+		PSRC += platform/pbx/mali_kbase_config_pbx.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_PANDA),y)
+		PSRC += platform/panda/mali_kbase_config_panda.c
+	endif
+
+	ifeq ($(CONFIG_MALI_PLATFORM_THIRDPARTY),y)
+	ifeq ($(CONFIG_MALI_T6XX),m)
+	# remove begin and end quotes from the Kconfig string type
+	platform_name := $(shell echo $(CONFIG_MALI_PLATFORM_THIRDPARTY_NAME))
+	MALI_PLATFORM_THIRDPARTY_DIR := platform/$(platform_name)
+	include  $(src)/platform/$(platform_name)/Kbuild
+	else ifeq ($(CONFIG_MALI_T6XX),y)  
+	obj-$(CONFIG_MALI_T6XX) += platform/
+	endif
+	endif
+
+	obj-m := mali_platform_fake.o
+	mali_platform_fake-y := $(PSRC:.c=.o)
 endif
 
 # Tell the Linux build system from which .o file to create the kernel module
@@ -196,3 +270,5 @@ obj-$(CONFIG_MALI_T6XX) += mali_kbase.o
 
 # Tell the Linux build system to enable building of our .c files
 mali_kbase-y := $(SRC:.c=.o)
+
+

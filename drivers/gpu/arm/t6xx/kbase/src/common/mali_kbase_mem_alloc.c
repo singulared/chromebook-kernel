@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -29,16 +29,22 @@
 
 atomic_t mali_memory_pages;
 
-STATIC int kbase_mem_allocator_shrink(struct shrinker *s, struct shrink_control *sc)
+static unsigned long kbase_mem_allocator_count(struct shrinker *s,
+						struct shrink_control *sc)
 {
-	kbase_mem_allocator * allocator;
+	kbase_mem_allocator *allocator;
+	allocator = container_of(s, kbase_mem_allocator, free_list_reclaimer);
+	return atomic_read(&allocator->free_list_size);
+}
+
+static unsigned long kbase_mem_allocator_scan(struct shrinker *s,
+						struct shrink_control *sc)
+{
+	kbase_mem_allocator *allocator;
 	int i;
 	int freed;
 
 	allocator = container_of(s, kbase_mem_allocator, free_list_reclaimer);
-
-	if (sc->nr_to_scan == 0)
-		return atomic_read(&allocator->free_list_size);
 
 	might_sleep();
 
@@ -48,20 +54,33 @@ STATIC int kbase_mem_allocator_shrink(struct shrinker *s, struct shrink_control 
 
 	atomic_sub(i, &allocator->free_list_size);
 
-	while (i--)
-	{
-		struct page * p;
+	while (i--) {
+		struct page *p;
 
 		BUG_ON(list_empty(&allocator->free_list_head));
-		p = list_first_entry(&allocator->free_list_head, struct page, lru);
+		p = list_first_entry(&allocator->free_list_head,
+					struct page, lru);
 		list_del(&p->lru);
 		__free_page(p);
 	}
 	mutex_unlock(&allocator->free_list_lock);
 	return atomic_read(&allocator->free_list_size);
+
 }
 
-mali_error kbase_mem_allocator_init(kbase_mem_allocator * const allocator, unsigned int max_size)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0)
+static int kbase_mem_allocator_shrink(struct shrinker *s,
+					struct shrink_control *sc)
+{
+	if (sc->nr_to_scan == 0)
+		return kbase_mem_allocator_count(s, sc);
+	else
+		return kbase_mem_allocator_scan(s, sc);
+}
+#endif
+
+mali_error kbase_mem_allocator_init(kbase_mem_allocator *const allocator,
+					unsigned int max_size)
 {
 	KBASE_DEBUG_ASSERT(NULL != allocator);
 
@@ -72,9 +91,17 @@ mali_error kbase_mem_allocator_init(kbase_mem_allocator * const allocator, unsig
 	atomic_set(&allocator->free_list_size, 0);
 
 	allocator->free_list_max_size = max_size;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0)
 	allocator->free_list_reclaimer.shrink = kbase_mem_allocator_shrink;
+#else
+	allocator->free_list_reclaimer.count_objects =
+						kbase_mem_allocator_count;
+	allocator->free_list_reclaimer.scan_objects = kbase_mem_allocator_scan;
+#endif
 	allocator->free_list_reclaimer.seeks = DEFAULT_SEEKS;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0) /* Kernel versions prior to 3.1 : struct shrinker does not define batch */
+	/* Kernel versions prior to 3.1 :
+	 * struct shrinker does not define batch */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0)
 	allocator->free_list_reclaimer.batch = 0;
 #endif
 
@@ -103,7 +130,7 @@ void kbase_mem_allocator_term(kbase_mem_allocator *allocator)
 }
 KBASE_EXPORT_TEST_API(kbase_mem_allocator_term)
 
-mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, u32 nr_pages, phys_addr_t *pages, int flags)
+mali_error kbase_mem_allocator_alloc(kbase_mem_allocator *allocator, size_t nr_pages, phys_addr_t *pages)
 {
 	struct page * p;
 	void * mp;
@@ -175,7 +202,7 @@ err_out_roll_back:
 }
 KBASE_EXPORT_TEST_API(kbase_mem_allocator_alloc)
 
-void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys_addr_t *pages, mali_bool sync_back)
+void kbase_mem_allocator_free(kbase_mem_allocator *allocator, size_t nr_pages, phys_addr_t *pages, mali_bool sync_back)
 {
 	int i = 0;
 	int page_count = 0;
@@ -190,9 +217,10 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys
 	/* Starting by just freeing the overspill.
 	* As we do this outside of the lock we might spill too many pages
 	* or get too many on the free list, but the max_size is just a ballpark so it is ok
+	* providing that tofree doesn't exceed nr_pages
 	*/
-	tofree = atomic_read(&allocator->free_list_size) + nr_pages - allocator->free_list_max_size;
-	/* if tofree became negative this first for loop will be ignored */
+	tofree = MAX((int)allocator->free_list_max_size - atomic_read(&allocator->free_list_size),0);
+	tofree = nr_pages - MIN(tofree, nr_pages);
 	for (; i < tofree; i++)
 	{
 		if (likely(0 != pages[i]))
@@ -237,3 +265,4 @@ void kbase_mem_allocator_free(kbase_mem_allocator *allocator, u32 nr_pages, phys
 	mutex_unlock(&allocator->free_list_lock);
 }
 KBASE_EXPORT_TEST_API(kbase_mem_allocator_free)
+

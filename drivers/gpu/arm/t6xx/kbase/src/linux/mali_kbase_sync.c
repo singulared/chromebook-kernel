@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -166,7 +166,7 @@ void kbase_sync_signal_pt(struct sync_pt *pt, int result)
 	struct mali_sync_pt *mpt = to_mali_sync_pt(pt);
 	struct mali_sync_timeline *mtl = to_mali_sync_timeline(pt->parent);
 	int signalled;
-	long diff;
+	int diff;
 
 	mpt->result = result;
 
@@ -177,9 +177,12 @@ void kbase_sync_signal_pt(struct sync_pt *pt, int result)
 		diff = signalled - mpt->order;
 
 		if (diff > 0) {
-			/* The timeline is already at or ahead of this point. This should not happen unless userspace
-			 * has been signalling fences out of order, so warn but don't violate the sync_pt API.
-			 * The warning is only in release builds to prevent a malicious user being able to spam dmesg.
+			/* The timeline is already at or ahead of this point.
+			 * This should not happen unless userspace has been
+			 * signalling fences out of order, so warn but don't
+			 * violate the sync_pt API.
+			 * The warning is only in debug builds to prevent
+			 * a malicious user being able to spam dmesg.
 			 */
 #ifdef CONFIG_MALI_DEBUG
 			KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Fences were triggered in a different order to allocation!");

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -29,6 +29,23 @@
 
 void kbase_hw_set_features_mask(kbase_device *kbdev)
 {
+	const base_hw_feature *features;
+	u32 gpu_id;
+
+	gpu_id = kbdev->gpu_props.props.raw_props.gpu_id;
+
+	switch (gpu_id) {
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
+	case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 1):
+		features = base_hw_features_t76x;
+		break;
+	default:
+		features = base_hw_features_generic;
+		break;
+	}
+
+	for (; *features != BASE_HW_FEATURE_END; features++)
+		set_bit(*features, &kbdev->hw_features_mask[0]);
 }
 
 mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
@@ -76,6 +93,16 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 		case GPU_ID_MAKE(GPU_ID_PI_T67X, 1, 0, 1):
 			issues = base_hw_issues_t67x_r1p0;
 			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 0):
+			issues = base_hw_issues_t76x_r0p0_beta;
+			break;
+		case GPU_ID_MAKE(GPU_ID_PI_T76X, 0, 0, 1):
+			issues = base_hw_issues_t76x_r0p0;
+			break;
+
+		case GPU_ID_MAKE(GPU_ID_PI_T72X, 0, 0, 0):
+			issues = base_hw_issues_t72x_r0p0;
+			break;
 		default:
 			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
 			return MALI_ERROR_FUNCTION_FAILED;
@@ -89,6 +116,13 @@ mali_error kbase_hw_set_issues_mask(kbase_device *kbdev)
 		case GPU_ID_PI_T67X:
 			issues = base_hw_issues_model_t6xx;
 			break;
+		case GPU_ID_PI_T72X:
+			issues = base_hw_issues_model_t72x;
+			break;
+		case GPU_ID_PI_T76X:
+			issues = base_hw_issues_model_t7xx;
+			break;
+
 		default:
 			KBASE_DEBUG_PRINT_ERROR(KBASE_CORE, "Unknown GPU ID %x", gpu_id);
 			return MALI_ERROR_FUNCTION_FAILED;

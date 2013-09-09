@@ -57,7 +57,6 @@
 #include <kbase/src/common/mali_midg_regmap.h>
 #include <kbase/src/linux/mali_kbase_mem_linux.h>
 #include <kbase/src/common/mali_kbase_defs.h>
-#include <kbase/src/linux/mali_kbase_config_linux.h>
 
 #include "mali_linux_dvfs_trace.h"
 
@@ -388,6 +387,7 @@ static kbase_pm_callback_conf pm_callbacks =
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
 	.power_suspend_callback = pm_callback_suspend,
+	.power_resume_callback = NULL
 };
 
 /**
@@ -2127,6 +2127,7 @@ struct mali_hwcounter_state {
 	kbase_uk_hwcnt_setup setup;		/* hwcounter setup block */
 	bool active;				/* collecting data */
 	u32 last_read[MALI_HWC_TOTAL];		/* last counter value read */
+	kbase_hwc_dma_mapping handle;		/* counter data buffer handle */
 };
 static struct mali_hwcounter_state mali_hwcs;
 static struct mutex mali_hwcounter_mutex;
@@ -2512,7 +2513,8 @@ static int mali_hwcounter_polling_start(struct kbase_device *kbdev)
 			return -ENOSPC;
 		}
 		mali_hwcs.buf = kbase_va_alloc(mali_hwcs.ctx,
-					       MALI_HWC_DUMP_SIZE);
+					       MALI_HWC_DUMP_SIZE,
+					       &mali_hwcs.handle);
 		mali_hwcs.setup.dump_buffer = (uintptr_t) mali_hwcs.buf;
 
 		error = kbase_instr_hwcnt_enable(mali_hwcs.ctx,
@@ -2520,7 +2522,7 @@ static int mali_hwcounter_polling_start(struct kbase_device *kbdev)
 		if (error != MALI_ERROR_NONE) {
 			pr_err("%s: cannot enable hw counters\n", __func__);
 
-			kbase_va_free(mali_hwcs.ctx, mali_hwcs.buf);
+			kbase_va_free(mali_hwcs.ctx, &mali_hwcs.handle);
 			mali_hwcs.buf = NULL;
 
 			kbase_destroy_context(mali_hwcs.ctx);
@@ -2553,7 +2555,7 @@ static void mali_hwcounter_polling_stop(struct kbase_device *kbdev)
 
 		kbase_instr_hwcnt_disable(mali_hwcs.ctx);
 
-		kbase_va_free(mali_hwcs.ctx, mali_hwcs.buf);
+		kbase_va_free(mali_hwcs.ctx, &mali_hwcs.handle);
 		mali_hwcs.buf = NULL;
 
 		kbase_destroy_context(mali_hwcs.ctx);

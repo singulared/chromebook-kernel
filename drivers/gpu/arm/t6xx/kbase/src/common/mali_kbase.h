@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -53,7 +53,7 @@
 #include "mali_kbase_mem.h"
 #include "mali_kbase_security.h"
 #include "mali_kbase_utility.h"
-
+#include <kbase/src/linux/mali_kbase_gpu_memory_debugfs.h>
 #include "mali_kbase_cpuprops.h"
 #include "mali_kbase_gpuprops.h"
 #ifdef CONFIG_GPU_TRACEPOINTS
@@ -71,13 +71,29 @@
  */
 
 kbase_device *kbase_device_alloc(void);
-/* note: configuration attributes member of kbdev needs to have been setup before calling kbase_device_init */
+/*
+* note: configuration attributes member of kbdev needs to have
+* been setup before calling kbase_device_init
+*/
+
+/*
+* API to acquire device list semaphone and return pointer
+* to the device list head
+*/
+const struct list_head *kbase_dev_list_get(void);
+/* API to release the device list semaphore */
+void kbase_dev_list_put(const struct list_head *dev_list);
+
 mali_error kbase_device_init(kbase_device * const kbdev);
 void kbase_device_term(kbase_device *kbdev);
 void kbase_device_free(kbase_device *kbdev);
 int kbase_device_has_feature(kbase_device *kbdev, u32 feature);
 kbase_midgard_type kbase_device_get_type(kbase_device *kbdev);
 struct kbase_device *kbase_find_device(int minor);	/* Only needed for gator integration */
+
+void kbase_set_profiling_control(struct kbase_device *kbdev, u32 control, u32 value);
+
+u32 kbase_get_profiling_control(struct kbase_device *kbdev, u32 control);
 
 /**
  * Ensure that all IRQ handlers have completed execution
@@ -331,7 +347,7 @@ static INLINE int kbase_jd_atom_id(kbase_context *kctx, kbase_jd_atom *katom)
 	kbasep_trace_dump(kbdev)
 
 /** PRIVATE - do not use directly. Use KBASE_TRACE_ADD() instead */
-void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, u32 info_val);
+void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val);
 /** PRIVATE - do not use directly. Use KBASE_TRACE_CLEAR() instead */
 void kbasep_trace_clear(kbase_device *kbdev);
 #else

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -18,7 +18,6 @@
 #include <linux/ioport.h>
 #include <kbase/src/common/mali_kbase.h>
 #include <kbase/src/common/mali_kbase_defs.h>
-#include <kbase/src/linux/mali_kbase_config_linux.h>
 #include <kbase/mali_kbase_config.h>
 #ifdef CONFIG_UMP
 #include <linux/ump-common.h>
@@ -69,6 +68,7 @@
 #define T6F1_ZBT_DDR_ENABLED 0
 #define HARD_RESET_AT_POWER_OFF 0
 
+#ifndef CONFIG_OF
 static kbase_io_resources io_resources = {
 	.job_irq_number = 68,
 	.mmu_irq_number = 69,
@@ -77,6 +77,7 @@ static kbase_io_resources io_resources = {
 			     .start = 0xFC010000,
 			     .end = 0xFC010000 + (4096 * 5) - 1}
 };
+#endif
 
 #if T6F1_ZBT_DDR_ENABLED
 
@@ -137,7 +138,9 @@ static void pm_callback_power_off(kbase_device *kbdev)
 
 static kbase_pm_callback_conf pm_callbacks = {
 	.power_on_callback = pm_callback_power_on,
-	.power_off_callback = pm_callback_power_off
+	.power_off_callback = pm_callback_power_off,
+	.power_suspend_callback  = NULL,
+	.power_resume_callback = NULL
 };
 
 /* Please keep table config_attributes in sync with config_attributes_hw_issue_8408 */
@@ -370,10 +373,15 @@ kbase_attribute config_attributes_hw_issue_8408[] = {
 	 KBASE_CONFIG_ATTR_END,
 	 0}
 };
+#ifdef MALI_PLATFORM_FAKE_MODULE
+EXPORT_SYMBOL(config_attributes_hw_issue_8408);
+#endif
 
 static kbase_platform_config virtex7_platform_config = {
 	.attributes = config_attributes,
+#ifndef CONFIG_OF
 	.io_resources = &io_resources
+#endif
 };
 
 kbase_platform_config *kbase_get_platform_config(void)

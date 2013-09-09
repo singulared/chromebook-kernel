@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -47,7 +47,7 @@ static void *get_compat_pointer(const kbase_pointer *p)
 {
 #ifdef CONFIG_COMPAT
 	if (is_compat_task())
-		return (void *)p->compat_value;
+		return compat_ptr(p->compat_value);
 	else
 #endif
 		return p->value;
@@ -171,51 +171,55 @@ void kbase_cancel_kds_wait_job(kbase_jd_atom *katom)
 #ifdef CONFIG_DMA_SHARED_BUFFER
 static mali_error kbase_jd_umm_map(kbase_context *kctx, struct kbase_va_region *reg)
 {
-	struct sg_table *st;
+	struct sg_table *sgt;
 	struct scatterlist *s;
 	int i;
 	phys_addr_t *pa;
 	mali_error err;
+	size_t count = 0;
 
-	KBASE_DEBUG_ASSERT(NULL == reg->imported_metadata.umm.st);
-	st = dma_buf_map_attachment(reg->imported_metadata.umm.dma_attachment, DMA_BIDIRECTIONAL);
+	KBASE_DEBUG_ASSERT(reg->alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM);
+	KBASE_DEBUG_ASSERT(NULL == reg->alloc->imported.umm.sgt);
+	sgt = dma_buf_map_attachment(reg->alloc->imported.umm.dma_attachment, DMA_BIDIRECTIONAL);
 
-	if (IS_ERR_OR_NULL(st))
+	if (IS_ERR_OR_NULL(sgt))
 		return MALI_ERROR_FUNCTION_FAILED;
 
 	/* save for later */
-	reg->imported_metadata.umm.st = st;
+	reg->alloc->imported.umm.sgt = sgt;
 
 	pa = kbase_get_phy_pages(reg);
 	KBASE_DEBUG_ASSERT(pa);
 
-	for_each_sg(st->sgl, s, st->nents, i) {
+	for_each_sg(sgt->sgl, s, sgt->nents, i) {
 		int j;
 		size_t pages = PFN_UP(sg_dma_len(s));
 
-		for (j = 0; j < pages; j++)
+		for (j = 0; (j < pages) && (count < reg->nr_pages); j++, count++)
 			*pa++ = sg_dma_address(s) + (j << PAGE_SHIFT);
+		WARN_ONCE(j < pages, "sg list returned by dma_buf_map_attachment is larger than dma_buf->size=%zu\n", reg->alloc->imported.umm.dma_buf->size);
 	}
 
-	err = kbase_mmu_insert_pages(kctx, reg->start_pfn, kbase_get_phy_pages(reg), reg->nr_alloc_pages, reg->flags | KBASE_REG_GPU_WR | KBASE_REG_GPU_RD);
+	err = kbase_mmu_insert_pages(kctx, reg->start_pfn, kbase_get_phy_pages(reg), kbase_reg_current_backed_size(reg), reg->flags | KBASE_REG_GPU_WR | KBASE_REG_GPU_RD);
 
 	if (MALI_ERROR_NONE != err) {
-		dma_buf_unmap_attachment(reg->imported_metadata.umm.dma_attachment, reg->imported_metadata.umm.st, DMA_BIDIRECTIONAL);
-		reg->imported_metadata.umm.st = NULL;
+		dma_buf_unmap_attachment(reg->alloc->imported.umm.dma_attachment, reg->alloc->imported.umm.sgt, DMA_BIDIRECTIONAL);
+		reg->alloc->imported.umm.sgt = NULL;
 	}
 
 	return err;
 }
 
-static void kbase_jd_umm_unmap(kbase_context *kctx, struct kbase_va_region *reg)
+static void kbase_jd_umm_unmap(kbase_context *kctx, struct kbase_va_region *reg, int mmu_update)
 {
 	KBASE_DEBUG_ASSERT(kctx);
 	KBASE_DEBUG_ASSERT(reg);
-	KBASE_DEBUG_ASSERT(reg->imported_metadata.umm.dma_attachment);
-	KBASE_DEBUG_ASSERT(reg->imported_metadata.umm.st);
-	kbase_mmu_teardown_pages(kctx, reg->start_pfn, reg->nr_alloc_pages);
-	dma_buf_unmap_attachment(reg->imported_metadata.umm.dma_attachment, reg->imported_metadata.umm.st, DMA_BIDIRECTIONAL);
-	reg->imported_metadata.umm.st = NULL;
+	KBASE_DEBUG_ASSERT(reg->alloc->imported.umm.dma_attachment);
+	KBASE_DEBUG_ASSERT(reg->alloc->imported.umm.sgt);
+	if (mmu_update)
+		kbase_mmu_teardown_pages(kctx, reg->start_pfn, kbase_reg_current_backed_size(reg));
+	dma_buf_unmap_attachment(reg->alloc->imported.umm.dma_attachment, reg->alloc->imported.umm.sgt, DMA_BIDIRECTIONAL);
+	reg->alloc->imported.umm.sgt = NULL;
 }
 #endif				/* CONFIG_DMA_SHARED_BUFFER */
 
@@ -257,23 +261,22 @@ static void kbase_jd_post_external_resources(kbase_jd_atom *katom)
 #endif				/* defined(CONFIG_DMA_SHARED_BUFFER) || defined(CONFIG_MALI_DEBUG) */
 	/* only roll back if extres is non-NULL */
 	if (katom->extres) {
-#ifdef CONFIG_DMA_SHARED_BUFFER
 		u32 res_no;
 		res_no = katom->nr_extres;
 		while (res_no-- > 0) {
-			base_external_resource *res;
-			kbase_va_region *reg;
-
-			res = &katom->extres[res_no];
-			reg = kbase_region_tracker_find_region_enclosing_address(katom->kctx, res->ext_resource & ~BASE_EXT_RES_ACCESS_EXCLUSIVE);
-			/* if reg wasn't found then it has been freed while the job ran */
-			if (reg && reg->imported_type == BASE_TMEM_IMPORT_TYPE_UMM) {
-				/* last job using */
-				if (1 == reg->imported_metadata.umm.current_mapping_usage_count--)
-					kbase_jd_umm_unmap(katom->kctx, reg);
+#ifdef CONFIG_DMA_SHARED_BUFFER
+			if (katom->extres[res_no].alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM) {
+				kbase_va_region *reg;
+				int mmu_update = 0;
+				reg = kbase_region_tracker_find_region_base_address(katom->kctx, katom->extres[res_no].gpu_address);
+				if (reg && reg->alloc == katom->extres[res_no].alloc)
+					mmu_update = 1;
+				if (1 == katom->extres[res_no].alloc->imported.umm.current_mapping_usage_count--)
+					kbase_jd_umm_unmap(katom->kctx, reg, mmu_update);
 			}
+#endif	/* CONFIG_DMA_SHARED_BUFFER */
+			kbase_mem_phy_alloc_put(katom->extres[res_no].alloc);
 		}
-#endif				/* CONFIG_DMA_SHARED_BUFFER */
 		kfree(katom->extres);
 		katom->extres = NULL;
 	}
@@ -316,6 +319,7 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 	struct kds_resource **kds_resources = NULL;
 	unsigned long *kds_access_bitmap = NULL;
 #endif				/* CONFIG_KDS */
+	struct base_external_resource * input_extres;
 
 	KBASE_DEBUG_ASSERT(katom);
 	KBASE_DEBUG_ASSERT(katom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES);
@@ -324,13 +328,19 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 	if (!katom->nr_extres)
 		return MALI_ERROR_FUNCTION_FAILED;
 
-	katom->extres = kmalloc(sizeof(base_external_resource) * katom->nr_extres, GFP_KERNEL);
+	katom->extres = kmalloc(sizeof(*katom->extres) * katom->nr_extres, GFP_KERNEL);
 	if (NULL == katom->extres) {
 		err_ret_val = MALI_ERROR_OUT_OF_MEMORY;
 		goto early_err_out;
 	}
 
-	if (copy_from_user(katom->extres, get_compat_pointer(&user_atom->extres_list), sizeof(base_external_resource) * katom->nr_extres) != 0) {
+	/* copy user buffer to the end of our real buffer.
+	 * Make sure the struct sizes haven't changed in a way
+	 * we don't support */
+	BUILD_BUG_ON(sizeof(*input_extres) > sizeof(*katom->extres));
+	input_extres = (struct base_external_resource*)(((unsigned char *)katom->extres) + (sizeof(*katom->extres) - sizeof(*input_extres)) * katom->nr_extres);
+
+	if (copy_from_user(input_extres, get_compat_pointer(&user_atom->extres_list), sizeof(*input_extres) * katom->nr_extres) != 0) {
 		err_ret_val = MALI_ERROR_FUNCTION_FAILED;
 		goto early_err_out;
 	}
@@ -363,23 +373,23 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 		base_external_resource *res;
 		kbase_va_region *reg;
 
-		res = &katom->extres[res_no];
+		res = &input_extres[res_no];
 		reg = kbase_region_tracker_find_region_enclosing_address(katom->kctx, res->ext_resource & ~BASE_EXT_RES_ACCESS_EXCLUSIVE);
 		/* did we find a matching region object? */
-		if (NULL == reg) {
+		if (NULL == reg || (reg->flags & KBASE_REG_FREE)) {
 			/* roll back */
 			goto failed_loop;
 		}
 
 		/* decide what needs to happen for this resource */
-		switch (reg->imported_type) {
+		switch (reg->alloc->type) {
 		case BASE_TMEM_IMPORT_TYPE_UMP:
 			{
 #if defined(CONFIG_KDS) && defined(CONFIG_UMP)
 				struct kds_resource *kds_res;
-				kds_res = ump_dd_kds_resource_get(reg->imported_metadata.ump_handle);
+				kds_res = ump_dd_kds_resource_get(reg->alloc->imported.ump_handle);
 				if (kds_res)
-					add_kds_resource(kds_res, kds_resources, &kds_res_count, kds_access_bitmap, katom->extres[res_no].ext_resource & BASE_EXT_RES_ACCESS_EXCLUSIVE);
+					add_kds_resource(kds_res, kds_resources, &kds_res_count, kds_access_bitmap, res->ext_resource & BASE_EXT_RES_ACCESS_EXCLUSIVE);
 #endif				/*defined(CONFIG_KDS) && defined(CONFIG_UMP) */
 				break;
 			}
@@ -388,12 +398,12 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 			{
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 				struct kds_resource *kds_res;
-				kds_res = get_dma_buf_kds_resource(reg->imported_metadata.umm.dma_buf);
+				kds_res = get_dma_buf_kds_resource(reg->alloc->imported.umm.dma_buf);
 				if (kds_res)
-					add_kds_resource(kds_res, kds_resources, &kds_res_count, kds_access_bitmap, katom->extres[res_no].ext_resource & BASE_EXT_RES_ACCESS_EXCLUSIVE);
+					add_kds_resource(kds_res, kds_resources, &kds_res_count, kds_access_bitmap, res->ext_resource & BASE_EXT_RES_ACCESS_EXCLUSIVE);
 #endif
-				reg->imported_metadata.umm.current_mapping_usage_count++;
-				if (1 == reg->imported_metadata.umm.current_mapping_usage_count) {
+				reg->alloc->imported.umm.current_mapping_usage_count++;
+				if (1 == reg->alloc->imported.umm.current_mapping_usage_count) {
 					/* use a local variable to not pollute err_ret_val
 					 * with a potential success value as some other gotos depend
 					 * on the default error code stored in err_ret_val */
@@ -402,7 +412,7 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 					if (MALI_ERROR_NONE != tmp) {
 						/* failed to map this buffer, roll back */
 						err_ret_val = tmp;
-						reg->imported_metadata.umm.current_mapping_usage_count--;
+						reg->alloc->imported.umm.current_mapping_usage_count--;
 						goto failed_loop;
 					}
 				}
@@ -412,6 +422,15 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 		default:
 			goto failed_loop;
 		}
+
+		/* finish with updating out array with the data we found */
+		/* NOTE: It is important that this is the last thing we do (or
+		 * at least not before the first write) as we overwrite elements
+		 * as we loop and could be overwriting ourself, so no writes
+		 * until the last read for an element.
+		 * */
+		katom->extres[res_no].gpu_address = reg->start_pfn << PAGE_SHIFT; /* save the start_pfn (as an address, not pfn) to use fast lookup later */
+		katom->extres[res_no].alloc = kbase_mem_phy_alloc_get(reg->alloc);
 	}
 	/* successfully parsed the extres array */
 #if defined(CONFIG_DMA_SHARED_BUFFER) || defined(CONFIG_MALI_DEBUG)
@@ -462,22 +481,22 @@ static mali_error kbase_jd_pre_external_resources(kbase_jd_atom *katom, const ba
 #endif				/* CONFIG_KDS */
 
  failed_loop:
-#ifdef CONFIG_DMA_SHARED_BUFFER
 	/* undo the loop work */
 	while (res_no-- > 0) {
-		base_external_resource *res;
-		kbase_va_region *reg;
-
-		res = &katom->extres[res_no];
-		reg = kbase_region_tracker_find_region_enclosing_address(katom->kctx, res->ext_resource & ~BASE_EXT_RES_ACCESS_EXCLUSIVE);
-		/* if reg wasn't found then it has been freed when we set up kds */
-		if (reg && reg->imported_type == BASE_TMEM_IMPORT_TYPE_UMM) {
-			reg->imported_metadata.umm.current_mapping_usage_count--;
-			if (0 == reg->imported_metadata.umm.current_mapping_usage_count)
-				kbase_jd_umm_unmap(katom->kctx, reg);
+#ifdef CONFIG_DMA_SHARED_BUFFER
+		if (katom->extres[res_no].alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM) {
+			struct kbase_va_region * reg;
+			int mmu_update = 0;
+			reg = kbase_region_tracker_find_region_base_address(katom->kctx, katom->extres[res_no].gpu_address);
+			if (reg && reg->alloc == katom->extres[res_no].alloc && reg->alloc->type)
+				mmu_update = 1;
+			katom->extres[res_no].alloc->imported.umm.current_mapping_usage_count--;
+			if (0 == reg->alloc->imported.umm.current_mapping_usage_count)
+				kbase_jd_umm_unmap(katom->kctx, reg, mmu_update);
 		}
-	}
 #endif				/* CONFIG_DMA_SHARED_BUFFER */
+		kbase_mem_phy_alloc_put(katom->extres[res_no].alloc);
+	}
 #if defined(CONFIG_DMA_SHARED_BUFFER) || defined(CONFIG_MALI_DEBUG)
 	/* Lock also used in debug mode just for lock order checking */
 	kbase_gpu_vm_unlock(katom->kctx);
@@ -566,14 +585,15 @@ mali_bool jd_done_nolock(kbase_jd_atom *katom)
 		}
 	}
 
-	/* With PRLAM-10817 the last tile of a fragment job being soft-stopped can fail with
+	/* With PRLAM-10817 or PRLAM-10959 the last tile of a fragment job being soft-stopped can fail with
 	 * BASE_JD_EVENT_TILE_RANGE_FAULT.
 	 *
 	 * So here if the fragment job failed with TILE_RANGE_FAULT and it has been soft-stopped, then we promote the
 	 * error code to BASE_JD_EVENT_DONE
 	 */
 
-	if ( kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10817) && katom->event_code == BASE_JD_EVENT_TILE_RANGE_FAULT ) {
+	if ((kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10817) || kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10959)) &&
+		  katom->event_code == BASE_JD_EVENT_TILE_RANGE_FAULT) {
 		if ( ( katom->core_req & BASE_JD_REQ_FS ) && (katom->atom_flags & KBASE_KATOM_FLAG_BEEN_SOFT_STOPPPED) ) {
 			/* Promote the failure to job done */
 			katom->event_code = BASE_JD_EVENT_DONE;
@@ -1009,7 +1029,7 @@ static void jd_done_worker(struct work_struct *data)
 		if (kbdev->gpu_props.num_core_groups > 1 && 
 		    !(katom->affinity & kbdev->gpu_props.props.coherency_info.group[0].core_mask) &&
 		    (katom->affinity & kbdev->gpu_props.props.coherency_info.group[1].core_mask)) {
-			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676\n");
+			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676");
 			kbasep_jd_cacheclean(kbdev);
 		}
 	}

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -143,7 +143,7 @@ mali_error kbase_event_init(kbase_context *kctx)
 	INIT_LIST_HEAD(&kctx->event_list);
 	mutex_init(&kctx->event_mutex);
 	kctx->event_closed = MALI_FALSE;
-	kctx->event_workq = alloc_workqueue("kbase_event", WQ_RESCUER, 1);
+	kctx->event_workq = alloc_workqueue("kbase_event", WQ_MEM_RECLAIM, 1);
 
 	if (NULL == kctx->event_workq)
 		return MALI_ERROR_FUNCTION_FAILED;

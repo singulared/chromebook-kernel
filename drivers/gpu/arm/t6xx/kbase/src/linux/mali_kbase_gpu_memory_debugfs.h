@@ -15,12 +15,29 @@
 
 
 
-#ifndef _KBASE_CPU_VEXPRESS_H_
-#define _KBASE_CPU_VEXPRESS_H_
+
 
 /**
- * Versatile Express implementation of @ref kbase_cpuprops_clock_speed_function.
+ * @file mali_kbase_gpu_memory_debugfs.h
+ * Header file for gpu_memory entry in debugfs
+ *
  */
-int kbase_get_vexpress_cpu_clock_speed(u32 *cpu_clock);
 
-#endif				/* _KBASE_CPU_VEXPRESS_H_ */
+#ifndef _KBASE_GPU_MEMORY_H
+#define _KBASE_GPU_MEMORY_H
+
+#include <kbase/src/common/mali_kbase.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+
+/**
+ * @brief Initialize gpu_memory debugfs entry
+ */
+mali_error kbasep_gpu_memory_debugfs_init(kbase_device *kbdev);
+
+/**
+ * @brief Terminate gpu_memory debugfs entry
+ */
+void kbasep_gpu_memory_debugfs_term(kbase_device *kbdev);
+
+#endif  /*_KBASE_GPU_MEMORY_H*/

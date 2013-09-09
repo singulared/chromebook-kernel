@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -98,7 +98,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 					                                 "restartIdx: %08x  \n" \
 					                                 "Fault_addr_low: %08x \n" \
 					                                 "minCoordsX: %08x minCoordsY: %08x \n" \
-					                                 "maxCoordsX: %08x maxCoordsY: %08x", 
+					                                 "maxCoordsX: %08x maxCoordsY: %08x",
 					                       job_header[JOB_DESC_STATUS_WORD],
 					                       job_header[JOB_DESC_RESTART_INDEX_WORD],
 					                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
@@ -145,7 +145,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 						                                 "restartIdx: %08x  \n"                 \
 						                                 "Fault_addr_low: %08x \n"              \
 						                                 "minCoordsX: %08x minCoordsY: %08x \n" \
-						                                 "maxCoordsX: %08x maxCoordsY: %08x", 
+						                                 "maxCoordsX: %08x maxCoordsY: %08x",
 						                       job_header[JOB_DESC_STATUS_WORD],
 						                       job_header[JOB_DESC_RESTART_INDEX_WORD],
 						                       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
@@ -163,7 +163,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 
 					}
 				}
-				if (copy_size < JOB_HEADER_SIZE)
+				if (copy_size < JOB_HEADER_SIZE) 
 					kunmap_atomic(page_2);
 
 				kunmap_atomic(page_1);

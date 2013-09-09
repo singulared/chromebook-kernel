@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -159,7 +159,7 @@ STATIC mali_error kbase_instr_hwcnt_enable_internal(kbase_device *kbdev, kbase_c
 	/* If HW has PRLAM-8186 we can now re-enable the tiler HW counters dump */
 	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8186))
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_TILER_EN), setup->tiler_bm, kctx);
-
+	
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 
 	if (kbdev->hwcnt.state == KBASE_INSTR_STATE_RESETTING) {
@@ -615,3 +615,4 @@ void kbase_instr_hwcnt_resume(kbase_device *kbdev)
 		     "Failed to restore instrumented hardware counters on resume\n");
 	}
 }
+

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -326,6 +326,20 @@ typedef struct kbase_pm_device_data {
 	 */
 	void (*callback_power_off) (struct kbase_device *kbdev);
 
+	/** Callback when a suspend occurs and the GPU needs to be turned off.
+	 *  See @ref kbase_pm_callback_conf
+	 *
+	 * @param kbdev         The kbase device
+	 */
+	void (*callback_power_suspend) (struct kbase_device *kbdev);
+
+	/** Callback when a resume occurs and the GPU needs to be turned on.
+	 *  See @ref kbase_pm_callback_conf
+	 *
+	 * @param kbdev         The kbase device
+	 */
+	void (*callback_power_resume) (struct kbase_device *kbdev);
+
 	/** Callback for initializing the runtime power management.
 	 *
 	 * @param kbdev         The kbase device
@@ -353,12 +367,6 @@ typedef struct kbase_pm_device_data {
 	 * @param kbdev         The kbase device
 	 */
 	void (*callback_power_runtime_off) (struct kbase_device *kbdev);
-
-	/** Callback when the GPU is suspending. See @ref kbase_pm_callback_conf
-	 *
-	 * @param kbdev         The kbase device
-	 */
-	void (*callback_power_suspend) (struct kbase_device *kbdev);
 
 } kbase_pm_device_data;
 
@@ -431,18 +439,21 @@ u64 kbase_pm_get_ready_cores(struct kbase_device *kbdev, kbase_pm_core_type type
  * This function can be used by a power policy to turn the clock for the GPU on. It should be modified during
  * integration to perform the necessary actions to ensure that the GPU is fully powered and clocked.
  *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ * @param kbdev       The kbase device structure for the device (must be a valid pointer)
+ * @param is_resume   MALI_TRUE if clock on due to resume after suspend,
+ *                    MALI_FALSE otherwise
  */
-void kbase_pm_clock_on(struct kbase_device *kbdev);
+void kbase_pm_clock_on(struct kbase_device *kbdev, mali_bool is_resume);
 
 /** Disable device interrupts, and turn the clock for the device off.
  *
  * This function can be used by a power policy to turn the clock for the GPU off. It should be modified during
  * integration to perform the necessary actions to turn the clock off (if this is possible in the integration).
  *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ * @param kbdev       The kbase device structure for the device (must be a valid pointer)
+ * @param is_suspend  MALI_TRUE if clock off due to suspend, MALI_FALSE otherwise
  */
-void kbase_pm_clock_off(struct kbase_device *kbdev);
+void kbase_pm_clock_off(struct kbase_device *kbdev, mali_bool is_suspend);
 
 /** Enable interrupts on the device.
  *
@@ -827,16 +838,20 @@ mali_bool kbase_pm_metrics_is_active(struct kbase_device *kbdev);
 /**
  * Power on the GPU, and any cores that are requested.
  *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ * @param kbdev        The kbase device structure for the device (must be a valid pointer)
+ * @param is_resume    MALI_TRUE if power on due to resume after suspend,
+ *                     MALI_FALSE otherwise
  */
-void kbase_pm_do_poweron(struct kbase_device *kbdev);
+void kbase_pm_do_poweron(struct kbase_device *kbdev, mali_bool is_resume);
 
 /**
  * Power off the GPU, and any cores that have been requested.
  *
- * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ * @param kbdev        The kbase device structure for the device (must be a valid pointer)
+ * @param is_suspend   MALI_TRUE if power off due to suspend,
+ *                     MALI_FALSE otherwise
  */
-void kbase_pm_do_poweroff(struct kbase_device *kbdev);
+void kbase_pm_do_poweroff(struct kbase_device *kbdev, mali_bool is_suspend);
 
 #ifdef CONFIG_MALI_T6XX_DVFS
 

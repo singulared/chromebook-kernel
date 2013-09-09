@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -30,6 +30,8 @@
 #endif
 
 #include <malisw/mali_malisw.h>
+#include <linux/kref.h>
+
 #ifdef CONFIG_UMP
 #include <linux/ump.h>
 #endif				/* CONFIG_UMP */
@@ -57,12 +59,81 @@ updates and generates duplicate page faults as the page table information used b
  * A CPU mapping
  */
 typedef struct kbase_cpu_mapping {
-	struct list_head link;
-	void __user *uaddr;
-	size_t nr_pages;
-	mali_size64 page_off;
-	struct vm_area_struct * private;
+	struct  list_head mappings_list;
+	struct  kbase_mem_phy_alloc *alloc;
+	struct  vm_area_struct *vma;
+	struct  kbase_context *kctx;
+	struct  kbase_va_region *region;
+	pgoff_t page_off;
+	int     count;
 } kbase_cpu_mapping;
+
+enum kbase_memory_type {
+	KBASE_MEM_TYPE_NATIVE,
+	KBASE_MEM_TYPE_IMPORTED_UMP,
+	KBASE_MEM_TYPE_IMPORTED_UMM,
+	KBASE_MEM_TYPE_TB,
+	KBASE_MEM_TYPE_RAW
+};
+
+/* physical pages tracking object.
+ * Set up to track N pages.
+ * N not stored here, the creator holds that info.
+ * This object only tracks how many elements are actually valid (present).
+ * Changing of nents or *pages should only happen if the kbase_mem_phy_alloc is not
+ * shared with another region or client. CPU mappings are OK to exist when changing, as
+ * long as the tracked mappings objects are updated as part of the change.
+ */
+struct kbase_mem_phy_alloc
+{
+	struct kref           kref; /* number of users of this alloc */
+	size_t                nents; /* 0..N */
+	phys_addr_t *         pages; /* N elements, only 0..nents are valid */
+
+	/* kbase_cpu_mappings */
+	struct list_head      mappings;
+
+	/* type of buffer */
+	enum kbase_memory_type type;
+
+	int accessed_cached;
+
+	/* member in union valid based on @a type */
+	union {
+#ifdef CONFIG_UMP
+		ump_dd_handle ump_handle;
+#endif /* CONFIG_UMP */
+#if defined(CONFIG_DMA_SHARED_BUFFER)
+		struct {
+			struct dma_buf *dma_buf;
+			struct dma_buf_attachment *dma_attachment;
+			unsigned int current_mapping_usage_count;
+			struct sg_table *sgt;
+		} umm;
+#endif /* defined(CONFIG_DMA_SHARED_BUFFER) */
+		/* Used by type = (KBASE_MEM_TYPE_NATIVE, KBASE_MEM_TYPE_TB) */
+		struct kbase_context *kctx;
+	} imported;
+};
+
+void kbase_mem_kref_free(struct kref * kref);
+
+mali_error kbase_mem_init(kbase_device * kbdev);
+void kbase_mem_halt(kbase_device * kbdev);
+void kbase_mem_term(kbase_device * kbdev);
+
+static inline struct kbase_mem_phy_alloc * kbase_mem_phy_alloc_get(struct kbase_mem_phy_alloc * alloc)
+{
+	kref_get(&alloc->kref);
+	return alloc;
+}
+
+static inline struct kbase_mem_phy_alloc * kbase_mem_phy_alloc_put(struct kbase_mem_phy_alloc * alloc)
+{
+	kref_put(&alloc->kref, kbase_mem_kref_free);
+	return NULL;
+}
+
 
 /**
  * A GPU memory region, and attributes for CPU mappings.
@@ -74,7 +145,7 @@ typedef struct kbase_va_region {
 	kbase_context *kctx;	/* Backlink to base context */
 
 	u64 start_pfn;		/* The PFN in GPU space */
-	size_t nr_pages;	/* VA size */
+	size_t nr_pages;
 
 #define KBASE_REG_FREE       (1ul << 0)	/* Free region */
 #define KBASE_REG_CPU_WR     (1ul << 1)	/* CPU write access */
@@ -83,31 +154,29 @@ typedef struct kbase_va_region {
 #define KBASE_REG_CPU_CACHED (1ul << 4)	/* Is CPU cached? */
 #define KBASE_REG_GPU_CACHED (1ul << 5)	/* Is GPU cached? */
 
-#define KBASE_REG_GROWABLE   (1ul << 6)	/* Is growable? */
+#define KBASE_REG_GROWABLE   (1ul << 6)
 #define KBASE_REG_PF_GROW    (1ul << 7)	/* Can grow on pf? */
 
-#define KBASE_REG_IS_RB      (1ul << 8)	/* Is ringbuffer? */
-#define KBASE_REG_IS_MMU_DUMP (1ul << 9)	/* Is an MMU dump */
-#define KBASE_REG_IS_TB      (1ul << 10)	/* Is register trace buffer? */
+#define KBASE_REG_CUSTOM_VA  (1ul << 8) /* VA managed by us */
 
-#define KBASE_REG_SHARE_IN   (1ul << 11)	/* inner shareable coherency */
-#define KBASE_REG_SHARE_BOTH (1ul << 12)	/* inner & outer shareable coherency */
+#define KBASE_REG_SHARE_IN   (1ul << 9)	/* inner shareable coherency */
+#define KBASE_REG_SHARE_BOTH (1ul << 10)	/* inner & outer shareable coherency */
 
-#define KBASE_REG_DELAYED_FREE (1ul << 13)	/* kbase_mem_free_region called but mappings still exist */
+#define KBASE_REG_ZONE_MASK  (3ul << 11)	/* Space for 4 different zones */
+#define KBASE_REG_ZONE(x)    (((x) & 3) << 11)
 
-#define KBASE_REG_ZONE_MASK  (3ul << 14)	/* Space for 4 different zones */
-#define KBASE_REG_ZONE(x)    (((x) & 3) << 14)
+#define KBASE_REG_GPU_RD     (1ul<<13)	/* GPU write access */
+#define KBASE_REG_CPU_RD     (1ul<<14)	/* CPU read access */
 
-#define KBASE_REG_GPU_RD     (1ul<<16)	/* GPU write access */
-#define KBASE_REG_CPU_RD     (1ul<<17)	/* CPU read access */
+#define KBASE_REG_ALIGNED    (1ul<<15) /* Aligned for GPU EX in SAME_VA */
 
-#define KBASE_REG_FLAGS_NR_BITS    18	/* Number of bits used by kbase_va_region flags */
+#define KBASE_REG_FLAGS_NR_BITS    16	/* Number of bits used by kbase_va_region flags */
 
-#define KBASE_REG_ZONE_PMEM  KBASE_REG_ZONE(0)
+#define KBASE_REG_ZONE_SAME_VA  KBASE_REG_ZONE(0)
 
-#ifndef KBASE_REG_ZONE_TMEM	/* To become 0 on a 64bit platform */
+/* only used with 32-bit clients */
 /*
- * On a 32bit platform, TMEM should be wired from (4GB + shader region)
+ * On a 32bit platform, custom VA should be wired from (4GB + shader region)
  * to the VA limit of the GPU. Unfortunately, the Linux mmap() interface 
  * limits us to 2^32 pages (2^44 bytes, see mmap64 man page for reference).
  * So we put the default limit to the maximum possible on Linux and shrink
@@ -115,14 +184,12 @@ typedef struct kbase_va_region {
  */
 #define KBASE_REG_ZONE_EXEC         KBASE_REG_ZONE(1)	/* Dedicated 16MB region for shader code */
 #define KBASE_REG_ZONE_EXEC_BASE    ((1ULL << 32) >> PAGE_SHIFT)
-#define KBASE_REG_ZONE_EXEC_SIZE    ((((1ULL << 32) + 0x1000000) >> PAGE_SHIFT) - \
-					KBASE_REG_ZONE_EXEC_BASE)
+#define KBASE_REG_ZONE_EXEC_SIZE    ((16ULL * 1024 * 1024) >> PAGE_SHIFT)
 
-#define KBASE_REG_ZONE_TMEM         KBASE_REG_ZONE(2)
-#define KBASE_REG_ZONE_TMEM_BASE    (((1ULL << 32) + 0x1000000) >> PAGE_SHIFT)	/* Starting after KBASE_REG_ZONE_EXEC */
-#define KBASE_REG_ZONE_TMEM_SIZE    (((1ULL << 44) >> PAGE_SHIFT) - \
-					KBASE_REG_ZONE_TMEM_BASE)
-#endif
+#define KBASE_REG_ZONE_CUSTOM_VA         KBASE_REG_ZONE(2)
+#define KBASE_REG_ZONE_CUSTOM_VA_BASE    (KBASE_REG_ZONE_EXEC_BASE + KBASE_REG_ZONE_EXEC_SIZE) /* Starting after KBASE_REG_ZONE_EXEC */
+#define KBASE_REG_ZONE_CUSTOM_VA_SIZE    (((1ULL << 44) >> PAGE_SHIFT) - KBASE_REG_ZONE_CUSTOM_VA_BASE)
+/* end 32-bit clients only */
 
 #define KBASE_REG_COOKIE_MASK       (~((1ul << KBASE_REG_FLAGS_NR_BITS)-1))
 #define KBASE_REG_COOKIE(x)         ((x << KBASE_REG_FLAGS_NR_BITS) & KBASE_REG_COOKIE_MASK)
@@ -134,37 +201,17 @@ typedef struct kbase_va_region {
 #define KBASE_REG_COOKIE_MTP        3
 #define KBASE_REG_COOKIE_FIRST_FREE 4
 
-/* Bit mask of cookies that not used for PMEM but reserved for other uses */
+/* Bit mask of cookies reserved for other uses */
 #define KBASE_REG_RESERVED_COOKIES  ((1ULL << (KBASE_REG_COOKIE_FIRST_FREE))-1)
 
 	unsigned long flags;
 
-	size_t nr_alloc_pages;	/* nr of pages allocated */
-	size_t extent;		/* nr of pages alloc'd on PF */
+	size_t extent; /* nr of pages alloc'd on PF */
 
-	phys_addr_t *phy_pages;
-
-	struct list_head map_list;
+	struct kbase_mem_phy_alloc * alloc; /* the one alloc object we mmap to the GPU and CPU when mapping this region */
 
 	/* non-NULL if this memory object is a kds_resource */
 	struct kds_resource *kds_res;
-
-	base_tmem_import_type imported_type;
-
-	/* member in union valid based on imported_type */
-	union {
-#ifdef CONFIG_UMP
-		ump_dd_handle ump_handle;
-#endif				/* CONFIG_UMP */
-#if defined(CONFIG_DMA_SHARED_BUFFER)
-		struct {
-			struct dma_buf *dma_buf;
-			struct dma_buf_attachment *dma_attachment;
-			unsigned int current_mapping_usage_count;
-			struct sg_table *st;
-		} umm;
-#endif				/* defined(CONFIG_DMA_SHARED_BUFFER) */
-	} imported_metadata;
 
 } kbase_va_region;
 
@@ -172,20 +219,61 @@ typedef struct kbase_va_region {
 static INLINE phys_addr_t *kbase_get_phy_pages(struct kbase_va_region *reg)
 {
 	KBASE_DEBUG_ASSERT(reg);
+	KBASE_DEBUG_ASSERT(reg->alloc);
 
-	return reg->phy_pages;
+	return reg->alloc->pages;
 }
 
-static INLINE void kbase_set_phy_pages(struct kbase_va_region *reg, phys_addr_t *phy_pages)
+static INLINE size_t kbase_reg_current_backed_size(struct kbase_va_region * reg)
 {
 	KBASE_DEBUG_ASSERT(reg);
-
-	reg->phy_pages = phy_pages;
+	/* if no alloc object the backed size naturally is 0 */
+	if (reg->alloc)
+		return reg->alloc->nents;
+	else
+		return 0;
 }
 
-mali_error kbase_mem_init(kbase_device * kbdev);
-void kbase_mem_halt(kbase_device * kbdev);
-void kbase_mem_term(kbase_device * kbdev);
+static INLINE struct kbase_mem_phy_alloc * kbase_alloc_create(size_t nr_pages, enum kbase_memory_type type)
+{
+	struct kbase_mem_phy_alloc * alloc;
+	const size_t extra_pages = (sizeof(*alloc) + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
+
+	/* Prevent nr_pages*sizeof + sizeof(*alloc) from wrapping around. */
+	if (nr_pages > (((size_t) -1 / sizeof(*alloc->pages))) - extra_pages)
+		return ERR_PTR(-ENOMEM);
+
+	alloc = vzalloc(sizeof(*alloc) + sizeof(*alloc->pages) * nr_pages);
+	if (!alloc) 
+		return ERR_PTR(-ENOMEM);
+
+	kref_init(&alloc->kref);
+	alloc->nents = 0;
+	alloc->pages = (void*)(alloc + 1);
+	INIT_LIST_HEAD(&alloc->mappings);
+	alloc->type = type;
+
+	return alloc;
+}
+
+static INLINE int kbase_reg_prepare_native(struct kbase_va_region * reg, struct kbase_context * kctx)
+{
+	KBASE_DEBUG_ASSERT(reg);
+	KBASE_DEBUG_ASSERT(!reg->alloc);
+	KBASE_DEBUG_ASSERT(reg->flags & KBASE_REG_FREE);
+
+	reg->alloc = kbase_alloc_create(reg->nr_pages, KBASE_MEM_TYPE_NATIVE);
+	if (IS_ERR(reg->alloc))
+		return PTR_ERR(reg->alloc);
+	else if (!reg->alloc)
+		return -ENOMEM;
+	reg->alloc->imported.kctx = kctx;
+	reg->flags &= ~KBASE_REG_FREE;
+	return 0;
+}
+
+
+
 
 /**
  * @brief Initialize an OS based memory allocator.
@@ -210,10 +298,9 @@ mali_error kbase_mem_allocator_init(kbase_mem_allocator * allocator, unsigned in
  * @param[in] allocator Allocator to obtain the memory from
  * @param nr_pages Number of pages to allocate
  * @param[out] pages Pointer to an array where the physical address of the allocated pages will be stored
- * @param flags Allocation flag, currently only 0 supported
  * @return MALI_ERROR_NONE if the pages were allocated, an error code indicating what failed on error
  */
-mali_error kbase_mem_allocator_alloc(kbase_mem_allocator * allocator, u32 nr_pages, phys_addr_t *pages, int flags);
+mali_error kbase_mem_allocator_alloc(kbase_mem_allocator * allocator, size_t nr_pages, phys_addr_t *pages);
 
 /**
  * @brief Free memory obtained for an OS based memory allocator.
@@ -223,7 +310,7 @@ mali_error kbase_mem_allocator_alloc(kbase_mem_allocator * allocator, u32 nr_pag
  * @param[in] pages Pointer to an array holding the physical address of the paghes to free.
  * @param[in] sync_back MALI_TRUE case the memory should be synced back
  */
-void kbase_mem_allocator_free(kbase_mem_allocator * allocator, u32 nr_pages, phys_addr_t *pages, mali_bool sync_back);
+void kbase_mem_allocator_free(kbase_mem_allocator * allocator, size_t nr_pages, phys_addr_t *pages, mali_bool sync_back);
 
 /**
  * @brief Terminate an OS based memory allocator.
@@ -246,7 +333,7 @@ void kbase_mem_allocator_term(kbase_mem_allocator * allocator);
  *
  * @return  MALI_ERROR_NONE in case of error. Error code otherwise.
  */
-mali_error kbase_mem_usage_init(kbasep_mem_usage *usage, u32 max_pages);
+mali_error kbase_mem_usage_init(kbasep_mem_usage *usage, size_t max_pages);
 
 /*
  * @brief Terminates given memory context
@@ -268,7 +355,7 @@ void kbase_mem_usage_term(kbasep_mem_usage *usage);
  *
  * @return  MALI_ERROR_NONE when context page request succeeded. Error code otherwise.
  */
-mali_error kbase_mem_usage_request_pages(kbasep_mem_usage *usage, u32 nr_pages);
+mali_error kbase_mem_usage_request_pages(kbasep_mem_usage *usage, size_t nr_pages);
 
 /*
  * @brief Release a number of pages from the given context.
@@ -276,12 +363,12 @@ mali_error kbase_mem_usage_request_pages(kbasep_mem_usage *usage, u32 nr_pages);
  * @param[in]    usage     usage tracker
  * @param[in]    nr_pages  number of pages to be released
  */
-void kbase_mem_usage_release_pages(kbasep_mem_usage *usage, u32 nr_pages);
+void kbase_mem_usage_release_pages(kbasep_mem_usage *usage, size_t nr_pages);
 
 mali_error kbase_region_tracker_init(kbase_context *kctx);
 void kbase_region_tracker_term(kbase_context *kctx);
 
-struct kbase_va_region *kbase_region_tracker_find_region_enclosing_range(kbase_context *kctx, u64 start_pgoff, u32 nr_pages);
+struct kbase_va_region *kbase_region_tracker_find_region_enclosing_range(kbase_context *kctx, u64 start_pgoff, size_t nr_pages);
 
 struct kbase_va_region *kbase_region_tracker_find_region_enclosing_address(kbase_context *kctx, mali_addr64 gpu_addr);
 
@@ -292,37 +379,34 @@ struct kbase_va_region *kbase_region_tracker_find_region_enclosing_address(kbase
  */
 struct kbase_va_region *kbase_region_tracker_find_region_base_address(kbase_context *kctx, mali_addr64 gpu_addr);
 
-struct kbase_va_region *kbase_alloc_free_region(kbase_context *kctx, u64 start_pfn, u32 nr_pages, u32 zone);
+struct kbase_va_region *kbase_alloc_free_region(kbase_context *kctx, u64 start_pfn, size_t nr_pages, int zone);
 void kbase_free_alloced_region(struct kbase_va_region *reg);
-mali_error kbase_add_va_region(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, u32 nr_pages, u32 align);
+mali_error kbase_add_va_region(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, size_t nr_pages, size_t align);
 
-mali_error kbase_gpu_mmap(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, u32 nr_pages, u32 align);
-mali_bool kbase_check_alloc_flags(u32 flags);
-void kbase_update_region_flags(struct kbase_va_region *reg, u32 flags, mali_bool is_growable);
+mali_error kbase_gpu_mmap(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, size_t nr_pages, size_t align);
+mali_bool kbase_check_alloc_flags(unsigned long flags);
+void kbase_update_region_flags(struct kbase_va_region *reg, unsigned long flags);
 
 void kbase_gpu_vm_lock(kbase_context *kctx);
 void kbase_gpu_vm_unlock(kbase_context *kctx);
 
-void kbase_free_phy_pages(struct kbase_va_region *reg);
-int kbase_alloc_phy_pages(struct kbase_va_region *reg, u32 vsize, u32 size);
-
-mali_error kbase_cpu_free_mapping(struct kbase_va_region *reg, struct vm_area_struct * vma);
+int kbase_alloc_phy_pages(struct kbase_va_region *reg, size_t vsize, size_t size);
 
 mali_error kbase_mmu_init(kbase_context *kctx);
 void kbase_mmu_term(kbase_context *kctx);
 
 phys_addr_t kbase_mmu_alloc_pgd(kbase_context *kctx);
 void kbase_mmu_free_pgd(kbase_context *kctx);
-mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn, phys_addr_t *phys, u32 nr, u32 flags);
-mali_error kbase_mmu_teardown_pages(kbase_context *kctx, u64 vpfn, u32 nr);
-mali_error kbase_mmu_update_pages(kbase_context* kctx, u64 vpfn, phys_addr_t* phys, u32 nr, u32 flags);
+mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn, phys_addr_t *phys, size_t nr, unsigned long flags);
+mali_error kbase_mmu_teardown_pages(kbase_context *kctx, u64 vpfn, size_t nr);
+mali_error kbase_mmu_update_pages(kbase_context* kctx, u64 vpfn, phys_addr_t* phys, size_t nr, unsigned long flags);
 
 /**
  * @brief Register region and map it on the GPU.
  *
  * Call kbase_add_va_region() and map the region on the GPU.
  */
-mali_error kbase_gpu_mmap(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, u32 nr_pages, u32 align);
+mali_error kbase_gpu_mmap(kbase_context *kctx, struct kbase_va_region *reg, mali_addr64 addr, size_t nr_pages, size_t align);
 
 /**
  * @brief Remove the region from the GPU and unregister it.
@@ -365,77 +449,8 @@ void kbase_mmu_interrupt(kbase_device *kbdev, u32 irq_stat);
 void *kbase_mmu_dump(kbase_context *kctx, int nr_pages);
 
 mali_error kbase_sync_now(kbase_context *kctx, base_syncset *syncset);
-void kbase_pre_job_sync(kbase_context *kctx, base_syncset *syncsets, u32 nr);
-void kbase_post_job_sync(kbase_context *kctx, base_syncset *syncsets, u32 nr);
-
-struct kbase_va_region *kbase_tmem_alloc(kbase_context *kctx, u32 vsize, u32 psize, u32 extent, u32 flags, mali_bool is_growable);
-
-/** Resize a tmem region
- *
- * This function changes the number of physical pages committed to a tmem region.
- *
- * @param[in]   kctx           The kbase context which the tmem belongs to
- * @param[in]   gpu_addr       The base address of the tmem region
- * @param[in]   delta          The number of pages to grow or shrink by
- * @param[out]  size           The number of pages of memory committed after growing/shrinking
- * @param[out]  failure_reason Error code describing reason of failure.
- *
- * @return MALI_ERROR_NONE on success
- */
-
-mali_error kbase_tmem_resize(kbase_context *kctx, mali_addr64 gpu_addr, s32 delta, u32 * const size, base_backing_threshold_status * const failure_reason);
-
-/** Set the size of a tmem region
- *
- * This function sets the number of physical pages committed to a tmem region upto max region size.
- *
- * @param[in]   kctx           The kbase context which the tmem belongs to
- * @param[in]   gpu_addr       The base address of the tmem region
- * @param[in]   size           The number of pages desired
- * @param[out]  actual_size    The actual number of pages of memory committed to this tmem
- * @param[out]  failure_reason Error code describing reason of failure.
- *
- * @return MALI_ERROR_NONE on success
- */
-
-mali_error kbase_tmem_set_size(kbase_context *kctx, mali_addr64 gpu_addr, u32 size, u32 * const actual_size, base_backing_threshold_status * const failure_reason);
-
-/** Get a tmem region size
- *
- * This function obtains the number of physical pages committed to a tmem region.
- *
- * @param[in]   kctx           The kbase context which the tmem belongs to
- * @param[in]   gpu_addr       The base address of the tmem region
- * @param[out]  actual_size    The actual number of pages of memory committed to this tmem
- *
- * @return MALI_ERROR_NONE on success
- */
-
-mali_error kbase_tmem_get_size(kbase_context *kctx, mali_addr64 gpu_addr, u32 * const actual_size);
-
-/**
- * Import external memory.
- *
- * This function supports importing external memory.
- * If imported a kbase_va_region is created of the tmem type.
- * The region might not be mappable on the CPU depending on the imported type.
- * If not mappable the KBASE_REG_NO_CPU_MAP bit will be set.
- *
- * Import will fail if (but not limited to):
- * @li Unsupported import type
- * @li Handle not valid for the type
- * @li Access to a handle was not valid
- * @li The underlying memory can't be accessed by the GPU
- * @li No VA space found to map the memory
- * @li Resources to track the region was not available
- *
- * @param[in]   kctx    The kbase context which the tmem will be created in
- * @param       type    The type of memory to import
- * @param       handle  Handle to the memory to import
- * @param[out]  pages   Where to store the number of pages imported
- * @return A region pointer on success, NULL on failure
- */
-struct kbase_va_region *kbase_tmem_import(kbase_context *kctx, base_tmem_import_type type, int handle, u64 * const pages);
+void kbase_pre_job_sync(kbase_context *kctx, base_syncset *syncsets, size_t nr);
+void kbase_post_job_sync(kbase_context *kctx, base_syncset *syncsets, size_t nr);
 
 /**
  * Set attributes for imported tmem region
@@ -530,28 +545,7 @@ static INLINE void kbase_process_page_usage_dec( struct kbase_context *kctx, int
  * @return A pointer to a descriptor of the CPU mapping that fully encloses
  *         the specified address range, or NULL if none was found.
  */
-struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(kbase_context *kctx, mali_addr64 gpu_addr, void *uaddr, size_t size);
-
-/**
- * @brief Round TMem Growable no. pages to allow for HW workarounds/block allocators
- *
- * For success, the caller should check that the unsigned return value is
- * higher than the \a nr_pages parameter.
- *
- * @param[in] kbdev      The kernel base context used for the allocation
- * @param[in] nr_pages  Size value (in pages) to round
- *
- * @return the rounded-up number of pages (which may have wraped around to zero)
- */
-static INLINE u32 kbasep_tmem_growable_round_size(kbase_device *kbdev, u32 nr_pages)
-{
-	if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_9630))
-		return (nr_pages + KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_9630 - 1) & ~(KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_9630 - 1);
-	else if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8316))
-		return (nr_pages + KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_8316 - 1) & ~(KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES_HW_ISSUE_8316 - 1);
-	else
-		return (nr_pages + KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES - 1) & ~(KBASEP_TMEM_GROWABLE_BLOCKSIZE_PAGES - 1);
-}
+struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(kbase_context *kctx, mali_addr64 gpu_addr, unsigned long uaddr, size_t size);
 
 enum hrtimer_restart kbasep_as_poke_timer_callback(struct hrtimer *timer);
 void kbase_as_poking_timer_retain_atom(kbase_device *kbdev, kbase_context *kctx, kbase_jd_atom *katom);
@@ -560,23 +554,32 @@ void kbase_as_poking_timer_release_atom(kbase_device *kbdev, kbase_context *kctx
 /**
 * @brief Allocates physical pages.
 *
-* Allocates \a nr_pages_requested and updates the region object.
+* Allocates \a nr_pages_requested and updates the alloc object.
 *
-* @param[in] reg memory region in which physical pages are supposed to be allocated
+* @param[in] alloc allocation object to add pages to
 * @param[in] nr_pages number of physical pages to allocate
 *
-* @return MALI_ERROR_NONE if all pages have been successfully allocated. Error code otherwise
+* @return 0 if all pages have been successfully allocated. Error code otherwise
 */
-mali_error kbase_alloc_phy_pages_helper(struct kbase_va_region *reg, u32 nr_pages_requested);
+int kbase_alloc_phy_pages_helper(struct kbase_mem_phy_alloc * alloc, size_t nr_pages_requested);
+
 /**
 * @brief Free physical pages.
 *
-* Frees \a nr_pages and updates the region object.
+* Frees \a nr_pages and updates the alloc object.
 *
-* @param[in] reg memory region in which physical pages are supposed to be allocated
+* @param[in] alloc allocation object to free pages from
 * @param[in] nr_pages number of physical pages to free
 */
-void kbase_free_phy_pages_helper(struct kbase_va_region * reg, u32 nr_pages);
+int kbase_free_phy_pages_helper(struct kbase_mem_phy_alloc * alloc, size_t nr_pages_to_free);
+
+#ifdef CONFIG_MALI_NO_MALI
+static inline void kbase_wait_write_flush(kbase_context *kctx)
+{
+}
+#else
+void kbase_wait_write_flush(kbase_context *kctx);
+#endif
 
 extern atomic_t mali_memory_pages;
 

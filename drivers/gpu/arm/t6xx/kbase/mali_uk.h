@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010, 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -130,6 +130,7 @@ extern "C" {
 		   /**< This field carries the user-side major version on input and the kernel-side major version on output */
 		u16 minor;
 		   /**< This field carries the user-side minor version on input and the kernel-side minor version on output. */
+		u8 padding[4];
 	} uku_version_check_args;
 
 /** @} end group uk_api */

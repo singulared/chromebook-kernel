@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -260,6 +260,9 @@ static void kbase_gpuprops_calculate_props(base_gpu_props * const gpu_props, kba
 	gpu_props->l2_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 0U, 8);
 	gpu_props->l2_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l2_features, 16U, 8);
 	gpu_props->l2_props.num_l2_slices = 1;
+	if (gpu_props->core_props.product_id == GPU_ID_PI_T76X) {
+		gpu_props->l2_props.num_l2_slices = KBASE_UBFX32(gpu_props->raw_props.mem_features, 8U, 4) + 1;
+	}
 
 	gpu_props->l3_props.log2_line_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 0U, 8);
 	gpu_props->l3_props.log2_cache_size = KBASE_UBFX32(gpu_props->raw_props.l3_features, 16U, 8);

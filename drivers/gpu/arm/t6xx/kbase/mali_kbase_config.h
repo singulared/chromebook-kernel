@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -672,6 +672,36 @@ typedef struct kbase_pm_callback_conf {
 	 */
 	int (*power_on_callback) (struct kbase_device *kbdev);
 
+	/** Callback for when the system is requesting a suspend and GPU power
+	 * must be switched off.
+	 *
+	 * Note that if this callback is present, then this may be called
+	 * without a preceding call to power_off_callback. Therefore this
+	 * callback must be able to take any action that might otherwise happen
+	 * in power_off_callback.
+	 *
+	 * The platform specific private pointer kbase_device::platform_context
+	 * can be accessed and modified in here. It is the platform \em
+	 * callbacks responsibility to initialize and terminate this pointer if
+	 * used (see @ref kbase_platform_funcs_conf).
+	 */
+	void (*power_suspend_callback) (struct kbase_device *kbdev);
+
+	/** Callback for when the system is resuming from a suspend and GPU
+	 * power must be switched on.
+	 *
+	 * Note that if this callback is present, then this may be called
+	 * without a following call to power_on_callback. Therefore this
+	 * callback must be able to take any action that might otherwise happen
+	 * in power_on_callback.
+	 *
+	 * The platform specific private pointer kbase_device::platform_context
+	 * can be accessed and modified in here. It is the platform \em
+	 * callbacks responsibility to initialize and terminate this pointer if
+	 * used (see @ref kbase_platform_funcs_conf).
+	 */
+	void (*power_resume_callback) (struct kbase_device *kbdev);
+
 	/** Callback for handling runtime power management initialization.
 	 *
 	 * The runtime power management callbacks @ref power_runtime_off_callback and @ref power_runtime_on_callback
@@ -707,13 +737,6 @@ typedef struct kbase_pm_callback_conf {
 	 */
 	int (*power_runtime_on_callback) (struct kbase_device *kbdev);
 
-	/** Callback for preparing the GPU for suspend
-	 *
-	 * For linux this callback will be called by the kernel suspend
-	 * callback
-	 */
-	void (*power_suspend_callback) (struct kbase_device *kbdev);
-
 } kbase_pm_callback_conf;
 
 /**
@@ -738,6 +761,12 @@ typedef int (*kbase_cpuprops_clock_speed_function) (u32 *clock_speed);
  */
 typedef int (*kbase_gpuprops_clock_speed_function) (u32 *clock_speed);
 
+#ifdef CONFIG_OF
+typedef struct kbase_platform_config {
+	const kbase_attribute *attributes;
+	u32 midgard_type;
+} kbase_platform_config;
+#else
 #ifdef CONFIG_MALI_PLATFORM_FAKE
 /*
  * @brief Specifies start and end of I/O memory region.
@@ -762,8 +791,9 @@ typedef struct kbase_platform_config {
 	const kbase_io_resources *io_resources;
 	u32 midgard_type;
 } kbase_platform_config;
-
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
+#endif /* CONFIG_OF */
+
 /**
  * @brief Return character string associated with the given midgard type.
  *
@@ -772,17 +802,6 @@ typedef struct kbase_platform_config {
  * @return  Pointer to NULL-terminated character array associated with the given midgard type
  */
 const char *kbasep_midgard_type_to_string(u32 midgard_type);
-
-/**
- * @brief Gets the count of attributes in array
- *
- * Function gets the count of attributes in array. Note that end of list indicator is also included.
- *
- * @param[in]  attributes     Array of attributes
-  *
- * @return  Number of attributes in the array including end of list indicator.
- */
-int kbasep_get_config_attribute_count(const kbase_attribute *attributes);
 
 /**
  * @brief Gets the next config attribute with the specified ID from the array of attributes.
@@ -832,6 +851,17 @@ mali_bool kbasep_validate_configuration_attributes(struct kbase_device *kbdev, c
  * @return Pointer to the platform config
  */
 kbase_platform_config *kbase_get_platform_config(void);
+
+/**
+ * @brief Gets the count of attributes in array
+ *
+ * Function gets the count of attributes in array. Note that end of list indicator is also included.
+ *
+ * @param[in]  attributes     Array of attributes
+ *
+ * @return  Number of attributes in the array including end of list indicator.
+ */
+int kbasep_get_config_attribute_count(const kbase_attribute *attributes);
 #endif				/* CONFIG_MALI_PLATFORM_FAKE */
 
 /**

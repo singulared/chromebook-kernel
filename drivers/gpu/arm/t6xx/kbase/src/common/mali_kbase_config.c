@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -23,7 +23,6 @@
 #ifdef CONFIG_UMP
 #include <linux/ump-common.h>
 #endif				/* CONFIG_UMP */
-#include <plat/cpu.h>
 
 /* Specifies how many attributes are permitted in the config (excluding terminating attribute).
  * This is used in validation function so we can detect if configuration is properly terminated. This value can be
@@ -163,20 +162,6 @@
  * Points to @ref kbase_cpuprops_get_default_clock_speed.
  */
 #define DEFAULT_CPU_SPEED_FUNC ((uintptr_t)kbase_cpuprops_get_default_clock_speed)
-
-int kbasep_get_config_attribute_count(const kbase_attribute *attributes)
-{
-	int count = 1;
-
-	KBASE_DEBUG_ASSERT(attributes != NULL);
-
-	while (attributes->id != KBASE_CONFIG_ATTR_END) {
-		attributes++;
-		count++;
-	}
-
-	return count;
-}
 
 const kbase_attribute *kbasep_get_next_attribute(const kbase_attribute *attributes, int attribute_id)
 {

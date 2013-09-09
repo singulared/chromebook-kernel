@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -24,17 +24,16 @@
 #include <linux/highmem.h>
 #include <linux/dma-mapping.h>
 #include <linux/mutex.h>
+#include <asm/cacheflush.h>
 
 void kbase_sync_to_memory(phys_addr_t paddr, void *vaddr, size_t sz)
 {
-const u32 PARTIAL_FLUSH_FASTER_SIZE = 2539520;
 #ifdef CONFIG_ARM
-	if(sz < PARTIAL_FLUSH_FASTER_SIZE)
-		__cpuc_flush_dcache_area(vaddr, sz);	
-	else
-		flush_cache_all();
-
+	__cpuc_flush_dcache_area(vaddr, sz);
 	outer_flush_range(paddr, paddr + sz);
+#elif defined(CONFIG_ARM64)
+	/* FIXME (MID64-46): There's no other suitable cache flush function for ARM64 */
+	flush_cache_all();
 #elif defined(CONFIG_X86)
 	struct scatterlist scl = { 0, };
 	sg_set_page(&scl, pfn_to_page(PFN_DOWN(paddr)), sz, paddr & (PAGE_SIZE - 1));
@@ -47,14 +46,12 @@ const u32 PARTIAL_FLUSH_FASTER_SIZE = 2539520;
 
 void kbase_sync_to_cpu(phys_addr_t paddr, void *vaddr, size_t sz)
 {
-const u32 PARTIAL_FLUSH_FASTER_SIZE = 2539520;
 #ifdef CONFIG_ARM
-	if(sz < PARTIAL_FLUSH_FASTER_SIZE)
-		__cpuc_flush_dcache_area(vaddr, sz);	
-	else
-		flush_cache_all();
-	
+	__cpuc_flush_dcache_area(vaddr, sz);
 	outer_flush_range(paddr, paddr + sz);
+#elif defined(CONFIG_ARM64)
+	/* FIXME (MID64-46): There's no other suitable cache flush function for ARM64 */
+	flush_cache_all();
 #elif defined(CONFIG_X86)
 	struct scatterlist scl = { 0, };
 	sg_set_page(&scl, pfn_to_page(PFN_DOWN(paddr)), sz, paddr & (PAGE_SIZE - 1));
