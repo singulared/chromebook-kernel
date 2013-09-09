@@ -1,5 +1,5 @@
 #
-# (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+# (C) COPYRIGHT ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -10,8 +10,7 @@
 # from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 # Boston, MA  02110-1301, USA.
 #
-#
 
+SRC += $(MALI_PLATFORM_THIRDPARTY_DIR)/mali_kbase_config_chromebook.c
 
-
-obj-$(CONFIG_MALI_MIDGARD) += midgard/
+obj-y += mali_kbase_config_chromebook.o
