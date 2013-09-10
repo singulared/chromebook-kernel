@@ -140,6 +140,22 @@ static struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
 	.disable	= exynos_drm_encoder_disable,
 };
 
+static int exynos_drm_encoder_set_property(struct drm_encoder *encoder,
+		struct drm_property *property, uint64_t val)
+{
+	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
+	struct exynos_drm_display *display = exynos_encoder->display;
+	int ret;
+
+	if (display->ops->set_property) {
+		ret = display->ops->set_property(display->ctx, property, val);
+		if (ret)
+			return ret;
+	}
+
+	return drm_object_property_set_value(&encoder->base, property, val);
+}
+
 static void exynos_drm_encoder_destroy(struct drm_encoder *encoder)
 {
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
@@ -152,6 +168,7 @@ static void exynos_drm_encoder_destroy(struct drm_encoder *encoder)
 }
 
 static struct drm_encoder_funcs exynos_encoder_funcs = {
+	.set_property = exynos_drm_encoder_set_property,
 	.destroy = exynos_drm_encoder_destroy,
 };
 
@@ -221,6 +238,10 @@ exynos_drm_encoder_create(struct drm_device *dev,
 			DRM_MODE_ENCODER_TMDS);
 
 	drm_encoder_helper_add(encoder, &exynos_encoder_helper_funcs);
+
+	drm_object_attach_property(&encoder->base,
+			dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
 
 	DRM_DEBUG_KMS("Created [ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
 			drm_get_encoder_name(encoder));
