@@ -466,12 +466,15 @@ struct drm_connector_funcs {
 /**
  * drm_encoder_funcs - encoder controls
  * @reset: reset state (e.g. at init or resume time)
+ * @set_property: called when a property is changed
  * @destroy: cleanup and free associated data
  *
  * Encoders sit between CRTCs and connectors.
  */
 struct drm_encoder_funcs {
 	void (*reset)(struct drm_encoder *encoder);
+	int (*set_property)(struct drm_encoder *encoder,
+			    struct drm_property *property, uint64_t val);
 	void (*destroy)(struct drm_encoder *encoder);
 };
 
@@ -490,6 +493,7 @@ struct drm_encoder_funcs {
  * @crtc: currently bound CRTC
  * @bridge: bridge associated to the encoder (mapped at init)
  * @funcs: control functions
+ * @properties: property tracking for this encoder
  * @helper_private: mid-layer private data
  *
  * CRTCs drive pixels to encoders, which convert them into signals
@@ -507,6 +511,7 @@ struct drm_encoder {
 	struct drm_crtc *crtc;
 	struct drm_bridge *bridge;
 	const struct drm_encoder_funcs *funcs;
+	struct drm_object_properties properties;
 	void *helper_private;
 };
 

@@ -671,6 +671,7 @@ int drm_encoder_init(struct drm_device *dev,
 	if (ret)
 		goto out;
 
+	encoder->base.properties = &encoder->properties;
 	encoder->dev = dev;
 	encoder->encoder_type = encoder_type;
 	encoder->funcs = funcs;
@@ -3341,6 +3342,21 @@ static int drm_mode_plane_set_obj_prop(struct drm_mode_object *obj,
 	return ret;
 }
 
+static int drm_mode_encoder_set_obj_prop(struct drm_mode_object *obj,
+					 struct drm_property *property,
+					 uint64_t value)
+{
+	int ret = -EINVAL;
+	struct drm_encoder *encoder = obj_to_encoder(obj);
+
+	if (encoder->funcs->set_property)
+		ret = encoder->funcs->set_property(encoder, property, value);
+	if (!ret)
+		drm_object_property_set_value(obj, property, value);
+
+	return ret;
+}
+
 int drm_mode_obj_get_properties_ioctl(struct drm_device *dev, void *data,
 				      struct drm_file *file_priv)
 {
@@ -3444,6 +3460,10 @@ int drm_mode_obj_set_property_ioctl(struct drm_device *dev, void *data,
 		break;
 	case DRM_MODE_OBJECT_PLANE:
 		ret = drm_mode_plane_set_obj_prop(arg_obj, property, arg->value);
+		break;
+	case DRM_MODE_OBJECT_ENCODER:
+		ret = drm_mode_encoder_set_obj_prop(arg_obj, property,
+				arg->value);
 		break;
 	}
 
