@@ -45,7 +45,6 @@
 int dwc3_host_init(struct dwc3 *dwc)
 {
 	struct platform_device	*xhci;
-	struct usb_hcd		*hcd;
 	int			ret;
 
 	xhci = platform_device_alloc("xhci-hcd", PLATFORM_DEVID_AUTO);
@@ -70,15 +69,18 @@ int dwc3_host_init(struct dwc3 *dwc)
 		goto err1;
 	}
 
+	ret = platform_device_add_data(xhci, &dwc->usb3_phy,
+					sizeof(dwc->usb3_phy));
+	if (ret) {
+		dev_err(dwc->dev, "failed to add platform data\n");
+		goto err1;
+	}
+
 	ret = platform_device_add(xhci);
 	if (ret) {
 		dev_err(dwc->dev, "failed to register xHCI device\n");
 		goto err1;
 	}
-
-	hcd = dev_get_drvdata(&xhci->dev);
-	hcd->phy = dwc->usb3_phy;
-	usb_phy_tune(hcd->phy);
 
 	return 0;
 

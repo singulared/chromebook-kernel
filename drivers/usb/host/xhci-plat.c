@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/usb/phy.h>
 
 #include "xhci.h"
 
@@ -98,6 +99,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	struct usb_hcd		*hcd;
 	int			ret;
 	int			irq;
+	struct usb_phy		**phy;
 
 	if (usb_disabled())
 		return -ENODEV;
@@ -133,6 +135,15 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		goto release_mem_region;
 	}
 
+	/*
+	 * The parent of the xhci-plat device may pass in a PHY via
+	 * platform data.  If it exists, store it in our struct usb_hcd
+	 * so that we can use it later.
+	 */
+	phy = dev_get_platdata(&pdev->dev);
+	if (phy)
+		hcd->phy = *phy;
+
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto unmap_registers;
@@ -152,6 +163,10 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	 * is called by usb_add_hcd().
 	 */
 	*((struct xhci_hcd **) xhci->shared_hcd->hcd_priv) = xhci;
+
+	/* The shared hcd uses the same PHY */
+	if (phy)
+		xhci->shared_hcd->phy = *phy;
 
 	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
 	if (ret)
