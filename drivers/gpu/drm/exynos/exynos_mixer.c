@@ -970,10 +970,14 @@ static void mixer_win_commit(void *ctx, int zpos)
 		mixer_graph_buffer(mctx, win);
 }
 
+/*
+ * Called at poweron to (re-)apply window configuration of enabled windows.
+ */
 static void mixer_apply(void *ctx)
 {
 	struct mixer_context *mctx = ctx;
 	int i;
+	int enabled_win_count = 0;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -982,7 +986,20 @@ static void mixer_apply(void *ctx)
 			continue;
 
 		mixer_win_commit(ctx, i);
+		enabled_win_count += 1;
 	}
+
+	/*
+	 * Once a layer (window) has been committed, we do not permit another
+	 * update to that same layer until all committed layers have been
+	 * updated.
+	 * This is a convenient place to block, since:
+	 *  (a) dpms/mixer_apply are never called in hard interrupt context.
+	 *  (b) we have the mode lock, so userspace can't requets any flips or
+	 *      mode sets.
+	 */
+	if (enabled_win_count)
+		mixer_wait_for_vsync(ctx);
 }
 
 static void mixer_win_disable(void *ctx, int zpos)
