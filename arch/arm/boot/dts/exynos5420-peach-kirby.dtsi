@@ -541,6 +541,30 @@
 		};
 	};
 
+	/* hsi2c8 */
+	hsi2c@12E00000 {
+		status = "okay";
+		clock-frequency = <333000>;
+
+		/*
+		 * TODO: for now config the IRQ at the i2c level since
+		 * pinctrl can't handle sharing it between two children, even
+		 * if one fails to probe.
+		 * See crosbug.com/p/20329
+		 */
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2c8_hs_bus &trackpad_irq>;
+
+		/* Only one of the following trackpads should be probed */
+		trackpad@4b {
+			reg = <0x4b>;
+			compatible = "atmel,atmel_mxt_tp";
+			interrupts = <1 0>;
+			interrupt-parent = <&gpx1>;
+			wakeup-source;
+		};
+	};
+
 	/* hsi2c9 */
 	hsi2c@12E10000 {
 		status = "okay";
