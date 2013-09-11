@@ -154,7 +154,8 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		mfc_err("Error: some instance may be closing/opening\n");
 	spin_lock_irqsave(&dev->irqlock, flags);
 
-	s5p_mfc_clock_off();
+	if (test_and_clear_bit(0, &dev->clk_flag))
+		s5p_mfc_clock_off();
 
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++) {
 		ctx = dev->ctx[i];
@@ -178,7 +179,6 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 			mfc_err("Failed to reload FW\n");
 			goto unlock;
 		}
-		s5p_mfc_clock_on();
 		ret = s5p_mfc_init_hw(dev);
 		if (ret)
 			mfc_err("Failed to reinit FW\n");
@@ -354,7 +354,6 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		wake_up_ctx(ctx, reason, err);
 		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 			BUG();
-		s5p_mfc_clock_off();
 		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 		return;
 	}
@@ -426,12 +425,11 @@ leave_handle_frame:
 	wake_up_ctx(ctx, reason, err);
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		BUG();
-	s5p_mfc_clock_off();
-	/* if suspending, wake up device and do not try_run again*/
+	/* if suspending, wake up device*/
 	if (test_bit(0, &dev->enter_suspend))
 		wake_up_dev(dev, reason, err);
-	else
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+
+	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 }
 
 /* Error handling for interrupt */
@@ -475,7 +473,8 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		BUG();
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	s5p_mfc_clock_off();
+	if (test_and_clear_bit(0, &dev->clk_flag))
+		s5p_mfc_clock_off();
 	wake_up_dev(dev, reason, err);
 	return;
 }
@@ -529,7 +528,6 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 	clear_work_bit(ctx);
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		BUG();
-	s5p_mfc_clock_off();
 	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 	wake_up_ctx(ctx, reason, err);
 }
@@ -569,15 +567,14 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 			BUG();
 
-		s5p_mfc_clock_off();
-
 		wake_up(&ctx->queue);
 		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 	} else {
 		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 			BUG();
 
-		s5p_mfc_clock_off();
+		if (test_and_clear_bit(0, &dev->clk_flag))
+			s5p_mfc_clock_off();
 
 		wake_up(&ctx->queue);
 	}
@@ -611,7 +608,6 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx,
 
 	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 
-	s5p_mfc_clock_off();
 	wake_up(&ctx->queue);
 	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 }
@@ -654,7 +650,6 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 			wake_up_ctx(ctx, reason, err);
 			if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 				BUG();
-			s5p_mfc_clock_off();
 			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 		} else {
 			s5p_mfc_handle_frame(ctx, reason, err);
@@ -717,8 +712,6 @@ irq_cleanup_hw:
 	ctx->int_cond = 1;
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		mfc_err("Failed to unlock hw\n");
-
-	s5p_mfc_clock_off();
 
 	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 	mfc_debug(2, "Exit via irq_cleanup_hw\n");
@@ -1298,6 +1291,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 
 	dev->hw_lock = 0;
+	dev->clk_flag = 0;
 	dev->watchdog_workqueue = create_singlethread_workqueue(S5P_MFC_NAME);
 	INIT_WORK(&dev->watchdog_work, s5p_mfc_watchdog_worker);
 	atomic_set(&dev->watchdog_cnt, 0);
