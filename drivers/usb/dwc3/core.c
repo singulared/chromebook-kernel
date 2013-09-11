@@ -545,6 +545,8 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	pm_runtime_allow(dev);
 
+	device_enable_async_suspend(dev);
+
 	return 0;
 
 err3:
