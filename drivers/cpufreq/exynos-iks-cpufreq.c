@@ -120,27 +120,6 @@ void reset_lpj_for_cluster(enum cluster_type cluster)
 	lpj[!cluster] = 0;
 }
 
-static void set_boot_freq(void)
-{
-	int i;
-
-	for (i = 0; i < CA_END; i++) {
-		if (exynos_info[i] == NULL)
-			continue;
-
-		exynos_info[i]->boot_freq
-				= clk_get_rate(exynos_info[i]->cpu_clk) / 1000;
-	}
-}
-
-static unsigned int get_boot_freq(unsigned int cluster)
-{
-	if (exynos_info[cluster] == NULL)
-		return 0;
-
-	return exynos_info[cluster]->boot_freq;
-}
-
 /* Get table size */
 static unsigned int cpufreq_get_table_size(
 				struct cpufreq_frequency_table *table,
@@ -449,13 +428,12 @@ static int exynos_target(struct cpufreq_policy *policy,
 {
 	/* read current cluster */
 	enum cluster_type cur = get_cur_cluster(policy->cpu);
-	unsigned int boot_freq, index, new_freq = 0, do_switch = 0;
+	unsigned int index, new_freq = 0, do_switch = 0;
 	int ret = 0;
 
 	mutex_lock(&cpufreq_lock);
 
-	boot_freq = VIRT_FREQ(get_boot_freq(CA15), CA15);
-	if (exynos_info[cur]->blocked && (target_freq != boot_freq))
+	if (exynos_info[cur]->blocked && (target_freq != freq_max[CA15]))
 		goto out;
 
 	/* get current frequency */
@@ -515,19 +493,17 @@ static int exynos_cpufreq_resume(struct cpufreq_policy *policy)
  * @v
  *
  * While cpufreq_disable == true, target() ignores every frequency but
- * boot_freq. The boot_freq value is the initial frequency,
- * which is set by the bootloader. In order to eliminate possible
- * inconsistency in clock values, we save and restore frequencies during
- * suspend and resume and block CPUFREQ activities. Note that the standard
- * suspend/resume cannot be used as they are too deep (syscore_ops) for
- * regulator actions.
+ * max_freq. The max_freq value is the maximum frequency.
+ * In order to eliminate possible inconsistency in clock values, we save
+ * and restore frequencies during suspend and resume and block CPUFREQ
+ * activities. Note that the standard suspend/resume cannot be used
+ * as they are too deep (syscore_ops) for regulator actions.
  */
 static int exynos_cpufreq_pm_notifier(struct notifier_block *notifier,
 				       unsigned long pm_event, void *v)
 {
 	struct cpufreq_policy *policy;
-	unsigned int freq_ca7, freq_ca15;
-	unsigned int bootfreq_ca7, bootfreq_ca15;
+	unsigned int maxfreq_ca7, maxfreq_ca15, saved_max;
 	int volt;
 	unsigned int i;
 
@@ -538,36 +514,35 @@ static int exynos_cpufreq_pm_notifier(struct notifier_block *notifier,
 		exynos_info[CA15]->blocked = true;
 		mutex_unlock(&cpufreq_lock);
 
-		bootfreq_ca7 = VIRT_FREQ(get_boot_freq(CA7), CA7);
-		bootfreq_ca15 = VIRT_FREQ(get_boot_freq(CA15), CA15);
+		maxfreq_ca7 = freq_max[CA7];
+		maxfreq_ca15 = freq_max[CA15];
 
-		freq_ca7 = exynos_getspeed_cluster(CA7);
-		freq_ca15 = exynos_getspeed_cluster(CA15);
-
-		volt =
-		max(get_match_volt(ID_KFC, ACTUAL_FREQ(bootfreq_ca7, CA7)),
-		get_match_volt(ID_KFC, ACTUAL_FREQ(freq_ca7, CA7)));
+		volt = get_match_volt(ID_KFC, ACTUAL_FREQ(maxfreq_ca7, CA7));
 		volt = get_limit_voltage(volt);
 
 		if (regulator_set_voltage(kfc_regulator, volt, volt))
 			goto err;
 
-		volt =
-		max(get_match_volt(ID_ARM, ACTUAL_FREQ(bootfreq_ca15, CA15)),
-		get_match_volt(ID_ARM, ACTUAL_FREQ(freq_ca15, CA15)));
+		volt = get_match_volt(ID_ARM, ACTUAL_FREQ(maxfreq_ca15, CA15));
 		volt = get_limit_voltage(volt);
 
 		if (regulator_set_voltage(arm_regulator, volt, volt))
 			goto err;
 
 		/*
-		 * Migrate all cores to the CA15 boot frequency (i.e. 800MHz) so
-		 * that we may be on the A15 cluster when suspending the system.
+		 * Migrate all cores to the CA15 max frequency so that
+		 * we may be on the A15 cluster when suspending the system.
 		 */
 		for_each_online_cpu(i) {
 			policy = cpufreq_cpu_get(i);
-			exynos_target(policy, bootfreq_ca15,
+			/* Save/restore maximum scaling frequency. */
+			saved_max = policy->user_policy.max;
+			policy->user_policy.max = maxfreq_ca15;
+			cpufreq_update_policy(i);
+			exynos_target(policy, maxfreq_ca15,
 						CPUFREQ_RELATION_H);
+			policy->user_policy.max = saved_max;
+			cpufreq_update_policy(i);
 			cpufreq_cpu_put(policy);
 		}
 
@@ -598,13 +573,13 @@ static int exynos_cpufreq_reboot_notifier(struct notifier_block *this,
 				unsigned long code, void *_cmd)
 {
 	struct cpufreq_policy *policy;
-	unsigned int bootfreq_ca15;
 	unsigned int i;
 
-	bootfreq_ca15 = VIRT_FREQ(get_boot_freq(CA15), CA15);
 	for_each_online_cpu(i) {
 		policy = cpufreq_cpu_get(i);
-		exynos_target(policy, bootfreq_ca15, CPUFREQ_RELATION_H);
+		policy->user_policy.max = freq_max[CA15];
+		cpufreq_update_policy(i);
+		exynos_target(policy, freq_max[CA15], CPUFREQ_RELATION_H);
 		cpufreq_cpu_put(policy);
 	}
 	return NOTIFY_DONE;
@@ -797,8 +772,6 @@ int __init exynos_iks_cpufreq_init(void)
 	freq_min[CA7] = VIRT_FREQ(exynos_info[CA7]->
 		freq_table[exynos_info[CA7]->min_support_idx].frequency, CA7);
 	cpufreq_merge_tables();
-
-	set_boot_freq();
 
 	register_pm_notifier(&exynos_cpufreq_nb);
 	register_reboot_notifier(&exynos_cpufreq_reboot_nb);
