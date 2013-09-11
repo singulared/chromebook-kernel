@@ -178,6 +178,8 @@ static int dwc3_exynos_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
+	device_enable_async_suspend(dev);
+
 	return 0;
 
 err2:
