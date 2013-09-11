@@ -16,4 +16,9 @@
 	model = "Google Peach Kirby";
 
 	compatible = "google,kirby", "google,peach", "samsung,exynos5420";
+
+	/* FIXME: Is this really necessary? */
+	display-port-controller {
+		samsung,skip-edid-read;
+	};
 };

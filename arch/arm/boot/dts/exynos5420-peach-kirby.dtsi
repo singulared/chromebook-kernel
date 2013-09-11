@@ -100,15 +100,8 @@
 			samsung,pin-drv = <0>;
 		};
 
-		ps8622_reset: ps8622-reset {
-			samsung,pins = "gpy7-7";
-			samsung,pin-function = <1>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
-		ps8622_sleep: ps8622-sleep {
-			samsung,pins = "gpx3-5";
+		ps8622_gpios: ps8622-gpios {
+			samsung,pins = "gpy7-7", "gpx3-5";
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
@@ -321,8 +314,6 @@
 			bus-width = <4>;
 		};
 	};
-
-	/* TODO: Add fimd, display port, etc */
 
 	spi_1: spi@12d30000 {
 		status = "okay";
@@ -838,6 +829,17 @@
 		};
 	};
 
+	dummy_backlight_regulator: dummy_backlight_regulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcd_led";
+		regulator-always-on;
+	};
+	dummy_lcd_regulator: dummy_lcd_regulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "lcd_vdd";
+		regulator-always-on;
+	};
+
 	/* hsi2c7 */
 	hsi2c@12CD0000 {
 		status = "okay";
@@ -853,6 +855,37 @@
 			mclk-pin = <2>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&max98090_irq>;
+		};
+
+		ps8622-bridge@20 {
+			compatible = "parade,ps8622";
+			reg = <0x08>;
+			sleep-gpio = <&gpx3 5 0>;
+			reset-gpio = <&gpy7 7 0>;
+			lane-count = <1>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&ps8622_gpios>;
+			use-external-pwm;
+
+			/*
+			 * The following table maps the timings set forth in the
+			 * LCD's datasheet to the timings specified in the
+			 * PS8622 datasheet.
+			 * ----------+---------------------------+--------------
+			 * LCD TIME  | TRANSITION                | PS8622 EQUIV
+			 * ----------+---------------------------+--------------
+			 * t2 <= 50  | LCD_VCC -> VIDEO_SIGNAL	 | T3+4+5+6+7+8
+			 * 200 <= t5 | VIDEO_SIGNAL -> LED_EN	 | T9 + T10
+			 * 0 <= t9   | LCD_BL_PWM -> LED_EN	 | T10
+			 * 10 <= t8  | VLED -> LCD_BL_PWM	 | --
+			 * 200 <= t6 | !LED_EN -> !VIDEO_SIGNAL  | T11 + T12
+			 * t3 <= 50  | !VIDEO_SIGNAL -> !LCD_VCC | T13
+			 * 400 <= t4 | !LCD_VCC -> LCD_VCC	 | T15
+			 * 0 <= t10  | !LED_EN -> !LCD_BL_PWM    | T11
+			 * 10 <= t11 | !LCD_BL_PWM -> !VLED      | --
+			 * ----------+---------------------------+--------------
+			 */
+			power-seq-timing = <10 200 10 5 200 10 600>;
 		};
 	};
 
@@ -920,6 +953,46 @@
 		regulator-always-on;
 		pinctrl-names = "default";
 		pinctrl-0 = <&mask_tpm_reset>;
+	};
+
+	fimd {
+		samsung,fimd-vidout-rgb;
+		samsung,fimd-inv-vclk;
+		samsung,default-window = <0>;
+		samsung,fimd-win-bpp = <32>;
+		samsung,fimd-src-clk-rate = <70500000>;
+		samsung,use-fimd-dithering;
+		samsung-rgb-dithpos = <6 6 6>;
+	};
+
+	lcd_dp0: lcd_panel0 {
+		lcd-htiming = <40 40 32 1366>;
+		lcd-vtiming = <10 12 6 768>;
+	};
+
+	display-port-controller {
+		samsung,dp-display = <&lcd_dp0>;
+		samsung,dp-frame-rate = <60>;
+		samsung,color-space = <0>;
+		samsung,dynamic-range = <0>;
+		samsung,ycbcr-coeff = <0>;
+		samsung,color-depth = <1>;
+		samsung,link-rate = <0x0a>;
+		samsung,lane-count = <1>;
+		samsung,hpd-gpio = <&gpx2 6 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&dp_hpd>;
+	};
+
+	hdmi {
+		hpd-gpio = <&gpx2 1 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_hpd_irq>;
+
+		hdmi-en-supply = <&ldo27_reg>;
+		vdd-supply = <&ldo8_reg>;
+		vdd_osc-supply = <&ldo10_reg>;
+		vdd_pll-supply = <&ldo8_reg>;
 	};
 
 	/* Chain regulators to ensure proper Wifi turn on sequence */
