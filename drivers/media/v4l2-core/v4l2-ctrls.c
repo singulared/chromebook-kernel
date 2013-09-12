@@ -811,6 +811,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 
 	/* VPX controls */
+	case V4L2_CID_VPX_CLASS:		return "VPX Encoder Controls";
 	case V4L2_CID_VPX_NUM_PARTITIONS:	return "VPX Number of partitions";
 	case V4L2_CID_VPX_IMD_DISABLE_4X4:	return "VPX Intra mode decision disable";
 	case V4L2_CID_VPX_NUM_OF_REF:		return "VPX Number of reference pictures for P frames";
@@ -948,6 +949,7 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_IMAGE_SOURCE_CLASS:
 	case V4L2_CID_IMAGE_PROC_CLASS:
 	case V4L2_CID_DV_CLASS:
+	case V4L2_CID_VPX_CLASS:
 		*type = V4L2_CTRL_TYPE_CTRL_CLASS;
 		/* You can neither read not write these */
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_WRITE_ONLY;
