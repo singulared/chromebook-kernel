@@ -1228,6 +1228,8 @@ static int s5p_mfc_set_enc_params_vp8(struct s5p_mfc_ctx *ctx)
 	/* VP8 specific params */
 	/* Config */
 	reg = 0;
+	/* Bit set to 1 disables IVF stream format. */
+	reg |= p_vp8->ivf ? 0 : (0x1 << 12);
 	reg |= (p_vp8->hier_qp & 0x1) << 11;
 	reg |= (p_vp8->imd_4x4 & 0x1) << 10;
 	reg |= (p_vp8->num_partitions & 0xF) << 3;

@@ -826,6 +826,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_VPX_MAX_QP:		return "VPX Maximum QP Value";
 	case V4L2_CID_VPX_I_FRAME_QP:		return "VPX I-Frame QP Value";
 	case V4L2_CID_VPX_P_FRAME_QP:		return "VPX P-Frame QP Value";
+	case V4L2_CID_VPX_IVF_FORMAT:		return "VPX Output stream in IVF format";
 	default:
 		return NULL;
 	}
