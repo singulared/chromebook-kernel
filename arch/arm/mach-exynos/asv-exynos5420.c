@@ -39,7 +39,15 @@
 
 #define LOT_ID_REG		(S5P_VA_CHIPID + 0x14)
 
+#define G3D_ID_REG		(S5P_VA_CHIPID + 0x28)
+#define G3D_SHADERCONFIG_MASK	0x3C00
+
 static bool is_special_lot;
+
+static unsigned int *g3d_asv_abb_info;
+static unsigned int (*g3d_asv_volt_info)[ARM_ASV_GRP_NR + 1];
+static unsigned int (*g3d_sram_asv_volt_info)[ARM_ASV_GRP_NR + 1];
+static struct asv_info *g3d_asv_member;
 
 static const char * const special_lot_list[] = {
 	"NZXK8",
@@ -209,6 +217,16 @@ static struct asv_ops exynos5420_asv_ops_g3d_sram = {
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
+static struct asv_ops exynos5420_asv_ops_g3d_mp6 = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
+static struct asv_ops exynos5420_asv_ops_g3d_mp6_sram = {
+	.get_asv_group	= exynos5420_get_asv_group,
+	.set_asv_info	= exynos5420_set_asv_info,
+};
+
 struct asv_info exynos5420_asv_member[] = {
 	{
 		.asv_type	= ID_ARM,
@@ -232,13 +250,6 @@ struct asv_info exynos5420_asv_member[] = {
 		.dvfs_level_nr	= DVFS_LEVEL_NR(INT),
 		.max_volt_value = MAX_VOLT(INT),
 	}, {
-		.asv_type	= ID_G3D,
-		.name		= "VDD_G3D",
-		.ops		= &exynos5420_asv_ops_g3d,
-		.asv_group_nr	= ASV_GRP_NR(G3D),
-		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D),
-		.max_volt_value = MAX_VOLT(G3D),
-	}, {
 		.asv_type	= ID_MIF,
 		.name		= "VDD_MIF",
 		.ops		= &exynos5420_asv_ops_mif,
@@ -252,13 +263,44 @@ struct asv_info exynos5420_asv_member[] = {
 		.asv_group_nr	= ASV_GRP_NR(MIF_SRAM),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(MIF_SRAM),
 		.max_volt_value = MAX_VOLT(MIF_SRAM),
+	},
+};
+
+#define NR_G3D_ASV_MEMBER	2
+
+static struct asv_info g3d_mp4_asv_member[NR_G3D_ASV_MEMBER] = {
+	{
+		.asv_type	= ID_G3D,
+		.name		= "VDD_G3D_MP4",
+		.ops		= &exynos5420_asv_ops_g3d,
+		.asv_group_nr	= ASV_GRP_NR(G3D_MP4),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_MP4),
+		.max_volt_value = MAX_VOLT(G3D_MP4),
 	}, {
 		.asv_type	= ID_G3D_SRAM,
-		.name		= "VDD_G3D_SRAM",
+		.name		= "VDD_G3D_MP4_SRAM",
 		.ops		= &exynos5420_asv_ops_g3d_sram,
-		.asv_group_nr	= ASV_GRP_NR(G3D_SRAM),
-		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_SRAM),
-		.max_volt_value = MAX_VOLT(G3D_SRAM),
+		.asv_group_nr	= ASV_GRP_NR(G3D_MP4_SRAM),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_MP4_SRAM),
+		.max_volt_value = MAX_VOLT(G3D_MP4_SRAM),
+	},
+};
+
+static struct asv_info g3d_mp6_asv_member[NR_G3D_ASV_MEMBER] = {
+	{
+		.asv_type	= ID_G3D,
+		.name		= "VDD_G3D_MP6",
+		.ops		= &exynos5420_asv_ops_g3d_mp6,
+		.asv_group_nr	= ASV_GRP_NR(G3D_MP6),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_MP6),
+		.max_volt_value = MAX_VOLT(G3D_MP6),
+	}, {
+		.asv_type	= ID_G3D_SRAM,
+		.name		= "VDD_G3D_MP6_SRAM",
+		.ops		= &exynos5420_asv_ops_g3d_mp6_sram,
+		.asv_group_nr	= ASV_GRP_NR(G3D_MP6_SRAM),
+		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D_MP6_SRAM),
+		.max_volt_value = MAX_VOLT(G3D_MP6_SRAM),
 	},
 };
 
@@ -269,6 +311,9 @@ unsigned int exynos5420_register_asv_member(void)
 	/* Register asv member into list */
 	for (i = 0; i < ARRAY_SIZE(exynos5420_asv_member); i++)
 		exynos_add_asv_member(&exynos5420_asv_member[i]);
+
+	for (i = 0; i < NR_G3D_ASV_MEMBER; i++)
+		exynos_add_asv_member(&g3d_asv_member[i]);
 
 	return 0;
 }
@@ -388,6 +433,7 @@ int exynos5420_init_asv(struct asv_common *asv_info)
 {
 	unsigned int chip_id3_value;
 	unsigned int chip_id4_value;
+	bool is_g3d_mp6;
 
 	pr_debug("EXYNOS5420: Adaptive Supply Voltage init\n");
 
@@ -409,6 +455,20 @@ int exynos5420_init_asv(struct asv_common *asv_info)
 
 	pr_debug("EXYNOS5420 ASV : %s IDS : %d HPM : %d\n", asv_info->lot_name,
 				asv_info->ids_value, asv_info->hpm_value);
+
+	/* MP6 variant has different ASV tables */
+	is_g3d_mp6 = !(__raw_readl(G3D_ID_REG) & G3D_SHADERCONFIG_MASK);
+	if (is_g3d_mp6) {
+		g3d_asv_abb_info = g3d_mp6_asv_abb_info;
+		g3d_asv_volt_info = g3d_mp6_asv_volt_info;
+		g3d_sram_asv_volt_info = g3d_mp6_sram_asv_volt_info;
+		g3d_asv_member = g3d_mp6_asv_member;
+	} else {
+		g3d_asv_abb_info = g3d_mp4_asv_abb_info;
+		g3d_asv_volt_info = g3d_mp4_asv_volt_info;
+		g3d_sram_asv_volt_info = g3d_mp4_sram_asv_volt_info;
+		g3d_asv_member = g3d_mp4_asv_member;
+	}
 
 set_asv_info:
 	asv_info->register_asv_member = exynos5420_register_asv_member;
