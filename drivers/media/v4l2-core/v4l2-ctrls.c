@@ -821,6 +821,7 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_VPX_GOLDEN_FRAME_SEL:	return "VPX Golden frame indicator";
 	case V4L2_CID_VPX_HIERARCHICAL_CODING_LAYER:	return "VPX Number of hierarchical layer";
 	case V4L2_CID_VPX_HIERARCHICAL_QP_ENABLE:	return "VPX Hierarchical QP enable";
+	case V4L2_CID_VPX_PROFILE:		return "VPX Profile";
 	default:
 		return NULL;
 	}

@@ -444,6 +444,7 @@ struct s5p_mfc_vp8_enc_params {
 	u8 filter_sharpness;
 	u32 golden_frame_ref_period;
 	u8 golden_frame_sel;
+	u8 profile;
 };
 
 /**
