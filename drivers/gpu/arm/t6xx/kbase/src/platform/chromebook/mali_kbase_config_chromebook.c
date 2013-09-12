@@ -82,6 +82,8 @@
 #define RUNTIME_PM_DELAY_TIME 10
 #define CONFIG_T6XX_HWVER_R0P0 1
 #define G3D_ASV_VOL_OFFSET	25000
+#define G3D_ID_REG		(S5P_VA_CHIPID + 0x28)
+#define G3D_SHADERCONFIG_MASK	0x3C00
 
 struct regulator *kbase_platform_get_regulator(void);
 int kbase_platform_regulator_init(void);
@@ -1619,6 +1621,7 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 #ifdef CONFIG_ARM_EXYNOS5420_ASV
 		int i;
 		unsigned int asv_volt;
+		bool is_mp6;
 
 		for (i = 0; i < MALI_DVFS_STEP; i++) {
 			asv_volt = get_match_volt(ID_G3D,
@@ -1627,6 +1630,14 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 			if (asv_volt)
 				mali_dvfs_infotbl[i].voltage = asv_volt;
 		}
+
+		/*
+		 * MP6 supports upto 533 MHz. Making max_threshold of
+		 * 533MHz as 100 so that it never steps to 600MHz
+		 */
+		is_mp6 = !(__raw_readl(G3D_ID_REG) & G3D_SHADERCONFIG_MASK);
+		if (is_mp6)
+			mali_dvfs_infotbl[MALI_DVFS_STEP - 2].max_threshold = 100;
 #endif
 	}
 #endif
