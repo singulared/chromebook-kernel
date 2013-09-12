@@ -2613,6 +2613,13 @@ int dw_mci_resume(struct dw_mci *host)
 	mci_writel(host, CTRL, SDMMC_CTRL_INT_ENABLE);
 
 	/*
+	 * Its possible that card may be inserted/removed while system is in
+	 * suspend mode, Let schedule the card_work to take care of such
+	 * insertion/removal of the card upon wakeup.
+	 */
+	queue_work(host->card_workqueue, &host->card_work);
+
+	/*
 	 * Invalidate the 'current_speed' value since CLKDIV has come up in
 	 * default state and our cache is incorrect; set to something we know
 	 * slot->clock won't be.
