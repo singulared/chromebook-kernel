@@ -25,6 +25,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 #include "drmP.h"
+#include "drm_crtc.h"
+#include "drm_crtc_helper.h"
 #include "anx7808regs.h"
 
 #define _wait_for(COND, TO_MS, INTVL_MS) ({ \
@@ -68,9 +70,13 @@ enum downstream_type {
 	DOWNSTREAM_DP,
 	DOWNSTREAM_VGA,
 	DOWNSTREAM_HDMI,
+	DOWNSTREAM_DISCONNECTED,
 };
 
 struct anx7808_data {
+	struct drm_connector connector;
+	struct drm_device *dev;
+	struct drm_encoder *encoder;
 	int pd_gpio;
 	int reset_gpio;
 	int intp_gpio;
@@ -383,6 +389,7 @@ static int anx7808_power_off(struct anx7808_data *anx7808, bool cancel_intp,
 
 	gpio_set_value(anx7808->reset_gpio, 0);
 	usleep_range(1000, 2000);
+
 	ret = regulator_disable(anx7808->vdd_mydp);
 	if (ret < 0) {
 		DRM_ERROR("Failed to power off ANX7808: %d", ret);
@@ -704,7 +711,7 @@ static void anx7808_update_audio(struct anx7808_data *anx7808)
 	return;
 }
 
-static int anx7808_handle_cable_insertion(struct anx7808_data *anx7808)
+static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 {
 	int ret;
 	uint8_t val;
@@ -715,8 +722,10 @@ static int anx7808_handle_cable_insertion(struct anx7808_data *anx7808)
 		return ret;
 	}
 
-	if (!(val & DOWN_STRM_HPD))
+	if (!(val & DOWN_STRM_HPD)) {
+		anx7808->ds_type = DOWNSTREAM_DISCONNECTED;
 		return 0;
+	}
 
 	ret = anx7808_aux_dpcd_read(anx7808, DOWNSTREAMPORT_PRESENT , 1, &val);
 	if (ret) {
@@ -740,8 +749,7 @@ static int anx7808_handle_cable_insertion(struct anx7808_data *anx7808)
 		break;
 	}
 
-	anx7808_set_hpd(anx7808, 1);
-	return 0;
+	return ret;
 }
 
 static void anx7808_handle_hdmi_int_5(struct anx7808_data *anx7808, uint8_t irq)
@@ -796,14 +804,13 @@ static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 		return;
 	}
 
-	if (irq[0] & DWN_STREAM_CONNECTED) {
-		ret = anx7808_handle_cable_insertion(anx7808);
-		if (ret)
-			DRM_ERROR("handle_cable_insertion failed [%d]\n", ret);
-	}
+	if (irq[0] & DWN_STREAM_CONNECTED)
+		drm_helper_hpd_irq_event(anx7808->dev);
 
-	if (irq[0] & DWN_STREAM_DISCONNECTED)
+	if (irq[0] & DWN_STREAM_DISCONNECTED) {
 		anx7808_set_hpd(anx7808, 0);
+		drm_helper_hpd_irq_event(anx7808->dev);
+	}
 }
 
 static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
@@ -841,6 +848,7 @@ static void anx7808_handle_tx_int(struct anx7808_data *anx7808, uint8_t irq)
 	/* Cable has been disconnected, power off and wait for cable_det */
 	if (irq & POLLING_ERR) {
 		anx7808_power_off(anx7808, false, true);
+		drm_helper_hpd_irq_event(anx7808->dev);
 		return;
 	}
 
@@ -912,15 +920,7 @@ static void anx7808_cable_det_work(struct work_struct *work)
 		return;
 	}
 
-	/*
-	 * There's no downstream connected interrupt if downstream is already
-	 * present, handle that case here.
-	 */
-	ret = anx7808_handle_cable_insertion(anx7808);
-	if (ret) {
-		DRM_ERROR("handle_cable_insertion failed [%d]\n", ret);
-		return;
-	}
+	drm_helper_hpd_irq_event(anx7808->dev);
 }
 
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
@@ -1068,11 +1068,7 @@ void anx7808_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	ret = anx7808_handle_cable_insertion(anx7808);
-	if (ret) {
-		DRM_ERROR("handle_cable_insertion failed [%d]\n", ret);
-		return;
-	}
+	anx7808_set_hpd(anx7808, 1);
 }
 
 void anx7808_enable(struct drm_bridge *bridge)
@@ -1104,7 +1100,7 @@ err:
 	anx7808_power_off(anx7808, true, false);
 }
 
-void anx7808_destroy(struct drm_bridge *bridge)
+void anx7808_bridge_destroy(struct drm_bridge *bridge)
 {
 	int i;
 	struct anx7808_data *anx7808 = bridge->driver_private;
@@ -1127,7 +1123,138 @@ struct drm_bridge_funcs anx7808_bridge_funcs = {
 	.post_disable = anx7808_post_disable,
 	.pre_enable = anx7808_pre_enable,
 	.enable = anx7808_enable,
-	.destroy = anx7808_destroy,
+	.destroy = anx7808_bridge_destroy,
+};
+
+int anx7808_get_modes(struct drm_connector *connector)
+{
+	struct anx7808_data *anx7808;
+	u8 *edid;
+	int ret, num_modes;
+	bool power_cycle;
+
+	anx7808 = container_of(connector, struct anx7808_data, connector);
+
+	power_cycle = !anx7808->powered;
+
+	if (power_cycle) {
+		ret = anx7808_power_on(anx7808);
+		if (ret) {
+			DRM_ERROR("Failed to power on anx7808, ret=%d\n", ret);
+			num_modes = 0;
+			goto out;
+		}
+	}
+
+	ret = anx7808_get_downstream_info(anx7808);
+	if (ret) {
+		DRM_ERROR("Failed to get downstream info, ret=%d\n", ret);
+		num_modes = 0;
+		goto out;
+	}
+
+	if (anx7808->ds_type == DOWNSTREAM_DISCONNECTED) {
+		DRM_ERROR("Downstream disconnected, no modes\n");
+		num_modes = 0;
+		goto out;
+	}
+
+	edid = (u8 *)drm_get_edid(connector, &anx7808->ddc_adapter);
+	if (!edid) {
+		DRM_ERROR("Failed to read edid\n");
+		num_modes = 0;
+		goto out;
+	}
+
+	drm_mode_connector_update_edid_property(connector, (struct edid *)edid);
+
+	num_modes = drm_add_edid_modes(connector, (struct edid *)edid);
+
+	kfree(edid);
+out:
+	if (power_cycle) {
+		ret = anx7808_power_off(anx7808, true, false);
+		if (ret)
+			DRM_ERROR("Failed to power off anx7808, ret=%d\n", ret);
+	}
+
+	return num_modes;
+}
+
+int anx7808_mode_valid(struct drm_connector *connector,
+		struct drm_display_mode *mode)
+{
+	return MODE_OK;
+}
+
+struct drm_encoder *anx7808_best_encoder(struct drm_connector *connector)
+{
+	struct anx7808_data *anx7808;
+
+	anx7808 = container_of(connector, struct anx7808_data, connector);
+
+	return anx7808->encoder;
+}
+
+struct drm_connector_helper_funcs anx7808_connector_helper_funcs = {
+	.get_modes = anx7808_get_modes,
+	.mode_valid = anx7808_mode_valid,
+	.best_encoder = anx7808_best_encoder,
+};
+
+enum drm_connector_status anx7808_detect(struct drm_connector *connector,
+		bool force)
+{
+	struct anx7808_data *anx7808;
+	int ret;
+	bool power_cycle;
+	enum drm_connector_status status;
+
+	anx7808 = container_of(connector, struct anx7808_data, connector);
+
+	if (atomic_read(&anx7808->cable_det_oneshot))
+		return connector_status_disconnected;
+
+	power_cycle = !anx7808->powered;
+
+	if (power_cycle) {
+		ret = anx7808_power_on(anx7808);
+		if (ret) {
+			DRM_ERROR("Failed to power on anx7808, ret=%d\n", ret);
+			status = connector_status_disconnected;
+			goto out;
+		}
+	}
+
+	ret = anx7808_get_downstream_info(anx7808);
+	if (ret) {
+		DRM_ERROR("Failed to get downstream info, ret=%d\n", ret);
+		status = connector_status_disconnected;
+		goto out;
+	}
+
+	status = anx7808->ds_type == DOWNSTREAM_DISCONNECTED ?
+			connector_status_disconnected :
+			connector_status_connected;
+out:
+	if (power_cycle) {
+		ret = anx7808_power_off(anx7808, true, false);
+		if (ret)
+			DRM_ERROR("Failed to power off anx7808, ret=%d\n", ret);
+	}
+
+	return status;
+}
+
+void anx7808_connector_destroy(struct drm_connector *connector)
+{
+}
+
+struct drm_connector_funcs anx7808_connector_funcs = {
+	.dpms = drm_helper_connector_dpms,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.detect = anx7808_detect,
+	.destroy = anx7808_connector_destroy,
 };
 
 int anx7808_init(struct drm_encoder *encoder)
@@ -1162,6 +1289,9 @@ int anx7808_init(struct drm_encoder *encoder)
 		ret = -ENOMEM;
 		goto err_client;
 	}
+
+	anx7808->dev = dev;
+	anx7808->encoder = encoder;
 
 	atomic_set(&anx7808->cable_det_oneshot, 1);
 	INIT_DELAYED_WORK(&anx7808->cable_det_work, anx7808_cable_det_work);
@@ -1326,12 +1456,23 @@ int anx7808_init(struct drm_encoder *encoder)
 		goto err_sysfs;
 	}
 
-	if (gpio_get_value(anx7808->cable_det_gpio))
-		mod_delayed_work(system_wq, &anx7808->cable_det_work,
-				msecs_to_jiffies(CABLE_DET_DEBOUNCE_MS));
+	ret = drm_connector_init(dev, &anx7808->connector,
+			&anx7808_connector_funcs, DRM_MODE_CONNECTOR_HDMIA);
+	if (ret) {
+		DRM_ERROR("Failed to initialize connector with drm\n");
+		goto err_bridge;
+	}
+	drm_connector_helper_add(&anx7808->connector,
+			&anx7808_connector_helper_funcs);
+	drm_sysfs_connector_add(&anx7808->connector);
+	drm_mode_connector_attach_encoder(&anx7808->connector, encoder);
+	anx7808->connector.interlace_allowed = true;
+	anx7808->connector.polled = DRM_CONNECTOR_POLL_HPD;
 
 	return 0;
 
+err_bridge:
+	drm_bridge_cleanup(bridge);
 err_sysfs:
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
 		device_remove_file(dev->dev, &anx7808_device_attrs[i]);
