@@ -378,6 +378,7 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_card *card = codec->card;
 	struct device_node *dn = card->dev->of_node;
+	struct device_node *codec_dn = codec->dev->of_node;
 	struct audio_codec_plugin *plugin;
 
 	if (dn) {
@@ -420,10 +421,10 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	/* Microphone BIAS has to be kept on so that the mic-detection circuit
 	 * will operate correctly.
 	 */
-	if (of_machine_is_compatible("google,spring"))
-		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
-	else
+	if (of_device_is_compatible(codec_dn, "maxim,max98095"))
 		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	else
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
 
 	snd_soc_dapm_sync(dapm);
 
@@ -531,7 +532,8 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
 	if (!dn) {
-		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089");
+		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089") ? :
+		     of_find_compatible_node(NULL, NULL, "maxim,max98090");
 		if (!dn)
 			return -ENODEV;
 		card->dapm_routes = max98089_audio_map;
@@ -595,6 +597,7 @@ static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
 static const struct of_device_id daisy_max98095_of_match[] __devinitconst = {
 	{ .compatible = "google,daisy-audio-max98095", },
 	{ .compatible = "google,daisy-audio-max98089", },
+	{ .compatible = "google,daisy-audio-max98090", },
 	{},
 };
 
