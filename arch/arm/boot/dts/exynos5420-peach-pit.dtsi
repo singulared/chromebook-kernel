@@ -421,8 +421,7 @@
 			controller-data {
 				cs-gpio = <&gpb1 2 0>;
 
-				/* TODO: feedback delay should be 2?*/
-				samsung,spi-feedback-delay = <0>;
+				samsung,spi-feedback-delay = <2>;
 			};
 
 			/* Arbitrarily assign bus 20 since past exynos range */
