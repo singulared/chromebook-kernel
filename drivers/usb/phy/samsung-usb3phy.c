@@ -84,6 +84,7 @@ void samsung_usb3phy_tune(struct usb_phy *phy)
 	if (sphy->drv_data->cpu_type == TYPE_EXYNOS5420) {
 		u32 temp;
 
+		mutex_lock(&sphy->mutex);
 		/*
 		 * Change los_bias to (0x5) for 28nm PHY from a
 		 * default value (0x0); los_level is set as default
@@ -105,6 +106,7 @@ void samsung_usb3phy_tune(struct usb_phy *phy)
 		crport_ctrl_write(sphy,
 				  EXYNOS5_DRD_PHYSS_TX_VBOOSTLEVEL_OVRD_IN,
 				  temp);
+		mutex_unlock(&sphy->mutex);
 	}
 }
 
