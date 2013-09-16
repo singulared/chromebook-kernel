@@ -291,6 +291,9 @@ static int hdmi_audio_hw_params(struct device *dev,
 		goto err;
 	}
 
+	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
+		return -EINVAL;
+
 	snd_printdd("[%d] %s\n", __LINE__, __func__);
 
 	plugin = dev_get_drvdata(dev);
@@ -370,6 +373,9 @@ static int hdmi_audio_trigger(struct device *dev,
 		dev_err(dev, "invalid device.\n");
 		return -EINVAL;
 	}
+
+	if (substream->stream != SNDRV_PCM_STREAM_PLAYBACK)
+		return -EINVAL;
 
 	snd_printdd("[%d] %s\n", __LINE__, __func__);
 
