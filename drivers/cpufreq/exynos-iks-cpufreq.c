@@ -651,6 +651,8 @@ static struct notifier_block notifier_policy_block = {
 
 static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
+	struct cpufreq_policy *cpu0_policy;
+
 	policy->cur = policy->min = policy->max = exynos_getspeed(policy->cpu);
 	freqs[CA7]->old = exynos_getspeed_cluster(CA7);
 	freqs[CA15]->old = exynos_getspeed_cluster(CA15);
@@ -666,7 +668,24 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	cpumask_clear(policy->cpus);
 	cpumask_set_cpu(policy->cpu, policy->cpus);
 
-	return cpufreq_frequency_table_cpuinfo(policy, merge_freq_table);
+	cpu0_policy = cpufreq_cpu_get(0);
+	/*
+	 * Secondary CPUs are disabled before suspend, so any policy settings
+	 * are lost.  Instead of having the policy being reset to default
+	 * values, copy the settings in CPU0's policy (which are preserved)
+	 * in case the CPUs were throttled before suspend.
+	 */
+	if (policy->cpu != 0 && cpu0_policy) {
+		policy->max = cpu0_policy->max;
+		policy->min = cpu0_policy->min;
+		policy->cpuinfo.max_freq = cpu0_policy->cpuinfo.max_freq;
+		policy->cpuinfo.min_freq = cpu0_policy->cpuinfo.min_freq;
+		cpufreq_cpu_put(cpu0_policy);
+		return 0;
+	} else {
+		return cpufreq_frequency_table_cpuinfo(policy,
+							merge_freq_table);
+	}
 }
 
 static int exynos_cpufreq_cpu_exit(struct cpufreq_policy *policy)
