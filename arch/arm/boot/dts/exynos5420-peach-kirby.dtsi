@@ -366,6 +366,11 @@
 				#size-cells = <0>;
 
 				google,remote-bus = <0>;
+
+				battery: bq27500@55 {
+					compatible = "ti,bq27500";
+					reg = <0x55>;
+				};
 			};
 
 			keyboard-controller {
