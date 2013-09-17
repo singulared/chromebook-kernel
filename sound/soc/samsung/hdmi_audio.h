@@ -31,6 +31,7 @@
 
 /* Control registers */
 #define HDMI_HPD_STATUS		HDMI_CTRL_BASE(0x000C)
+#define HDMI_PHY_STATUS_0		HDMI_CTRL_BASE(0x0020)
 
 /* Audio related registers */
 #define HDMI_ASP_CON			HDMI_CORE_BASE(0x0300)
@@ -122,6 +123,8 @@
 #define HDMI_ASP_MASK			(1 << 2)
 #define HDMI_EN				(1 << 0)
 
+/* HDMI_PHY_STATUS */
+#define HDMI_PHY_STATUS_READY		(1 << 0)
 
 /* HDMI I2S register */
 #define HDMI_I2S_CLK_CON		HDMI_I2S_BASE(0x000)

@@ -204,18 +204,26 @@ static void hdmi_audio_init(struct hdmi_audio_context *ctx)
 	hdmi_audio_i2s_init(ctx);
 }
 
+static bool hdmi_phy_stable(struct hdmi_audio_context *ctx)
+{
+	u32 phy_state = hdmi_reg_read(ctx, HDMI_PHY_STATUS_0);
+	return phy_state & HDMI_PHY_STATUS_READY;
+}
+
 static int hdmi_audio_control(struct hdmi_audio_context *ctx,
 	bool onoff)
 {
 	u32 mod;
 
-	snd_printdd("[%d] %s on %d\n", __LINE__,
-				__func__, onoff);
-
+	snd_printdd("[%d] %s on %d\n", __LINE__, __func__, onoff);
 
 	mod = hdmi_reg_read(ctx, HDMI_MODE_SEL);
 
-	if (mod & HDMI_DVI_MODE_EN && onoff) {
+	/*
+	* DVI mode bit carries correct mode information only when hdmi
+	* phy is in stable state. Else should be ignored.
+	*/
+	if ((mod & HDMI_DVI_MODE_EN) && hdmi_phy_stable(ctx) && onoff) {
 		snd_printdd("dvi mode on\n");
 		return -EINVAL;
 	}
