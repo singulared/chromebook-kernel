@@ -30,8 +30,7 @@
 #include "hdmi_audio.h"
 
 #define DRV_NAME "exynos-hdmi-audio"
-#define HDMI_POWERON_WAIT_COUNT (200)
-#define HDMI_INIT_DELAY (50)
+#define HDMI_POWERON_WAIT_COUNT (60)
 
 struct hdmi_audio_params {
 	u32 sample_rate;
@@ -472,8 +471,8 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 	int plugged;
 	static int tries = HDMI_POWERON_WAIT_COUNT;
 
-	snd_printdd("[%d] %s plugged %d\n",
-		__LINE__, __func__, atomic_read(&ctx->plugged));
+	snd_printdd("[%d] %s plugged %d tries %d.\n",
+		__LINE__, __func__, atomic_read(&ctx->plugged), tries);
 
 	plugged = atomic_read(&ctx->plugged);
 
@@ -481,12 +480,12 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 	if (!plugged)
 		goto report_event;
 
-	/* wait till hdmi is powered on */
-	if (pm_runtime_suspended(&ctx->parent_pdev->dev)) {
+	/* wait till hdmiphy is stable */
+	if (!hdmi_phy_stable(ctx)) {
 		if (--tries) {
 			cancel_delayed_work(&ctx->hotplug_work);
 			queue_delayed_work(ctx->hpd_wq, &ctx->hotplug_work,
-					msecs_to_jiffies(5));
+					msecs_to_jiffies(50));
 		} else {
 			/* hdmi is still off, reset count. */
 			tries = HDMI_POWERON_WAIT_COUNT;
@@ -496,9 +495,6 @@ static void hdmi_audio_hotplug_func(struct work_struct *work)
 
 	snd_printdd("[%d] %s hdmi powered on after %d tries\n",
 		__LINE__, __func__, HDMI_POWERON_WAIT_COUNT - tries);
-
-	/* should set audio regs after ip, phy got stable.*/
-	mdelay(HDMI_INIT_DELAY);
 
 	hdmi_audio_control(ctx, false);
 	hdmi_conf_init(ctx);
