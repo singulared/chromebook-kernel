@@ -465,9 +465,13 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 
 	plugin = (void *)daisy_dapm_controls[0].private_value;
 	if (plugin) {
+		int state;
 		snd_soc_jack_new(codec, "HDMI Jack",
 				 SND_JACK_AVOUT, &daisy_hdmi_jack);
 		plugin->jack_cb = daisy_hdmi_jack_report;
+
+		plugin->ops.get_jack_state(plugin->dev, &state);
+		daisy_hdmi_jack_report(state);
 	}
 
 	/* Microphone BIAS is needed to power the analog mic.

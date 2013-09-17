@@ -435,6 +435,28 @@ static int hdmi_get_state(struct device *dev, int *is_enabled)
 	return 0;
 }
 
+static int hdmi_get_jack_state(struct device *dev, int *is_connected)
+{
+	struct hdmi_audio_context *ctx = NULL;
+	struct audio_codec_plugin *plugin;
+
+	if (!dev) {
+		dev_err(dev, "invalid device.\n");
+		return -EINVAL;
+	}
+
+	snd_printdd("[%d] %s\n", __LINE__, __func__);
+
+	plugin = dev_get_drvdata(dev);
+	ctx = container_of(plugin, struct hdmi_audio_context, plugin);
+
+	if (is_connected && ctx)
+		*is_connected = atomic_read(&ctx->plugged);
+	else
+		return -EINVAL;
+	return 0;
+}
+
 static void hdmi_audio_hotplug_func(struct work_struct *work)
 {
 	struct hdmi_audio_context *ctx = container_of(work,
@@ -519,6 +541,7 @@ static int hdmi_audio_probe(struct platform_device *pdev)
 	ctx->plugin.ops.trigger = hdmi_audio_trigger;
 	ctx->plugin.ops.get_state = hdmi_get_state;
 	ctx->plugin.ops.set_state = hdmi_set_state;
+	ctx->plugin.ops.get_jack_state = hdmi_get_jack_state;
 	ctx->params.sample_rate = DEFAULT_RATE;
 	ctx->params.bits_per_sample = DEFAULT_BPS;
 
