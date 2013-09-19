@@ -964,12 +964,6 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		return ret;
 
 	for (plane = 0; plane < vb->num_planes; ++plane) {
-		/* Skip the plane if already verified */
-		if (vb->v4l2_planes[plane].m.userptr &&
-		    vb->v4l2_planes[plane].m.userptr == planes[plane].m.userptr
-		    && vb->v4l2_planes[plane].length == planes[plane].length)
-			continue;
-
 		dprintk(3, "qbuf: userspace address for plane %d changed, "
 				"reacquiring memory\n", plane);
 
@@ -978,14 +972,6 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 			ret = -EINVAL;
 			goto err;
 		}
-
-		/* Release previously acquired memory if present */
-		if (vb->planes[plane].mem_priv)
-			call_memop(q, put_userptr, vb->planes[plane].mem_priv);
-
-		vb->planes[plane].mem_priv = NULL;
-		vb->v4l2_planes[plane].m.userptr = 0;
-		vb->v4l2_planes[plane].length = 0;
 
 		/* Acquire each plane's memory */
 		mem_priv = call_memop(q, get_userptr, q->alloc_ctx[plane],
@@ -1498,6 +1484,16 @@ static void __vb2_dqbuf(struct vb2_buffer *vb)
 				continue;
 			call_memop(q, unmap_dmabuf, vb->planes[i].mem_priv);
 			vb->planes[i].dbuf_mapped = 0;
+		}
+	} else if (q->memory == V4L2_MEMORY_USERPTR) {
+		for (i = 0; i < vb->num_planes; ++i) {
+			if (vb->planes[i].mem_priv)
+				call_memop(q, put_userptr,
+						vb->planes[i].mem_priv);
+
+			vb->planes[i].mem_priv = NULL;
+			vb->v4l2_planes[i].m.userptr = 0;
+			vb->v4l2_planes[i].length = 0;
 		}
 	}
 }
