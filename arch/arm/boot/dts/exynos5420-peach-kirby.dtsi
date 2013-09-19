@@ -772,7 +772,7 @@
 					regulator-max-microvolt = <1200000>;
 					regulator-always-on;
 					regulator-boot-on;
-					regulator-op-mode = <1>;
+					regulator-op-mode = <3>;
 				};
 				buck6_reg: BUCK6 {
 					regulator-name = "vdd_kfc";
