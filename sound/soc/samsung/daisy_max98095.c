@@ -636,17 +636,6 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	/* The below needs to be replaced with proper full device-tree probing
-	 * of the ASoC device, but the core plumbing hasn't been completed yet
-	 * so we're doing this only half-way now.
-	 */
-
-	if (!of_machine_is_compatible("google,snow") &&
-	    !of_machine_is_compatible("google,spring") &&
-	    !of_machine_is_compatible("google,daisy") &&
-	    !of_machine_is_compatible("google,pit"))
-		return -ENODEV;
-
 	i2s_node = of_parse_phandle(pdev->dev.of_node,
 				    "samsung,i2s-controller", 0);
 	if (!i2s_node) {
