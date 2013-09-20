@@ -317,8 +317,7 @@
 		num-slots = <1>;
 		broken-cd;
 		bypass-smu;
-		supports-highspeed;	/* >= 25MHz */
-		supports-hs200-mode;	/* 200MHz */
+		supports-highspeed;
 		non-removable;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
