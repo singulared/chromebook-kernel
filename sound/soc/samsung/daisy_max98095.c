@@ -520,16 +520,6 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	/* The below needs to be replaced with proper full device-tree probing
-	 * of the ASoC device, but the core plumbing hasn't been completed yet
-	 * so we're doing this only half-way now.
-	 */
-
-	if (!of_machine_is_compatible("google,snow-any") &&
-	    !of_machine_is_compatible("google,spring") &&
-	    !of_machine_is_compatible("google,daisy"))
-		return -ENODEV;
-
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
 	if (!dn) {
 		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089") ? :
