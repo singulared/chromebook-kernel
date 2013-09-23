@@ -577,17 +577,14 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 	 * If this is the last message to be transfered (stop == 1)
 	 * Then check if the bus can be brought back to idle.
 	 */
-	ret = exynos5_i2c_wait_bus_idle(i2c, stop);
+	if (ret == 0)
+		ret = exynos5_i2c_wait_bus_idle(i2c, stop);
 
 	if (ret < 0) {
 		exynos5_i2c_reset(i2c);
-		if (ret == -ETIMEDOUT) {
+		if (ret == -ETIMEDOUT)
 			dev_warn(i2c->dev, "%s timeout\n",
 				 (msgs->flags & I2C_M_RD) ? "rx" : "tx");
-			return ret;
-		} else if (ret == -EAGAIN) {
-			return ret;
-		}
 	}
 
 	/* Return the state as in interrupt routine */
