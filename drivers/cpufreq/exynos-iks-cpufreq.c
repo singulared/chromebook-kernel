@@ -314,7 +314,7 @@ static int exynos_cpufreq_scale(unsigned int target_freq,
 	unsigned int new_index, old_index, j;
 	unsigned int volt, safe_volt = 0;
 	bool increased_frequency;
-	int ret = 0;
+	int ret = 0, err;
 
 	pr_debug("\ncpu %d cluster %d\n", cpu, cur);
 	if (!policy)
@@ -364,12 +364,24 @@ static int exynos_cpufreq_scale(unsigned int target_freq,
 			ACTUAL_FREQ(freqs[cur]->old, cur));
 
 	/* When the new frequency is higher than current frequency */
-	if (increased_frequency && !safe_volt)
+	if (increased_frequency && !safe_volt) {
 		/* Firstly, voltage up to increase frequency */
-		regulator_set_voltage(regulator, volt, volt);
+		ret = regulator_set_voltage(regulator, volt, volt);
+		if (ret) {
+			pr_warn("Failed to increase CPU voltage: %d\n", ret);
+			freqs[cur]->new = freqs[cur]->old;
+			goto out_notify;
+		}
+	}
 
-	if (safe_volt)
-		regulator_set_voltage(regulator, safe_volt, safe_volt);
+	if (safe_volt) {
+		ret = regulator_set_voltage(regulator, safe_volt, safe_volt);
+		if (ret) {
+			pr_warn("Failed to increase CPU voltage: %d\n", ret);
+			freqs[cur]->new = freqs[cur]->old;
+			goto out_notify;
+		}
+	}
 
 	if (old_index != new_index) {
 		pr_debug("\nold_index %d new_index %d\n", old_index, new_index);
@@ -386,6 +398,20 @@ static int exynos_cpufreq_scale(unsigned int target_freq,
 
 	loops_per_jiffy = max(lpj[CA7], lpj[CA15]);
 
+	/* When the new frequency is lower than current frequency */
+	if (!increased_frequency || (increased_frequency && safe_volt)) {
+		/* down the voltage after frequency change */
+		err = regulator_set_voltage(regulator, volt, volt);
+		if (err)
+			/*
+			 * Not actually fatal since we've already changed
+			 * the frequency and are running at a high enough
+			 * voltage.
+			 */
+			pr_warn("Failed to decrease CPU voltage: %d\n", err);
+	}
+
+out_notify:
 	for_each_cpu(j, &cluster_cpus[cur]) {
 		if (is_cpufreq_valid(j)) {
 			freqs[cur]->cpu = j;
@@ -393,11 +419,6 @@ static int exynos_cpufreq_scale(unsigned int target_freq,
 					freqs[cur], CPUFREQ_POSTCHANGE);
 		}
 	}
-
-	/* When the new frequency is lower than current frequency */
-	if (!increased_frequency || (increased_frequency && safe_volt))
-		/* down the voltage after frequency change */
-		regulator_set_voltage(regulator, volt, volt);
 
 out:
 	cpufreq_cpu_put(policy);
