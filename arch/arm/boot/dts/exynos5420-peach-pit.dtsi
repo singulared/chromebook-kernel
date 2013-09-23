@@ -1035,14 +1035,6 @@
 		pinctrl-0 = <&i2c8_hs_bus &trackpad_irq>;
 
 		/* Only one of the following trackpads should be probed */
-		trackpad@67 {
-			reg = <0x67>;
-			compatible = "cypress,cyapa";
-			interrupts = <1 0>;
-			interrupt-parent = <&gpx1>;
-			wakeup-source;
-		};
-
 		trackpad@4b {
 			reg=<0x4b>;
 			compatible="atmel,atmel_mxt_tp";
