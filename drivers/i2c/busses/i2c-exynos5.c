@@ -474,7 +474,7 @@ static int exynos5_i2c_wait_bus_idle(struct exynos5_i2c *i2c, int stop)
 		usleep_range(50, 200);
 	} while (time_before(jiffies, stop_time));
 
-	return -EBUSY;
+	return -EAGAIN;
 }
 
 /*
@@ -573,6 +573,12 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 	else
 		ret = i2c->state;
 
+	/*
+	 * If this is the last message to be transfered (stop == 1)
+	 * Then check if the bus can be brought back to idle.
+	 */
+	ret = exynos5_i2c_wait_bus_idle(i2c, stop);
+
 	if (ret < 0) {
 		exynos5_i2c_reset(i2c);
 		if (ret == -ETIMEDOUT) {
@@ -583,15 +589,6 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 			return ret;
 		}
 	}
-
-	/*
-	 * If this is the last message to be transfered (stop == 1)
-	 * Then check if the bus can be brought back to idle.
-	 *
-	 * Return -EBUSY if the bus still busy.
-	 */
-	if (exynos5_i2c_wait_bus_idle(i2c, stop))
-		return -EBUSY;
 
 	/* Return the state as in interrupt routine */
 	return ret;
@@ -691,6 +688,7 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 	strlcpy(i2c->adap.name, "exynos5-i2c", sizeof(i2c->adap.name));
 	i2c->adap.owner   = THIS_MODULE;
 	i2c->adap.algo    = &exynos5_i2c_algorithm;
+	i2c->adap.retries = 3;
 
 	i2c->dev = &pdev->dev;
 	i2c->clk = devm_clk_get(&pdev->dev, "hsi2c");
