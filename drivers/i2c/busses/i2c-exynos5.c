@@ -435,10 +435,11 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
  stop:
 	if ((i2c->msg_len == i2c->msg->len) || (i2c->state < 0)) {
 		writel(0, i2c->regs + HSI2C_INT_ENABLE);
+		exynos5_i2c_clr_pend_irq(i2c);
 		complete(&i2c->msg_complete);
+	} else {
+		exynos5_i2c_clr_pend_irq(i2c);
 	}
-
-	exynos5_i2c_clr_pend_irq(i2c);
 
 	return IRQ_HANDLED;
 }
