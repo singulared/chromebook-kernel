@@ -43,6 +43,13 @@ int cros_ec_prepare_tx(struct cros_ec_device *ec_dev,
 	return EC_MSG_TX_PROTO_BYTES + msg->outsize;
 }
 
+int cros_ec_cmd_xfer(struct cros_ec_device *ec_dev,
+		     struct cros_ec_command *msg)
+{
+	return ec_dev->cmd_xfer(ec_dev, msg);
+}
+EXPORT_SYMBOL(cros_ec_cmd_xfer);
+
 static struct mfd_cell cros_devs[] = {
 	{
 		.name = "cros-ec-keyb",
