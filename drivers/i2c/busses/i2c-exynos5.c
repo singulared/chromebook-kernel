@@ -26,6 +26,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_i2c.h>
+#include <linux/spinlock.h>
 
 /*
  * HSI2C controller from Samsung supports 2 modes of operation
@@ -169,10 +170,12 @@ struct exynos5_i2c {
 	struct device		*dev;
 	int			state;
 
+	spinlock_t		lock;
+
 	/*
 	 * Since the TRANS_DONE bit is cleared on read, and we may read it
-	 * either during an IRQ or after a transaction, keep track of its
-	 * state here.
+	 * before we've actually cleared the FIFOs, keep track of its state
+	 * here.
 	 */
 	int			trans_done;
 
@@ -366,7 +369,10 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 
 	i2c->state = -EINVAL;
 
+	spin_lock(&i2c->lock);
+
 	int_status = readl(i2c->regs + HSI2C_INT_STATUS);
+	writel(int_status, i2c->regs + HSI2C_INT_STATUS);
 	fifo_status = readl(i2c->regs + HSI2C_FIFO_STATUS);
 
 	if (int_status & HSI2C_INT_I2C) {
@@ -433,13 +439,14 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 
 
  stop:
-	if ((i2c->msg_len == i2c->msg->len) || (i2c->state < 0)) {
+	if ((i2c->trans_done && (i2c->msg->len == i2c->msg_len)) ||
+	    (i2c->state < 0)) {
 		writel(0, i2c->regs + HSI2C_INT_ENABLE);
 		exynos5_i2c_clr_pend_irq(i2c);
 		complete(&i2c->msg_complete);
-	} else {
-		exynos5_i2c_clr_pend_irq(i2c);
 	}
+
+	spin_unlock(&i2c->lock);
 
 	return IRQ_HANDLED;
 }
@@ -447,13 +454,12 @@ static irqreturn_t exynos5_i2c_irq(int irqno, void *dev_id)
 /*
  * exynos5_i2c_wait_bus_idle
  *
- * Wait for the transaction to complete (indicated by the TRANS_DONE bit
- * being set), and, if this is the last message in a transfer, wait for the
- * MASTER_BUSY bit to be cleared.
+ * Wait for the bus to go idle, indicated by the MASTER_BUSY bit being
+ * cleared.
  *
  * Returns -EBUSY if the bus cannot be bought to idle
  */
-static int exynos5_i2c_wait_bus_idle(struct exynos5_i2c *i2c, int stop)
+static int exynos5_i2c_wait_bus_idle(struct exynos5_i2c *i2c)
 {
 	unsigned long stop_time;
 	u32 trans_status;
@@ -462,20 +468,13 @@ static int exynos5_i2c_wait_bus_idle(struct exynos5_i2c *i2c, int stop)
 	stop_time = jiffies + msecs_to_jiffies(100) + 1;
 	do {
 		trans_status = readl(i2c->regs + HSI2C_TRANS_STATUS);
-		if (trans_status & HSI2C_TRANS_DONE)
-			i2c->trans_done = 1;
-		/*
-		 * Only wait for MASTER_BUSY to be cleared if this is the last
-		 * message.
-		 */
-		if ((!stop || !(trans_status & HSI2C_MASTER_BUSY)) &&
-		    i2c->trans_done)
+		if (!(trans_status & HSI2C_MASTER_BUSY))
 			return 0;
 
 		usleep_range(50, 200);
 	} while (time_before(jiffies, stop_time));
 
-	return -EAGAIN;
+	return -EBUSY;
 }
 
 /*
@@ -495,6 +494,7 @@ static void exynos5_i2c_message_start(struct exynos5_i2c *i2c, int stop)
 	u32 i2c_auto_conf = 0;
 	u32 fifo_ctl;
 	u32 i2c_timeout;
+	unsigned long flags;
 
 	/*
 	 * When the message length is > FIFO depth, set the FIFO trigger
@@ -544,12 +544,18 @@ static void exynos5_i2c_message_start(struct exynos5_i2c *i2c, int stop)
 
 	writel(i2c_auto_conf, i2c->regs + HSI2C_AUTO_CONF);
 
+	/*
+	 * Enable interrupts before starting the transfer so that we don't
+	 * miss any INT_I2C interrupts.
+	 */
+	spin_lock_irqsave(&i2c->lock, flags);
+	writel(int_en, i2c->regs + HSI2C_INT_ENABLE);
+
 	/* Start data transfer in Master mode */
 	i2c_auto_conf = readl(i2c->regs + HSI2C_AUTO_CONF);
 	i2c_auto_conf |= HSI2C_MASTER_RUN;
 	writel(i2c_auto_conf, i2c->regs + HSI2C_AUTO_CONF);
-
-	writel(int_en, i2c->regs + HSI2C_INT_ENABLE);
+	spin_unlock_irqrestore(&i2c->lock, flags);
 }
 
 static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
@@ -578,8 +584,8 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 	 * If this is the last message to be transfered (stop == 1)
 	 * Then check if the bus can be brought back to idle.
 	 */
-	if (ret == 0)
-		ret = exynos5_i2c_wait_bus_idle(i2c, stop);
+	if (ret == 0 && stop)
+		ret = exynos5_i2c_wait_bus_idle(i2c);
 
 	if (ret < 0) {
 		exynos5_i2c_reset(i2c);
@@ -713,6 +719,8 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 	exynos5_i2c_clr_pend_irq(i2c);
 
 	init_completion(&i2c->msg_complete);
+
+	spin_lock_init(&i2c->lock);
 
 	i2c->irq = ret = irq_of_parse_and_map(np, 0);
 	if (ret <= 0) {
