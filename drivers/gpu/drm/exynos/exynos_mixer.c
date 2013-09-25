@@ -1033,6 +1033,9 @@ static void mixer_win_disable(void *ctx, int zpos)
 	mixer_vsync_set_update(mctx, true);
 
 	spin_unlock_irqrestore(&res->reg_slock, flags);
+
+	/* Synchronously wait for window to be disabled */
+	mixer_wait_for_vsync(mctx);
 }
 
 /* for pageflip event */

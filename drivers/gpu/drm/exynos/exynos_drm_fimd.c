@@ -105,6 +105,7 @@ struct fimd_context {
 	bool				suspended;
 	struct mutex			lock;
 	u32				clkdiv;
+	struct completion		vblank_completion;
 
 	struct exynos_drm_panel_info *panel;
 };
@@ -608,12 +609,28 @@ static void fimd_win_commit(void *ctx, int zpos)
 	win_data->enabled = true;
 }
 
+static int fimd_wait_for_vsync(void *ctx)
+{
+	struct fimd_context *fimd_ctx = ctx;
+	int ret;
+
+	/* reinitialize completion to wait for *next* vblank */
+	INIT_COMPLETION(fimd_ctx->vblank_completion);
+	ret = wait_for_completion_timeout(&fimd_ctx->vblank_completion,
+			msecs_to_jiffies(100));
+	if (ret == 0)
+		return -ETIME;
+
+	return 0;
+}
+
 static void fimd_win_disable(void *ctx, int zpos)
 {
 	struct fimd_context *fimd_ctx = ctx;
 	struct fimd_win_data *win_data;
 	int win = zpos;
 	u32 val;
+	int ret;
 
 	DRM_DEBUG_KMS("[FIMD:%s] win: %d\n", fimd_get_name(fimd_ctx), win);
 
@@ -643,6 +660,12 @@ static void fimd_win_disable(void *ctx, int zpos)
 	val &= ~SHADOWCON_CHx_ENABLE(win);
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, fimd_ctx->regs + SHADOWCON);
+
+	/* Synchronously wait for window to be disabled */
+	ret = fimd_wait_for_vsync(fimd_ctx);
+	if (ret)
+		DRM_ERROR("[FIMD:%s] Timed out waiting for vblank after disabling win: %d\n",
+				fimd_get_name(fimd_ctx), win);
 
 	win_data->enabled = false;
 }
@@ -681,6 +704,8 @@ static irqreturn_t fimd_irq_handler(int irq, void *arg)
 
 	drm_handle_vblank(fimd_ctx->drm_dev, fimd_ctx->pipe);
 	exynos_drm_crtc_finish_pageflip(fimd_ctx->drm_dev, fimd_ctx->pipe);
+
+	complete_all(&fimd_ctx->vblank_completion);
 
 out:
 	return IRQ_HANDLED;
@@ -967,6 +992,8 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 		ret = -ENXIO;
 		goto err_req_region_io_mie;
 	}
+
+	init_completion(&fimd_ctx->vblank_completion);
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 1);
 	if (!res) {
