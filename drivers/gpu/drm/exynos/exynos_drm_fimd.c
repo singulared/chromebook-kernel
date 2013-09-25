@@ -760,7 +760,8 @@ static void fimd_window_suspend(struct fimd_context *fimd_ctx)
 	{
 		win_data = &fimd_ctx->win_data[i];
 		win_data->win_suspended = win_data->enabled;
-		fimd_win_disable(fimd_ctx, i);
+		if (win_data->enabled)
+			fimd_win_disable(fimd_ctx, i);
 	}
 }
 
