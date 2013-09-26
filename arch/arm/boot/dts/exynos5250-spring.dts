@@ -137,11 +137,6 @@
 		};
 	};
 
-	adc@12D10000 {
-		/* no NTC connected to the ADCs */
-		status = "disabled";
-	};
-
 	dwmmc1@12210000 {
 		/*
 		 * The current best way to ensure that reset/enable and clocks
