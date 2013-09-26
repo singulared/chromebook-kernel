@@ -701,8 +701,6 @@
 		max98089: codec@10 {
 			compatible = "maxim,max98089", "maxim,max98088";
 			reg = <0x10>;
-			mic-left-digital;
-			mic-right-digital;
 		};
 
 		temp-sensor@4c {
