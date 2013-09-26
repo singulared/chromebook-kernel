@@ -131,14 +131,6 @@
 			edid-emulation = <5>;
 		};
 
-		codec {
-			compatible = "maxim,max98095";
-			reg = <0x11>;
-			mic-left-digital;
-			mic-right-digital;
-			mclk-pin = <1>;
-		};
-
 		light-sensor {
 			compatible = "invn,isl29018";
 			reg = <0x44>;
@@ -159,12 +151,6 @@
 				<&gpc4 3 2 3 0>, <&gpc4 4 2 3 0>,
 				<&gpc4 5 2 3 0>, <&gpc4 6 2 3 0>;
 		};
-	};
-
-	sound {
-		compatible = "google,daisy-audio-max98095";
-		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
-		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
 	};
 
 	gpio-controllers {
@@ -327,14 +313,5 @@
 			compatible = "samsung,exynos-usbphy";
 			clock-enable-gpio = <&gpy1 1 1 0 3>;
 		};
-	};
-
-	max98095-en {
-		compatible = "regulator-fixed";
-		regulator-name = "codec-en";
-		gpio = <&gpx1 7 0 0 0>;
-		enable-active-high;
-		regulator-boot-on;
-		regulator-always-on;
 	};
 };
