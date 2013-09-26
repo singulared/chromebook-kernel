@@ -69,13 +69,6 @@
 			samsung,pin-drv = <0>;
 		};
 
-		max98095_en: max98095-en {
-			samsung,pins = "gpx1-7";
-			samsung,pin-function = <1>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
 		power_key_irq: power-key-irq {
 			samsung,pins = "gpx1-3";
 			samsung,pin-function = <0>;
@@ -409,13 +402,6 @@
 			compatible = "invn,isl29018";
 			reg = <0x44>;
 		};
-
-		max98095: codec {
-			compatible = "maxim,max98095";
-			reg = <0x11>;
-			mic-left-digital;
-			mic-right-digital;
-		};
 	};
 
 	i2c@12CE0000 {
@@ -558,17 +544,6 @@
 		pinctrl-0 = <&hdmi_hpd_irq>;
 	};
 
-	max98095-en-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "codec-en";
-		gpio = <&gpx1 7 0>;
-		enable-active-high;
-		regulator-boot-on;
-		regulator-always-on;
-		pinctrl-names = "default";
-		pinctrl-0 = <&max98095_en>;
-	};
-
 	/* Chain regulators to ensure proper Wifi turn on sequence */
 	wifi_rst_regulator: wifi-rst-regulator {
 		compatible = "regulator-fixed";
@@ -617,9 +592,9 @@
 	};
 
 	sound {
-		compatible = "google,daisy-audio-max98095";
+		/* compatible string defined in sub-boards */
+
 		samsung,i2s-controller = <&i2s0>;
-		samsung,audio-codec = <&max98095>;
 		samsung,mic-det-gpios = <&gpx2 0 1>;
 		samsung,hp-det-gpios = <&gpx2 2 0>;
 		clocks = <&clock 3>, <&clock 4>, <&clock 1026>,

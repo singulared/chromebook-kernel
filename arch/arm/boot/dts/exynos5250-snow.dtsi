@@ -27,13 +27,6 @@
 			samsung,pin-drv = <0>;
 		};
 
-		audio_detection: audio-detection {
-			samsung,pins = "gpx2-0", "gpx2-2";
-			samsung,pin-function = <0>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
 		ec_irq: ec-irq {
 			samsung,pins = "gpx1-6";
 			samsung,pin-function = <0>;
@@ -364,13 +357,6 @@
 		vdd-supply = <&ldo8_reg>;
 		vdd_osc-supply = <&ldo10_reg>;
 		vdd_pll-supply = <&ldo8_reg>;
-	};
-
-	sound {
-		samsung,mic-det-gpios = <&gpx2 0 1>;
-		samsung,hp-det-gpios = <&gpx2 2 0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&audio_detection>;
 	};
 
 	backlight {

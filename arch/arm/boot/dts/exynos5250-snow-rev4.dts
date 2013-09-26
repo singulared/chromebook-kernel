@@ -32,4 +32,39 @@
 	 */
 	compatible = "google,snow-rev4", "google,snow", "google,snow-any",
 		"samsung,exynos5250";
+
+	pinctrl@11400000 {
+		max98095_en: max98095-en {
+			samsung,pins = "gpx1-7";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	i2c@12CD0000 {
+		max98095: codec {
+			compatible = "maxim,max98095";
+			reg = <0x11>;
+			mic-left-digital;
+			mic-right-digital;
+		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98095";
+		samsung,audio-codec = <&max98095>;
+		/* pins and clocks are defined in cros5250-common.dtsi */
+	};
+
+	max98095-en-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "codec-en";
+		gpio = <&gpx1 7 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&max98095_en>;
+	};
 };
