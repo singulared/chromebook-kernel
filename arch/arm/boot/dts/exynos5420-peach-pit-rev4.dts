@@ -33,4 +33,11 @@
 			};
 		};
 	};
+
+	/* Override HDMI-en-supply back to FET2 */
+	hdmi {
+		max77802-pmic@9 {
+			hdmi-en-supply = <&tps65090_fet2>;
+		};
+	};
 };
