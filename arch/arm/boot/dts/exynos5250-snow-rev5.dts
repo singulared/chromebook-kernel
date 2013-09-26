@@ -28,4 +28,9 @@
 	 */
 	compatible = "google,snow-rev5", "google,snow-any",
 		"samsung,exynos5250";
+
+	/* No thermistors on rev5; just disable the whole adc. */
+	adc@12D10000 {
+		status = "disabled";
+	};
 };
