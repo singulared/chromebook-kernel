@@ -125,7 +125,6 @@ static int cros_ec_spi_receive_response(struct cros_ec_device *ec_dev,
 		memset(&trans, '\0', sizeof(trans));
 		trans.cs_change = 1;
 		trans.rx_buf = ptr = ec_dev->din;
-		trans.flags |= SPI_TRANSFER_SW_CS_CNTRL;
 		trans.len = EC_MSG_PREAMBLE_COUNT;
 
 		spi_message_init(&msg);
@@ -186,7 +185,6 @@ static int cros_ec_spi_receive_response(struct cros_ec_device *ec_dev,
 		trans.cs_change = 1;
 		trans.rx_buf = ptr;
 		trans.len = todo;
-		trans.flags |= SPI_TRANSFER_SW_CS_CNTRL;
 		spi_message_init(&msg);
 		spi_message_add_tail(&trans, &msg);
 
@@ -247,7 +245,6 @@ static int cros_ec_cmd_xfer_spi(struct cros_ec_device *ec_dev,
 	trans.tx_buf = ec_dev->dout;
 	trans.len = len;
 	trans.cs_change = 1;
-	trans.flags |= SPI_TRANSFER_SW_CS_CNTRL_CLAIM;
 	spi_message_init(&msg);
 	spi_message_add_tail(&trans, &msg);
 	ret = spi_sync(ec_spi->spi, &msg);
@@ -261,10 +258,7 @@ static int cros_ec_cmd_xfer_spi(struct cros_ec_device *ec_dev,
 	}
 
 	/* turn off CS */
-	memset(&trans, '\0', sizeof(trans));
-	trans.flags |= SPI_TRANSFER_SW_CS_CNTRL_RELEASE;
 	spi_message_init(&msg);
-	spi_message_add_tail(&trans, &msg);
 	final_ret = spi_sync(ec_spi->spi, &msg);
 	ktime_get_ts(&ts);
 	ec_spi->last_transfer_ns = timespec_to_ns(&ts);
