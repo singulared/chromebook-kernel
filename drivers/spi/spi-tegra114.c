@@ -717,8 +717,7 @@ static int tegra_spi_start_transfer_one(struct spi_device *spi,
 		else if (req_mode == SPI_MODE_3)
 			command1 |= SPI_CONTROL_MODE_3;
 
-		if (SPI_CS_HW_CTRL(t->flags) || SPI_CS_SW_CLAIM(t->flags))
-			tegra_spi_writel(tspi, command1, SPI_COMMAND1);
+		tegra_spi_writel(tspi, command1, SPI_COMMAND1);
 
 		command1 |= SPI_CS_SW_HW;
 		if (spi->mode & SPI_CS_HIGH)
@@ -813,7 +812,6 @@ static int tegra_spi_transfer_one_message(struct spi_master *master,
 	struct spi_transfer *xfer;
 	struct spi_device *spi = msg->spi;
 	int ret;
-	int stash_flags = 0;
 
 	msg->status = 0;
 	msg->actual_length = 0;
@@ -829,12 +827,6 @@ static int tegra_spi_transfer_one_message(struct spi_master *master,
 	single_xfer = list_is_singular(&msg->transfers);
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		INIT_COMPLETION(tspi->xfer_completion);
-
-		stash_flags = xfer->flags;
-
-		if (xfer->len == 0 && !xfer->tx_buf && !xfer->rx_buf)
-			continue;
-
 		ret = tegra_spi_start_transfer_one(spi, xfer,
 					is_first_msg, single_xfer);
 		if (ret < 0) {
@@ -866,8 +858,7 @@ static int tegra_spi_transfer_one_message(struct spi_master *master,
 	}
 	ret = 0;
 exit:
-	if (SPI_CS_HW_CTRL(stash_flags) || SPI_CS_SW_RELEASE(stash_flags))
-		tegra_spi_writel(tspi, tspi->def_command1_reg, SPI_COMMAND1);
+	tegra_spi_writel(tspi, tspi->def_command1_reg, SPI_COMMAND1);
 	pm_runtime_put(tspi->dev);
 	msg->status = ret;
 	spi_finalize_current_message(master);
