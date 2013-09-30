@@ -235,6 +235,8 @@ static struct exynos_drm_fimd_pdata smdk5250_lcd1_pdata = {
 			.lower_margin   = 4,
 			.refresh        = 60,
 		},
+		.width_mm = 256,
+		.height_mm = 144,
 	},
 	.vidcon0        = VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1        = VIDCON1_INV_VCLK,
