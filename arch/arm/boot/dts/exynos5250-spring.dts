@@ -41,13 +41,6 @@
 			samsung,pin-drv = <0>;
 		};
 
-		atmel_irq: atmel-irq {
-			samsung,pins = "gpx1-2";
-			samsung,pin-function = <0>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
 		dp_hpd: dp-hpd {
 			samsung,pins = "gpc3-0";
 			samsung,pin-function = <0>;
@@ -431,27 +424,6 @@
 					op_mode = <1>; /* Normal Mode */
 				};
 			};
-		};
-	};
-
-	i2c@12C70000 {
-		trackpad {
-			reg = <0x4b>;
-			compatible = "atmel,atmel_mxt_tp";
-			interrupts = <2 0>;
-			interrupt-parent = <&gpx1>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&atmel_irq>;
-			wakeup-source;
-		};
-		trackpad-bootloader {
-			reg = <0x25>;
-			compatible = "atmel,atmel_mxt_tp";
-			interrupts = <2 0>;
-			interrupt-parent = <&gpx1>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&atmel_irq>;
-			wakeup-source;
 		};
 	};
 
