@@ -51,6 +51,7 @@
 
 	sound {
 		compatible = "google,daisy-audio-max98090";
+		card-name = "DAISY-I2S-98090";
 		samsung,audio-codec = <&max98090>;
 		/* pins and clocks are defined in cros5250-common.dtsi */
 	};
