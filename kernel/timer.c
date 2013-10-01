@@ -41,6 +41,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/pm.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -87,7 +88,7 @@ struct tvec_base {
 	struct tvec tv5;
 } ____cacheline_aligned;
 
-struct tvec_base boot_tvec_bases;
+struct __suspend_volatile_bss tvec_base boot_tvec_bases;
 EXPORT_SYMBOL(boot_tvec_bases);
 static DEFINE_PER_CPU(struct tvec_base *, tvec_bases) = &boot_tvec_bases;
 
