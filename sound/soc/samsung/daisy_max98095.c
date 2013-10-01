@@ -629,12 +629,17 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 	struct snd_soc_card *card = &daisy_snd;
 	struct device_node *i2s_node, *codec_node;
 	struct audio_codec_plugin *plugin = NULL;
+	const char *name;
 	int i, ret;
 
 	if (!pdev->dev.platform_data && !pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform data supplied\n");
 		return -EINVAL;
 	}
+
+	name = of_get_property(pdev->dev.of_node, "card-name", NULL);
+	if (name)
+		card->name = name;
 
 	i2s_node = of_parse_phandle(pdev->dev.of_node,
 				    "samsung,i2s-controller", 0);
