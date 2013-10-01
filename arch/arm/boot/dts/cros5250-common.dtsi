@@ -233,6 +233,20 @@
 			interrupt-parent = <&wakeup_eint>;
 			wakeup-source;
 		};
+		trackpad-alt {
+			reg=<0x4b>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<10 0>;
+			interrupt-parent=<&wakeup_eint>;
+			wakeup-source;
+		};
+		trackpad-bootloader {
+			reg=<0x25>;
+			compatible="atmel,atmel_mxt_tp";
+			interrupts=<10 0>;
+			interrupt-parent=<&wakeup_eint>;
+			wakeup-source;
+		};
 	};
 
 	i2c@12C80000 {
