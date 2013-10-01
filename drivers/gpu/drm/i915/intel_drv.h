@@ -42,7 +42,7 @@
 			break;						\
 		}							\
 		if (W && drm_can_sleep())  {				\
-			usleep_range(W * 50, W * 100);			\
+			msleep(W);					\
 		} else {						\
 			cpu_relax();					\
 		}							\
