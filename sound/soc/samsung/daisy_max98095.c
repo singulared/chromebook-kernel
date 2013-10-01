@@ -513,12 +513,17 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 	struct device_node *dn;
 	struct daisy_max98095 *machine;
 	struct audio_codec_plugin *plugin = NULL;
+	const char *name;
 	int i, ret;
 
 	if (!pdev->dev.platform_data && !pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform data supplied\n");
 		return -EINVAL;
 	}
+
+	name = of_get_property(pdev->dev.of_node, "card-name", NULL);
+	if (name)
+		card->name = name;
 
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
 	if (!dn) {

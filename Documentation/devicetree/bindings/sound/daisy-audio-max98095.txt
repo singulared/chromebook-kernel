@@ -6,6 +6,8 @@ Required properties:
 Optional properties:
 - samsung,hp-det-gpios : The GPIO that detects when headphones are plugged in.
 - samsung,mic-det-gpios : The GPIO that detects when mic is plugged in.
+- card-name : The name that we'll report for the sound card.  If not present
+              will be "DAISY-I2S".
 
 Example:
 
@@ -14,4 +16,5 @@ sound {
 
 	samsung,mic-det-gpios = <&gpx2 0 2 0 0>;
 	samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
+	card-name = "DAISY-I2S-98095";
 };
