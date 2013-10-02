@@ -682,10 +682,15 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	data->temp_error1 = trim_info & EXYNOS_TMU_TRIM_TEMP_MASK;
 	data->temp_error2 = ((trim_info >> 8) & EXYNOS_TMU_TRIM_TEMP_MASK);
 
-	if ((EFUSE_MIN_VALUE > data->temp_error1) ||
-			(data->temp_error1 > EFUSE_MAX_VALUE) ||
-			(data->temp_error2 != 0))
-		data->temp_error1 = pdata->efuse_value;
+	/*
+	 * TRIMINFO values should always be valid on Exynos5420
+	 */
+	if (!soc_is_exynos5420()) {
+		if ((EFUSE_MIN_VALUE > data->temp_error1) ||
+				(data->temp_error1 > EFUSE_MAX_VALUE) ||
+				(data->temp_error2 != 0))
+			data->temp_error1 = pdata->efuse_value;
+	}
 
 	/* Count trigger levels to be enabled */
 	for (i = 0; i < MAX_THRESHOLD_LEVS; i++)
