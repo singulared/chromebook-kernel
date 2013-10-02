@@ -446,6 +446,32 @@ static int iwl_mvm_power_mac_disable(struct iwl_mvm *mvm,
 				    sizeof(cmd), &cmd);
 }
 
+static int iwl_mvm_power_update_device(struct iwl_mvm *mvm)
+{
+	struct iwl_device_power_cmd cmd = {
+		.flags = cpu_to_le16(DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK),
+	};
+
+	if (!(mvm->fw->ucode_capa.flags & IWL_UCODE_TLV_FLAGS_DEVICE_PS_CMD))
+		return 0;
+
+	if (iwlmvm_mod_params.power_scheme == IWL_POWER_SCHEME_CAM)
+		cmd.flags |= cpu_to_le16(DEVICE_POWER_FLAGS_CAM_MSK);
+
+#ifdef CPTCFG_IWLWIFI_DEBUGFS
+	if ((mvm->cur_ucode == IWL_UCODE_WOWLAN) ? mvm->disable_power_off_d3 :
+	    mvm->disable_power_off)
+		cmd.flags &=
+			cpu_to_le16(~DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK);
+#endif
+	IWL_DEBUG_POWER(mvm,
+			"Sending device power command with flags = 0x%X\n",
+			cmd.flags);
+
+	return iwl_mvm_send_cmd_pdu(mvm, POWER_TABLE_CMD, CMD_SYNC, sizeof(cmd),
+				    &cmd);
+}
+
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 static int iwl_mvm_power_mac_dbgfs_read(struct iwl_mvm *mvm,
 					struct ieee80211_vif *vif, char *buf,
@@ -533,32 +559,6 @@ static int iwl_mvm_power_mac_dbgfs_read(struct iwl_mvm *mvm,
 		}
 	}
 	return pos;
-}
-
-static int iwl_mvm_power_update_device(struct iwl_mvm *mvm)
-{
-	struct iwl_device_power_cmd cmd = {
-		.flags = cpu_to_le16(DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK),
-	};
-
-	if (!(mvm->fw->ucode_capa.flags & IWL_UCODE_TLV_FLAGS_DEVICE_PS_CMD))
-		return 0;
-
-	if (iwlmvm_mod_params.power_scheme == IWL_POWER_SCHEME_CAM)
-		cmd.flags |= cpu_to_le16(DEVICE_POWER_FLAGS_CAM_MSK);
-
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
-	if ((mvm->cur_ucode == IWL_UCODE_WOWLAN) ? mvm->disable_power_off_d3 :
-	    mvm->disable_power_off)
-		cmd.flags &=
-			cpu_to_le16(~DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK);
-#endif
-	IWL_DEBUG_POWER(mvm,
-			"Sending device power command with flags = 0x%X\n",
-			cmd.flags);
-
-	return iwl_mvm_send_cmd_pdu(mvm, POWER_TABLE_CMD, CMD_SYNC, sizeof(cmd),
-				    &cmd);
 }
 
 void
