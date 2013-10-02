@@ -20,8 +20,12 @@ Required properties:
       range as the second parameter.
 
 - interrupts : interrupt number to the cpu.
-- clocks : Clock number as per common clock framework for the cpu.
-- clock-names : clock name to be used in the driver
+- clocks : Clock number as per common clock framework for the cpu.  In the
+  case of Exynos5420, a second clock may be specified if the TRIMINFO register
+  is located on a separate TMU.
+- clock-names : "tmu_apbif" for the TMU's gate clock and, if necessary,
+  "tmu_apbif_triminfo" for the gate clock of the TMU which contains this TMU's
+  TRIMINFO register.
 
 Example:
 
@@ -42,7 +46,7 @@ Example: In case of Exynos5420 TMU channel 3
 		/* 2nd reg is for the misplaced TRIMINFO register */
 		reg = <0x1006c000 0x100>, <0x100a0000 0x4>;
 		interrupts = <0 185 0>;
-		clocks = <&clock 318>;
-		clock-names = "tmu_apbif";
+		clocks = <&clock 318>, <&clock 319>;
+		clock-names = "tmu_apbif", "tmu_apbif_triminfo";
 	};
 

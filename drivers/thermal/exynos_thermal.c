@@ -130,6 +130,7 @@ struct exynos_tmu_data {
 	struct work_struct irq_work;
 	struct mutex lock;
 	struct clk *clk;
+	struct clk *triminfo_clk;
 	u32 thd_temp_rise, thd_temp_fall;	/* exynos5 resume support */
 	struct exynos_thermal_zone *th_zone;
 	u8 temp_error1, temp_error2;
@@ -657,6 +658,8 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 
 	mutex_lock(&data->lock);
 	clk_enable(data->clk);
+	if (!IS_ERR(data->triminfo_clk))
+		clk_enable(data->triminfo_clk);
 
 	status = readb(data->base + EXYNOS_TMU_REG_STATUS);
 	if (!status) {
@@ -733,6 +736,8 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 
 out:
 	clk_disable(data->clk);
+	if (!IS_ERR(data->triminfo_clk))
+		clk_disable(data->triminfo_clk);
 	mutex_unlock(&data->lock);
 
 	return ret;
@@ -1041,12 +1046,25 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	data->clk = devm_clk_get(&pdev->dev, "tmu_apbif");
 	if (IS_ERR(data->clk)) {
 		dev_err(&pdev->dev, "Failed to get clock\n");
-		return  PTR_ERR(data->clk);
+		ret = PTR_ERR(data->clk);
+		goto err_iomap;
 	}
 
 	ret = clk_prepare(data->clk);
 	if (ret)
-		return ret;
+		goto err_iomap;
+
+	/*
+	 * The misplaced TRIMINFO register may be located on a different
+	 * TMU, requiring a seprate clock to be un-gated in order to access
+	 * it.
+	 */
+	data->triminfo_clk = devm_clk_get(&pdev->dev, "tmu_apbif_triminfo");
+	if (!IS_ERR(data->triminfo_clk)) {
+		ret = clk_prepare(data->triminfo_clk);
+		if (ret)
+			goto err_clk_1;
+	}
 
 	if (pdata->type >= SOC_ARCH_EXYNOS ||
 				pdata->type == SOC_ARCH_EXYNOS4210)
@@ -1054,7 +1072,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	else {
 		ret = -EINVAL;
 		dev_err(&pdev->dev, "Platform not supported\n");
-		goto err_clk;
+		goto err_clk_2;
 	}
 
 	data->pdata = pdata;
@@ -1064,7 +1082,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	ret = exynos_tmu_initialize(pdev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize TMU\n");
-		goto err_clk;
+		goto err_clk_2;
 	}
 
 	/* Register the sensor with thermal management interface */
@@ -1095,7 +1113,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	ret = exynos_register_thermal(sensor_conf, data);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register thermal interface\n");
-		goto err_clk;
+		goto err_clk_2;
 	}
 
 	ret = request_irq(data->irq, exynos_tmu_irq, IRQF_TRIGGER_RISING,
@@ -1109,12 +1127,16 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 err_irq:
 	exynos_unregister_thermal(data);
-err_clk:
+err_clk_2:
+	if (!IS_ERR(data->triminfo_clk))
+		clk_unprepare(data->triminfo_clk);
+err_clk_1:
+	clk_unprepare(data->clk);
+err_iomap:
 	if (data->triminfo_base)
 		iounmap(data->triminfo_base);
 
 	platform_set_drvdata(pdev, NULL);
-	clk_unprepare(data->clk);
 	return ret;
 }
 
@@ -1131,6 +1153,8 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 		iounmap(data->triminfo_base);
 
 	clk_unprepare(data->clk);
+	if (!IS_ERR(data->triminfo_clk))
+		clk_unprepare(data->triminfo_clk);
 
 	platform_set_drvdata(pdev, NULL);
 
