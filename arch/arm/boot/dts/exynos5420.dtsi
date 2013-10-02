@@ -284,8 +284,8 @@
 		/* 2nd reg is for the misplaced TRIMINFO register */
 		reg = <0x1006c000 0x100>, <0x100a0000 0x4>;
 		interrupts = <0 185 0>;
-		clocks = <&clock 318>;
-		clock-names = "tmu_apbif";
+		clocks = <&clock 318>, <&clock 319>;
+		clock-names = "tmu_apbif", "tmu_apbif_triminfo";
 	};
 
 	/* tmu for GPU */
@@ -294,8 +294,8 @@
 		/* 2nd reg is for the misplaced TRIMINFO register */
 		reg = <0x100a0000 0x100>, <0x10068000 0x4>;
 		interrupts = <0 215 0>;
-		clocks = <&clock 319>;
-		clock-names = "tmu_apbif";
+		clocks = <&clock 319>, <&clock 318>;
+		clock-names = "tmu_apbif", "tmu_apbif_triminfo";
 	};
 
 	serial@12C00000 {
