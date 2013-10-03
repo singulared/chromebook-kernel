@@ -28,8 +28,8 @@
 
 #define MAX_CLK_PER_DOMAIN			4
 #define DEFAULT_DEV_LATENCY_NS			1000000UL
-#define DEFAULT_PD_PWRON_LATENCY_NS		1000000000UL
-#define DEFAULT_PD_PWROFF_LATENCY_NS		1000000000UL
+#define DEFAULT_PD_PWRON_LATENCY_NS		10000000UL
+#define DEFAULT_PD_PWROFF_LATENCY_NS		10000000UL
 
 /*
  * Exynos specific wrapper around the generic power domain
@@ -227,6 +227,8 @@ static __init int exynos_pm_dt_parse_domains(void)
 		pd->base = of_iomap(np, 0);
 		pd->pd.power_off = exynos_pd_power_off;
 		pd->pd.power_on = exynos_pd_power_on;
+		pd->pd.power_off_latency_ns = DEFAULT_PD_PWROFF_LATENCY_NS;
+		pd->pd.power_on_latency_ns = DEFAULT_PD_PWRON_LATENCY_NS;
 		pd->pd.of_node = np;
 
 		pd->oscclk = devm_clk_get(dev, "oscclk");
