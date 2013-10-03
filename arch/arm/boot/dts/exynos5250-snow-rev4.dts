@@ -14,7 +14,8 @@
 #include "exynos5250-snow.dtsi"
 
 / {
-	model = "Google Snow Rev 0-4";
+	/* NOTE: Don't change this to include rev; old mosys relies on it */
+	model = "Google Snow";
 
 	/*
 	 * Define with revisions this tree is compatible with.
