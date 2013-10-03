@@ -134,6 +134,12 @@ out:
 	return ERR_PTR(err);
 }
 
+static void delayed_free_pidns(struct rcu_head *p)
+{
+	kmem_cache_free(pid_ns_cachep,
+			container_of(p, struct pid_namespace, rcu));
+}
+
 static void destroy_pid_namespace(struct pid_namespace *ns)
 {
 	int i;
@@ -142,7 +148,7 @@ static void destroy_pid_namespace(struct pid_namespace *ns)
 	for (i = 0; i < PIDMAP_ENTRIES; i++)
 		kfree(ns->pidmap[i].page);
 	put_user_ns(ns->user_ns);
-	kmem_cache_free(pid_ns_cachep, ns);
+	call_rcu(&ns->rcu, delayed_free_pidns);
 }
 
 struct pid_namespace *copy_pid_ns(unsigned long flags,
