@@ -1003,6 +1003,8 @@ static bool hdmi_is_connected(void *ctx)
 {
 	struct hdmi_context *hdata = ctx;
 
+	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
+
 	return hdata->hpd;
 }
 
