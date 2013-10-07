@@ -807,6 +807,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 0>;
 		mmu-master = <&gsc_0>;
+		clocks = <&clock 262>, <&clock 256>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
@@ -817,6 +819,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 2>;
 		mmu-master = <&gsc_1>;
+		clocks = <&clock 263>, <&clock 257>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
@@ -827,6 +831,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 4>;
 		mmu-master = <&gsc_2>;
+		clocks = <&clock 264>, <&clock 258>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
@@ -837,6 +843,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <2 6>;
 		mmu-master = <&gsc_3>;
+		clocks = <&clock 265>, <&clock 259>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&gsc_pd>;
 	};
 
