@@ -172,6 +172,8 @@
 		compatible = "samsung,mfc-v6";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
+		clocks = <&clock 266>;
+		clock-names = "mfc";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
@@ -770,6 +772,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <8 5>;
 		mmu-master = <&mfc>;
+		clocks = <&clock 267>, <&clock 266>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
@@ -780,6 +784,8 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <6 2>;
 		mmu-master = <&mfc>;
+		clocks = <&clock 268>, <&clock 266>;
+		clock-names = "sysmmu", "master";
 		samsung,power-domain = <&mfc_pd>;
 	};
 
