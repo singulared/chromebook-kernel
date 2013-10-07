@@ -166,6 +166,14 @@ clock which they consume.
   smmu_tv		347
 
 
+   [Clock Dividers]
+
+  Clock			ID
+  ----------------------------
+  div_aclk266		512
+  div_aclk300_gscl	513
+
+
    [Clock Muxes]
 
   Clock			ID
@@ -173,6 +181,8 @@ clock which they consume.
   mout_hdmi		1024
   mout_fimd1		1025
   mout_audio0		1026
+  mout_aclk266_gscl_sub	1027
+  mout_aclk300_gscl_sub	1028
 
 
 Example 1: An example of a clock controller node is listed below.

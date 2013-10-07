@@ -111,8 +111,12 @@ enum exynos5250_clks {
 	wdt, rtc, tmu, fimd1, mie1, dsim0, dp, mixer, hdmi, g3d, aclk_400_g3d,
 	smmu_tv,
 
+	/* div clocks */
+	div_aclk266 = 512, div_aclk300_gscl,
+
 	/* mux clocks */
-	mout_hdmi = 1024, mout_fimd1, mout_audio0,
+	mout_hdmi = 1024, mout_fimd1, mout_audio0, mout_aclk266_gscl_sub,
+	mout_aclk300_gscl_sub,
 
 	nr_clks,
 };
@@ -192,6 +196,11 @@ PNAME(mout_aclk166_p)	= { "sclk_cpll", "sclk_mpll_user" };
 PNAME(mout_aclk200_p)	= { "sclk_mpll_user", "sclk_bpll_user" };
 PNAME(mout_aclk400_p)	= { "aclk_400_g3d_mid", "sclk_gpll" };
 PNAME(mout_aclk200_disp1_sub_p) = { "fin_pll", "aclk200" };
+PNAME(mout_aclk266_gscl_sub_p)	= { "fin_pll", "div_aclk266" };
+PNAME(mout_aclk300_gscl_mid1_p)	= { "sclk_vpll", "sclk_cpll" };
+PNAME(mout_aclk300_gscl_p)	= { "mout_aclk300_gscl_mid",
+					"mout_aclk300_gscl_mid1" };
+PNAME(mout_aclk300_gscl_sub_p)	= { "fin_pll", "div_aclk300_gscl" };
 PNAME(mout_hdmi_p)	= { "div_hdmi_pixel", "sclk_hdmiphy" };
 PNAME(mout_usb3_p)	= { "sclk_mpll_user", "sclk_cpll" };
 PNAME(mout_group1_p)	= { "fin_pll", "fin_pll", "sclk_hdmi27m",
@@ -256,6 +265,14 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(sclk_gpll, "sclk_gpll", mout_gpll_p, SRC_TOP2, 28, 1),
 	MUX(none, "mout_aclk400", mout_aclk400_p, SRC_TOP1, 28, 1),
 	MUX(none, "aclk200_disp1", mout_aclk200_disp1_sub_p, SRC_TOP3, 4, 1),
+	MUX(mout_aclk266_gscl_sub, "mout_aclk266_gscl_sub",
+				mout_aclk266_gscl_sub_p, SRC_TOP3, 8, 1),
+	MUX(none, "mout_aclk300_gscl_mid", mout_aclk200_p, SRC_TOP0, 24, 1),
+	MUX(none, "mout_aclk300_gscl_mid1", mout_aclk300_gscl_mid1_p, SRC_TOP1,
+						12, 1),
+	MUX(none, "mout_aclk300_gscl", mout_aclk300_gscl_p, SRC_TOP0, 25, 2),
+	MUX(mout_aclk300_gscl_sub, "mout_aclk300_gscl_sub",
+				mout_aclk300_gscl_sub_p, SRC_TOP3, 10, 1),
 	MUX(none, "mout_cam_bayer", mout_group1_p, SRC_GSCL, 12, 4),
 	MUX(none, "mout_cam0", mout_group1_p, SRC_GSCL, 16, 4),
 	MUX(none, "mout_cam1", mout_group1_p, SRC_GSCL, 20, 4),
@@ -293,11 +310,13 @@ struct samsung_div_clock exynos5250_div_clks[] __initdata = {
 	DIV(none, "sclk_apll", "mout_apll", DIV_CPU0, 24, 3),
 	DIV(none, "aclk66_pre", "sclk_mpll_user", DIV_TOP1, 24, 3),
 	DIV(none, "aclk66", "aclk66_pre", DIV_TOP0, 0, 3),
-	DIV(none, "aclk266", "sclk_mpll_user", DIV_TOP0, 16, 3),
+	DIV(div_aclk266, "div_aclk266", "sclk_mpll_user", DIV_TOP0, 16, 3),
 	DIV(none, "aclk166", "mout_aclk166", DIV_TOP0, 8, 3),
 	DIV(none, "aclk333", "mout_aclk333", DIV_TOP0, 20, 3),
 	DIV(none, "aclk200", "mout_aclk200", DIV_TOP0, 12, 3),
 	DIV(aclk_400_g3d, "aclk_400_g3d", "mout_aclk400", DIV_TOP0, 24, 3),
+	DIV(div_aclk300_gscl, "div_aclk300_gscl", "mout_aclk300_gscl",
+						DIV_TOP1, 12, 3),
 	DIV(none, "div_cam_bayer", "mout_cam_bayer", DIV_GSCL, 12, 4),
 	DIV(none, "div_cam0", "mout_cam0", DIV_GSCL, 16, 4),
 	DIV(none, "div_cam1", "mout_cam1", DIV_GSCL, 20, 4),
@@ -351,26 +370,30 @@ struct samsung_div_clock exynos5250_div_clks[] __initdata = {
 };
 
 struct samsung_gate_clock exynos5250_gate_clks[] __initdata = {
-	GATE(gscl0, "gscl0", "none", GATE_IP_GSCL, 0, 0, 0),
-	GATE(gscl1, "gscl1", "none", GATE_IP_GSCL, 1, 0, 0),
-	GATE(gscl2, "gscl2", "aclk266", GATE_IP_GSCL, 2, 0, 0),
-	GATE(gscl3, "gscl3", "aclk266", GATE_IP_GSCL, 3, 0, 0),
+	GATE(gscl0, "gscl0", "mout_aclk266_gscl_sub", GATE_IP_GSCL, 0, 0, 0),
+	GATE(gscl1, "gscl1", "mout_aclk266_gscl_sub", GATE_IP_GSCL, 1, 0, 0),
+	GATE(gscl2, "gscl2", "mout_aclk266_gscl_sub", GATE_IP_GSCL, 2, 0, 0),
+	GATE(gscl3, "gscl3", "mout_aclk266_gscl_sub", GATE_IP_GSCL, 3, 0, 0),
 	GATE(gscl_wa, "gscl_wa", "div_gscl_wa", GATE_IP_GSCL, 5, 0, 0),
 	GATE(gscl_wb, "gscl_wb", "div_gscl_wb", GATE_IP_GSCL, 6, 0, 0),
-	GATE(smmu_gscl0, "smmu_gscl0", "aclk266", GATE_IP_GSCL, 7, 0, 0),
-	GATE(smmu_gscl1, "smmu_gscl1", "aclk266", GATE_IP_GSCL, 8, 0, 0),
-	GATE(smmu_gscl2, "smmu_gscl2", "aclk266", GATE_IP_GSCL, 9, 0, 0),
-	GATE(smmu_gscl3, "smmu_gscl3", "aclk266", GATE_IP_GSCL, 10, 0, 0),
+	GATE(smmu_gscl0, "smmu_gscl0", "mout_aclk266_gscl_sub", GATE_IP_GSCL,
+							7, 0, 0),
+	GATE(smmu_gscl1, "smmu_gscl1", "mout_aclk266_gscl_sub", GATE_IP_GSCL,
+							8, 0, 0),
+	GATE(smmu_gscl2, "smmu_gscl2", "mout_aclk266_gscl_sub", GATE_IP_GSCL,
+							9, 0, 0),
+	GATE(smmu_gscl3, "smmu_gscl3", "mout_aclk266_gscl_sub", GATE_IP_GSCL,
+							10, 0, 0),
 	GATE(smmu_tv, "smmu_tv", "aclk200_disp1", GATE_IP_DISP1, 9, 0, 0),
 	GATE(mfc, "mfc", "aclk333", GATE_IP_MFC, 0, 0, 0),
 	GATE(smmu_mfcl, "smmu_mfcl", "aclk333", GATE_IP_MFC, 2, 0, 0),
 	GATE(smmu_mfcr, "smmu_mfcr", "aclk333", GATE_IP_MFC, 1, 0, 0),
-	GATE(rotator, "rotator", "aclk266", GATE_IP_GEN, 1, 0, 0),
+	GATE(rotator, "rotator", "div_aclk266", GATE_IP_GEN, 1, 0, 0),
 	GATE(jpeg, "jpeg", "aclk166", GATE_IP_GEN, 2, 0, 0),
-	GATE(mdma1, "mdma1", "aclk266", GATE_IP_GEN, 4, 0, 0),
-	GATE(smmu_rotator, "smmu_rotator", "aclk266", GATE_IP_GEN, 6, 0, 0),
+	GATE(mdma1, "mdma1", "div_aclk266", GATE_IP_GEN, 4, 0, 0),
+	GATE(smmu_rotator, "smmu_rotator", "div_aclk266", GATE_IP_GEN, 6, 0, 0),
 	GATE(smmu_jpeg, "smmu_jpeg", "aclk166", GATE_IP_GEN, 7, 0, 0),
-	GATE(smmu_mdma1, "smmu_mdma1", "aclk266", GATE_IP_GEN, 9, 0, 0),
+	GATE(smmu_mdma1, "smmu_mdma1", "div_aclk266", GATE_IP_GEN, 9, 0, 0),
 	GATE(pdma0, "pdma0", "aclk200", GATE_IP_FSYS, 1, 0, 0),
 	GATE(pdma1, "pdma1", "aclk200", GATE_IP_FSYS, 2, 0, 0),
 	GATE(sata, "sata", "aclk200", GATE_IP_FSYS, 6, 0, 0),
