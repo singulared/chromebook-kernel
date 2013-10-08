@@ -337,6 +337,24 @@ static int dwc3_core_init(struct dwc3 *dwc)
 
 	dwc3_writel(dwc->regs, DWC3_GCTL, reg);
 
+	/*
+	 * WORKAROUND: DWC3 revisions from 1.90a to 2.10a have a bug
+	 * For ss bulk-in data packet, when the host detects
+	 * a DPP error or the internal buffer becomes full,
+	 * it retries with an ACK TP Retry=1. Under the following
+	 * conditions, the Retry=1 is falsely carried over to the next burst
+	 * - There is only single active asynchronous SS EP at the time.
+	 * - The active asynchronous EP is a Bulk IN EP.
+	 * - The burst with the correctly Retry=1 ACK TP and
+	 *   the next burst belong to the same transfer.
+	 */
+	if (dwc->revision >= DWC3_REVISION_190A &&
+	    dwc->revision <= DWC3_REVISION_210A) {
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
+		reg |= DWC3_GUCTL_USBHstInAutoRetryEn;
+		dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
+	}
+
 	return 0;
 
 err0:
@@ -677,6 +695,7 @@ static int dwc3_suspend(struct device *dev)
 	}
 
 	dwc->gctl = dwc3_readl(dwc->regs, DWC3_GCTL);
+	dwc->guctl = dwc3_readl(dwc->regs, DWC3_GUCTL);
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	usb_phy_shutdown(dwc->usb3_phy);
@@ -695,6 +714,7 @@ static int dwc3_resume(struct device *dev)
 
 	spin_lock_irqsave(&dwc->lock, flags);
 
+	dwc3_writel(dwc->regs, DWC3_GUCTL, dwc->guctl);
 	dwc3_writel(dwc->regs, DWC3_GCTL, dwc->gctl);
 
 	switch (dwc->mode) {
