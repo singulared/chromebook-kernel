@@ -268,13 +268,13 @@ void intel_fbdev_set_suspend(struct drm_device *dev, int state)
 
 MODULE_LICENSE("GPL and additional rights");
 
-void intel_fb_output_poll_changed(struct drm_device *dev)
+void intel_fbdev_output_poll_changed(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	drm_fb_helper_hotplug_event(&dev_priv->fbdev->helper);
 }
 
-void intel_fb_restore_mode(struct drm_device *dev)
+void intel_fbdev_restore_mode(struct drm_device *dev)
 {
 	int ret;
 	drm_i915_private_t *dev_priv = dev->dev_private;
