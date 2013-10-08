@@ -360,20 +360,11 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci *host, u32 opcode)
 		return -EINVAL;
 	}
 
-	/* Short circuit: don't tune again if we already did. */
-	if (host->pdata->tuned) {
-		dw_mci_exynos_set_sample(host, host->pdata->clk_smpl);
-		mci_writel(host, CDTHRCTL, host->cd_rd_thr << 16 | 1);
-		return 0;
-	}
-
 	tuning_blk = kmalloc(blksz, GFP_KERNEL);
 	if (!tuning_blk)
 		return -ENOMEM;
 
 	orig_sample = dw_mci_exynos_get_sample(host);
-	host->cd_rd_thr = 512;
-	mci_writel(host, CDTHRCTL, host->cd_rd_thr << 16 | 1);
 
 	/*
 	 * eMMC 4.5 spec section 6.6.7.1 says the device is guaranteed to
@@ -452,7 +443,6 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci *host, u32 opcode)
 	}
 
 	/* Failed. Just restore and return error */
-	mci_writel(host, CDTHRCTL, 0 << 16 | 0);
 	dw_mci_exynos_set_sample(host, orig_sample);
 	return -EIO;
 }
