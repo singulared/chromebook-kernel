@@ -801,7 +801,7 @@
 		interrupt-parent = <&combiner>;
 		interrupts = <7 4>;
 		mmu-master = <&mixer>;
-		clocks = <&clock 347>;
+		clocks = <&clock 346>;
 		clock-names = "sysmmu";
 	};
 
@@ -859,7 +859,7 @@
 		compatible = "samsung,exynos-sysmmu";
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
-		clocks = <&clock 348>, <&clock 339>;
+		clocks = <&clock 347>, <&clock 339>;
 		clock-names = "sysmmu", "master";
 		mmu-master = <&fimd>;
 	};
@@ -972,7 +972,7 @@
 		compatible = "arm,mali";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 118 0>, <0 119 0>, <0 117 0>;
-		clocks = <&clock 345>, <&clock 346>, <&clock 6>, <&clock 1>, <&clock 5>;
+		clocks = <&clock 345>, <&clock 515>, <&clock 6>, <&clock 1>, <&clock 5>;
 		clock-names = "g3d", "aclk_g3d", "mout_gpll", "ext_xtal", "fout_gpll";
 	};
 };
