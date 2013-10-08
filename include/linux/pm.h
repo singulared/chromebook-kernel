@@ -41,9 +41,13 @@ extern void (*pm_power_off_prepare)(void);
  * of all other memory.
  */
 #define __suspend_volatile_bss	__section(.bss.suspend_volatile)
+#define __suspend_volatile	__section(.data.suspend_volatile)
 
 extern u8 __start_suspend_volatile_bss[];
 extern u8 __stop_suspend_volatile_bss[];
+
+extern u8 __start_suspend_volatile_data[];
+extern u8 __stop_suspend_volatile_data[];
 
 /*
  * Data that can't be marked __suspend_volatile because it's allocated on
