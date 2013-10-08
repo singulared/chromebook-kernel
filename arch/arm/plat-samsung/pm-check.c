@@ -27,9 +27,7 @@
 
 #include <plat/pm.h>
 
-#ifdef CONFIG_SNOW_BITFIX
 #include <mach/bitfix-snow.h>
-#endif
 
 #if CONFIG_SAMSUNG_PM_CHECK_CHUNKSIZE < 1
 #error CONFIG_SAMSUNG_PM_CHECK_CHUNKSIZE must be a positive non-zero value
@@ -59,7 +57,7 @@
 
 static char *pm_check_checksum_type = CHECKSUM_TYPE_SUM;
 static bool pm_check_enabled;
-static bool pm_check_should_panic;
+static bool pm_check_should_panic = 1;
 static bool pm_check_print_skips;
 static bool pm_check_print_timings;
 static int pm_check_chunksize = CONFIG_SAMSUNG_PM_CHECK_CHUNKSIZE * 1024;
@@ -128,12 +126,11 @@ static bool s3c_pm_should_skip_page(phys_addr_t addr)
 		s3c_pm_printskip("volatile suspend data", addr);
 		return true;
 	}
-#ifdef CONFIG_SNOW_BITFIX
 	if (bitfix_does_overlap_reserved(addr)) {
 		s3c_pm_printskip("bitfix", addr);
 		return true;
 	}
-#endif
+
 	return false;
 }
 
@@ -261,10 +258,8 @@ static inline u32 s3c_pm_process_mem(u32 val, u32 addr, size_t len,
 		val = checksum_func(val, virt, left);
 		kunmap_atomic(virt);
 
-#ifdef CONFIG_SNOW_BITFIX
 		if (for_save)
 			bitfix_process_page(addr + processed);
-#endif
 	}
 	return val;
 }
@@ -401,9 +396,7 @@ void s3c_pm_check_prepare(void)
 	/* Timing code generates warnings at this point in suspend */
 	if (pm_check_print_timings)
 		start = ktime_get();
-#ifdef CONFIG_SNOW_BITFIX
 	bitfix_prepare();
-#endif
 	s3c_pm_run_sysram(s3c_pm_countram, &new_crc_size);
 	if (pm_check_print_timings) {
 		stop = ktime_get();
@@ -566,12 +559,10 @@ static u32 *s3c_pm_runcheck(const struct resource *res, u32 *val)
 
 		calc = s3c_pm_process_mem(~0, addr, left, false);
 		if (calc != *val) {
-#ifndef CONFIG_SNOW_BITFIX
-			crc_err_cnt++;
 			S3C_PMDBG("s3c_pm_check: Restore CRC error at %08lx "
 				"(%08x vs %08x)\n",
 				addr, calc, *val);
-#else
+
 			bitfix_recover_chunk(addr, s3c_pm_should_skip_page);
 			calc = s3c_pm_process_mem(~0, addr, left, false);
 			if (calc != *val) {
@@ -581,7 +572,6 @@ static u32 *s3c_pm_runcheck(const struct resource *res, u32 *val)
 			} else {
 				S3C_PMDBG("s3c_pm_check: Recovered\n");
 			}
-#endif
 		}
 	}
 
@@ -631,9 +621,7 @@ void s3c_pm_check_restore(void)
  */
 void s3c_pm_check_cleanup(void)
 {
-#ifdef CONFIG_SNOW_BITFIX
 	bitfix_finish();
-#endif
 }
 
 /**
