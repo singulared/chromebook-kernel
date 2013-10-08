@@ -541,10 +541,10 @@
 						regulator-max-microvolt = <5000000>;
 					};
 				};
+			};
 
-				charger {
-					compatible = "ti,cros_ec-charger";
-				};
+			charger {
+				compatible = "ti,cros-ec-charger";
 			};
 
 			/* Arbitrarily assign bus 20 since past exynos range */
