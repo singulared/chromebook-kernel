@@ -2599,7 +2599,7 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 
 	hdmiphy_poweroff(hdata);
 
-	cancel_delayed_work_sync(&hdata->hotplug_work);
+	cancel_delayed_work(&hdata->hotplug_work);
 
 	/* HDMI PHY Disable */
 	hdmi_phy_pow_ctrl_reg_writemask(hdata, PMU_HDMI_PHY_DISABLE,
