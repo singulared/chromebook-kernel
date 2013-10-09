@@ -449,8 +449,8 @@ static int exynos_target(struct cpufreq_policy *policy,
 {
 	/* read current cluster */
 	enum cluster_type cur = get_cur_cluster(policy->cpu);
-	unsigned int index, new_freq = 0, do_switch = 0;
-	int ret = 0;
+	unsigned int index, a15_freq, new_freq = 0, do_switch = 0;
+	int ret = 0, volt;
 
 	mutex_lock(&cpufreq_lock);
 
@@ -465,13 +465,40 @@ static int exynos_target(struct cpufreq_policy *policy,
 
 	if (cur == CA15 && target_freq < freq_min[CA15])
 		do_switch = 1;	/* Switch to Little */
-	else if (cur == CA7 && target_freq > freq_max[CA7])
+	else if (cur == CA7 && target_freq > freq_max[CA7]) {
 		do_switch = 1;	/* Switch from LITTLE to big */
+		if (cpumask_weight(&cluster_cpus[CA15]) == 0) {
+			/*
+			 * If the A15 cluster is being powered up again,
+			 * restore the voltage to the frequency level it
+			 * will be powered up at.
+			 */
+			a15_freq = ACTUAL_FREQ(exynos_getspeed_cluster(CA15),
+						CA15);
+			volt = get_match_volt(ID_ARM, a15_freq);
+			ret = regulator_set_voltage(arm_regulator, volt, volt);
+			if (ret) {
+				pr_err("Failed to restore CPU voltge: %d\n",
+					ret);
+				goto out;
+			}
+		}
+	}
 
 	if (do_switch) {
 		cur = exynos_switch(policy, cur);
 		freqs[cur]->old = exynos_getspeed_cluster(cur);
 		policy->cur = freqs[cur]->old;
+
+		if (cpumask_weight(&cluster_cpus[CA15]) == 0) {
+			/*
+			 * If the A15 cluster is no longer active, lower the
+			 * ARM rail voltage to save power.
+			 */
+			a15_freq = ACTUAL_FREQ(freq_min[CA15], CA15);
+			volt = get_match_volt(ID_ARM, a15_freq);
+			regulator_set_voltage(arm_regulator, volt, volt);
+		}
 	}
 
 	new_freq = max(get_max_req_freq(cur), target_freq);
