@@ -1065,8 +1065,9 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 		(mode->flags & DRM_MODE_FLAG_INTERLACE) ? true :
 		false, mode->clock * 1000);
 
-	/* We're only dependent on mixer in 4212 hdmi */
-	if (hdata->version == HDMI_VER_EXYNOS4212) {
+	/* We're only dependent on mixer in 4212 & 5420 hdmi */
+	if (hdata->version == HDMI_VER_EXYNOS4212 ||
+	    hdata->version == HDMI_VER_EXYNOS5420) {
 		ret = mixer_check_mode(mode);
 		if (ret)
 			return ret;
