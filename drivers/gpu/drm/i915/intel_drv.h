@@ -674,6 +674,38 @@ extern void assert_pipe(struct drm_i915_private *dev_priv, enum pipe pipe,
 #define assert_pipe_enabled(d, p) assert_pipe(d, p, true)
 #define assert_pipe_disabled(d, p) assert_pipe(d, p, false)
 
+/* legacy fbdev emulation in intel_fb.c */
+#ifdef CONFIG_DRM_I915_FBDEV
+extern int intel_fbdev_init(struct drm_device *dev);
+extern void intel_fbdev_initial_config(struct drm_device *dev);
+extern void intel_fbdev_fini(struct drm_device *dev);
+extern void intel_fbdev_set_suspend(struct drm_device *dev, int state);
+extern void intel_fb_output_poll_changed(struct drm_device *dev);
+extern void intel_fb_restore_mode(struct drm_device *dev);
+#else
+static inline int intel_fbdev_init(struct drm_device *dev)
+{
+	return 0;
+}
+
+static inline void intel_fbdev_initial_config(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_fini(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_set_suspend(struct drm_device *dev, int state)
+{
+}
+
+static inline void intel_fb_restore_mode(struct drm_device *dev)
+{
+}
+#endif
+
+
 extern void intel_init_clock_gating(struct drm_device *dev);
 extern void intel_write_eld(struct drm_encoder *encoder,
 			    struct drm_display_mode *mode);
