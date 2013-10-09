@@ -368,6 +368,14 @@ static int put_hdmi(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int daisy_hdmi_jack_report(int plugged)
+{
+	snd_soc_jack_report(&daisy_hdmi_jack,
+			    plugged ? SND_JACK_AVOUT : 0,
+			    SND_JACK_AVOUT);
+	return 0;
+}
+
 static struct snd_kcontrol_new daisy_dapm_controls[] = {
 	SOC_SINGLE_BOOL_EXT("HDMI Playback Switch", 0, get_hdmi, put_hdmi),
 };
@@ -414,9 +422,12 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	plugin = (void *)daisy_dapm_controls[0].private_value;
-	if (plugin)
+	if (plugin) {
 		snd_soc_jack_new(codec, "HDMI Jack",
 				 SND_JACK_AVOUT, &daisy_hdmi_jack);
+
+		plugin->jack_cb = daisy_hdmi_jack_report;
+	}
 
 	/* Microphone BIAS has to be kept on so that the mic-detection circuit
 	 * will operate correctly.
@@ -439,14 +450,6 @@ static int daisy_resume_post(struct snd_soc_card *card)
 	if (gpio_is_valid(daisy_hp_jack_gpio.gpio))
 		snd_soc_jack_gpio_detect(&daisy_hp_jack_gpio);
 
-	return 0;
-}
-
-static int daisy_hdmi_jack_report(int plugged)
-{
-	snd_soc_jack_report(&daisy_hdmi_jack,
-			    plugged ? SND_JACK_AVOUT : 0,
-			    SND_JACK_AVOUT);
 	return 0;
 }
 
@@ -501,8 +504,6 @@ static int plugin_init(struct audio_codec_plugin **pplugin)
 		return -EFAULT;
 	else
 		*pplugin = plugin;
-
-	plugin->jack_cb = daisy_hdmi_jack_report;
 
 	return 0;
 }
