@@ -30,8 +30,7 @@
 #include <mach/asv-5250.h>
 
 #define MAX_SAFEVOLT			1100000 /* 1.10V */
-/* Assume that the bus is saturated if the utilization is 25% */
-#define INT_BUS_SATURATION_RATIO	25
+#define INT_UP_THRESHOLD		8
 
 #define ASV_GROUP_10	10
 #define ASV_GROUP_12	12
@@ -359,7 +358,6 @@ static int exynos5_int_get_dev_status(struct device *dev,
 
 	/* Number of cycles spent on memory access */
 	stat->busy_time = data->ppmu[busier_dmc].count[PPMU_PMNCNT3];
-	stat->busy_time *= 100 / INT_BUS_SATURATION_RATIO;
 	stat->total_time = data->ppmu[busier_dmc].ccnt;
 
 	return 0;
@@ -372,6 +370,10 @@ static void exynos5_int_exit(struct device *dev)
 
 	devfreq_unregister_opp_notifier(dev, data->devfreq);
 }
+
+static struct devfreq_simple_ondemand_data exynos5_int_governor_data = {
+	.upthreshold		= INT_UP_THRESHOLD,
+};
 
 static struct devfreq_dev_profile exynos5_devfreq_int_profile = {
 	.initial_freq		= 266000,
@@ -562,7 +564,7 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 	busfreq_mon_reset(data);
 
 	data->devfreq = devfreq_add_device(dev, &exynos5_devfreq_int_profile,
-					   "simple_ondemand", NULL);
+				"simple_ondemand", &exynos5_int_governor_data);
 
 	if (IS_ERR(data->devfreq)) {
 		err = PTR_ERR(data->devfreq);
