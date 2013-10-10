@@ -162,9 +162,8 @@ clock which they consume.
   mixer			343
   hdmi			344
   g3d			345
-  aclk_400_g3d		346
-  smmu_tv		347
-  smmu_fimd1		348
+  smmu_tv		346
+  smmu_fimd1		347
 
 
    [Clock Dividers]
@@ -174,6 +173,7 @@ clock which they consume.
   div_aclk266		512
   div_aclk300_gscl	513
   div_aclk333		514
+  div_aclk400_g3d	515
 
 
    [Clock Muxes]
