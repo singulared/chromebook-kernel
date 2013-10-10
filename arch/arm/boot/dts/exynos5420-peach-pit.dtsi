@@ -321,6 +321,7 @@
 		non-removable;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
+		clock-frequency = <400000000>;
 		samsung,dw-mshc-ciu-div = <3>;
 		samsung,dw-mshc-sdr-timing = <0 4>;
 		samsung,dw-mshc-ddr-timing = <0 2>;
@@ -367,6 +368,7 @@
 		supports-highspeed;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
+		clock-frequency = <400000000>;
 		samsung,dw-mshc-ciu-div = <3>;
 		samsung,dw-mshc-sdr-timing = <2 3>;
 		samsung,dw-mshc-ddr-timing = <1 2>;
