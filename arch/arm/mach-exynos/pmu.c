@@ -724,7 +724,8 @@ static int __init exynos_pmu_init(void)
 		for (i = 0; i < ARRAY_SIZE(exynos5420_list_disable_pmu_reg); i++)
 			__raw_writel(0x0, exynos5420_list_disable_pmu_reg[i]);
 
-		__raw_writel(0xfffff, EXYNOS5_XXTI_DURATION3);
+		/* Time taken to stabilized XXTI clock */
+		__raw_writel(0x005dc, EXYNOS5_XXTI_DURATION3);
 
 		/* Enable USE_STANDBY_WFI for all CORE */
 		__raw_writel(EXYNOS5420_USE_STANDBY_WFI_ALL,
