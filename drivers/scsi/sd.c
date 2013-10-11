@@ -1408,7 +1408,7 @@ out:
 	return retval;
 }
 
-static int sd_sync_cache(struct scsi_disk *sdkp)
+static int sd_sync_cache(struct scsi_disk *sdkp, int *sense_key)
 {
 	int retries, res;
 	struct scsi_device *sdp = sdkp->device;
@@ -1434,8 +1434,11 @@ static int sd_sync_cache(struct scsi_disk *sdkp)
 
 	if (res) {
 		sd_print_result(sdkp, res);
-		if (driver_byte(res) & DRIVER_SENSE)
+		if (driver_byte(res) & DRIVER_SENSE) {
 			sd_print_sense_hdr(sdkp, &sshdr);
+			if (sense_key)
+				*sense_key = sshdr.sense_key;
+		}
 	}
 
 	if (res)
@@ -3057,7 +3060,7 @@ static void sd_shutdown(struct device *dev)
 
 	if (sdkp->WCE) {
 		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
-		sd_sync_cache(sdkp);
+		sd_sync_cache(sdkp, NULL);
 	}
 
 	if (system_state != SYSTEM_RESTART && sdkp->device->manage_start_stop) {
@@ -3072,6 +3075,7 @@ exit:
 static int sd_suspend(struct device *dev)
 {
 	struct scsi_disk *sdkp = scsi_disk_get_from_dev(dev);
+	int sense_key = 0;
 	int ret = 0;
 
 	if (!sdkp)
@@ -3083,9 +3087,17 @@ static int sd_suspend(struct device *dev)
 
 	if (sdkp->WCE) {
 		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
-		ret = sd_sync_cache(sdkp);
-		if (ret)
-			goto done;
+		ret = sd_sync_cache(sdkp, &sense_key);
+		/*
+		 * If this is a bad drive that doesn't support sync, there's not
+		 * much to do.
+		 */
+		if (ret) {
+			if (sense_key == ILLEGAL_REQUEST)
+				ret = 0;
+			else
+				goto done;
+		}
 	}
 
 	if (sdkp->device->manage_start_stop) {
