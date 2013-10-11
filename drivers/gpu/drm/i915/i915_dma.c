@@ -1609,6 +1609,8 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto out_gem_unload;
 
+	mutex_init(&dev_priv->modeset_restore_lock);
+
 	/* Start out suspended */
 	dev_priv->mm.suspended = 1;
 

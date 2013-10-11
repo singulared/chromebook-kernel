@@ -633,6 +633,12 @@ struct intel_l3_parity {
 	struct work_struct error_work;
 };
 
+enum modeset_restore {
+	MODESET_ON_LID_OPEN,
+	MODESET_DONE,
+	MODESET_SUSPENDED,
+};
+
 typedef struct drm_i915_private {
 	struct drm_device *dev;
 
@@ -777,8 +783,8 @@ typedef struct drm_i915_private {
 
 	unsigned long quirks;
 
-	/* Register state */
-	bool modeset_on_lid;
+	enum modeset_restore modeset_restore;
+	struct mutex modeset_restore_lock;
 
 	struct {
 		/** Bridge to intel-gtt-ko */
