@@ -859,6 +859,8 @@
 		compatible = "samsung,exynos-sysmmu";
 		interrupt-parent = <&combiner>;
 		interrupts = <3 2>;
+		clocks = <&clock 348>, <&clock 339>;
+		clock-names = "sysmmu", "master";
 		mmu-master = <&fimd>;
 	};
 
