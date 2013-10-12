@@ -86,47 +86,12 @@ static int dw_mci_pltfm_resume(struct device *dev)
 
 	return dw_mci_resume(host);
 }
-
-static int dw_mci_pltfm_suspend_noirq(struct device *dev)
-{
-	struct dw_mci *host = dev_get_drvdata(dev);
-	const struct dw_mci_drv_data *drv_data = host->drv_data;
-
-	if (drv_data && drv_data->suspend_noirq)
-		return drv_data->suspend_noirq(host);
-
-	return 0;
-}
-
-static int dw_mci_pltfm_resume_noirq(struct device *dev)
-{
-	struct dw_mci *host = dev_get_drvdata(dev);
-	const struct dw_mci_drv_data *drv_data = host->drv_data;
-
-	if (drv_data && drv_data->resume_noirq)
-		return drv_data->resume_noirq(host);
-
-	return 0;
-}
-
-
 #else
-#define dw_mci_pltfm_suspend		NULL
-#define dw_mci_pltfm_resume		NULL
-#define dw_mci_pltfm_suspend_noirq	NULL
-#define dw_mci_pltfm_resume_noirq	NULL
+#define dw_mci_pltfm_suspend	NULL
+#define dw_mci_pltfm_resume	NULL
 #endif /* CONFIG_PM_SLEEP */
 
-const struct dev_pm_ops dw_mci_pltfm_pmops = {
-	SET_SYSTEM_SLEEP_PM_OPS(dw_mci_pltfm_suspend, dw_mci_pltfm_resume)
-	.suspend_noirq = dw_mci_pltfm_suspend_noirq,
-	.resume_noirq = dw_mci_pltfm_resume_noirq,
-	.freeze_noirq = dw_mci_pltfm_suspend_noirq,
-	.thaw_noirq = dw_mci_pltfm_resume_noirq,
-	.poweroff_noirq = dw_mci_pltfm_suspend_noirq,
-	.restore_noirq = dw_mci_pltfm_resume_noirq,
-};
-
+SIMPLE_DEV_PM_OPS(dw_mci_pltfm_pmops, dw_mci_pltfm_suspend, dw_mci_pltfm_resume);
 EXPORT_SYMBOL_GPL(dw_mci_pltfm_pmops);
 
 static const struct of_device_id dw_mci_pltfm_match[] = {

@@ -53,8 +53,6 @@
 #define SDMMC_IDINTEN		0x090
 #define SDMMC_DSCADDR		0x094
 #define SDMMC_BUFADDR		0x098
-#define SDMMC_CLKSEL		0x09C /* specific to Samsung Exynos */
-#define SDMMC_CDTHRCTL		0x100
 #define SDMMC_DATA(x)		(x)
 
 /*
@@ -100,7 +98,6 @@
 #define SDMMC_INT_HLE			BIT(12)
 #define SDMMC_INT_FRUN			BIT(11)
 #define SDMMC_INT_HTO			BIT(10)
-#define SDMMC_INT_VOLT_SWITCH		BIT(10) /* overloads bit 10! */
 #define SDMMC_INT_DRTO			BIT(9)
 #define SDMMC_INT_RTO			BIT(8)
 #define SDMMC_INT_DCRC			BIT(7)
@@ -115,7 +112,6 @@
 /* Command register defines */
 #define SDMMC_CMD_START			BIT(31)
 #define SDMMC_CMD_USE_HOLD_REG	BIT(29)
-#define SDMMC_CMD_VOLT_SWITCH		BIT(28)
 #define SDMMC_CMD_CCS_EXP		BIT(23)
 #define SDMMC_CMD_CEATA_RD		BIT(22)
 #define SDMMC_CMD_UPD_CLK		BIT(21)
@@ -132,9 +128,6 @@
 #define SDMMC_CMD_INDX(n)		((n) & 0x1F)
 /* Status register defines */
 #define SDMMC_GET_FCNT(x)		(((x)>>17) & 0x1FFF)
-/* FIFOTH register defines */
-#define SDMMC_FIFOTH_DMA_MULTI_TRANS_SIZE	28
-#define SDMMC_FIFOTH_RX_WMARK		16
 /* Internal DMAC interrupt defines */
 #define SDMMC_IDMAC_INT_AI		BIT(9)
 #define SDMMC_IDMAC_INT_NI		BIT(8)
@@ -149,18 +142,12 @@
 #define SDMMC_IDMAC_SWRESET		BIT(0)
 /* Version ID register define */
 #define SDMMC_GET_VERID(x)		((x) & 0xFFFF)
-/* Ultra High Speed register define (SDMMC_UHS_REG) */
-#define SDMMC_UHS_DDR_MODE		BIT(16)
-#define SDMMC_UHS_18V			BIT(0)
 
 /* Register access macros */
 #define mci_readl(dev, reg)			\
 	__raw_readl((dev)->regs + SDMMC_##reg)
 #define mci_writel(dev, reg, value)			\
 	__raw_writel((value), (dev)->regs + SDMMC_##reg)
-
-/* timeout (maximum) */
-#define dw_mci_set_timeout(host)	mci_writel(host, TMOUT, 0xffffffff)
 
 /* 16-bit FIFO access macros */
 #define mci_readw(dev, reg)			\
@@ -204,10 +191,6 @@ extern int dw_mci_resume(struct dw_mci *host);
  * @prepare_command: handle CMD register extensions.
  * @set_ios: handle bus specific extensions.
  * @parse_dt: parse implementation specific device tree properties.
- * @cfg_smu: to configure security management unit
- * @execute_tuning: "auto-tune" Clock-In parameters
- * @suspend_noirq: called late in the suspend process
- * @resume_noirq: called early in the resume process
  *
  * Provide controller implementation specific extensions. The usage of this
  * data structure is fully optional and usage of each member in this structure
@@ -220,9 +203,5 @@ struct dw_mci_drv_data {
 	void		(*prepare_command)(struct dw_mci *host, u32 *cmdr);
 	void		(*set_ios)(struct dw_mci *host, struct mmc_ios *ios);
 	int		(*parse_dt)(struct dw_mci *host);
-	void		(*cfg_smu)(struct dw_mci *host);
-	int		(*execute_tuning)(struct dw_mci *host, u32 opcode);
-	int		(*suspend_noirq)(struct dw_mci *host);
-	int		(*resume_noirq)(struct dw_mci *host);
 };
 #endif /* _DW_MMC_H_ */

@@ -66,19 +66,10 @@ Optional properties:
 
 * supports-highspeed: Enables support for high speed cards (upto 50MHz)
 
-* supports-sdr50-mode: Enables support for SDR50 mode cards
-
-* supports-sdr104-mode: Enables support for SDR104 mode cards
-
 * broken-cd: as documented in mmc core bindings.
 
 * vmmc-supply: The phandle to the regulator to use for vmmc.  If this is
   specified we'll defer probe until we can find this regulator.
-
-* bypass-smu: Bypass Security Management Unit of eMMC channel 0 and channel 1
-
-* non-removable: This is set for the devices which are non removable from the
-  board like eMMC or SDIO cards.
 
 Aliases:
 
@@ -105,7 +96,6 @@ board specific portions as listed below.
 		num-slots = <1>;
 		supports-highspeed;
 		broken-cd;
-		non-removable;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
 		vmmc-supply = <&buck8>;
