@@ -94,7 +94,7 @@ static void exynos_core_power_control(unsigned int cpu, unsigned int cluster,
 static void exynos_cluster_power_control(unsigned int cluster, int enable)
 {
 	unsigned long timeout = jiffies + msecs_to_jiffies(20);
-	unsigned int status, val = 0;
+	unsigned int status, tmp, val = 0;
 
 	if (enable)
 		val = EXYNOS_CORE_LOCAL_PWR_EN;
@@ -102,6 +102,18 @@ static void exynos_cluster_power_control(unsigned int cluster, int enable)
 	status = __raw_readl(EXYNOS_COMMON_STATUS(cluster));
 	if ((status & EXYNOS_CORE_LOCAL_PWR_EN) == val)
 		return;
+
+	/*
+	 * Reduce power consumption when A15 cluster is down by powering
+	 * down the APLL and setting the lowest A15 voltage.
+	 * Note: The voltage change will be handled by the CPUFREQ code.
+	 */
+	if (!cluster) {
+		tmp = enable ? 0x1 : 0x0;
+		__raw_writel(tmp, EXYNOS5_APLL_SYSCLK_CONFIGURATION);
+		while ((__raw_readl(EXYNOS5_APLL_SYSCLK_STATUS) & 0x1) != tmp)
+			cpu_relax();
+	}
 
 	__raw_writel(val, EXYNOS_COMMON_CONFIGURATION(cluster));
 	/* Wait until cluster power control is applied */
