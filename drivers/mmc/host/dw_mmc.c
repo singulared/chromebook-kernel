@@ -198,12 +198,13 @@ err:
 }
 #endif /* defined(CONFIG_DEBUG_FS) */
 
-static void dw_mci_disable_low_power(struct dw_mci_slot *slot);
+static void mci_send_cmd(struct dw_mci_slot *slot, u32 cmd, u32 arg);
 
 static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 {
 	struct mmc_data	*data;
 	struct dw_mci_slot *slot = mmc_priv(mmc);
+	struct dw_mci *host = slot->host;
 	const struct dw_mci_drv_data *drv_data = slot->host->drv_data;
 	u32 cmdr;
 	cmd->error = -EINPROGRESS;
@@ -216,6 +217,8 @@ static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
 
 	if (cmd->opcode == SD_SWITCH_VOLTAGE) {
+		u32 clk_en_a;
+
 		/* Special bit makes CMD11 not die */
 		cmdr |= SDMMC_CMD_VOLT_SWITCH;
 
@@ -226,8 +229,17 @@ static u32 dw_mci_prepare_command(struct mmc_host *mmc, struct mmc_command *cmd)
 		/*
 		 * We need to disable clock stop while doing voltage switch
 		 * according to 7.4.1.2 Voltage Switch Normal Scenario.
+		 *
+		 * It's assumed that by the next time the CLKENA is updated
+		 * (when we set the clock next) that the voltage change will
+		 * be over, so we don't bother setting any bits to synchronize
+		 * with dw_mci_setup_bus().
 		 */
-		dw_mci_disable_low_power(slot);
+		clk_en_a = mci_readl(host, CLKENA);
+		clk_en_a &= ~(SDMMC_CLKEN_LOW_PWR << slot->id);
+		mci_writel(host, CLKENA, clk_en_a);
+		mci_send_cmd(slot, SDMMC_CMD_UPD_CLK |
+			     SDMMC_CMD_PRV_DAT_WAIT, 0);
 	}
 
 	if (cmd->flags & MMC_RSP_PRESENT) {
