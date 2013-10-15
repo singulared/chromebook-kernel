@@ -27,6 +27,7 @@
 #include <linux/stat.h>
 #include <linux/delay.h>
 #include <linux/irq.h>
+#include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/dw_mmc.h>
@@ -137,6 +138,7 @@ struct dw_mci_slot {
 	unsigned long		flags;
 #define DW_MMC_CARD_PRESENT	0
 #define DW_MMC_CARD_NEED_INIT	1
+#define DW_MMC_CARD_NO_LOW_PWR	2
 	int			id;
 	int			last_detect_state;
 	bool			cd_gpio_active_low;
@@ -672,6 +674,7 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 {
 	struct dw_mci *host = slot->host;
 	u32 div;
+	u32 clk_en_a;
 
 	if (slot->clock != host->current_speed || force_clkinit) {
 		div = host->bus_hz / slot->clock;
@@ -704,9 +707,11 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, bool force_clkinit)
 		mci_send_cmd(slot,
 			     SDMMC_CMD_UPD_CLK | SDMMC_CMD_PRV_DAT_WAIT, 0);
 
-		/* enable clock */
-		mci_writel(host, CLKENA, ((SDMMC_CLKEN_ENABLE |
-			   SDMMC_CLKEN_LOW_PWR) << slot->id));
+		/* enable clock; only low power if no SDIO */
+		clk_en_a = SDMMC_CLKEN_ENABLE << slot->id;
+		if (!test_bit(DW_MMC_CARD_NO_LOW_PWR, &slot->flags))
+			clk_en_a |= SDMMC_CLKEN_LOW_PWR << slot->id;
+		mci_writel(host, CLKENA, clk_en_a);
 
 		/* inform CIU */
 		mci_send_cmd(slot,
@@ -1032,28 +1037,37 @@ static int dw_mci_get_cd(struct mmc_host *mmc)
 	return present;
 }
 
-/*
- * Disable lower power mode.
- *
- * Low power mode will stop the card clock when idle.  According to
- * documentation we should disable low power mode for SDIO cards if we
- * need interrupts to work.
- *
- * This function is fast if the power mode is already disabled.
- */
-static void dw_mci_disable_low_power(struct mmc_host *mmc)
+static void dw_mci_init_card(struct mmc_host *mmc, struct mmc_card *card)
 {
 	struct dw_mci_slot *slot = mmc_priv(mmc);
 	struct dw_mci *host = slot->host;
-	u32 clk_en_a;
-	const u32 clken_low_pwr = SDMMC_CLKEN_LOW_PWR << slot->id;
 
-	clk_en_a = mci_readl(host, CLKENA);
+	/*
+	 * Low power mode will stop the card clock when idle.  According to the
+	 * description of the CLKENA register we should disable low power mode
+	 * for SDIO cards if we need SDIO interrupts to work.
+	 */
+	if (mmc->caps | MMC_CAP_SDIO_IRQ) {
+		const u32 clken_low_pwr = SDMMC_CLKEN_LOW_PWR << slot->id;
+		u32 clk_en_a_old;
+		u32 clk_en_a;
 
-	if (clk_en_a & clken_low_pwr) {
-		mci_writel(host, CLKENA, clk_en_a & ~clken_low_pwr);
-		mci_send_cmd(slot, SDMMC_CMD_UPD_CLK |
-			     SDMMC_CMD_PRV_DAT_WAIT, 0);
+		clk_en_a_old = mci_readl(host, CLKENA);
+
+		if (card->type == MMC_TYPE_SDIO ||
+		    card->type == MMC_TYPE_SD_COMBO) {
+			set_bit(DW_MMC_CARD_NO_LOW_PWR, &slot->flags);
+			clk_en_a = clk_en_a_old & ~clken_low_pwr;
+		} else {
+			clear_bit(DW_MMC_CARD_NO_LOW_PWR, &slot->flags);
+			clk_en_a = clk_en_a_old | clken_low_pwr;
+		}
+
+		if (clk_en_a != clk_en_a_old) {
+			mci_writel(host, CLKENA, clk_en_a);
+			mci_send_cmd(slot, SDMMC_CMD_UPD_CLK |
+				     SDMMC_CMD_PRV_DAT_WAIT, 0);
+		}
 	}
 }
 
@@ -1065,21 +1079,11 @@ static void dw_mci_enable_sdio_irq(struct mmc_host *mmc, int enb)
 
 	/* Enable/disable Slot Specific SDIO interrupt */
 	int_mask = mci_readl(host, INTMASK);
-	if (enb) {
-		/*
-		 * Turn off low power mode if it was enabled.  This is a bit of
-		 * a heavy operation and we disable / enable IRQs a lot, so
-		 * we'll leave them disabled; they will get re-enabled again in
-		 * dw_mci_setup_bus().
-		 */
-		dw_mci_disable_low_power(mmc);
-
-		mci_writel(host, INTMASK,
-			   (int_mask | SDMMC_INT_SDIO(slot->id)));
-	} else {
-		mci_writel(host, INTMASK,
-			   (int_mask & ~SDMMC_INT_SDIO(slot->id)));
-	}
+	if (enb)
+		int_mask |= SDMMC_INT_SDIO(slot->id);
+	else
+		int_mask &= ~SDMMC_INT_SDIO(slot->id);
+	mci_writel(host, INTMASK, int_mask);
 }
 
 /* initialize the clock sample to given value */
@@ -1261,6 +1265,7 @@ static const struct mmc_host_ops dw_mci_ops = {
 	.get_cd			= dw_mci_get_cd,
 	.enable_sdio_irq	= dw_mci_enable_sdio_irq,
 	.execute_tuning		= dw_mci_execute_tuning,
+	.init_card		= dw_mci_init_card,
 };
 
 static void dw_mci_request_end(struct dw_mci *host, struct mmc_request *mrq)
