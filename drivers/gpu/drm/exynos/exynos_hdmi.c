@@ -112,12 +112,6 @@ enum HDMI_PACKET_TYPE {
 	HDMI_PACKET_TYPE_AUI = HDMI_PACKET_TYPE_INFOFRAME + 4
 };
 
-enum hdmi_version {
-	HDMI_VER_EXYNOS4210,
-	HDMI_VER_EXYNOS4212,
-	HDMI_VER_EXYNOS5420,
-};
-
 struct hdmi_resources {
 	struct clk			*hdmi;
 	struct clk			*sclk_hdmi;
@@ -1068,9 +1062,8 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 		false, mode->clock * 1000);
 
 	/* We're only dependent on mixer in 4212 & 5420 hdmi */
-	if (hdata->version == HDMI_VER_EXYNOS4212 ||
-	    hdata->version == HDMI_VER_EXYNOS5420) {
-		ret = mixer_check_mode(mode);
+	if (hdata->version != HDMI_VER_EXYNOS4210) {
+		ret = mixer_check_mode(mode, mixer_get_version(hdata->version));
 		if (ret)
 			return ret;
 	}
