@@ -18,17 +18,6 @@
 	compatible = "google,pit-rev5", "google,pit",
 		"google,peach", "samsung,exynos5420";
 
-	/* Avoid suspend/resume problems on non-screened silicon */
-	hsi2c@12CA0000 {
-		max77802-pmic@9 {
-			voltage-regulators {
-				buck3_reg: BUCK3 {
-					regulator-op-mode = <2>;
-				};
-			};
-		};
-	};
-
 	/* Override HDMI-en-supply back to FET2 */
 	hdmi {
 		max77802-pmic@9 {
