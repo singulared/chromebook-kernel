@@ -28,6 +28,7 @@
 #define SDMMC_CLKSEL_CCLK_SAMPLE(x)	(((x) & 7) << 0)
 #define SDMMC_CLKSEL_CCLK_DRIVE(x)	(((x) & 7) << 16)
 #define SDMMC_CLKSEL_CCLK_DIVIDER(x)	(((x) & 7) << 24)
+#define SDMMC_CLKSEL_GET_SAMPLE(x)      (((x) >> 0) & 0x7)
 #define SDMMC_CLKSEL_GET_DRV_WD3(x)	(((x) >> 16) & 0x7)
 #define SDMMC_CLKSEL_TIMING(x, y, z)	(SDMMC_CLKSEL_CCLK_SAMPLE(x) |	\
 					SDMMC_CLKSEL_CCLK_DRIVE(y) |	\
@@ -120,6 +121,12 @@ static int dw_mci_exynos_setup_clock(struct dw_mci *host)
 {
 	struct dw_mci_exynos_priv_data *priv = host->priv;
 	unsigned long rate = clk_get_rate(host->ciu_clk);
+	u32 clksel = mci_readl(host, CLKSEL);
+
+	clksel = SDMMC_CLKSEL_TIMING(SDMMC_CLKSEL_GET_SAMPLE(clksel),
+				     SDMMC_CLKSEL_GET_DRV_WD3(clksel),
+				     priv->ciu_div);
+	mci_writel(host, CLKSEL, clksel);
 
 	host->bus_hz = rate / (priv->ciu_div + 1);
 	return 0;
