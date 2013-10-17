@@ -2437,6 +2437,11 @@ static int kbase_device_suspend(struct device *dev)
 	if (!kbdev)
 		return -ENODEV;
 
+	if (kbdev->pm.callback_power_suspend) {
+		kbdev->pm.callback_power_suspend(kbdev);
+		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "suspend\n");
+	}
+
 	kbase_pm_suspend(kbdev);
 	return 0;
 }

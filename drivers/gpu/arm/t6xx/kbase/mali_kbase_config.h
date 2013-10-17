@@ -676,6 +676,13 @@ typedef struct kbase_pm_callback_conf {
 	 */
 	int (*power_runtime_on_callback) (struct kbase_device *kbdev);
 
+	/** Callback for preparing the GPU for suspend
+	 *
+	 * For linux this callback will be called by the kernel suspend
+	 * callback
+	 */
+	void (*power_suspend_callback) (struct kbase_device *kbdev);
+
 } kbase_pm_callback_conf;
 
 /**

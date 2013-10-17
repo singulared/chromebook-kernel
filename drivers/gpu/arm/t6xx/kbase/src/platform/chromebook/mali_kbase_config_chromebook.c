@@ -289,6 +289,7 @@ void kbase_platform_remove_sysfs_file(struct device *dev);
 mali_error kbase_platform_init(struct kbase_device *kbdev);
 static int kbase_platform_is_power_on(void);
 void kbase_platform_term(struct kbase_device *kbdev);
+static void kbase_platform_dvfs_set_max(kbase_device *kbdev);
 
 #ifdef CONFIG_MALI_T6XX_DEBUG_SYS
 static int kbase_platform_create_sysfs_file(struct device *dev);
@@ -348,10 +349,19 @@ static void pm_callback_power_off(kbase_device *kbdev)
 #endif /* CONFIG_PM_RUNTIME */
 }
 
+/**
+ * Power Management callback - suspend
+ */
+static void pm_callback_suspend(kbase_device *kbdev)
+{
+	kbase_platform_dvfs_set_max(kbdev);
+}
+
 static kbase_pm_callback_conf pm_callbacks =
 {
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
+	.power_suspend_callback = pm_callback_suspend,
 };
 
 /**
@@ -2039,6 +2049,25 @@ static void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
 		kbase_platform_dvfs_set_vol(mali_dvfs_infotbl[level].voltage);
 	}
 	level_prev = level;
+}
+
+static void kbase_platform_dvfs_set_max(kbase_device *kbdev)
+{
+	int i, level;
+
+	/*
+	 * Firmware may initialize the GPU clocks at a rate higher than the
+	 * one we suspended at. Set the maximum frequency and voltage at
+	 * suspend time so that we don't under-volt the GPU during resume.
+	 */
+	for (i = 0; i < MALI_DVFS_STEP; i++)
+		if (mali_dvfs_infotbl[i].max_threshold == 100) {
+			level = i;
+			break;
+		}
+
+	kbase_platform_dvfs_set_level(kbdev, level);
+	mali_dvfs_status_current.step = level;
 }
 #endif /* CONFIG_MALI_T6XX_DVFS */
 

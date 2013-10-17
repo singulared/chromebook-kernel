@@ -403,6 +403,12 @@ typedef struct kbase_pm_device_data {
 	 */
 	void (*callback_power_runtime_off) (struct kbase_device *kbdev);
 
+	/** Callback when the GPU is suspending. See @ref kbase_pm_callback_conf
+	 *
+	 * @param kbdev         The kbase device
+	 */
+	void (*callback_power_suspend) (struct kbase_device *kbdev);
+
 } kbase_pm_device_data;
 
 /** Get the current policy.
