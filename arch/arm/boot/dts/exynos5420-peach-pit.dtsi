@@ -364,6 +364,7 @@
 	};
 
 	dwmmc2@12220000 {
+		vqmmc-supply = <&vqmmc_sdcard>;
 		status = "okay";
 		num-slots = <1>;
 		supports-highspeed;
@@ -710,9 +711,9 @@
 					regulator-always-on;
 					regulator-op-mode = <2>;
 				};
-				ldo4_reg: LDO4 {
+				vqmmc_sdcard: ldo4_reg: LDO4 {
 					regulator-name = "vdd_sd";
-					regulator-min-microvolt = <2800000>;
+					regulator-min-microvolt = <1800000>;
 					regulator-max-microvolt = <2800000>;
 					regulator-always-on;
 					regulator-op-mode = <1>;
