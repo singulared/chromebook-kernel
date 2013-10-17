@@ -830,7 +830,7 @@ const struct v4l2_ctrl_ops gsc_ctrl_ops = {
 static const struct v4l2_ctrl_config gsc_custom_ctrl[] = {
 	{
 		.ops = &gsc_ctrl_ops,
-		.id = V4L2_CID_GLOBAL_ALPHA,
+		.id = V4L2_CID_ALPHA_COMPONENT,
 		.name = "Set RGB alpha",
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.flags = V4L2_CTRL_FLAG_SLIDER,
