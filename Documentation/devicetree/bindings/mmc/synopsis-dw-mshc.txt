@@ -82,6 +82,10 @@ Optional properties:
 * vmmc-supply: The phandle to the regulator to use for vmmc.  If this is
   specified we'll defer probe until we can find this regulator.
 
+* vqmmc-supply: The phandle to the regulator to use for vqmmc, which
+  is the I/O voltage.  Like vmmc, if this is specified we'll defer probe until
+  we can find this regulator.
+
 * non-removable: This is set for the devices which are non removable from the
   board like eMMC or SDIO cards.
 
@@ -116,6 +120,7 @@ board specific portions as listed below.
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
 		vmmc-supply = <&buck8>;
+		vqmmc-supply = <&ldo4>;
 
 		slot@0 {
 			reg = <0>;

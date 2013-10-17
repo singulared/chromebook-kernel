@@ -2530,11 +2530,34 @@ int dw_mci_probe(struct dw_mci *host)
 		}
 	}
 
+	/*
+	 * We need this if we want to do voltage switching, for example to do
+	 * UHS we generally need to negotiate from 3.3v down to 1.8v during
+	 * initialization.  This code is currently assuming that there is only
+	 * one slot and therefore only one vqmmc regulator per host.
+	 */
+	host->vqmmc = devm_regulator_get(host->dev, "vqmmc");
+	if (IS_ERR(host->vqmmc)) {
+		ret = PTR_ERR(host->vqmmc);
+		if (ret == -EPROBE_DEFER)
+			goto err_clk_ciu;
+
+		dev_dbg(host->dev, "no vqmmc regulator found: %d\n", ret);
+		host->vqmmc = NULL;
+	} else {
+		ret = regulator_enable(host->vqmmc);
+		if (ret) {
+			dev_err(host->dev,
+				"enable vqmmc regulator failed %d\n", ret);
+			goto err_clk_ciu;
+		}
+	}
+
 	host->vmmc = devm_regulator_get(host->dev, "vmmc");
 	if (IS_ERR(host->vmmc)) {
 		ret = PTR_ERR(host->vmmc);
 		if (ret == -EPROBE_DEFER)
-			goto err_clk_ciu;
+			goto err_vqmmc;
 
 		dev_info(host->dev, "no vmmc regulator found: %d\n", ret);
 		host->vmmc = NULL;
@@ -2544,7 +2567,7 @@ int dw_mci_probe(struct dw_mci *host)
 		dev_err(host->dev,
 			"Platform data must supply bus speed\n");
 		ret = -ENODEV;
-		goto err_clk_ciu;
+		goto err_vqmmc;
 	}
 
 	host->quirks = host->pdata->quirks;
@@ -2701,6 +2724,10 @@ err_dmaunmap:
 	if (host->use_dma && host->dma_ops->exit)
 		host->dma_ops->exit(host);
 
+err_vqmmc:
+	if (host->vqmmc)
+		regulator_disable(host->vqmmc);
+
 err_clk_ciu:
 	if (!IS_ERR(host->ciu_clk))
 		clk_disable_unprepare(host->ciu_clk);
@@ -2739,6 +2766,9 @@ void dw_mci_remove(struct dw_mci *host)
 				regulator_disable(host->vmmc);
 		}
 	}
+
+	if (host->vqmmc)
+		regulator_disable(host->vqmmc);
 
 	if (host->use_dma && host->dma_ops->exit)
 		host->dma_ops->exit(host);
