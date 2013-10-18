@@ -240,6 +240,7 @@ struct hdmi_context {
 	struct i2c_client               *hdcp_port;
 
 	/* current hdmiphy conf regs */
+	struct drm_display_mode		current_mode;
 	struct hdmi_conf_regs		mode_conf;
 
 	struct hdmi_resources		res;
@@ -1794,20 +1795,17 @@ static void hdmi_audio_control(struct hdmi_context *hdata, bool onoff)
 			HDMI_ASP_EN : HDMI_ASP_DIS, HDMI_ASP_MASK);
 }
 
-static void hdmi_conf_reset(struct hdmi_context *hdata)
+static void hdmi_start(struct hdmi_context *hdata, bool start)
 {
-	u32 reg;
+	u32 val = start ? ~0 : 0;
 
-	if (hdata->version == HDMI_VER_EXYNOS4210)
-		reg = HDMI_4210_CORE_RSTOUT;
+	hdmi_reg_writemask(hdata, HDMI_CON_0, val, HDMI_EN);
+
+	if (hdata->current_mode.flags & DRM_MODE_FLAG_INTERLACE)
+		hdmi_reg_writemask(hdata, HDMI_TG_CMD, val, HDMI_TG_EN |
+				HDMI_FIELD_EN);
 	else
-		reg = HDMI_CORE_RSTOUT;
-
-	/* resetting HDMI core */
-	hdmi_reg_writemask(hdata, reg,  0, HDMI_CORE_SW_RSTOUT);
-	usleep_range(10000, 12000);
-	hdmi_reg_writemask(hdata, reg, ~0, HDMI_CORE_SW_RSTOUT);
-	usleep_range(10000, 12000);
+		hdmi_reg_writemask(hdata, HDMI_TG_CMD, val, HDMI_TG_EN);
 }
 
 static void hdmi_conf_init(struct hdmi_context *hdata)
@@ -1947,13 +1945,7 @@ static void hdmi_4210_mode_apply(struct hdmi_context *hdata)
 	clk_set_parent(hdata->res.mout_hdmi, hdata->res.sclk_hdmiphy);
 	clk_prepare_enable(hdata->res.sclk_hdmi);
 
-	/* enable HDMI and timing generator */
-	hdmi_reg_writemask(hdata, HDMI_CON_0, ~0, HDMI_EN);
-	if (core->int_pro_mode[0])
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, ~0, HDMI_TG_EN |
-				HDMI_FIELD_EN);
-	else
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, ~0, HDMI_TG_EN);
+	hdmi_start(hdata, true);
 }
 
 static void hdmi_4212_mode_apply(struct hdmi_context *hdata)
@@ -2114,13 +2106,7 @@ static void hdmi_4212_mode_apply(struct hdmi_context *hdata)
 	clk_set_parent(hdata->res.mout_hdmi, hdata->res.sclk_hdmiphy);
 	clk_prepare_enable(hdata->res.sclk_hdmi);
 
-	/* enable HDMI and timing generator */
-	hdmi_reg_writemask(hdata, HDMI_CON_0, ~0, HDMI_EN);
-	if (core->int_pro_mode[0])
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, ~0, HDMI_TG_EN |
-				HDMI_FIELD_EN);
-	else
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, ~0, HDMI_TG_EN);
+	hdmi_start(hdata, true);
 }
 
 static void hdmi_mode_apply(struct hdmi_context *hdata)
@@ -2241,7 +2227,7 @@ static void hdmi_conf_apply(struct hdmi_context *hdata)
 	hdmiphy_conf_reset(hdata);
 	hdmiphy_conf_apply(hdata);
 
-	hdmi_conf_reset(hdata);
+	hdmi_start(hdata, false);
 	hdmi_conf_init(hdata);
 	if (!support_hdmi_audio_through_alsa(hdata))
 		hdmi_audio_init(hdata);
@@ -2497,6 +2483,9 @@ static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 		m->vrefresh, (m->flags & DRM_MODE_FLAG_INTERLACE) ?
 		"INTERLACED" : "PROGERESSIVE");
 
+	/* preserve mode information for later use. */
+	drm_mode_copy(&hdata->current_mode, mode);
+
 	if (hdata->version == HDMI_VER_EXYNOS4210)
 		hdmi_4210_mode_set(hdata, mode);
 	else
@@ -2588,7 +2577,7 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	hdcp_stop(hdata);
 
 	/* HDMI System Disable */
-	hdmi_reg_writemask(hdata, HDMI_CON_0, 0, HDMI_EN);
+	hdmi_start(hdata, false);
 
 	hdmiphy_poweroff(hdata);
 
