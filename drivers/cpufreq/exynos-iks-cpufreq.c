@@ -672,6 +672,21 @@ static struct notifier_block notifier_policy_block = {
 	.notifier_call = exynos_policy_notifier,
 };
 
+static int exynos_bL_switcher_notifier(struct notifier_block *nb,
+					unsigned long val, void *data)
+{
+	if (val == BL_NOTIFY_PRE_DISABLE) {
+		pr_warn("Disabling the bL_switcher is not supported\n");
+		return NOTIFY_BAD;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block exynos_bL_switcher_nb = {
+	.notifier_call = exynos_bL_switcher_notifier,
+};
+
 static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_policy *cpu0_policy;
@@ -744,6 +759,14 @@ int __init exynos_iks_cpufreq_init(void)
 	int cpu;
 
 	boot_cluster = 0;
+
+	if (!bL_switcher_get_enabled()) {
+		bL_switcher_put_enabled();
+		ret = -EINVAL;
+		goto err_bL_enable;
+	}
+	bL_switcher_register_notifier(&exynos_bL_switcher_nb);
+	bL_switcher_put_enabled();
 
 	exynos_info[CA7] = kzalloc(sizeof(struct exynos_dvfs_info),
 					GFP_KERNEL);
@@ -858,6 +881,8 @@ err_alloc_freqs_CA7:
 err_alloc_info_CA15:
 	kfree(exynos_info[CA7]);
 err_alloc_info_CA7:
+	bL_switcher_unregister_notifier(&exynos_bL_switcher_nb);
+err_bL_enable:
 	pr_err("%s: failed initialization\n", __func__);
 
 	return ret;
