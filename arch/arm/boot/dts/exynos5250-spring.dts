@@ -245,7 +245,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo7_reg: LDO7 {
 					regulator-name = "P1.1V_LDO_OUT7";
@@ -253,7 +253,7 @@
 					regulator-max-microvolt = <1100000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo8_reg: LDO8 {
 					regulator-name = "P1.0V_LDO_OUT8";
@@ -261,7 +261,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo10_reg: LDO10 {
 					regulator-name = "P1.8V_LDO_OUT10";
@@ -269,7 +269,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo11_reg: LDO11 {
 					regulator-name = "P1.8V_LDO_OUT11";
@@ -285,7 +285,7 @@
 					regulator-max-microvolt = <3000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo13_reg: LDO13 {
 					regulator-name = "P1.8V_LDO_OUT13";
@@ -301,7 +301,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo15_reg: LDO15 {
 					regulator-name = "P1.0V_LDO_OUT15";
@@ -309,7 +309,7 @@
 					regulator-max-microvolt = <1000000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo16_reg: LDO16 {
 					regulator-name = "P1.8V_LDO_OUT16";
@@ -317,7 +317,7 @@
 					regulator-max-microvolt = <1800000>;
 					regulator-always-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 				s5m_ldo17_reg: LDO17 {
 					regulator-name = "P2.8V_LDO_OUT17";
@@ -332,7 +332,7 @@
 					regulator-min-microvolt = <1200000>;
 					regulator-max-microvolt = <1200000>;
 					/* Output ON */
-					op_mode = <3>;
+					op_mode = <1>;
 				};
 				s5m_buck1_reg: BUCK1 {
 					regulator-name = "vdd_mif";
@@ -341,7 +341,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 
 				s5m_buck2_reg: BUCK2 {
@@ -351,7 +351,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 
 				s5m_buck3_reg: BUCK3 {
@@ -361,7 +361,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 
 				s5m_buck4_reg: BUCK4 {
@@ -370,7 +370,7 @@
 					regulator-max-microvolt = <1300000>;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 
 				s5m_buck5_reg: BUCK5 {
@@ -380,7 +380,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON */
-					op_mode = <3>;
+					op_mode = <1>;
 				};
 
 				s5m_buck6_reg: BUCK6 {
@@ -400,7 +400,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					/* Output ON/OFF controlled by PWRREQ */
-					op_mode = <1>;
+					op_mode = <3>;
 				};
 
 				s5m_en32khz_ap: EN32KHZ_AP {
