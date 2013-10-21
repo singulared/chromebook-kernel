@@ -2407,6 +2407,9 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "caps2-mmc-hs200-1_2v", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200_1_2V_SDR;
 
+	if (of_find_property(np, "edge-triggered-interrupts", NULL))
+		pdata->caps2 |= MMC_CAP2_EDGE_TRIG_IRQ;
+
 	return pdata;
 }
 
