@@ -142,10 +142,6 @@ struct exynos_drm_overlay {
  *
  * @initialize: initializes the display with drm_dev
  * @remove: cleans up the display for removal
- * @is_connected: check for that display is connected or not.
- * @get_max_resol: get maximum resolution to specific hardware.
- * @get_edid: get edid modes from display driver.
- * @get_panel: get panel object from display driver.
  * @mode_fixup: fix mode data comparing to hw specific display mode.
  * @mode_set: convert drm_display_mode to hw specific display mode and
  *	      would be called by encoder->mode_set().
@@ -159,11 +155,6 @@ struct exynos_drm_display_ops {
 	int (*create_connector)(void *ctx,
 				struct drm_encoder *encoder);
 	void (*remove)(void *ctx);
-	bool (*is_connected)(void *ctx);
-	void (*get_max_resol)(void *ctx, unsigned int *width,
-				unsigned int *height);
-	struct edid *(*get_edid)(void *ctx, struct drm_connector *connector);
-	void *(*get_panel)(void *ctx);
 	bool (*mode_fixup)(void *ctx, struct drm_connector *connector,
 				const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
