@@ -262,6 +262,7 @@ struct mmc_host {
 #define MMC_CAP2_CD_ACTIVE_HIGH	(1 << 10)	/* Card-detect signal active high */
 #define MMC_CAP2_RO_ACTIVE_HIGH	(1 << 11)	/* Write-protect signal active high */
 #define MMC_CAP2_NO_MMC		(1 << 12)	/* Only SD supported, not MMC */
+#define MMC_CAP2_EDGE_TRIG_IRQ	(1 << 13)	/* Poll for back-to-back IRQs */
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
