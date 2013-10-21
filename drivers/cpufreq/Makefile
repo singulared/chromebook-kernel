@@ -55,6 +55,7 @@ obj-$(CONFIG_ARM_EXYNOS5420_CPUFREQ)	+= exynos5420-cpufreq.o
 obj-$(CONFIG_ARM_EXYNOS_IKS_CORE)	+= exynos-iks-cpufreq.o
 obj-$(CONFIG_ARM_OMAP2PLUS_CPUFREQ)     += omap-cpufreq.o
 obj-$(CONFIG_ARM_SPEAR_CPUFREQ)		+= spear-cpufreq.o
+obj-$(CONFIG_ARCH_TEGRA)		+= tegra-cpufreq.o
 
 ##################################################################################
 # PowerPC platform drivers
