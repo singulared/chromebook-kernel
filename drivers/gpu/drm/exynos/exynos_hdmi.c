@@ -17,6 +17,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/bridge/anx7808.h>
 
 #include "regs-hdmi.h"
 
@@ -1206,6 +1207,21 @@ static struct drm_connector_helper_funcs hdmi_connector_helper_funcs = {
 	.best_encoder = hdmi_best_encoder,
 };
 
+static int (*exynos_possible_hdmi_bridges[])(struct drm_encoder *encoder) = {
+	anx7808_init,
+};
+
+static int exynos_drm_attach_hdmi_bridge(struct drm_encoder *encoder)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(exynos_possible_hdmi_bridges); i++) {
+		if (!exynos_possible_hdmi_bridges[i](encoder))
+			return 0;
+	}
+	return -ENODEV;
+}
+
 static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
 {
 	struct hdmi_context *hdata = ctx;
@@ -1213,6 +1229,11 @@ static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
 	int ret;
 
 	hdata->encoder = encoder;
+
+	/* Pre-empt connector creation if there's a bridge */
+	if (!exynos_drm_attach_hdmi_bridge(encoder))
+		return 0;
+
 	connector->interlace_allowed = true;
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 

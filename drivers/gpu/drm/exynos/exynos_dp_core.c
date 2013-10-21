@@ -28,6 +28,8 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/bridge/ptn3460.h>
+#include <drm/bridge/ps8622.h>
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
@@ -992,6 +994,22 @@ static struct drm_connector_helper_funcs exynos_dp_connector_helper_funcs = {
 	.best_encoder = exynos_dp_best_encoder,
 };
 
+static int (*exynos_possible_dp_bridges[])(struct drm_encoder *encoder) = {
+	ptn3460_init,
+	ps8622_init,
+};
+
+static int exynos_drm_attach_dp_bridge(struct drm_encoder *encoder)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(exynos_possible_dp_bridges); i++) {
+		if (!exynos_possible_dp_bridges[i](encoder))
+			return 0;
+	}
+	return -ENODEV;
+}
+
 static int exynos_dp_create_connector(void *ctx, struct drm_encoder *encoder)
 {
 	struct exynos_dp_device *dp = ctx;
@@ -999,6 +1017,11 @@ static int exynos_dp_create_connector(void *ctx, struct drm_encoder *encoder)
 	int ret;
 
 	dp->encoder = encoder;
+
+	/* Pre-empt DP connector creation if there's a bridge */
+	if (!exynos_drm_attach_dp_bridge(encoder))
+		return 0;
+
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 
 	ret = drm_connector_init(dp->drm_dev, connector,
