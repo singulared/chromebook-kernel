@@ -623,6 +623,11 @@ static int exynos_cpufreq_reboot_notifier(struct notifier_block *this,
 	struct cpufreq_policy *policy;
 	unsigned int i;
 
+	mutex_lock(&cpufreq_lock);
+	exynos_info[CA7]->blocked = true;
+	exynos_info[CA15]->blocked = true;
+	mutex_unlock(&cpufreq_lock);
+
 	for_each_online_cpu(i) {
 		policy = cpufreq_cpu_get(i);
 		policy->user_policy.max = freq_max[CA15];
