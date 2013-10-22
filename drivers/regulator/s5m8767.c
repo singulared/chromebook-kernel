@@ -28,6 +28,10 @@
 #define S5M8767_OPMODE_MASK	0x3
 #define S5M8767_OPMODE_SHIFT	6
 #define S5M8767_OPMODE_SM       (S5M8767_OPMODE_MASK << S5M8767_OPMODE_SHIFT)
+#define S5M8767_PMUMODE_MASK	0x3
+#define S5M8767_PMUMODE_SHIFT	2
+#define S5M8767_PMUMODE_SM      (S5M8767_PMUMODE_MASK << S5M8767_PMUMODE_SHIFT)
+#define S5M8767_PMUMODE_DEFAULT 0x2
 
 struct s5m8767_info {
 	struct device *dev;
@@ -188,6 +192,7 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
 	int i;
 	int op_mode = 0x3;
+
 	for (i = 0; i < s5m8767->iodev->pdata->num_regulators; i++)
 		if (reg_id == s5m8767->iodev->pdata->regulators[i].id)
 			break;
@@ -636,7 +641,7 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 		rdata->reg_node = reg_np;
 		if (of_property_read_u32(reg_np, "reg_op_mode",
 				&rdata->reg_op_mode)) {
-			dev_warn(iodev->dev, "no op_mode property property at %s\n",
+			dev_warn(iodev->dev, "no op_mode property at %s\n",
 				reg_np->full_name);
 			/*
 			 * Set operating mode to NORMAL "ON" as default. The
@@ -646,6 +651,7 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 			 */
 			rdata->reg_op_mode = S5M8767_OPMODE_MASK;
 		}
+		of_property_read_u32(reg_np, "pmu_mode", &rdata->pmu_mode);
 		rdata++;
 	}
 
@@ -881,6 +887,8 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 	for (i = 0; i < pdata->num_regulators; i++) {
 		const struct s5m_voltage_desc *desc;
 		int id = pdata->regulators[i].id;
+		int pmu_mode = pdata->regulators[i].pmu_mode;
+		int reg_id;
 
 		desc = reg_voltage_map[id];
 		if (desc)
@@ -898,6 +906,12 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 			rdev[i] = NULL;
 			goto err;
 		}
+		reg_id = rdev_get_id(rdev[i]);
+		if (pmu_mode)
+			regmap_update_bits(s5m8767->iodev->pmic,
+					   s5m8767_get_ctrl_ridx(reg_id),
+					   S5M8767_PMUMODE_SM,
+					   pmu_mode << S5M8767_PMUMODE_SHIFT);
 	}
 
 	return 0;
