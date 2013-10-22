@@ -260,6 +260,15 @@
 					reg_op_mode = <0>; /* Off Mode */
 				};
 
+				s5m_buck8_reg: BUCK8 {
+					regulator-name = "vdd_1v35_ldoin";
+					regulator-min-microvolt = <1350000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-always-on;
+					regulator-boot-on;
+					reg_op_mode = <3>; /* Normal Mode */
+				};
+
 				s5m_buck9_reg: BUCK9 {
 					regulator-name = "vdd_ummc";
 					regulator-min-microvolt = <900000>;
