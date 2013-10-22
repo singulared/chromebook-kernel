@@ -557,6 +557,7 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 	case KBASE_FUNC_TMEM_SETSIZE:
 		{
 			kbase_uk_tmem_set_size *set_size = args;
+			base_backing_threshold_status failure_reason;
 
 			if (sizeof(*set_size) != args_size)
 				goto bad_size;
@@ -567,13 +568,16 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 				break;
 			}
 
-			ukh->ret = kbase_tmem_set_size(kctx, set_size->gpu_addr, set_size->size, &set_size->actual_size, &set_size->result_subcode);
+			ukh->ret = kbase_tmem_set_size(kctx, set_size->gpu_addr, set_size->size, &set_size->actual_size, &failure_reason);
+			set_size->result_subcode = (u32)failure_reason;
 			break;
 		}
 
 	case KBASE_FUNC_TMEM_RESIZE:
 		{
 			kbase_uk_tmem_resize *resize = args;
+			base_backing_threshold_status failure_reason;
+
 			if (sizeof(*resize) != args_size)
 				goto bad_size;
 
@@ -583,7 +587,8 @@ static mali_error kbase_dispatch(kbase_context *kctx, void * const args, u32 arg
 				break;
 			}
 
-			ukh->ret = kbase_tmem_resize(kctx, resize->gpu_addr, resize->delta, &resize->actual_size, &resize->result_subcode);
+			ukh->ret = kbase_tmem_resize(kctx, resize->gpu_addr, resize->delta, &resize->actual_size, &failure_reason);
+			resize->result_subcode = (u32)failure_reason;
 			break;
 		}
 
