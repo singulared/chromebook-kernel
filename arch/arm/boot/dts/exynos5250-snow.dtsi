@@ -308,6 +308,7 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_bus4>;
+		edge-triggered-interrupts;
 	};
 
 	wwan-en {

@@ -143,6 +143,7 @@
 		supports-highspeed;
 		broken-cd;
 		keep-power-in-suspend;
+		edge-triggered-interrupts;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
 		clock-frequency = <400000000>;
