@@ -267,6 +267,7 @@
 					regulator-always-on;
 					regulator-boot-on;
 					reg_op_mode = <3>; /* Normal Mode */
+					pmu_mode = <3>;
 				};
 
 				s5m_buck9_reg: BUCK9 {
