@@ -2575,7 +2575,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	if (ret) {
 		dev_err(dwc->dev, "failed to register gadget device\n");
 		put_device(&dwc->gadget.dev);
-		goto err6;
+		goto err5;
 	}
 
 	ret = usb_add_gadget_udc(dwc->dev, &dwc->gadget);
