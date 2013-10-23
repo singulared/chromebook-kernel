@@ -122,7 +122,7 @@ static const struct s5m_voltage_desc *reg_voltage_map[] = {
 	[S5M8767_BUCK5] = &buck_voltage_val1,
 	[S5M8767_BUCK6] = &buck_voltage_val1,
 	[S5M8767_BUCK7] = NULL,
-	[S5M8767_BUCK8] = NULL,
+	[S5M8767_BUCK8] = &buck_voltage_val3,
 	[S5M8767_BUCK9] = &buck_voltage_val3,
 	[S5M8767_EN32KHZ_AP] = NULL,
 	[S5M8767_EN32KHZ_CP] = NULL,
@@ -349,9 +349,9 @@ static int s5m8767_set_voltage(struct regulator_dev *rdev,
 	case S5M8767_BUCK1 ... S5M8767_BUCK6:
 		mask = 0xff;
 		break;
-	case S5M8767_BUCK7 ... S5M8767_BUCK8:
+	case S5M8767_BUCK7:
 		return -EINVAL;
-	case S5M8767_BUCK9:
+	case S5M8767_BUCK8 ... S5M8767_BUCK9:
 		mask = 0xff;
 		break;
 	default:
@@ -404,7 +404,7 @@ static int s5m8767_set_voltage_buck(struct regulator_dev *rdev,
 	const struct s5m_voltage_desc *desc;
 	int new_val, old_val, i = 0;
 
-	if (reg_id < S5M8767_BUCK1 || reg_id > S5M8767_BUCK6)
+	if (reg_id < S5M8767_BUCK1 || reg_id > S5M8767_BUCK9)
 		return -EINVAL;
 
 	switch (reg_id) {
@@ -414,7 +414,7 @@ static int s5m8767_set_voltage_buck(struct regulator_dev *rdev,
 		break;
 	case S5M8767_BUCK5 ... S5M8767_BUCK6:
 		return s5m8767_set_voltage(rdev, min_uV, max_uV, selector);
-	case S5M8767_BUCK9:
+	case S5M8767_BUCK8 ... S5M8767_BUCK9:
 		return s5m8767_set_voltage(rdev, min_uV, max_uV, selector);
 	}
 
