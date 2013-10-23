@@ -150,6 +150,37 @@ static int s5m8767_list_voltage(struct regulator_dev *rdev,
 	return val;
 }
 
+static int s5m8767_get_ctrl_ridx(int reg_id)
+{
+	int ridx;
+	switch (reg_id) {
+	case S5M8767_LDO1 ... S5M8767_LDO2:
+		ridx = S5M8767_REG_LDO1CTRL + (reg_id - S5M8767_LDO1);
+		break;
+	case S5M8767_LDO3 ... S5M8767_LDO28:
+		ridx = S5M8767_REG_LDO3CTRL + (reg_id - S5M8767_LDO3);
+		break;
+	case S5M8767_BUCK1:
+		ridx = S5M8767_REG_BUCK1CTRL1;
+		break;
+	case S5M8767_BUCK2 ... S5M8767_BUCK4:
+		ridx = S5M8767_REG_BUCK2CTRL + (reg_id - S5M8767_BUCK2) * 9;
+		break;
+	case S5M8767_BUCK5:
+		ridx = S5M8767_REG_BUCK5CTRL1;
+		break;
+	case S5M8767_BUCK6 ... S5M8767_BUCK9:
+		ridx = S5M8767_REG_BUCK6CTRL1 + (reg_id - S5M8767_BUCK6) * 2;
+		break;
+	case S5M8767_EN32KHZ_AP...S5M8767_EN32KHZ_BT:
+		ridx = S5M8767_REG_CTRL1;
+		break;
+	default:
+		ridx = -EINVAL;
+	}
+	return ridx;
+}
+
 static int s5m8767_get_register(struct regulator_dev *rdev,
 				int *reg, int *mask, int *pattern)
 {
@@ -168,30 +199,13 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 #ifdef CONFIG_OF
 	op_mode = s5m8767->iodev->pdata->regulators[i].reg_op_mode;
 #endif
-	*pattern = op_mode << S5M8767_OPMODE_SHIFT;
-	*mask = S5M8767_OPMODE_SM;
-
+	*reg = s5m8767_get_ctrl_ridx(reg_id);
 	switch (reg_id) {
-	case S5M8767_LDO1 ... S5M8767_LDO2:
-		*reg = S5M8767_REG_LDO1CTRL + (reg_id - S5M8767_LDO1);
-		break;
-	case S5M8767_LDO3 ... S5M8767_LDO28:
-		*reg = S5M8767_REG_LDO3CTRL + (reg_id - S5M8767_LDO3);
-		break;
-	case S5M8767_BUCK1:
-		*reg = S5M8767_REG_BUCK1CTRL1;
-		break;
-	case S5M8767_BUCK2 ... S5M8767_BUCK4:
-		*reg = S5M8767_REG_BUCK2CTRL + (reg_id - S5M8767_BUCK2) * 9;
-		break;
-	case S5M8767_BUCK5:
-		*reg = S5M8767_REG_BUCK5CTRL1;
-		break;
-	case S5M8767_BUCK6 ... S5M8767_BUCK9:
-		*reg = S5M8767_REG_BUCK6CTRL1 + (reg_id - S5M8767_BUCK6) * 2;
+	case S5M8767_LDO1 ... S5M8767_BUCK9:
+		*pattern = op_mode << S5M8767_OPMODE_SHIFT;
+		*mask = S5M8767_OPMODE_SM;
 		break;
 	case S5M8767_EN32KHZ_AP...S5M8767_EN32KHZ_BT:
-		*reg = S5M8767_REG_CTRL1;
 		*pattern = 1 << (reg_id - S5M8767_EN32KHZ_AP);
 		*mask = 1 << (reg_id - S5M8767_EN32KHZ_AP);
 		break;
