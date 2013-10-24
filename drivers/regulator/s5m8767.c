@@ -677,7 +677,28 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 }
 #endif	/* CONFIG_OF */
 
-static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
+static void s5m8767_config_pmu_mode(struct device *dev, int low_power)
+{
+	struct s5m8767_info *s5m8767 = dev_get_drvdata(dev);
+	struct s5m87xx_dev *iodev = s5m8767->iodev;
+	struct s5m_platform_data *pdata = iodev->pdata;
+	struct regulator_dev **rdev = s5m8767->rdev;
+	int i;
+
+	for (i = 0; i < pdata->num_regulators; i++) {
+		if (pdata->regulators[i].pmu_mode) {
+			int pmu_mode = (low_power) ? S5M8767_PMUMODE_DEFAULT :
+				pdata->regulators[i].pmu_mode;
+			int reg_id = rdev_get_id(rdev[i]);
+			regmap_update_bits(iodev->pmic,
+					   s5m8767_get_ctrl_ridx(reg_id),
+					   S5M8767_PMUMODE_SM,
+					   pmu_mode << S5M8767_PMUMODE_SHIFT);
+		}
+	}
+}
+
+static int s5m8767_pmic_probe(struct platform_device *pdev)
 {
 	struct s5m87xx_dev *iodev = dev_get_drvdata(pdev->dev.parent);
 	struct s5m_platform_data *pdata = iodev->pdata;
@@ -887,8 +908,6 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 	for (i = 0; i < pdata->num_regulators; i++) {
 		const struct s5m_voltage_desc *desc;
 		int id = pdata->regulators[i].id;
-		int pmu_mode = pdata->regulators[i].pmu_mode;
-		int reg_id;
 
 		desc = reg_voltage_map[id];
 		if (desc)
@@ -906,13 +925,8 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 			rdev[i] = NULL;
 			goto err;
 		}
-		reg_id = rdev_get_id(rdev[i]);
-		if (pmu_mode)
-			regmap_update_bits(s5m8767->iodev->pmic,
-					   s5m8767_get_ctrl_ridx(reg_id),
-					   S5M8767_PMUMODE_SM,
-					   pmu_mode << S5M8767_PMUMODE_SHIFT);
 	}
+	s5m8767_config_pmu_mode(s5m8767->dev, 0);
 
 	return 0;
 err:
@@ -942,10 +956,30 @@ static const struct platform_device_id s5m8767_pmic_id[] = {
 };
 MODULE_DEVICE_TABLE(platform, s5m8767_pmic_id);
 
+#ifdef CONFIG_PM_SLEEP
+
+static int s5m8767_suspend(struct device *dev)
+{
+	/* set BUCKs to 'auto' mode if they were in 'force' PWM mode */
+	s5m8767_config_pmu_mode(dev, 1);
+	return 0;
+}
+
+static int s5m8767_resume(struct device *dev)
+{
+	/* return BUCKs to 'force PWM' mode if necessary */
+	s5m8767_config_pmu_mode(dev, 0);
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(s5m8767_pm_ops, s5m8767_suspend, s5m8767_resume);
+#endif
+
 static struct platform_driver s5m8767_pmic_driver = {
 	.driver = {
 		.name = "s5m8767-pmic",
 		.owner = THIS_MODULE,
+		.pm = &s5m8767_pm_ops,
 	},
 	.probe = s5m8767_pmic_probe,
 	.remove = __devexit_p(s5m8767_pmic_remove),
