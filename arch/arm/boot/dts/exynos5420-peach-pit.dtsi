@@ -859,7 +859,7 @@
 				ldo30_reg: LDO30 {
 					regulator-name = "vdd_mifs";
 					regulator-min-microvolt = <900000>;
-					regulator-max-microvolt = <1050000>;
+					regulator-max-microvolt = <1300000>;
 					regulator-always-on;
 				};
 				ldo32_reg: LDO32 {
