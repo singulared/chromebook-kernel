@@ -98,6 +98,13 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+
+		wwan_en: wwan-en {
+			samsung,pins = "gpe0-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	gpio-keys {
@@ -301,6 +308,17 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_bus4>;
+	};
+
+	wwan-en {
+		compatible = "regulator-fixed";
+		regulator-name = "wwan-en";
+		gpio = <&gpe0 0 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&wwan_en>;
 	};
 
 	usb@12000000 {
