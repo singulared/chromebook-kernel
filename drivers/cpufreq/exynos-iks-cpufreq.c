@@ -101,7 +101,7 @@ static void init_cpumask_cluster_set(unsigned int cluster)
 {
 	unsigned int i;
 
-	for_each_cpu(i, cpu_possible_mask) {
+	for_each_online_cpu(i) {
 		per_cpu(cpu_cur_cluster, i) = cluster;
 		if (cluster == CA15)
 			cpumask_set_cpu(i, &cluster_cpus[CA15]);
