@@ -80,6 +80,8 @@ static DEFINE_PER_CPU(unsigned int, req_freq);
 
 static struct cpufreq_policy fake_policy[CA_END][NR_CPUS];
 
+static bool use_cluster_switching = true;
+
 static void switch_complete_cb(void *cookie)
 {
 	struct completion *switch_complete = (struct completion *) cookie;
@@ -450,7 +452,7 @@ static int exynos_target(struct cpufreq_policy *policy,
 	/* read current cluster */
 	enum cluster_type cur = get_cur_cluster(policy->cpu);
 	unsigned int index, a15_freq, new_freq = 0, do_switch = 0;
-	int ret = 0, volt;
+	int ret = 0, volt, i;
 
 	mutex_lock(&cpufreq_lock);
 
@@ -489,6 +491,16 @@ static int exynos_target(struct cpufreq_policy *policy,
 		cur = exynos_switch(policy, cur);
 		freqs[cur]->old = exynos_getspeed_cluster(cur);
 		policy->cur = freqs[cur]->old;
+
+		if (use_cluster_switching) {
+			for_each_online_cpu(i) {
+				struct cpufreq_policy *tmp_policy;
+
+				tmp_policy = cpufreq_cpu_get(i);
+				tmp_policy->cur = freqs[cur]->old;
+				cpufreq_cpu_put(tmp_policy);
+			}
+		}
 
 		if (cpumask_weight(&cluster_cpus[CA15]) == 0) {
 			/*
@@ -695,6 +707,7 @@ static struct notifier_block exynos_bL_switcher_nb = {
 static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_policy *cpu0_policy;
+	int i;
 
 	policy->cur = policy->min = policy->max = exynos_getspeed(policy->cpu);
 	freqs[CA7]->old = exynos_getspeed_cluster(CA7);
@@ -709,7 +722,12 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.transition_latency = 100000;
 
 	cpumask_clear(policy->cpus);
-	cpumask_set_cpu(policy->cpu, policy->cpus);
+	if (use_cluster_switching) {
+		for_each_online_cpu(i)
+			cpumask_set_cpu(i, policy->cpus);
+	} else {
+		cpumask_set_cpu(policy->cpu, policy->cpus);
+	}
 
 	cpu0_policy = cpufreq_cpu_get(0);
 	/*
