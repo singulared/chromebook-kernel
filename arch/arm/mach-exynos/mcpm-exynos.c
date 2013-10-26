@@ -19,6 +19,7 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/arm-cci.h>
+#include <linux/suspend.h>
 
 #include <asm/mcpm.h>
 #include <asm/cputype.h>
@@ -426,6 +427,71 @@ static struct miscdevice bL_status_device = {
 	&bL_status_fops
 };
 
+extern void wfi_entry_point(void);
+
+/*
+ * exynos_mcpm_pm_notifier - On resume, power the KFC cores up, reset all
+ * the KFC cores and then power them off. To power off the KFC cores change
+ * the mcpm entry point for them to a function which performs a "wfi". This
+ * function gets called prior to the cpufreq notifier which unblocks the
+ * switcher.
+ *
+ * This is done in order to address post-resume system hangs as a result of
+ * Cortex-A7 erratum 802022 ("A CPU can interfere with the duplicate tag RAM
+ * invalidation process for another CPU and cause deadlock").  Resetting the
+ * A7s causes the L2 to re-initiate L1 duplicate tag RAM invalidation.
+ */
+static int exynos_mcpm_pm_notifier(struct notifier_block *notifier,
+					unsigned long val, void *data)
+{
+	unsigned int cpu;
+
+	if (val != PM_POST_SUSPEND)
+		return NOTIFY_DONE;
+
+	exynos_cluster_power_control(1, true);
+
+	/* Clear the entry point and power up all the A7s */
+	__raw_writel(0x0, REG_ENTRY_ADDR);
+	dsb();
+	for (cpu = 0; cpu < 4; cpu++) {
+		clear_boot_flag(cpu, EXYNOS_RESET);
+		exynos_core_power_control(cpu, 1, true);
+	}
+	for (cpu = 0; cpu < 4; cpu++) {
+		while (!exynos_core_power_state(cpu, 1))
+			cpu_relax();
+		pr_info("cpu %d up\n", cpu);
+	}
+
+	udelay(30);
+
+	/* Reset the A7s */
+	__raw_writel((0xf << 20) | (0xf << 8), S5P_SWRESET);
+
+	/* Set the entry point to WFI and power down the A7s */
+	__raw_writel(virt_to_phys(wfi_entry_point), REG_ENTRY_ADDR);
+	dsb();
+	sev();
+
+	udelay(10);
+
+	for (cpu = 0; cpu < 4; cpu++)
+		exynos_core_power_control(cpu, 1, false);
+	for (cpu = 0; cpu < 4; cpu++) {
+		while (exynos_core_power_state(cpu, 1))
+			cpu_relax();
+		pr_info("cpu %d down\n", cpu);
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block exynos_mcpm_nb = {
+	.notifier_call = exynos_mcpm_pm_notifier,
+	.priority = 1,
+};
+
 extern void exynos_power_up_setup(unsigned int affinity_level);
 
 static int __init exynos_mcpm_init(void)
@@ -458,6 +524,8 @@ static int __init exynos_mcpm_init(void)
 	ret = mcpm_platform_register(&exynos_power_ops);
 	if (!ret)
 		ret = mcpm_sync_init(exynos_power_up_setup);
+
+	register_pm_notifier(&exynos_mcpm_nb);
 
 	return ret;
 }

@@ -33,3 +33,8 @@ ENTRY(exynos_power_up_setup)
 	bx	lr
 
 ENDPROC(exynos_power_up_setup)
+
+ENTRY(wfi_entry_point)
+1:	wfi
+	b	1b
+ENDPROC(wfi_entry_point)
