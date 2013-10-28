@@ -288,17 +288,8 @@ static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 	size_t dspl_y_addr;
 	unsigned int frame_type;
 
-	/* Use decode frame for vp8. refer comments in s5p_mfc_handle_frame */
-	if (ctx->codec_mode == S5P_MFC_CODEC_VP8_DEC) {
-		dspl_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dec_y_adr, dev);
-		frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_dec_frame_type,
-					dev);
-	} else {
-		dspl_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_y_adr,
-					dev);
-		frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_disp_frame_type,
-					ctx);
-	}
+	dspl_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_y_adr, dev);
+	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_disp_frame_type, ctx);
 
 	/* If frame is same as previous then skip and do not dequeue */
 	if (frame_type == S5P_FIMV_DECODE_FRAME_SKIPPED) {
@@ -348,31 +339,11 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	unsigned int res_change;
 	struct v4l2_event ev;
 
-	/*
-	 * MFC has 2 sets of registers: decode frame registers and display frame
-	 * registers. In case of H264 decoding order need not be the same as
-	 * display order. So to get frames in display order, the display frame
-	 * set of registers only can be used.
-	 * But for VP8 decoder, decoding order and display order are the same
-	 * For MFC V6, the display registers are updated with a 1 frame delay
-	 * compared to decode registers. This leads to one frame latency in Vp8
-	 * decoder output.
-	 * So to remove this latency, decode registers can be used for MFC Vp8
-	 * decoder only.
-	 */
-	if (ctx->codec_mode == S5P_MFC_CODEC_VP8_DEC) {
-		dst_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dec_status,
-				dev) & S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
-		res_change = (s5p_mfc_hw_call(dev->mfc_ops, get_dec_status,
-				dev) & S5P_FIMV_DEC_STATUS_RESOLUTION_MASK)
+	dst_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status, dev)
+				& S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
+	res_change = (s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status, dev)
+				& S5P_FIMV_DEC_STATUS_RESOLUTION_MASK)
 				>> S5P_FIMV_DEC_STATUS_RESOLUTION_SHIFT;
-	} else {
-		dst_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status,
-				dev) & S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
-		res_change = (s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status,
-				dev) & S5P_FIMV_DEC_STATUS_RESOLUTION_MASK)
-				>> S5P_FIMV_DEC_STATUS_RESOLUTION_SHIFT;
-	}
 	mfc_debug(2, "Frame Status: %x\n", dst_frame_status);
 	if (ctx->state == MFCINST_RES_CHANGE_INIT)
 		ctx->state = MFCINST_RES_CHANGE_FLUSH;
