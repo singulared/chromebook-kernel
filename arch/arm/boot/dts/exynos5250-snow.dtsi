@@ -82,6 +82,13 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+
+		backlight_en: backlight-en {
+			samsung,pins = "gpx3-0";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	pinctrl@13400000 {
@@ -383,7 +390,8 @@
 		pwms = <&pwm 0 1000000 0>;
 		max-brightness = <2800>;
 		default-brightness-level = <2800>;
-		pinctrl-0 = <&backlight_pwm>;
+		enable-gpio = <&gpx3 0 0>;
+		pinctrl-0 = <&backlight_pwm &backlight_en>;
 		pinctrl-names = "default";
 	};
 
