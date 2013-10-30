@@ -99,4 +99,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&max98095_en>;
 	};
+
+	hdmi {
+		hdmi-en-supply = <&tps65090_fet2>;
+	};
 };

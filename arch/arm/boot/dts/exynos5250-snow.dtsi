@@ -279,8 +279,9 @@
 					fet6 {
 						regulator-name = "lcd_vdd";
 					};
-					fet7 {
-						regulator-name = "ts";
+					tps65090_fet7: fet7 {
+						regulator-name = "video_mid_1a";
+						regulator-always-on;
 					};
 					ldo1 {
 					};
@@ -378,7 +379,7 @@
 	};
 
 	hdmi {
-		hdmi-en-supply = <&tps65090_fet2>;
+		hdmi-en-supply = <&tps65090_fet7>;
 		vdd-supply = <&ldo8_reg>;
 		vdd_osc-supply = <&ldo10_reg>;
 		vdd_pll-supply = <&ldo8_reg>;
