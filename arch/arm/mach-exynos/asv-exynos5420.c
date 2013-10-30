@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/bitrev.h>
 #include <linux/regulator/consumer.h>
-#include <linux/suspend.h>
 
 #include <mach/asv-exynos.h>
 #include <mach/asv-exynos5420.h>
@@ -49,9 +48,6 @@ static unsigned int *g3d_asv_abb_info;
 static unsigned int (*g3d_asv_volt_info)[ARM_ASV_GRP_NR + 1];
 static unsigned int (*g3d_sram_asv_volt_info)[ARM_ASV_GRP_NR + 1];
 static struct asv_info *g3d_asv_member;
-
-static struct regulator *mif_regulator;
-static struct regulator *mif_sram_regulator;
 
 static const char * const special_lot_list[] = {
 	"NZXK8",
@@ -356,62 +352,13 @@ out:
 	return is_special_lot;
 }
 
-static int exynos5420_asv_pm_notifier(struct notifier_block *notifier,
-					unsigned long pm_event, void *v)
-{
-	int ret;
-	unsigned int mif_volt, mifs_volt;
-
-	switch (pm_event) {
-	case PM_SUSPEND_PREPARE:
-		/*
-		 * Bump-up MIF_SRAM and MIF voltage to the maximum before
-		 * suspend. First MIF_SRAM needs to be set and then MIF.
-		 * Order is important here.
-		 */
-		ret = regulator_set_voltage(mif_sram_regulator,
-						MIF_SRAM_MAX_VOLT,
-						MIF_SRAM_MAX_VOLT);
-		if (ret)
-			goto err;
-		ret = regulator_set_voltage(mif_regulator, MIF_MAX_VOLT,
-						MIF_MAX_VOLT);
-		if (ret)
-			goto err;
-		break;
-	case PM_POST_SUSPEND:
-		/*
-		 * Restore MIF and MIF_SRAM voltage as per their respective
-		 * ASV groups. MIF needs to be set first and then MIF_SRAM.
-		 */
-		mif_volt = get_match_volt(ID_MIF, 0);
-		mifs_volt = get_match_volt(ID_MIF_SRAM, 0);
-
-		ret = regulator_set_voltage(mif_regulator, mif_volt, mif_volt);
-		if (ret)
-			goto err;
-		ret = regulator_set_voltage(mif_sram_regulator, mifs_volt,
-						mifs_volt);
-		if (ret)
-			goto err;
-		break;
-	}
-
-	return NOTIFY_OK;
-err:
-	pr_err("exynos5420_asv_pm_notifier failed: %d\n", ret);
-	return NOTIFY_BAD;
-}
-
-static struct notifier_block exynos5420_asv_nb = {
-	.notifier_call = exynos5420_asv_pm_notifier,
-};
-
 static int __init exynos5420_set_asv_volt_mif_sram(void)
 {
 	unsigned int mif_volt;
 	unsigned int mif_sram_volt;
 	unsigned int g3d_sram_volt;
+	struct regulator *mif_regulator;
+	struct regulator *mif_sram_regulator;
 	struct regulator *g3d_sram_regulator;
 
 	if (!(soc_is_exynos5420()))
@@ -432,7 +379,7 @@ static int __init exynos5420_set_asv_volt_mif_sram(void)
 		regulator_set_voltage(mif_regulator, mif_volt, mif_volt);
 	else {
 		pr_err("Regulator get error : mif\n");
-		goto err;
+		goto err_mif;
 	}
 
 	if (!IS_ERR(mif_sram_regulator))
@@ -440,7 +387,7 @@ static int __init exynos5420_set_asv_volt_mif_sram(void)
 							mif_sram_volt);
 	else {
 		pr_err("Regulator get error : mif_sram\n");
-		goto err;
+		goto err_mif_sram;
 	}
 
 	if (!IS_ERR(g3d_sram_regulator))
@@ -448,15 +395,15 @@ static int __init exynos5420_set_asv_volt_mif_sram(void)
 							g3d_sram_volt);
 	else {
 		pr_err("Regulator get error : g3d_sram\n");
-		goto err;
+		goto err_g3d_sram;
 	}
 
-	register_pm_notifier(&exynos5420_asv_nb);
-
-err:
-	if (!IS_ERR(g3d_sram_regulator))
-		regulator_put(g3d_sram_regulator);
-
+	regulator_put(g3d_sram_regulator);
+err_g3d_sram:
+	regulator_put(mif_sram_regulator);
+err_mif_sram:
+	regulator_put(mif_regulator);
+err_mif:
 	return 0;
 }
 late_initcall(exynos5420_set_asv_volt_mif_sram);
