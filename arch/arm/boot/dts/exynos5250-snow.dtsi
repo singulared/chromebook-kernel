@@ -111,9 +111,10 @@
 				VFET7 {
 					tps65090-control-reg-offset = <21>;
 					tps65090-overcurrent-wait = <3>;
-					regulator-name = "ts";
+					regulator-name = "video_mid_1a";
 					regulator-min-microvolt = <5000000>;
 					regulator-max-microvolt = <5000000>;
+					regulator-always-on;
 				};
 			};
 
