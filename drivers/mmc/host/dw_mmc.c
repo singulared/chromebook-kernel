@@ -2509,6 +2509,9 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 	if (of_find_property(np, "supports-hs200-mode", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200;
 
+	if (of_find_property(np, "edge-triggered-interrupts", NULL))
+		pdata->caps2 |= MMC_CAP2_EDGE_TRIG_IRQ;
+
 	return pdata;
 }
 

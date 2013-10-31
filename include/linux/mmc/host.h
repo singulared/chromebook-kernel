@@ -239,6 +239,7 @@ struct mmc_host {
 #define MMC_CAP2_DETECT_ON_ERR	(1 << 8)	/* On I/O err check card removal */
 #define MMC_CAP2_HC_ERASE_SZ	(1 << 9)	/* High-capacity erase size */
 #define MMC_CAP2_NO_MMC		(1 << 10)	/* Only SD supported, not MMC */
+#define MMC_CAP2_EDGE_TRIG_IRQ	(1 << 11)	/* Poll for back-to-back IRQs */
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 	unsigned int        power_notify_type;

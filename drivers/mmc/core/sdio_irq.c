@@ -148,6 +148,20 @@ static int sdio_irq_thread(void *_host)
 				if (period > idle_period)
 					period = idle_period;
 			}
+		} else if (host->caps2 & MMC_CAP2_EDGE_TRIG_IRQ) {
+			/*
+			 * Do an exponentially decaying fast-poll until we
+			 * are reasonably sure we are at the end of a burst
+			 * of interrupts.  This allows a system that may lose
+			 * back-to-back interrupts to successfully catch the
+			 * tail of the burst.
+			 */
+			if (ret > 0)
+				period = idle_period;
+			else if (period < msecs_to_jiffies(10000))
+				period *= 4;
+			else
+				period = MAX_SCHEDULE_TIMEOUT;
 		}
 
 		set_current_state(TASK_INTERRUPTIBLE);
