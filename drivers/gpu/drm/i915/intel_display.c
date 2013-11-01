@@ -2944,8 +2944,9 @@ static void intel_crtc_wait_for_pending_flips(struct drm_crtc *crtc)
 	if (crtc->fb == NULL)
 		return;
 
-	wait_event(dev_priv->pending_flip_queue,
-		   !intel_crtc_has_pending_flip(crtc));
+	wait_event_timeout(dev_priv->pending_flip_queue,
+			   !intel_crtc_has_pending_flip(crtc),
+			   DRM_HZ/10);
 
 	mutex_lock(&dev->struct_mutex);
 	intel_finish_fb(crtc->fb);
