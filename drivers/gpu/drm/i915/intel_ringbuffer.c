@@ -593,9 +593,12 @@ gen6_add_request(struct intel_ring_buffer *ring)
 {
 	u32 mbox1_reg;
 	u32 mbox2_reg;
-	int ret;
+	int ret, extra_dwords = 10;
 
-	ret = intel_ring_begin(ring, 10);
+	if (ring->fbc_dirty && ring->id == BCS)
+		extra_dwords += 4;
+
+	ret = intel_ring_begin(ring, extra_dwords);
 	if (ret)
 		return ret;
 
@@ -608,6 +611,17 @@ gen6_add_request(struct intel_ring_buffer *ring)
 	intel_ring_emit(ring, I915_GEM_HWS_INDEX << MI_STORE_DWORD_INDEX_SHIFT);
 	intel_ring_emit(ring, ring->outstanding_lazy_request);
 	intel_ring_emit(ring, MI_USER_INTERRUPT);
+
+	if (ring->fbc_dirty && ring->id == BCS) {
+		intel_ring_emit(ring, MI_NOOP);
+		intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(1));
+		intel_ring_emit(ring, GEN6_BLITTER_ECOSKPD);
+		intel_ring_emit(ring,
+				_MASKED_BIT_DISABLE(GEN6_BLITTER_FBC_NOTIFY));
+
+		ring->fbc_dirty = false;
+	}
+
 	intel_ring_advance(ring);
 
 	return 0;
@@ -1504,7 +1518,8 @@ static int gen6_ring_fbc_flush(struct intel_ring_buffer *ring)
 			_MASKED_BIT_ENABLE(GEN6_BLITTER_FBC_NOTIFY));
 	intel_ring_advance(ring);
 
-	ring->fbc_dirty = false;
+	/* We'll mark the fbc clean only after the operation has completed so we
+	 * can track when to disable the bit above */
 	return 0;
 }
 
