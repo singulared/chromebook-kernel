@@ -425,7 +425,7 @@ STATIC void kbasep_js_debug_check(kbasep_js_policy_cfs *policy_info, kbase_conte
 
 		expect_queued = (check_flag & KBASEP_JS_CHECKFLAG_IS_QUEUED) ? MALI_TRUE : MALI_FALSE;
 
-		KBASE_DEBUG_ASSERT_MSG(expect_queued == is_queued, "Expected context %p to be %s but it was %s\n", kctx, (expect_queued) ? "queued" : "not queued", (is_queued) ? "queued" : "not queued");
+		KBASE_DEBUG_ASSERT_MSG(expect_queued == is_queued, "Expected context %p to be %s but it was %s", kctx, (expect_queued) ? "queued" : "not queued", (is_queued) ? "queued" : "not queued");
 
 	}
 
@@ -435,7 +435,7 @@ STATIC void kbasep_js_debug_check(kbasep_js_policy_cfs *policy_info, kbase_conte
 		is_scheduled = (kbasep_list_member_of(&policy_info->scheduled_ctxs_head, &kctx->jctx.sched_info.runpool.policy_ctx.cfs.list)) ? MALI_TRUE : MALI_FALSE;
 
 		expect_scheduled = (check_flag & KBASEP_JS_CHECKFLAG_IS_SCHEDULED) ? MALI_TRUE : MALI_FALSE;
-		KBASE_DEBUG_ASSERT_MSG(expect_scheduled == is_scheduled, "Expected context %p to be %s but it was %s\n", kctx, (expect_scheduled) ? "scheduled" : "not scheduled", (is_scheduled) ? "scheduled" : "not scheduled");
+		KBASE_DEBUG_ASSERT_MSG(expect_scheduled == is_scheduled, "Expected context %p to be %s but it was %s", kctx, (expect_scheduled) ? "scheduled" : "not scheduled", (is_scheduled) ? "scheduled" : "not scheduled");
 
 	}
 
@@ -510,7 +510,7 @@ STATIC void debug_check_core_req_variants(kbase_device *kbdev, kbasep_js_policy_
 		}
 
 		/* Early-out on any failure */
-		KBASE_DEBUG_ASSERT_MSG(found != MALI_FALSE, "Job slot %d features 0x%x not matched by core_req_variants. " "Rework core_req_variants and vairants_supported_<...>_state[] to match\n", j, job_core_req);
+		KBASE_DEBUG_ASSERT_MSG(found != MALI_FALSE, "Job slot %d features 0x%x not matched by core_req_variants. " "Rework core_req_variants and vairants_supported_<...>_state[] to match", j, job_core_req);
 	}
 }
 #endif

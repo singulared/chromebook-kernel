@@ -345,7 +345,7 @@ void kbase_report_gpu_fault(kbase_device *kbdev, int multiple)
 
 	KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "GPU Fault 0x%08x (%s) at 0x%016llx", status, kbase_exception_name(status), address);
 	if (multiple)
-		KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "There were multiple GPU faults - some have not been reported\n");
+		KBASE_DEBUG_PRINT_WARN(KBASE_CORE, "There were multiple GPU faults - some have not been reported");
 }
 
 void kbase_gpu_interrupt(kbase_device *kbdev, u32 val)

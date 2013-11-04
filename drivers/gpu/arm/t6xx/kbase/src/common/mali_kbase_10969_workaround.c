@@ -36,7 +36,7 @@
 int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 {
 	u32   clamped = 0;
-	KBASE_DEBUG_PRINT_WARN(KBASE_JD,"Called TILE_RANGE_FAULT workaround clamping function. \n");
+	KBASE_DEBUG_PRINT_WARN(KBASE_JD,"Called TILE_RANGE_FAULT workaround clamping function.");
 	if (katom->core_req & BASE_JD_REQ_FS){
 		kbase_va_region * region = kbase_region_tracker_find_region_enclosing_address(katom->kctx, katom->jc );
 
@@ -60,7 +60,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 
 				page_1 = kmap_atomic(pfn_to_page(PFN_DOWN(page_array[page_index])));
 				if (!page_1){
-					KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 1 \n");
+					KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 1");
 					goto exit;
 				}
 				/* page_1 is a u32 pointer, offset is expressed in bytes */
@@ -72,7 +72,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 				if (copy_size < JOB_HEADER_SIZE){
 					page_2 = kmap_atomic(pfn_to_page(PFN_DOWN(page_array[page_index + 1])));
 					if (!page_2){
-						KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 2 \n");
+						KBASE_DEBUG_PRINT_WARN(KBASE_JD, "Restart Index clamping function not able to map page 2");
 						kunmap_atomic(page_1);
 						goto exit;
 					}
@@ -98,7 +98,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 							                 "restartIdx: %08x  \n" \
 							                 "Fault_addr_low: %08x \n" \
 							                 "minCoordsX: %08x minCoordsY: %08x \n" \
-							                 "maxCoordsX: %08x maxCoordsY: %08x \n",
+							                 "maxCoordsX: %08x maxCoordsY: %08x",
 							       job_header[JOB_DESC_STATUS_WORD],
 							       job_header[JOB_DESC_RESTART_INDEX_WORD],
 							       job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],
@@ -145,7 +145,7 @@ int kbasep_10969_workaround_clamp_coordinates(kbase_jd_atom *katom)
 							                         "restartIdx: %08x  \n"                 \
 							                         "Fault_addr_low: %08x \n"              \
 							                         "minCoordsX: %08x minCoordsY: %08x \n" \
-							                         "maxCoordsX: %08x maxCoordsY: %08x \n",
+							                         "maxCoordsX: %08x maxCoordsY: %08x",
 							               job_header[JOB_DESC_STATUS_WORD],
 							               job_header[JOB_DESC_RESTART_INDEX_WORD],
 							               job_header[JOB_DESC_FAULT_ADDR_LOW_WORD],

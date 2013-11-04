@@ -2444,7 +2444,7 @@ static int kbase_device_suspend(struct device *dev)
 
 	if (kbdev->pm.callback_power_suspend) {
 		kbdev->pm.callback_power_suspend(kbdev);
-		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "suspend\n");
+		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "suspend");
 	}
 
 	kbase_pm_suspend(kbdev);
@@ -2489,7 +2489,7 @@ static int kbase_device_runtime_suspend(struct device *dev)
 
 	if (kbdev->pm.callback_power_runtime_off) {
 		kbdev->pm.callback_power_runtime_off(kbdev);
-		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "runtime suspend\n");
+		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "runtime suspend");
 	}
 	return 0;
 }
@@ -2515,7 +2515,7 @@ int kbase_device_runtime_resume(struct device *dev)
 
 	if (kbdev->pm.callback_power_runtime_on) {
 		ret = kbdev->pm.callback_power_runtime_on(kbdev);
-		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "runtime resume\n");
+		KBASE_DEBUG_PRINT_INFO(KBASE_PM, "runtime resume");
 	}
 	return ret;
 }

@@ -1011,7 +1011,7 @@ static void jd_done_worker(struct work_struct *data)
 		kbasep_jd_cacheclean(kbdev);  /* cache flush when jobs complete with non-done codes */
 	else if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_10676)) {
 		if (katom->slot_nr == 2 && kbdev->gpu_props.num_core_groups > 1) {
-			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676\n");
+			KBASE_DEBUG_PRINT_INFO(KBASE_JD, "JD: Flushing cache due to PRLAM-10676");
 			kbasep_jd_cacheclean(kbdev);
 		}
 		else
@@ -1025,13 +1025,13 @@ static void jd_done_worker(struct work_struct *data)
 	    !(katom->atom_flags & KBASE_KATOM_FLAGS_RERUN)){
 		KBASE_DEBUG_PRINT_INFO(KBASE_JD,
 				       " Soft-stopped fragment shader job got a TILE_RANGE_FAULT." \
-				       "Possible HW issue, trying SW workaround \n " );
+				       "Possible HW issue, trying SW workaround");
 		if (kbasep_10969_workaround_clamp_coordinates(katom)){
 			/* The job had a TILE_RANGE_FAULT after was soft-stopped.
 			 * Due to an HW issue we try to execute the job
 			 * again.
 			 */
-			KBASE_DEBUG_PRINT_INFO(KBASE_JD, " Clamping has been executed, try to rerun the job \n" );
+			KBASE_DEBUG_PRINT_INFO(KBASE_JD, " Clamping has been executed, try to rerun the job");
 			katom->event_code = BASE_JD_EVENT_STOPPED;
 			katom->atom_flags |= KBASE_KATOM_FLAGS_RERUN;
 		}
@@ -1255,7 +1255,7 @@ static enum hrtimer_restart zap_timeout_callback(struct hrtimer *timer)
 		goto out;
 
 	if (kbase_prepare_to_reset_gpu(kbdev)) {
-		KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Issueing GPU soft-reset because jobs failed to be killed (within %d ms) as part of context termination (e.g. process exit)\n", ZAP_TIMEOUT);
+		KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Issueing GPU soft-reset because jobs failed to be killed (within %d ms) as part of context termination (e.g. process exit)", ZAP_TIMEOUT);
 		kbase_reset_gpu(kbdev);
 	}
 

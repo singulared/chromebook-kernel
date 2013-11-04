@@ -158,7 +158,7 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 	KBASE_DEBUG_ASSERT(kbdev);
 
 	if (completion_code != BASE_JD_EVENT_DONE && completion_code != BASE_JD_EVENT_STOPPED)
-		KBASE_DEBUG_PRINT_ERROR(KBASE_JM, "t6xx: GPU fault 0x%02lx from job slot %d\n", (unsigned long)completion_code, s);
+		KBASE_DEBUG_PRINT_ERROR(KBASE_JM, "t6xx: GPU fault 0x%02lx from job slot %d", (unsigned long)completion_code, s);
 
 	/* IMPORTANT: this function must only contain work necessary to complete a
 	 * job from a Real IRQ (and not 'fake' completion, e.g. from
@@ -347,7 +347,7 @@ void kbase_job_done(kbase_device *kbdev, u32 done)
 				}
 			}
 
-			KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Job ended with status 0x%08X\n", completion_code);
+			KBASE_DEBUG_PRINT_INFO(KBASE_JM, "Job ended with status 0x%08X", completion_code);
 
 			nr_done = kbasep_jm_nr_jobs_submitted(slot);
 			nr_done -= (active >> i) & 1;
@@ -1246,7 +1246,7 @@ void kbase_reset_gpu(kbase_device *kbdev)
 	atomic_set(&kbdev->reset_gpu, KBASE_RESET_GPU_COMMITTED);
 
 	timeout_ms = kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS);
-	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Preparing to soft-reset GPU: Waiting (upto %d ms) for all jobs to complete soft-stop\n", timeout_ms);
+	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Preparing to soft-reset GPU: Waiting (upto %d ms) for all jobs to complete soft-stop", timeout_ms);
 	hrtimer_start(&kbdev->reset_timer, HR_TIMER_DELAY_MSEC(timeout_ms), HRTIMER_MODE_REL);
 
 	/* Try resetting early */
@@ -1265,7 +1265,7 @@ void kbase_reset_gpu_locked(kbase_device *kbdev)
 	atomic_set(&kbdev->reset_gpu, KBASE_RESET_GPU_COMMITTED);
 
 	timeout_ms = kbasep_get_config_value(kbdev, kbdev->config_attributes, KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS);
-	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Preparing to soft-reset GPU: Waiting (upto %d ms) for all jobs to complete soft-stop\n", timeout_ms);
+	KBASE_DEBUG_PRINT_ERROR(KBASE_JD, "Preparing to soft-reset GPU: Waiting (upto %d ms) for all jobs to complete soft-stop", timeout_ms);
 	hrtimer_start(&kbdev->reset_timer, HR_TIMER_DELAY_MSEC(timeout_ms), HRTIMER_MODE_REL);
 
 	/* Try resetting early */

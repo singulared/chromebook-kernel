@@ -344,7 +344,7 @@ static phys_addr_t mmu_get_next_pgd(kbase_context *kctx, phys_addr_t pgd, u64 vp
 
 	page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 	if (NULL == page) {
-		KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_next_pgd: kmap failure\n");
+		KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_next_pgd: kmap failure");
 		return 0;
 	}
 
@@ -353,7 +353,7 @@ static phys_addr_t mmu_get_next_pgd(kbase_context *kctx, phys_addr_t pgd, u64 vp
 	if (!target_pgd) {
 		target_pgd = kbase_mmu_alloc_pgd(kctx);
 		if (!target_pgd) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_next_pgd: kbase_mmu_alloc_pgd failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_next_pgd: kbase_mmu_alloc_pgd failure");
 			kunmap(pfn_to_page(PFN_DOWN(pgd)));
 			return 0;
 		}
@@ -379,7 +379,7 @@ static phys_addr_t mmu_get_bottom_pgd(kbase_context *kctx, u64 vpfn)
 		pgd = mmu_get_next_pgd(kctx, pgd, vpfn, l);
 		/* Handle failure condition */
 		if (!pgd) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_bottom_pgd: mmu_get_next_pgd failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "mmu_get_bottom_pgd: mmu_get_next_pgd failure");
 			return 0;
 		}
 	}
@@ -521,7 +521,7 @@ mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn, phys_addr_t *ph
 		 */
 		pgd = mmu_get_bottom_pgd(kctx, vpfn);
 		if (!pgd) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_insert_pages: mmu_get_bottom_pgd failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_insert_pages: mmu_get_bottom_pgd failure");
 			if (recover_required) {
 				/* Invalidate the pages we have partially completed */
 				mmu_insert_pages_failure_recovery(kctx, recover_vpfn, recover_phys, recover_count);
@@ -531,7 +531,7 @@ mali_error kbase_mmu_insert_pages(kbase_context *kctx, u64 vpfn, phys_addr_t *ph
 
 		pgd_page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 		if (!pgd_page) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_insert_pages: kmap failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_insert_pages: kmap failure");
 			if (recover_required) {
 				/* Invalidate the pages we have partially completed */
 				mmu_insert_pages_failure_recovery(kctx, recover_vpfn, recover_phys, recover_count);
@@ -604,13 +604,13 @@ mali_error kbase_mmu_teardown_pages(kbase_context *kctx, u64 vpfn, u32 nr)
 
 		pgd = mmu_get_bottom_pgd(kctx, vpfn);
 		if (!pgd) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_teardown_pages: mmu_get_bottom_pgd failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_teardown_pages: mmu_get_bottom_pgd failure");
 			return MALI_ERROR_FUNCTION_FAILED;
 		}
 
 		pgd_page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 		if (!pgd_page) {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_teardown_pages: kmap failure\n");
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbase_mmu_teardown_pages: kmap failure");
 			return MALI_ERROR_OUT_OF_MEMORY;
 		}
 
@@ -658,7 +658,7 @@ mali_error kbase_mmu_teardown_pages(kbase_context *kctx, u64 vpfn, u32 nr)
 
 			if (!max_loops) {
 				/* Flush failed to complete, assume the GPU has hung and perform a reset to recover */
-				KBASE_DEBUG_PRINT_ERROR(KBASE_MMU, "Flush for GPU page table update did not complete. Issueing GPU soft-reset to recover\n");
+				KBASE_DEBUG_PRINT_ERROR(KBASE_MMU, "Flush for GPU page table update did not complete. Issueing GPU soft-reset to recover");
 				if (kbase_prepare_to_reset_gpu(kbdev))
 					kbase_reset_gpu(kbdev);
 			}
@@ -806,7 +806,7 @@ static size_t kbasep_mmu_dump_level(kbase_context *kctx, phys_addr_t pgd, int le
 
 	pgd_page = kmap(pfn_to_page(PFN_DOWN(pgd)));
 	if (!pgd_page) {
-		KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbasep_mmu_dump_level: kmap failure\n");
+		KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "kbasep_mmu_dump_level: kmap failure");
 		return 0;
 	}
 
@@ -952,7 +952,7 @@ static void bus_fault_worker(struct work_struct *data)
 		 * We start the reset before switching to UNMAPPED to ensure that unrelated jobs
 		 * are evicted from the GPU before the switch.
 		 */
-		KBASE_DEBUG_PRINT_ERROR(KBASE_MMU, "GPU bus error occurred. For this GPU version we now soft-reset as part of bus error recovery\n");
+		KBASE_DEBUG_PRINT_ERROR(KBASE_MMU, "GPU bus error occurred. For this GPU version we now soft-reset as part of bus error recovery");
 		reset_status = kbase_prepare_to_reset_gpu(kbdev);
 	}
 
@@ -1043,9 +1043,9 @@ void kbase_mmu_interrupt(kbase_device *kbdev, u32 irq_stat)
 			kbasep_js_clear_submit_allowed(js_devdata, kctx);
 			spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Bus error in AS%d at 0x%016llx\n", as_no, fault_addr);
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Bus error in AS%d at 0x%016llx", as_no, fault_addr);
 		} else {
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Bus error in AS%d at 0x%016llx with no context present! " "Suprious IRQ or SW Design Error?\n", as_no, fault_addr);
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Bus error in AS%d at 0x%016llx with no context present! " "Suprious IRQ or SW Design Error?", as_no, fault_addr);
 		}
 
 		as = &kbdev->as[as_no];
@@ -1083,7 +1083,7 @@ void kbase_mmu_interrupt(kbase_device *kbdev, u32 irq_stat)
 		fault_addr |= kbase_reg_read(kbdev, MMU_AS_REG(as_no, ASn_FAULTADDRESS_LO), kctx);
 
 		if (kctx == NULL)
-			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Page fault in AS%d at 0x%016llx with no context present! " "Suprious IRQ or SW Design Error?\n", as_no, fault_addr);
+			KBASE_DEBUG_PRINT_WARN(KBASE_MMU, "Page fault in AS%d at 0x%016llx with no context present! " "Suprious IRQ or SW Design Error?", as_no, fault_addr);
 
 		as = &kbdev->as[as_no];
 
@@ -1267,7 +1267,7 @@ static void kbase_mmu_report_fault_and_kill(kbase_context *kctx, kbase_as *as, m
 	                                   "decoded fault status: %s\n"
 	                                   "exception type 0x%X: %s\n"
 	                                   "access type 0x%X: %s\n"
-	                                   "source id 0x%X\n",
+	                                   "source id 0x%X",
 	                                   as_no, fault_addr,
 	                                   fault_status,
 	                                   (fault_status & (1 << 10) ? "DECODER FAULT" : "SLAVE FAULT"),
