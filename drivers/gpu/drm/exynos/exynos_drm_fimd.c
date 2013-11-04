@@ -124,6 +124,7 @@ struct fimd_context {
 	atomic_t			wait_vsync_event;
 	enum dither_mode		dither_mode;
 	u32				dither_rgb_bpc[3];
+	unsigned int			irq;
 };
 
 static struct device *dp_dev;
@@ -690,6 +691,8 @@ static int fimd_enable_vblank(void *in_ctx)
 
 	writel(val, ctx->regs + VIDINTCON0);
 
+	enable_irq(ctx->irq);
+
 	return 0;
 }
 
@@ -709,6 +712,8 @@ static void fimd_disable_vblank(void *in_ctx)
 	val &= ~VIDINTCON0_INT_ENABLE;
 
 	writel(val, ctx->regs + VIDINTCON0);
+
+	disable_irq(ctx->irq);
 }
 
 static void fimd_wait_for_vblank(struct fimd_context *ctx)
@@ -1050,12 +1055,14 @@ static int fimd_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 
-	ret = devm_request_irq(&pdev->dev, res->start, fimd_irq_handler,
+	ctx->irq = res->start;
+	ret = devm_request_irq(&pdev->dev, ctx->irq, fimd_irq_handler,
 							0, "drm_fimd", ctx);
 	if (ret) {
 		dev_err(dev, "irq request failed.\n");
 		return ret;
 	}
+	disable_irq(ctx->irq);
 
 	ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
 	if (!ctx->regs_mie) {
