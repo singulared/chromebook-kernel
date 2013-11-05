@@ -1046,7 +1046,7 @@ static int fimd_probe(struct platform_device *pdev)
 	}
 	disable_irq(ctx->irq);
 
-	ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
+	ctx->regs_mie = devm_ioremap(dev, MIE_BASE_ADDRESS, 0x400);
 	if (!ctx->regs_mie) {
 		dev_err(dev, "failed to map registers\n");
 		return -ENXIO;
