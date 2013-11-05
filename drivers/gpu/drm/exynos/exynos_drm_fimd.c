@@ -652,23 +652,6 @@ static void fimd_commit(void *in_ctx)
 	writel(val, ctx->regs + VIDCON0);
 }
 
-static void fimd_apply(void *in_ctx)
-{
-	struct fimd_context *ctx = in_ctx;
-	struct fimd_win_data *win_data;
-	int i;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	for (i = 0; i < FIMD_WIN_NR; i++) {
-		win_data = &ctx->win_data[i];
-		if (win_data->enabled)
-			fimd_win_commit(ctx, i);
-	}
-
-	fimd_commit(ctx);
-}
-
 static int fimd_enable_vblank(void *in_ctx)
 {
 	struct fimd_context *ctx = in_ctx;
@@ -873,7 +856,6 @@ static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.initialize = fimd_mgr_initialize,
 	.remove = fimd_mgr_remove,
 	.dpms = fimd_dpms,
-	.apply = fimd_apply,
 	.mode_fixup = fimd_mode_fixup,
 	.update = fimd_update,
 	.commit = fimd_commit,

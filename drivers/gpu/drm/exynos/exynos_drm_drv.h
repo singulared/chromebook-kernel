@@ -194,7 +194,6 @@ struct exynos_drm_display {
  * @remove: cleans up the manager for removal
  * @dpms: control device power.
  * @adjust_modes: allows manager to adjust modes in the fill_modes path
- * @apply: set timing, vblank and overlay data to registers.
  * @mode_fixup: fix mode data before applying it
  * @update: set the given mode to the manager
  * @commit: set current hw specific display mode to hw.
@@ -210,7 +209,6 @@ struct exynos_drm_manager_ops {
 	void (*remove)(void *ctx);
 	void (*dpms)(void *ctx, int mode);
 	void (*adjust_modes)(void *ctx, struct drm_connector *connector);
-	void (*apply)(void *ctx);
 	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*update)(void *ctx, const struct drm_display_mode *mode);

@@ -1064,20 +1064,6 @@ static void mixer_win_disable(void *ctx, int zpos)
 	mixer_ctx->win_data[win].enabled = false;
 }
 
-static void mixer_apply(void *ctx)
-{
-	struct mixer_context *mixer_ctx = ctx;
-	int i;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	for (i = 0; i < MIXER_WIN_NR; i++) {
-		struct hdmi_win_data *win_data = &mixer_ctx->win_data[i];
-		if (win_data->enabled)
-			mixer_win_commit(ctx, i);
-	}
-}
-
 static void mixer_wait_for_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
@@ -1224,7 +1210,6 @@ static struct exynos_drm_manager_ops mixer_manager_ops = {
 	.remove			= mixer_mgr_remove,
 	.dpms			= mixer_dpms,
 	.adjust_modes		= mixer_adjust_modes,
-	.apply                  = mixer_apply,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
 	.win_mode_set		= mixer_win_mode_set,
