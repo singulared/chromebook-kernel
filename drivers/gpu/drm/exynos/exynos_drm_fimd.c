@@ -1081,8 +1081,6 @@ static int fimd_probe(struct platform_device *pdev)
 	for (win = 0; win < FIMD_WIN_NR; win++)
 		fimd_clear_win(ctx, win);
 
-	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
-
 	fimd_manager.ctx = ctx;
 	exynos_drm_manager_register(&fimd_manager);
 
