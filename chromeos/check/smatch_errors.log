@@ -491,6 +491,8 @@ drivers/thermal/thermal_sys.c:580 thermal_add_hwmon_sysfs() error: snprintf() 't
 drivers/thermal/thermal_sys.c:580 thermal_add_hwmon_sysfs() error: snprintf() is printing too much 20 vs 16
 drivers/thermal/thermal_sys.c:593 thermal_add_hwmon_sysfs() error: snprintf() 'temp->temp_crit.name' too small (16 vs 20)
 drivers/thermal/thermal_sys.c:593 thermal_add_hwmon_sysfs() error: snprintf() is printing too much 20 vs 16
+drivers/tty/serial/8250/8250_pci.c:938 pci_ite887x_init() error: potential null dereference 'iobase'.  (__request_region returns null)
+drivers/tty/serial/8250/8250_pci.c:938 pci_ite887x_init() error: we previously assumed 'iobase' could be null (see line 913)
 drivers/tty/sysrq.c:133 sysrq_handle_crash() error: potential NULL dereference 'killer'.
 drivers/tty/tty_io.c:1719 tty_release() error: we previously assumed 'o_tty' could be null (see line 1679)
 drivers/tty/tty_ldisc.c:480 tty_ldisc_restore() error: 'old' dereferencing possible ERR_PTR()
