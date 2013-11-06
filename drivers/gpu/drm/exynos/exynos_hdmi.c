@@ -2577,7 +2577,7 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	hdcp_stop(hdata);
 
 	/* HDMI System Disable */
-	hdmi_start(hdata, false);
+	hdmi_reg_writemask(hdata, HDMI_CON_0, 0, HDMI_EN);
 
 	hdmiphy_poweroff(hdata);
 
