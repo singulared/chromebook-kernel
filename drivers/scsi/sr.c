@@ -82,6 +82,7 @@ static const char *const VENDOR_BLACKLIST[] = {
 	 */
 	"HSPA",
 	"HUAWEI",
+	"Micromax",
 	"USBModem",
 	"ZTE",
 	NULL
