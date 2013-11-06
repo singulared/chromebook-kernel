@@ -189,7 +189,7 @@ static mali_error kbase_jd_umm_map(kbase_context *kctx, struct kbase_va_region *
 
 	for_each_sg(st->sgl, s, st->nents, i) {
 		int j;
-		size_t pages = PFN_DOWN(sg_dma_len(s));
+		size_t pages = PFN_UP(sg_dma_len(s));
 
 		for (j = 0; j < pages; j++)
 			*pa++ = sg_dma_address(s) + (j << PAGE_SHIFT);
