@@ -2727,8 +2727,10 @@ int dw_mci_probe(struct dw_mci *host)
 	}
 
 	/* Reset all blocks */
-	if (!dw_mci_ctrl_all_reset(host))
-		return -ENODEV;
+	if (!dw_mci_ctrl_all_reset(host)) {
+		ret = -ENODEV;
+		goto err_vqmmc;
+	}
 
 	host->dma_ops = host->pdata->dma_ops;
 	dw_mci_init_dma(host);
