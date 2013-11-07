@@ -357,6 +357,14 @@ static int exynos_pm_suspend(void)
 		asm ("mrc p15, 0, %0, c15, c0, 1"
 		     : "=r" (tmp) : : "cc");
 		save_arm_register[1] = tmp;
+	} else if (soc_is_exynos5250()) {
+		/* Save Auxiliary Control Register
+		 * This ensures that workarounds 773022 and 774769 survive a
+		 * suspend/resume cycle.
+		 */
+		asm volatile ("mrc p15, 0, %0, c1, c0, 1"
+		     : "=r" (tmp) : : "cc");
+		save_arm_register[0] = tmp;
 	}
 
 	return 0;
@@ -402,6 +410,15 @@ static void exynos_pm_resume(void)
 		asm volatile ("mcr p15, 0, %0, c15, c0, 1"
 			      : : "r" (tmp)
 			      : "cc");
+	} else if (soc_is_exynos5250()) {
+		/* Restore Auxiliary Control Register
+		 * This ensures that workarounds 773022 and 774769 survive a
+		 * suspend/resume cycle.
+		 */
+		tmp = save_arm_register[0];
+		asm volatile ("mcr p15, 0, %0, c1, c0, 1"
+			     : : "r" (tmp)
+			     : "cc");
 	}
 
 	/* For release retention */
