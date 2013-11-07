@@ -24,6 +24,7 @@
 #include <linux/usb.h>
 #include <linux/crc32.h>
 #include <linux/usb/usbnet.h>
+#include <linux/version.h>
 
 #define AX88179_PHY_ID				0x03
 #define AX_EEPROM_LEN				0x100
@@ -1450,7 +1451,9 @@ static struct usb_driver ax88179_178a_driver = {
 	.reset_resume =	ax88179_resume,
 	.disconnect =	usbnet_disconnect,
 	.supports_autosuspend = 1,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,5,0)
 	.disable_hub_initiated_lpm = 1,
+#endif
 };
 
 module_usb_driver(ax88179_178a_driver);
