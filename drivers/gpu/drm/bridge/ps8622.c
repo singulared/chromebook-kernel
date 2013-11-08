@@ -38,7 +38,6 @@ struct ps8622_bridge {
 	struct regulator *lcd_fet;
 	struct backlight_device *bl;
 
-	ktime_t last_power_down;
 	int gpio_slp_n;
 	int gpio_rst_n;
 
@@ -191,22 +190,10 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 
 static void ps8622_power_up(struct ps8622_bridge *bridge)
 {
-	ktime_t now, diff;
 	int ret;
 
 	if (bridge->enabled)
 		return;
-
-	/*
-	 * The datasheet for the PS8622 indicates that there should be at least
-	 * T17 between power down of the bridge and power up. This sleep should
-	 * be very rare.
-	 */
-	now = ktime_get();
-	diff = ktime_sub(now, bridge->last_power_down);
-	if (ktime_to_ms(bridge->last_power_down) != 0 &&
-	    ktime_to_ms(diff) < PS8622_POWER_OFF_T17_MS)
-		msleep(PS8622_POWER_OFF_T17_MS - ktime_to_ms(diff));
 
 	if (gpio_is_valid(bridge->gpio_rst_n))
 		gpio_set_value(bridge->gpio_rst_n, 0);
@@ -263,7 +250,7 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 	if (gpio_is_valid(bridge->gpio_rst_n))
 		gpio_set_value(bridge->gpio_rst_n, 0);
 
-	bridge->last_power_down = ktime_get();
+	msleep(PS8622_POWER_OFF_T17_MS);
 }
 
 static int ps8622_backlight_update(struct backlight_device *bl)
@@ -414,7 +401,6 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 			&ps8622_bridge_helper_funcs);
 	bridge->bridge.connector_type = DRM_MODE_CONNECTOR_eDP;
 	bridge->enabled = false;
-	bridge->last_power_down = ktime_set(0, 0);
 
 	return 0;
 
