@@ -66,6 +66,11 @@ struct ps8622_bridge {
 #define PS8622_POWER_FALL_T16_MAX_US 10000
 #define PS8622_POWER_OFF_T17_MS 500
 
+#if ((PS8622_RST_HIGH_T2_MIN_US + PS8622_POWER_RISE_T1_MAX_US) > \
+	(PS8622_RST_HIGH_T2_MAX_US + PS8622_POWER_RISE_T1_MIN_US))
+#error "T2.min + T1.max must be less than T2.max + T1.min"
+#endif
+
 static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 {
 	int ret;
@@ -206,6 +211,16 @@ static void ps8622_power_up(struct ps8622_bridge *bridge)
 	if (gpio_is_valid(bridge->gpio_slp_n))
 		gpio_set_value(bridge->gpio_slp_n, 1);
 
+	/*
+	 * T1 is the range of time that it takes for the power to rise after we
+	 * enable the lcd fet. T2 is the range of time in which the data sheet
+	 * specifies we should deassert the reset pin.
+	 *
+	 * If it takes T1.max for the power to rise, we need to wait atleast
+	 * T2.min before deasserting the reset pin. If it takes T1.min for the
+	 * power to rise, we need to wait at most T2.max before deasserting the
+	 * reset pin.
+	 */
 	usleep_range(PS8622_RST_HIGH_T2_MIN_US + PS8622_POWER_RISE_T1_MAX_US,
 		     PS8622_RST_HIGH_T2_MAX_US + PS8622_POWER_RISE_T1_MIN_US);
 
