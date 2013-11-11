@@ -2349,10 +2349,24 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 		/* Useful defaults if platform data is unset. */
 #ifdef CONFIG_MMC_DW_IDMAC
 		mmc->max_segs = host->ring_size;
+
+		/* the BLKSIZ register is 16-bits wide */
 		mmc->max_blk_size = 65536;
-		mmc->max_blk_count = host->ring_size;
+
+		/*
+		 * This value is calculated by taking the size of the
+		 * 32-bit BYTCNT (byte count) register and dividing by the
+		 * BLKSIZ (block size) register.  This is the minimum number
+		 * of blocks which could be handled.
+		 */
+		mmc->max_blk_count = 0xFFFF;
 		mmc->max_seg_size = 0x1000;
-		mmc->max_req_size = mmc->max_seg_size * mmc->max_blk_count;
+		/*
+		 * Maximum request size should be total number of descriptors
+		 * times the maximum amount of data each can reference
+		 */
+
+		mmc->max_req_size = mmc->max_seg_size * mmc->max_segs;
 #else
 		mmc->max_segs = 64;
 		mmc->max_blk_size = 65536; /* BLKSIZ is 16 bits */
