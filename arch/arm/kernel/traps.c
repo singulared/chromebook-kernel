@@ -165,6 +165,7 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 #ifdef CONFIG_ARM_UNWIND
 static inline void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 {
+	printk("Backtrace:\n");         /* for consistent output */
 	unwind_backtrace(regs, tsk);
 }
 #else
