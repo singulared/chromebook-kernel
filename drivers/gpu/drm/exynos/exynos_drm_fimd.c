@@ -918,6 +918,18 @@ static void fimd_clear_win(struct fimd_context *ctx, int win)
 	writel(val, ctx->regs + SHADOWCON);
 }
 
+static const char *exynos_drm_fimd_dithering_name(enum dither_mode dither_mode)
+{
+	switch (dither_mode) {
+	case USE_MIE_DITHERING:
+		return "MIE";
+	case USE_FIMD_DITHERING:
+		return "FIMD";
+	case USE_NO_DITHERING:
+	default:
+		return "NO";
+	}
+}
 static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -1062,6 +1074,8 @@ static int fimd_probe(struct platform_device *pdev)
 		ctx->dither_rgb_bpc[1] = pdata->dither_rgb_bpc[1];
 		ctx->dither_rgb_bpc[2] = pdata->dither_rgb_bpc[2];
 	}
+	DRM_INFO("FIMD: using %s dithering\n",
+			exynos_drm_fimd_dithering_name(ctx->dither_mode));
 
 	ctx->suspended = true;
 	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
