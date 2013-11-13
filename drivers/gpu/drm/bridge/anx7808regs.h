@@ -236,6 +236,12 @@
 /***************************************************************/
 /*Register definition of device address 0x80*/
 
+#define HDMI_RX_HDCP_BCAPS 0x802A
+#define REPEATER 0x40
+
+#define HDMI_RX_HDCP_BSTATUS_0 0x802B
+#define HDMI_RX_HDCP_BSTATUS_1 0x802C
+
 #define HDMI_RX_HDCP_STATUS_REG 0x803F
 #define ADV_CIPHER 0x80
 #define LOAD_KEY_DONE 0x40
@@ -288,7 +294,7 @@
 /***************************************************************/
 /*Register definition of device address 0x70*/
 #define SP_TX_HDCP_STATUS 0x7000
-#define SP_TX_HDCP_AUTH_PASS 0x7002
+#define SP_TX_HDCP_AUTH_PASS 0x02
 
 #define SP_TX_HDCP_CTRL0_REG 0x7001
 #define STORE_AN 0x80
@@ -307,6 +313,9 @@
 
 #define SP_TX_HDCP_LINK_CHK_FRAME_NUM 0x7003
 #define SP_TX_HDCP_CTRL2_REG 0x7004
+#define SP_TX_HDCP_RX_BCAPS 0x701A
+#define SP_TX_HDCP_RX_BSTATUS_0 0x701B
+#define SP_TX_HDCP_RX_BSTATUS_1 0x701C
 #define SP_TX_HDCP_KEY_STATUS 0x701E
 
 #define SP_TX_VID_BLANK_SET1 0x702C
@@ -690,6 +699,7 @@
 #define MAIN_LINK_CHANNEL_CODING_SET 0x00108
 #define SINK_COUNT 0x00200
 #define DEVICE_SERVICE_IRQ_VECTOR 0x00201
+#define CP_IRQ 0x04
 #define SINK_SPECIFIC_IRQ 0x40
 #define LANE0_1_STATUS 0x00202
 #define LANE0_1_STATUS_SUCCESS 0x07
@@ -709,6 +719,9 @@
 #define BRANCH_IEEE_OUI_2 0x00501
 #define BRANCH_IEEE_OUI_3 0x00502
 #define SPECIFIC_INTERRUPT_1 0x00510
+#define DWN_STREAM_HDCP_LINK_INTEGRITY_FAIL 0x20
+#define DWN_STREAM_HDCP_FAIL 0x10
+#define DWN_STREAM_HDCP_DONE 0x08
 #define DWN_STREAM_DISCONNECTED 0x02
 #define DWN_STREAM_CONNECTED 0x01
 #define SPECIFIC_INTERRUPT_2 0x00511
@@ -761,6 +774,7 @@
 #define SINK_ACCESS_REG 0x005f2
 #define GPIO_I2C_SEL 0x005f3
 #define SET_DP_PWR_VOLTAGE 0x00600
+/*0x68000-0x68FFF used for HDCP*/
 #define BKSV_1 0x68000
 #define BKSV_2 0x68001
 #define BKSV_3 0x68002
@@ -802,9 +816,13 @@
 #define H4_3 0x68026
 #define H4_4 0x68027
 #define BCAPS 0x68028
+#define HDCP_CAPABLE 0x01
 #define BSTATUS 0x68029
+#define LINK_INTEGRITY_FAILURE 0x40
 #define BINFO_L 0x6802a
+#define MAX_DEVS_EXCEEDED 0x80
 #define BINFO_H 0x6802b
+#define MAX_CASCADE_EXCEEDED 0x08
 #define KSV_FIFO_1 0x6802c
 #define KSV_FIFO_2 0x6802d
 #define KSV_FIFO_3 0x6802e

@@ -56,6 +56,18 @@
 #define AUX_WAIT_MS 100
 #define AUX_BUFFER_SIZE 0x10
 #define CABLE_DET_DEBOUNCE_MS 500
+/*
+ * Time in ms to wait for R0 checking in HDCP first step authentication after
+ * AKSV is written to receiver. Must be > 100ms per HDCP protocol.
+ */
+#define SP_TX_WAIT_R0_TIME_VALUE_MS 176
+/*
+ * Time to wait for downstream repeater KSVFIFO ready in HDCP first step
+ * authentication. Must be > 4.2s per HDCP protocol.
+ * 0x9C => 4.2s
+ */
+#define SP_TX_WAIT_KSVR_TIME_VALUE 0xC8
+#define HDCP_MAX_TRIES 10
 
 enum dp_link_bw {
 	BW_OVER = 0xFF,
@@ -91,15 +103,17 @@ struct anx7808_data {
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
 	struct delayed_work cable_det_work;
-	struct work_struct intp_work;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
 	bool powered;
 	bool recv_audio;
 	bool recv_cts;
+	bool hdcp_desired;
+	int hdcp_tries;
 	struct mutex aux_mutex;
 	struct mutex power_mutex;
+	struct mutex powerdown_reg_mutex;
 	struct i2c_algorithm i2c_algorithm;
 	struct i2c_adapter ddc_adapter;
 };
@@ -239,7 +253,8 @@ static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 	anx7808_clear_bits(anx7808, HDMI_RX_SYS_PWDN1_REG, PWDN_CTRL);
 
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK1_REG, 0x00);
-	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG, 0x00);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG,
+			AUTH_START | AUTH_DONE | HDCP_ERR);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK3_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK4_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK7_REG, 0x00);
@@ -354,8 +369,11 @@ static int anx7808_power_on(struct anx7808_data *anx7808)
 
 	gpio_set_value(anx7808->reset_gpio, 1);
 
+	mutex_lock(&anx7808->powerdown_reg_mutex);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
+	mutex_unlock(&anx7808->powerdown_reg_mutex);
+
 	anx7808_init_pipeline(anx7808);
 
 	/*
@@ -375,10 +393,8 @@ static int anx7808_power_off(struct anx7808_data *anx7808, bool cancel_intp,
 	int ret = 0;
 
 	mutex_lock(&anx7808->power_mutex);
-	if (cancel_intp) {
+	if (cancel_intp)
 		disable_irq(anx7808->intp_irq);
-		cancel_work_sync(&anx7808->intp_work);
-	}
 
 	if (!anx7808->powered)
 		goto out;
@@ -752,6 +768,242 @@ static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 	return ret;
 }
 
+static int anx7808_get_ds_video_status(struct anx7808_data *anx7808)
+{
+	uint8_t reg_value;
+	anx7808_aux_dpcd_read(anx7808, US_COMM_6, 1, &reg_value);
+	/*
+	 * This a ANX7730 specific register access via DPCD.
+	 * No detailed info about this "Upstream command byte 6"
+	 * in the ANX7730 register spec.
+	 */
+	return reg_value & 0x01;
+}
+
+static void anx7808_update_hdcp_property(struct anx7808_data *anx7808,
+		bool enabled)
+{
+	struct drm_device *dev = anx7808->connector.dev;
+	uint64_t val = DRM_MODE_CONTENT_PROTECTION_OFF;
+
+	if (enabled)
+		val = DRM_MODE_CONTENT_PROTECTION_ENABLED;
+	else if (anx7808->hdcp_desired)
+		val = DRM_MODE_CONTENT_PROTECTION_DESIRED;
+
+	drm_object_property_set_value(&anx7808->connector.base,
+			dev->mode_config.content_protection_property, val);
+}
+
+static int anx7808_power_on_hdcp(struct anx7808_data *anx7808)
+{
+	int ret = 0;
+
+	mutex_lock(&anx7808->powerdown_reg_mutex);
+	ret |= anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, HDCP_PD);
+	ret |= anx7808_set_bits(anx7808, SP_COMMON_INT_MASK2, HDCP_AUTH_DONE);
+	mutex_unlock(&anx7808->powerdown_reg_mutex);
+
+	msleep(50);
+	return ret;
+}
+
+static int anx7808_power_off_hdcp(struct anx7808_data *anx7808)
+{
+	int ret = 0;
+
+	mutex_lock(&anx7808->powerdown_reg_mutex);
+	ret |= anx7808_clear_bits(anx7808, SP_COMMON_INT_MASK2, HDCP_AUTH_DONE);
+	ret |= anx7808_set_bits(anx7808, SP_POWERD_CTRL_REG, HDCP_PD);
+	mutex_unlock(&anx7808->powerdown_reg_mutex);
+
+	return ret;
+}
+
+static int anx7808_start_hdcp(struct anx7808_data *anx7808)
+{
+	int ret = 0;
+	int i;
+	uint8_t reg_value;
+
+	DRM_DEBUG("Starting HDCP for ANX7808\n");
+
+	/* Sink HDCP capability check */
+	ret = anx7808_aux_dpcd_read(anx7808, BCAPS, 1, &reg_value);
+	if (ret)
+		goto out;
+	if (!(reg_value & HDCP_CAPABLE)) {
+		DRM_INFO("ANX7808 DP sink is not HDCP capable\n");
+		ret = -EPERM;
+		goto out;
+	}
+
+	/* In case ANX7730 video can not get ready */
+	if (anx7808->ds_type == DOWNSTREAM_HDMI) {
+		for (i = 0; i < 10; i++) {
+			ret = anx7808_get_ds_video_status(anx7808);
+			if (ret)
+				break;
+			usleep_range(5000, 20000);
+		}
+		if (!ret) {
+			DRM_ERROR("Downstream video is not ready\n");
+			ret = -EPERM;
+			goto out;
+		}
+	}
+
+	/* Issue HDCP after the HDMI Rx key loaddown */
+	ret = anx7808_read_reg(anx7808, HDMI_RX_HDCP_STATUS_REG, &reg_value);
+	if (ret)
+		goto out;
+	if (reg_value & AUTH_EN) {
+		for (i = 0; i < 10; i++) {
+			ret = anx7808_read_reg(anx7808,
+					HDMI_RX_HDCP_STATUS_REG, &reg_value);
+			if (ret)
+				goto out;
+			if (reg_value & LOAD_KEY_DONE)
+				break;
+			usleep_range(10000, 20000);
+		}
+		if (!(reg_value & LOAD_KEY_DONE)) {
+			DRM_ERROR("HDMI Rx HDCP key load took > 100ms\n");
+			ret = -EPERM;
+			goto out;
+		}
+	} else {
+		/*
+		 * DP Tx HDCP should be enabled to protect AV content even
+		 * if HDCP cannot be enabled on the HDMI Rx side somehow.
+		 */
+		DRM_INFO("ANX7808 upstream HDCP auth is not attempted\n");
+	}
+
+	ret = anx7808_power_on_hdcp(anx7808);
+	if (ret)
+		goto out;
+
+	ret |= anx7808_clear_bits(anx7808, SP_TX_HDCP_CTRL0_REG,
+			ENC_EN | HARD_AUTH_EN);
+	ret |= anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL0_REG,
+			ENC_EN | HARD_AUTH_EN | BKSV_SRM_PASS | KSVLIST_VLD);
+	ret |= anx7808_write_reg(anx7808, SP_TX_WAIT_R0_TIME,
+			SP_TX_WAIT_R0_TIME_VALUE_MS);
+	ret |= anx7808_write_reg(anx7808, SP_TX_WAIT_KSVR_TIME,
+			SP_TX_WAIT_KSVR_TIME_VALUE);
+
+out:
+	/*
+	 * If HDCP is desired but it cannot be started, the 'Content Protection'
+	 * property on the connector stays as "Desired", and will not be
+	 * updated to "Enabled".
+	 */
+	return ret;
+}
+
+static int anx7808_stop_hdcp(struct anx7808_data *anx7808)
+{
+	int ret = 0;
+	DRM_DEBUG("Stopping HDCP for ANX7808\n");
+	anx7808_update_hdcp_property(anx7808, false);
+
+	if (!anx7808->powered)
+		return ret;
+
+	/* Disable encryption and clean hdcp status */
+	ret |= anx7808_write_reg(anx7808, SP_TX_HDCP_CTRL0_REG, 0x00);
+
+	/* HDCP reauth */
+	ret |= anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL0_REG, RE_AUTH);
+	ret |= anx7808_clear_bits(anx7808, SP_TX_HDCP_CTRL0_REG, RE_AUTH);
+
+	ret |= anx7808_power_off_hdcp(anx7808);
+
+	return ret;
+}
+
+static int anx7808_reset_hdcp(struct anx7808_data *anx7808)
+{
+	int ret = 0;
+	DRM_DEBUG("Resetting HDCP for ANX7808\n");
+
+	ret = anx7808_stop_hdcp(anx7808);
+	if (!anx7808->hdcp_desired)
+		return ret;
+
+	anx7808->hdcp_tries++;
+	if (anx7808->hdcp_tries >= HDCP_MAX_TRIES) {
+		DRM_ERROR("Maximum HDCP tries exceeded, giving up\n");
+		return -EPERM;
+	}
+
+	ret = anx7808_start_hdcp(anx7808);
+	return ret;
+}
+
+static void anx7808_handle_hdcp_auth_done_int(struct anx7808_data *anx7808)
+{
+	int ret;
+	uint8_t reg_value;
+	uint8_t bytebuf[2];
+
+	ret = anx7808_read_reg(anx7808, SP_TX_HDCP_STATUS, &reg_value);
+	if (ret)
+		return;
+	if (!(reg_value & SP_TX_HDCP_AUTH_PASS)) {
+		DRM_ERROR("ANX7808 downstream HDCP authentication failed %d\n",
+				reg_value);
+		anx7808_reset_hdcp(anx7808);
+		return;
+	}
+
+	ret = anx7808_aux_dpcd_read(anx7808, BINFO_L, 2, bytebuf);
+	if (ret)
+		return;
+	if (bytebuf[1] & MAX_CASCADE_EXCEEDED) {
+		DRM_ERROR("HDCP max cascade level reached\n");
+		anx7808_reset_hdcp(anx7808);
+	} else {
+		DRM_DEBUG("ANX7808 downstream HDCP authentication passed\n");
+		anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL0_REG, ENC_EN);
+		anx7808_update_hdcp_property(anx7808, true);
+	}
+}
+
+static void anx7808_handle_common_int_2(struct anx7808_data *anx7808,
+		uint8_t irq)
+{
+	int ret;
+
+	ret = anx7808_write_reg(anx7808, SP_COMMON_INT_STATUS2, irq);
+	if (ret)
+		DRM_ERROR("Failed to write SP_COMMON_INT_STATUS2 %d\n", ret);
+
+	if (irq & HDCP_AUTH_DONE)
+		anx7808_handle_hdcp_auth_done_int(anx7808);
+}
+
+static void anx7808_handle_hdmi_int_2(struct anx7808_data *anx7808, uint8_t irq)
+{
+	int ret;
+
+	ret = anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS2_REG, irq);
+	if (ret)
+		DRM_ERROR("Write hdmi int 2 failed %d\n", ret);
+
+	if (irq & AUTH_START) {
+		anx7808->hdcp_tries = 0;
+		anx7808_start_hdcp(anx7808);
+	}
+
+	if (irq & AUTH_DONE)
+		DRM_DEBUG("ANX7808 upstream HDCP authentication ended\n");
+
+	if (irq & HDCP_ERR)
+		DRM_ERROR("ANX7808 upstream HDCP authentication error\n");
+}
+
 static void anx7808_handle_hdmi_int_5(struct anx7808_data *anx7808, uint8_t irq)
 {
 	int ret;
@@ -792,6 +1044,7 @@ static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq[2];
 	int ret;
+	bool status;
 
 	ret = anx7808_aux_dpcd_read(anx7808, SPECIFIC_INTERRUPT_1, 2, irq);
 	if (ret) {
@@ -811,12 +1064,33 @@ static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 		anx7808_set_hpd(anx7808, 0);
 		drm_helper_hpd_irq_event(anx7808->dev);
 	}
+
+	if (anx7808->ds_type != DOWNSTREAM_HDMI)
+		return;
+
+	/* ANX7730 specific interrupts */
+	if (irq[0] & DWN_STREAM_HDCP_DONE) {
+		status = (irq[0] & DWN_STREAM_HDCP_FAIL);
+		if (status) {
+			DRM_ERROR("ANX7730 downstream HDCP failed\n");
+			anx7808_reset_hdcp(anx7808);
+		} else {
+			DRM_DEBUG("ANX7730 downstream HDCP passed\n");
+		}
+	}
+
+	if (irq[0] & DWN_STREAM_HDCP_LINK_INTEGRITY_FAIL) {
+		if (anx7808->hdcp_desired)
+			DRM_ERROR("ANX7730 downstream HDCP sync lost\n");
+		anx7808_reset_hdcp(anx7808);
+	}
 }
 
 static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq;
 	int ret;
+	uint8_t reg_value;
 
 	ret = anx7808_aux_dpcd_read(anx7808, DEVICE_SERVICE_IRQ_VECTOR, 1,
 			&irq);
@@ -827,8 +1101,19 @@ static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 	ret = anx7808_aux_dpcd_write(anx7808, DEVICE_SERVICE_IRQ_VECTOR, 1,
 			&irq);
 	if (ret) {
-		DRM_ERROR("Failed to read DPCD irq %d\n", ret);
+		DRM_ERROR("Failed to write DPCD irq %d\n", ret);
 		return;
+	}
+
+	if (irq & CP_IRQ) {
+		ret = anx7808_aux_dpcd_read(anx7808, BSTATUS, 1, &reg_value);
+		if (ret) {
+			DRM_ERROR("Failed to read DPCD HDCP BSTATUS\n");
+		} else if (reg_value & LINK_INTEGRITY_FAILURE) {
+			if (anx7808->hdcp_desired)
+				DRM_ERROR("ANX7808 downstream HDCP sync lost\n");
+			anx7808_reset_hdcp(anx7808);
+		}
 	}
 
 	if (irq & SINK_SPECIFIC_IRQ)
@@ -856,13 +1141,11 @@ static void anx7808_handle_tx_int(struct anx7808_data *anx7808, uint8_t irq)
 		anx7808_handle_dpcd_int(anx7808);
 }
 
-static void anx7808_intp_work(struct work_struct *work)
+static irqreturn_t anx7808_intp_threaded_handler(int unused, void *data)
 {
-	struct anx7808_data *anx7808;
+	struct anx7808_data *anx7808 = data;
 	int ret;
 	uint8_t irq;
-
-	anx7808 = container_of(work, struct anx7808_data, intp_work);
 
 	ret = anx7808_read_reg(anx7808, SP_TX_INT_STATUS1, &irq);
 	if (ret)
@@ -876,7 +1159,19 @@ static void anx7808_intp_work(struct work_struct *work)
 	 * statuses
 	 */
 	if (!anx7808->powered)
-		return;
+		return IRQ_HANDLED;
+
+	ret = anx7808_read_reg(anx7808, SP_COMMON_INT_STATUS2, &irq);
+	if (ret)
+		DRM_ERROR("Failed to read SP_COMMON_INT_STATUS2 %d\n", ret);
+	else if (irq)
+		anx7808_handle_common_int_2(anx7808, irq);
+
+	ret = anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS2_REG, &irq);
+	if (ret)
+		DRM_ERROR("Failed to read RX_INT_STATUS2 %d\n", ret);
+	else if (irq)
+		anx7808_handle_hdmi_int_2(anx7808, irq);
 
 	ret = anx7808_read_reg(anx7808, HDMI_RX_INT_STATUS6_REG, &irq);
 	if (ret)
@@ -889,14 +1184,6 @@ static void anx7808_intp_work(struct work_struct *work)
 		DRM_ERROR("Failed to read RX_INT_STATUS5 %d\n", ret);
 	else if (irq)
 		anx7808_handle_hdmi_int_5(anx7808, irq);
-}
-
-static irqreturn_t anx7808_intp_isr(int irq, void *data)
-{
-	struct anx7808_data *anx7808 = data;
-
-	if (anx7808->powered)
-		schedule_work(&anx7808->intp_work);
 
 	return IRQ_HANDLED;
 }
@@ -1107,7 +1394,6 @@ void anx7808_bridge_destroy(struct drm_bridge *bridge)
 
 	drm_bridge_cleanup(bridge);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
-	cancel_work_sync(&anx7808->intp_work);
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
 		device_remove_file(bridge->dev->dev, &anx7808_device_attrs[i]);
@@ -1246,6 +1532,41 @@ out:
 	return status;
 }
 
+int anx7808_set_property(struct drm_connector *connector,
+		struct drm_property *property, uint64_t val)
+{
+	struct anx7808_data *anx7808;
+	struct drm_mode_config *mode_config = &connector->dev->mode_config;
+	int ret = 0;
+
+	anx7808 = container_of(connector, struct anx7808_data, connector);
+
+	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+
+	if (property != mode_config->content_protection_property)
+		return 0;
+
+	anx7808->hdcp_desired = val;
+
+	ret |= anx7808->encoder->funcs->set_property(anx7808->encoder,
+			property, val);
+
+	/*
+	 * During HDCP enable:
+	 * Enable upstream HDCP, then wait for HDMI_RX_INT_STATUS2_REG
+	 * (AUTH_START) interrupt which notifies the anx7808 driver
+	 * that upstream HDCP authentication has started, then
+	 * anx7808_start_hdcp() enables HDCP in anx7808.
+	 *
+	 * During HDCP disable:
+	 * HDCP is disabled in the upstream HDMI driver then here
+	 */
+	if (!val)
+		ret |= anx7808_stop_hdcp(anx7808);
+
+	return ret;
+}
+
 void anx7808_connector_destroy(struct drm_connector *connector)
 {
 }
@@ -1254,6 +1575,7 @@ struct drm_connector_funcs anx7808_connector_funcs = {
 	.dpms = drm_helper_connector_dpms,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.detect = anx7808_detect,
+	.set_property = anx7808_set_property,
 	.destroy = anx7808_connector_destroy,
 };
 
@@ -1295,7 +1617,6 @@ int anx7808_init(struct drm_encoder *encoder)
 
 	atomic_set(&anx7808->cable_det_oneshot, 1);
 	INIT_DELAYED_WORK(&anx7808->cable_det_work, anx7808_cable_det_work);
-	INIT_WORK(&anx7808->intp_work, anx7808_intp_work);
 
 	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
@@ -1424,9 +1745,10 @@ int anx7808_init(struct drm_encoder *encoder)
 		goto err_i2c;
 	}
 
-	ret = devm_request_irq(&client->dev, anx7808->intp_irq,
-			anx7808_intp_isr, IRQF_TRIGGER_RISING, "anx7808_intp",
-			anx7808);
+	ret = devm_request_threaded_irq(&client->dev, anx7808->intp_irq, NULL,
+			anx7808_intp_threaded_handler,
+			IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+			"anx7808_intp", anx7808);
 	if (ret < 0) {
 		DRM_ERROR("Failed to request intp irq: %d\n", ret);
 		goto err_i2c;
@@ -1443,6 +1765,7 @@ int anx7808_init(struct drm_encoder *encoder)
 
 	mutex_init(&anx7808->aux_mutex);
 	mutex_init(&anx7808->power_mutex);
+	mutex_init(&anx7808->powerdown_reg_mutex);
 
 	if (anx7808_init_ddc_adapter(anx7808, dev->dev))
 		goto err_sysfs;
@@ -1464,6 +1787,11 @@ int anx7808_init(struct drm_encoder *encoder)
 	}
 	drm_connector_helper_add(&anx7808->connector,
 			&anx7808_connector_helper_funcs);
+
+	drm_object_attach_property(&anx7808->connector.base,
+			dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
+
 	drm_sysfs_connector_add(&anx7808->connector);
 	drm_mode_connector_attach_encoder(&anx7808->connector, encoder);
 	anx7808->connector.interlace_allowed = true;
@@ -1484,7 +1812,6 @@ err_reg:
 	regulator_put(anx7808->vdd_mydp);
 err_work:
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
-	cancel_work_sync(&anx7808->intp_work);
 
 err_client:
 	put_device(&client->dev);
