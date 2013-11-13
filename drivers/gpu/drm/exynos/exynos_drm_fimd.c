@@ -959,6 +959,7 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 		if (of_property_read_u32_array(np,
 				"samsung-rgb-dithpos", pd->dither_rgb_bpc, 3)) {
 			dev_err(dev, "bpc values needed for dithering\n");
+			pd->dither_mode = USE_NO_DITHERING;
 		}
 	} else
 		pd->dither_mode = USE_NO_DITHERING;
