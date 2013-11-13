@@ -357,6 +357,18 @@ static void exynos_set_dithering(struct fimd_context *ctx)
 		mie_set_6bit_dithering(ctx);
 }
 
+static void fimd_dither_enable(struct fimd_context *ctx)
+{
+	if (ctx->dither_mode == USE_MIE_DITHERING)
+		writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
+}
+
+static void fimd_dither_disable(struct fimd_context *ctx)
+{
+	if (ctx->dither_mode == USE_MIE_DITHERING)
+		writel(0, ctx->regs + DPCLKCON);
+}
+
 static void fimd_win_commit(void *in_ctx, int zpos)
 {
 	struct fimd_context *ctx = in_ctx;
@@ -815,7 +827,7 @@ static int fimd_poweron(struct fimd_context *ctx)
 		goto lcd_clk_err;
 	}
 
-	writel(MIE_CLK_ENABLE, ctx->regs + DPCLKCON);
+	fimd_dither_enable(ctx);
 
 	/*
 	 * Restore the vblank interrupts to whichever state DRM
@@ -840,7 +852,7 @@ static int fimd_poweron(struct fimd_context *ctx)
 	return 0;
 
 enable_vblank_err:
-	writel(0, ctx->regs + DPCLKCON);
+	fimd_dither_disable(ctx);
 	clk_disable_unprepare(ctx->lcd_clk);
 lcd_clk_err:
 	clk_disable_unprepare(ctx->bus_clk);
@@ -876,7 +888,7 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
 		fimd_disable_vblank(ctx);
 
-	writel(0, ctx->regs + DPCLKCON);
+	fimd_dither_disable(ctx);
 
 	clk_disable_unprepare(ctx->lcd_clk);
 	clk_disable_unprepare(ctx->bus_clk);
@@ -1115,11 +1127,6 @@ static int fimd_probe(struct platform_device *pdev)
 	}
 	disable_irq(ctx->irq);
 
-	ctx->regs_mie = devm_ioremap(dev, MIE_BASE_ADDRESS, 0x400);
-	if (!ctx->regs_mie) {
-		dev_err(dev, "failed to map registers\n");
-		return -ENXIO;
-	}
 	ctx->vidcon0 = pdata->vidcon0;
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
@@ -1129,6 +1136,12 @@ static int fimd_probe(struct platform_device *pdev)
 	if (ctx->dither_mode == USE_FIMD_DITHERING) {
 		if (fimd_parse_dither_rgb(ctx, pdata->dither_rgb_bpc))
 			ctx->dither_mode = USE_NO_DITHERING;
+	} else if (ctx->dither_mode == USE_MIE_DITHERING) {
+		ctx->regs_mie = devm_ioremap(dev, MIE_BASE_ADDRESS, 0x400);
+		if (!ctx->regs_mie) {
+			dev_err(dev, "failed to map registers\n");
+			ctx->dither_mode = USE_NO_DITHERING;
+		}
 	}
 	DRM_INFO("FIMD: using %s dithering\n",
 			exynos_drm_fimd_dithering_name(ctx->dither_mode));
