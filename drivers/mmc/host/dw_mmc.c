@@ -2147,10 +2147,6 @@ static void dw_mci_work_routine_card(struct work_struct *work)
 
 				/* Clear down the FIFO */
 				dw_mci_fifo_reset(host);
-#ifdef CONFIG_MMC_DW_IDMAC
-				dw_mci_idmac_reset(host);
-#endif
-
 			}
 
 			spin_unlock_bh(&host->lock);
@@ -2477,7 +2473,9 @@ static inline bool dw_mci_fifo_reset(struct dw_mci *host)
 		sg_miter_stop(&host->sg_miter);
 		host->sg = NULL;
 	}
-
+#ifdef CONFIG_MMC_DW_IDMAC
+	dw_mci_idmac_reset(host);
+#endif
 	return dw_mci_ctrl_reset(host, SDMMC_CTRL_FIFO_RESET);
 }
 
