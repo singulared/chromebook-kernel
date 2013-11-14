@@ -362,6 +362,7 @@ static kbase_pm_callback_conf pm_callbacks =
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
 	.power_suspend_callback = pm_callback_suspend,
+	.power_resume_callback = NULL
 };
 
 /**

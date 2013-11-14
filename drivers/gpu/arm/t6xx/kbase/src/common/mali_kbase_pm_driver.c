@@ -917,22 +917,32 @@ KBASE_EXPORT_TEST_API(kbase_pm_disable_interrupts)
  * 0x0004: PMU VERSION ID (RO) (0x00000000)
  * 0x0008: CLOCK ENABLE (RW) (31:1 SBZ, 0 CLOCK STATE)
  */
-void kbase_pm_clock_on(kbase_device *kbdev)
+void kbase_pm_clock_on(kbase_device *kbdev, mali_bool is_resume)
 {
+	mali_bool reset_required = is_resume;
 	unsigned long flags;
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
 	lockdep_assert_held(&kbdev->pm.lock);
 
 	if (kbdev->pm.gpu_powered) {
 		/* Already turned on */
+		KBASE_DEBUG_ASSERT(!is_resume);
 		return;
 	}
 
 	KBASE_TRACE_ADD(kbdev, PM_GPU_ON, NULL, NULL, 0u, 0u);
 
-	if (kbdev->pm.callback_power_on && kbdev->pm.callback_power_on(kbdev)) {
-		/* GPU state was lost, reset GPU to ensure it is in a consistent state */
-		kbase_pm_init_hw(kbdev,MALI_TRUE);
+	if (is_resume && kbdev->pm.callback_power_resume) {
+		kbdev->pm.callback_power_resume(kbdev);
+	} else if (kbdev->pm.callback_power_on) {
+		if (kbdev->pm.callback_power_on(kbdev))
+			reset_required = MALI_TRUE;
+	}
+
+	if (reset_required) {
+		/* GPU state was lost, reset GPU to ensure it is in a
+		 * consistent state */
+		kbase_pm_init_hw(kbdev, MALI_TRUE);
 	}
 
 	spin_lock_irqsave(&kbdev->pm.gpu_powered_lock, flags);
@@ -945,7 +955,7 @@ void kbase_pm_clock_on(kbase_device *kbdev)
 
 KBASE_EXPORT_TEST_API(kbase_pm_clock_on)
 
-void kbase_pm_clock_off(kbase_device *kbdev)
+void kbase_pm_clock_off(kbase_device *kbdev, mali_bool is_suspend)
 {
 	unsigned long flags;
 	KBASE_DEBUG_ASSERT(NULL != kbdev);
@@ -957,6 +967,8 @@ void kbase_pm_clock_off(kbase_device *kbdev)
 
 	if (!kbdev->pm.gpu_powered) {
 		/* Already turned off */
+		if (is_suspend && kbdev->pm.callback_power_suspend)
+			kbdev->pm.callback_power_suspend(kbdev);
 		return;
 	}
 
@@ -972,7 +984,9 @@ void kbase_pm_clock_off(kbase_device *kbdev)
 	kbdev->pm.gpu_powered = MALI_FALSE;
 	spin_unlock_irqrestore(&kbdev->pm.gpu_powered_lock, flags);
 
-	if (kbdev->pm.callback_power_off)
+	if (is_suspend && kbdev->pm.callback_power_suspend)
+		kbdev->pm.callback_power_suspend(kbdev);
+	else if (kbdev->pm.callback_power_off)
 		kbdev->pm.callback_power_off(kbdev);
 }
 

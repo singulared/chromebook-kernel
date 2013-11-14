@@ -641,6 +641,36 @@ typedef struct kbase_pm_callback_conf {
 	 */
 	int (*power_on_callback) (struct kbase_device *kbdev);
 
+	/** Callback for when the system is requesting a suspend and GPU power
+	 * must be switched off.
+	 *
+	 * Note that if this callback is present, then this may be called
+	 * without a preceding call to power_off_callback. Therefore this
+	 * callback must be able to take any action that might otherwise happen
+	 * in power_off_callback.
+	 *
+	 * The platform specific private pointer kbase_device::platform_context
+	 * can be accessed and modified in here. It is the platform \em
+	 * callbacks responsibility to initialize and terminate this pointer if
+	 * used (see @ref kbase_platform_funcs_conf).
+	 */
+	void (*power_suspend_callback) (struct kbase_device *kbdev);
+
+	/** Callback for when the system is resuming from a suspend and GPU
+	 * power must be switched on.
+	 *
+	 * Note that if this callback is present, then this may be called
+	 * without a following call to power_on_callback. Therefore this
+	 * callback must be able to take any action that might otherwise happen
+	 * in power_on_callback.
+	 *
+	 * The platform specific private pointer kbase_device::platform_context
+	 * can be accessed and modified in here. It is the platform \em
+	 * callbacks responsibility to initialize and terminate this pointer if
+	 * used (see @ref kbase_platform_funcs_conf).
+	 */
+	void (*power_resume_callback) (struct kbase_device *kbdev);
+
 	/** Callback for handling runtime power management initialization.
 	 *
 	 * The runtime power management callbacks @ref power_runtime_off_callback and @ref power_runtime_on_callback
@@ -675,13 +705,6 @@ typedef struct kbase_pm_callback_conf {
 	 * Note: for linux the kernel must have CONFIG_PM_RUNTIME enabled to use this feature.
 	 */
 	int (*power_runtime_on_callback) (struct kbase_device *kbdev);
-
-	/** Callback for preparing the GPU for suspend
-	 *
-	 * For linux this callback will be called by the kernel suspend
-	 * callback
-	 */
-	void (*power_suspend_callback) (struct kbase_device *kbdev);
 
 } kbase_pm_callback_conf;
 
