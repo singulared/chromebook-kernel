@@ -204,7 +204,6 @@ static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
 	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 	wake_up_interruptible(&e->base.file_priv->event_wait);
-	trace_exynos_fake_flip_complete(e->pipe);
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
@@ -664,8 +663,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	 */
 	exynos_drm_crtc_try_do_flip(crtc);
 
-	trace_exynos_flip_request(exynos_crtc->pipe);
-
 	return 0;
 
 fail_kds:
@@ -695,7 +692,6 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
 		return;
 
-	trace_exynos_flip_complete(crtc_idx);
 	trace_exynos_page_flip_state(crtc_idx, DRM_BASE_ID(next_desc.fb),
 			"flipped");
 

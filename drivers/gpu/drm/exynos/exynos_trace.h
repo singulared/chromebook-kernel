@@ -12,53 +12,6 @@
 #define TRACE_SYSTEM_STRING __stringify(TRACE_SYSTEM)
 #define TRACE_INCLUDE_FILE exynos_trace
 
-/* object tracking */
-
-TRACE_EVENT(exynos_flip_request,
-	TP_PROTO(unsigned int pipe),
-	TP_ARGS(pipe),
-
-	TP_STRUCT__entry(
-		__field(unsigned int, pipe)
-	),
-
-	TP_fast_assign(
-		__entry->pipe = pipe;
-	),
-
-	TP_printk("pipe=%u", __entry->pipe)
-);
-
-TRACE_EVENT(exynos_flip_complete,
-	TP_PROTO(unsigned int pipe),
-	TP_ARGS(pipe),
-
-	TP_STRUCT__entry(
-		__field(unsigned int, pipe)
-	),
-
-	TP_fast_assign(
-		__entry->pipe = pipe;
-	),
-
-	TP_printk("pipe=%u", __entry->pipe)
-);
-
-TRACE_EVENT(exynos_fake_flip_complete,
-	TP_PROTO(unsigned int pipe),
-	TP_ARGS(pipe),
-
-	TP_STRUCT__entry(
-		__field(unsigned int, pipe)
-	),
-
-	TP_fast_assign(
-		__entry->pipe = pipe;
-	),
-
-	TP_printk("pipe=%u", __entry->pipe)
-);
-
 /*
  * exynos_page_flip_state exposes more detail of frame buffer when GPU is
  * rendering. This allows chrome://tracing to trace the states that a frame
