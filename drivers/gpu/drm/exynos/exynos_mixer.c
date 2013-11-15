@@ -45,6 +45,12 @@
 #define MIXER_WIN_NR		3
 #define MIXER_DEFAULT_WIN	0
 
+enum mixer_version_id {
+	MXR_VER_0_0_0_16 = 1 << 0,
+	MXR_VER_16_0_33_0 = 1 << 1,
+	MXR_VER_128_0_0_184 = 1 << 2,
+};
+
 struct hdmi_win_data {
 	dma_addr_t		dma_addr;
 	dma_addr_t		chroma_dma_addr;
@@ -272,8 +278,8 @@ static inline void mixer_reg_writemask(struct mixer_resources *res,
 	writel(val, res->mixer_regs + reg_id);
 }
 
-enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height,
-						enum mixer_version_id version)
+enum exynos_mixer_mode_type exynos_mixer_get_mode_type(
+		struct mixer_context *ctx, int width, int height)
 {
 	int i;
 
@@ -282,7 +288,7 @@ enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height,
 
 		if (width >= range->min_res[0] && width <= range->max_res[0]
 		 && height >= range->min_res[1] && height <= range->max_res[1]
-		 && range->m_ver & version)
+		 && range->m_ver & ctx->mxr_ver)
 			return range->mode_type;
 	}
 	return EXYNOS_MIXER_MODE_INVALID;
@@ -330,6 +336,24 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 			return;
 		}
 	}
+}
+
+static bool mixer_mode_fixup(void *ctx, const struct drm_display_mode *mode,
+			struct drm_display_mode *adjusted_mode)
+{
+	struct mixer_context *mctx = ctx;
+	enum exynos_mixer_mode_type mode_type;
+
+	mode_type = exynos_mixer_get_mode_type(mctx, mode->hdisplay,
+			mode->vdisplay);
+
+	if (mode_type == EXYNOS_MIXER_MODE_INVALID) {
+		DRM_INFO("Mode %dx%d unsupported in mixer, failing modeset\n",
+				mode->hdisplay, mode->vdisplay);
+		return false;
+	}
+
+	return true;
 }
 
 static void mixer_regs_dump(struct mixer_context *ctx)
@@ -446,7 +470,7 @@ static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int width,
 				MXR_CFG_SCAN_PROGRASSIVE);
 
 	/* choosing between proper HD and SD mode */
-	mode_type = exynos_mixer_get_mode_type(width, height, ctx->mxr_ver);
+	mode_type = exynos_mixer_get_mode_type(ctx, width, height);
 	switch (mode_type) {
 	case EXYNOS_MIXER_MODE_SD_NTSC:
 		val |= MXR_CFG_SCAN_NTSC | MXR_CFG_SCAN_SD;
@@ -1231,28 +1255,12 @@ static void mixer_dpms(void *ctx, int mode)
 	}
 }
 
-int mixer_check_mode(struct drm_display_mode *mode,
-						enum mixer_version_id version)
-{
-	enum exynos_mixer_mode_type mode_type;
-
-	mode_type = exynos_mixer_get_mode_type(mode->hdisplay, mode->vdisplay,
-			version);
-
-	DRM_DEBUG_KMS("[MODE:%s] %ux%u vrefresh:%d interlace:%d == mode_type: %s\n",
-			mode->name, mode->hdisplay, mode->vdisplay,
-			mode->vrefresh,
-			(mode->flags & DRM_MODE_FLAG_INTERLACE) ? 1 : 0,
-			mixer_mode_type_name(mode_type));
-
-	return (mode_type != EXYNOS_MIXER_MODE_INVALID) ? 0 : -EINVAL;
-}
-
 static struct exynos_drm_manager_ops mixer_manager_ops = {
 	.initialize		= mixer_initialize,
 	.remove			= mixer_mgr_remove,
 	.dpms			= mixer_dpms,
 	.adjust_mode		= mixer_adjust_mode,
+	.mode_fixup		= mixer_mode_fixup,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
 	.win_mode_set		= mixer_win_mode_set,

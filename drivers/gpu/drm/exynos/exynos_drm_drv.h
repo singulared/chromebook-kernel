@@ -162,7 +162,7 @@ struct exynos_drm_display_ops {
 				unsigned int *height);
 	struct edid *(*get_edid)(void *ctx, struct drm_connector *connector);
 	void *(*get_panel)(void *ctx);
-	void (*mode_fixup)(void *ctx, struct drm_connector *connector,
+	bool (*mode_fixup)(void *ctx, struct drm_connector *connector,
 				const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
