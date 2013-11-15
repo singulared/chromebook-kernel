@@ -566,9 +566,13 @@ static u32 fimd_calc_clkdiv(struct fimd_context *ctx,
 static bool fimd_mode_fixup(void *in_ctx, const struct drm_display_mode *mode,
 		struct drm_display_mode *adjusted_mode)
 {
+	struct fimd_context *ctx = in_ctx;
+
 	if (adjusted_mode->vrefresh == 0)
 		adjusted_mode->vrefresh = 60;
 
+	adjusted_mode->clock = ctx->lcd_clk_rate /
+			fimd_calc_clkdiv(ctx, adjusted_mode);
 	return true;
 }
 
