@@ -329,12 +329,6 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	/*
-	 * copy the mode data adjusted by mode_fixup() into crtc->mode
-	 * so that hardware can be seet to proper mode.
-	 */
-	memcpy(&crtc->mode, adjusted_mode, sizeof(*adjusted_mode));
-
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
 				 kfifo_is_empty(&exynos_crtc->flip_fifo),
