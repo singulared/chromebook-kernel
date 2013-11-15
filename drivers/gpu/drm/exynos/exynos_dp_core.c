@@ -1179,6 +1179,17 @@ static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
 	of_property_read_u32(np, "samsung,dp-frame-rate",
 				&dp->panel.timing.refresh);
 
+	dp->panel.timing.pixclock = (dp->panel.timing.left_margin +
+			dp->panel.timing.right_margin +
+			dp->panel.timing.hsync_len + dp->panel.timing.xres) *
+			(dp->panel.timing.upper_margin +
+			dp->panel.timing.lower_margin +
+			dp->panel.timing.vsync_len + dp->panel.timing.yres) *
+			dp->panel.timing.refresh;
+
+	DRM_DEBUG_KMS("DP Panel pixel clock: %u Hz\n",
+			dp->panel.timing.pixclock);
+
 	return 0;
 }
 
