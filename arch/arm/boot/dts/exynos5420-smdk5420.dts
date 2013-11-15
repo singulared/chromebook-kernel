@@ -347,6 +347,7 @@
 	lcd_dp0: lcd_panel0 {
 		lcd-htiming = <80 48 32 2560>;
 		lcd-vtiming = <16 8 6 1600>;
+		lcd-dimensions = <256 144>;
 	};
 
 	display-port-controller {

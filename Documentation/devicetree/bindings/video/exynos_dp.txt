@@ -42,6 +42,11 @@ Required properties for dp-controller:
 			- vertical front porch (in number of lcd lines)
 			- vsync pulse width (in number of lcd clocks)
 			- Display panels Y resolution.
+
+		  -lcd-dimensions: Specifies the physical dimensions of the
+			attached LCD panel in the following order.
+			-width (in mm)
+			-height (in mm)
 	-samsung,dp-frame-rate:
 		Number of video frames per second.
 	-samsung,color-space:
@@ -101,6 +106,7 @@ Board Specific portion:
 	lcd_dp0: lcd_panel0 {
 			lcd-htiming = <4 4 4 480>;
 			lcd-vtiming = <4 4 4 320>;
+			lcd-dimensions = <256 144>;
 			supports-mipi-panel;
 	};
 

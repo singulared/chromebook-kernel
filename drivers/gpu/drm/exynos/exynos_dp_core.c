@@ -1190,6 +1190,13 @@ static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
 	DRM_DEBUG_KMS("DP Panel pixel clock: %u Hz\n",
 			dp->panel.timing.pixclock);
 
+	if (of_property_read_u32_array(disp_np, "lcd-dimensions", data, 2)) {
+		dev_err(dp->dev, "invalid lcd physical dimesions\n");
+		return -EINVAL;
+	}
+	dp->panel.width_mm = data[0];
+	dp->panel.height_mm = data[1];
+
 	return 0;
 }
 
