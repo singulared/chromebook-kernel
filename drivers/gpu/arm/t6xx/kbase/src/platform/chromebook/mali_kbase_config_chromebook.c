@@ -1635,19 +1635,6 @@ static void mali_dvfs_event_proc(struct work_struct *w)
 					(exynos_result_of_asv & 0xf);
 			dvfs_status.asv_need_update = DVFS_NOT_UPDATE_ASV_TBL;
 		}
-	} else if (soc_is_exynos5420()) {
-#ifdef CONFIG_ARM_EXYNOS5420_ASV
-		int i;
-		unsigned int asv_volt;
-
-		for (i = 0; i < MALI_DVFS_STEP; i++) {
-			asv_volt = get_match_volt(ID_G3D,
-					mali_dvfs_infotbl_exynos5420[i].clock
-						/ 1000);
-			if (asv_volt)
-				mali_dvfs_infotbl[i].voltage = asv_volt;
-		}
-#endif
 	}
 #endif
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, irqflags);
@@ -1712,6 +1699,26 @@ int kbase_platform_dvfs_get_control_status(void)
 	return mali_dvfs_control;
 }
 
+
+static void mali_dvfs_infotbl_init_exynos5420(kbase_device *kbdev)
+{
+	int i;
+
+	mali_dvfs_infotbl = mali_dvfs_infotbl_exynos5420;
+
+	for (i = 0; i < MALI_DVFS_STEP; i++) {
+		unsigned int asv_volt;
+#ifdef CONFIG_ARM_EXYNOS5420_ASV
+		asv_volt = get_match_volt(ID_G3D,
+				mali_dvfs_infotbl[i].clock / 1000);
+#else
+		asv_volt = 0;
+#endif
+		if (asv_volt)
+			mali_dvfs_infotbl[i].voltage = asv_volt;
+	}
+}
+
 int kbase_platform_dvfs_init(kbase_device *kbdev)
 {
 	unsigned long irqflags;
@@ -1746,7 +1753,7 @@ int kbase_platform_dvfs_init(kbase_device *kbdev)
 		mali_dvfs_asv_vol_tbl = mali_dvfs_asv_vol_tbl_exynos5250;
 #endif
 	} else if (soc_is_exynos5420())
-		mali_dvfs_infotbl = mali_dvfs_infotbl_exynos5420;
+		mali_dvfs_infotbl_init_exynos5420(kbdev);
 
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, irqflags);
 
