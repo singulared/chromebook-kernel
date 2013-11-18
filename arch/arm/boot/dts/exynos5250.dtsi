@@ -164,12 +164,13 @@
 		reg = <0x10040000 0x5000>;
 	};
 
-	watchdog {
-		compatible = "samsung,s3c2410-wdt";
+	watchdog@101D0000 {
+		compatible = "samsung,exynos5250-wdt";
 		reg = <0x101D0000 0x100>;
 		interrupts = <0 42 0>;
 		clocks = <&clock 336>;
 		clock-names = "watchdog";
+		samsung,syscon-phandle = <&pmu_syscon>;
 	};
 
 	mfc: codec@11000000 {
