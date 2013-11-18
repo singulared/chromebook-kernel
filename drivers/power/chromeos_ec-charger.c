@@ -26,6 +26,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
+#include <linux/slab.h>
 
 /* Device Type 1 Reg */
 #define TSU6721_TYPE_NONE		0x000000
@@ -51,6 +52,9 @@
 		       TSU6721_TYPE_APPLE_CHG | TSU6721_TYPE_U200_CHG | \
 		       TSU6721_TYPE_NON_STD_CHG | TSU6721_TYPE_JIG_UART_ON)
 
+#define ID_SHIFT      24
+#define ID_MASK       (0x1f << ID_SHIFT)
+
 struct charger_data {
 	struct device *dev;
 	struct power_supply charger;
@@ -61,6 +65,7 @@ static enum power_supply_property cros_ec_charger_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW, /* current flowing out of charger */
 	POWER_SUPPLY_PROP_VOLTAGE_NOW, /* voltage at charger */
 	POWER_SUPPLY_PROP_POWER_NOW, /* product of voltage & current props */
+	POWER_SUPPLY_PROP_MODEL_NAME, /* charger module number (ID pin value) */
 };
 
 
@@ -72,9 +77,10 @@ static int is_debounced(struct ec_response_power_info *ec_data)
 static void update_psu_type(struct power_supply *psy,
 			    struct ec_response_power_info *ec_data)
 {
-	dev_info(psy->dev, "dev_type = 0x%06x cur_limit = %d\n",
+	dev_info(psy->dev, "dev_type = 0x%06x cur_limit = %d ID=%02x\n",
 		 ec_data->usb_dev_type & CHARGING_MASK,
-		 ec_data->usb_current_limit);
+		 ec_data->usb_current_limit,
+		 (ec_data->usb_dev_type & ID_MASK) >> ID_SHIFT);
 
 	psy->type = POWER_SUPPLY_TYPE_UNKNOWN;
 	if (is_debounced(ec_data)) {
@@ -123,6 +129,24 @@ static void cros_ec_charger_power_changed(struct power_supply *psy)
 	update_psu_type(psy, &ec_data);
 }
 
+static const char *cros_ec_charger_model_name(u32 usb_dev_type)
+{
+	u8 id = (usb_dev_type & ID_MASK) >> ID_SHIFT;
+	static u8 current_id;
+	static const char *model_string;
+
+	/* generate a new model string if we don't have a cached one */
+	if (!model_string || (id != current_id)) {
+		/* free the previous string if it exists */
+		kfree(model_string);
+
+		model_string = kasprintf(GFP_KERNEL, "0x%02x", id);
+		current_id = id;
+	}
+
+	return model_string;
+}
+
 static int cros_ec_charger_get_prop(struct power_supply *psy,
 				    enum power_supply_property psp,
 				    union power_supply_propval *val)
@@ -153,6 +177,9 @@ static int cros_ec_charger_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_POWER_NOW:
 		val->intval = ec_data.voltage_system *
 			ec_data.current_system;
+		break;
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->strval = cros_ec_charger_model_name(ec_data.usb_dev_type);
 		break;
 	default:
 		return -EINVAL;
