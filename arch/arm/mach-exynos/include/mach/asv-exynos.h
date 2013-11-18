@@ -112,6 +112,7 @@ struct asv_ops {
 /* define function for common asv */
 extern void exynos_add_asv_member(struct asv_info *exynos_asv_info);
 extern struct asv_info *asv_get(enum asv_type_id exynos_asv_type_id);
+extern int exynos_asv_group_get(enum asv_type_id asv_type_id);
 extern unsigned int get_match_volt(enum asv_type_id target_type,
 					unsigned int target_freq);
 extern unsigned int get_match_abb(enum asv_type_id target_type,
@@ -120,4 +121,7 @@ extern unsigned int set_match_abb(enum asv_type_id target_type,
 					unsigned int target_abb);
 /* define function for initialize of SoC */
 extern int exynos5420_init_asv(struct asv_common *asv_info);
+
+extern bool exynos5420_is_g3d_mp6(void);
+
 #endif /* __ASM_ARCH_NEW_ASV_H */

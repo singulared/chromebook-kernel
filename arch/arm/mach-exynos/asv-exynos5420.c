@@ -429,11 +429,15 @@ static void exynos5420_set_ema(void)
 	__raw_writel(ema_val, EXYNOS5420_EMA_CON1);
 }
 
+bool exynos5420_is_g3d_mp6(void)
+{
+	return !(__raw_readl(G3D_ID_REG) & G3D_SHADERCONFIG_MASK);
+}
+
 int exynos5420_init_asv(struct asv_common *asv_info)
 {
 	unsigned int chip_id3_value;
 	unsigned int chip_id4_value;
-	bool is_g3d_mp6;
 
 	pr_debug("EXYNOS5420: Adaptive Supply Voltage init\n");
 
@@ -457,8 +461,7 @@ int exynos5420_init_asv(struct asv_common *asv_info)
 				asv_info->ids_value, asv_info->hpm_value);
 
 	/* MP6 variant has different ASV tables */
-	is_g3d_mp6 = !(__raw_readl(G3D_ID_REG) & G3D_SHADERCONFIG_MASK);
-	if (is_g3d_mp6) {
+	if (exynos5420_is_g3d_mp6()) {
 		g3d_asv_abb_info = g3d_mp6_asv_abb_info;
 		g3d_asv_volt_info = g3d_mp6_asv_volt_info;
 		g3d_sram_asv_volt_info = g3d_mp6_sram_asv_volt_info;

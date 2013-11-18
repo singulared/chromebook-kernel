@@ -1319,6 +1319,8 @@ static ssize_t mali_sysfs_show_asv(struct device *dev,
 	struct kbase_device *kbdev;
 	ssize_t ret = 0;
 	int i;
+	int asv_group;
+
 	kbdev = dev_get_drvdata(dev);
 
 	if (!kbdev)
@@ -1326,8 +1328,15 @@ static ssize_t mali_sysfs_show_asv(struct device *dev,
 	if (!buf)
 		return -EINVAL;
 
-	ret += scnprintf(buf, PAGE_SIZE, "asv group:%d exynos_lot_id:%d\n",
-		exynos_result_of_asv & 0xf, exynos_lot_id);
+	asv_group = exynos_asv_group_get(ID_G3D);
+	if (soc_is_exynos5250()) {
+		ret += scnprintf(buf, PAGE_SIZE, "asv group:%d exynos_lot_id:%d\n",
+				asv_group, exynos_lot_id);
+	} else if (soc_is_exynos5420()) {
+		ret += scnprintf(buf, PAGE_SIZE, "asv group:%d mp%d\n",
+				asv_group, exynos5420_is_g3d_mp6() ? 6 : 4);
+	}
+
 	for (i = MALI_DVFS_STEP - 1; i >= 0; i--) {
 		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%u:%d\n",
 				mali_dvfs_infotbl[i].clock,

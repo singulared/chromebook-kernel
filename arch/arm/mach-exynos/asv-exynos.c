@@ -18,6 +18,7 @@
 
 #include <mach/map.h>
 #include <mach/asv-exynos.h>
+#include <mach/asv-5250.h>
 
 #include <plat/cpu.h>
 
@@ -40,6 +41,18 @@ struct asv_info *asv_get(enum asv_type_id exynos_asv_type_id)
 			return match_asv_info;
 
 	return match_asv_info;
+}
+
+int exynos_asv_group_get(enum asv_type_id asv_type_id)
+{
+	int asv_group = -1;
+
+	if (soc_is_exynos5250())
+		asv_group = exynos_result_of_asv & 0xf;
+	else if (soc_is_exynos5420())
+		asv_group = asv_get(asv_type_id)->result_asv_grp;
+
+	return asv_group;
 }
 
 unsigned int get_match_volt(enum asv_type_id target_type,
