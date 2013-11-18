@@ -159,6 +159,11 @@
 		interrupts = <0 47 0>;
 	};
 
+	pmu_syscon: syscon@10040000 {
+		compatible = "samsung,exynos5250-pmu", "syscon";
+		reg = <0x10040000 0x5000>;
+	};
+
 	watchdog {
 		compatible = "samsung,s3c2410-wdt";
 		reg = <0x101D0000 0x100>;
