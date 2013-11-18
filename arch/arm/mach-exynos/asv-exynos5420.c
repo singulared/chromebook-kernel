@@ -44,9 +44,9 @@
 
 static bool is_special_lot;
 
-static unsigned int *g3d_asv_abb_info;
-static unsigned int (*g3d_asv_volt_info)[ARM_ASV_GRP_NR + 1];
-static unsigned int (*g3d_sram_asv_volt_info)[ARM_ASV_GRP_NR + 1];
+static const unsigned int *g3d_asv_abb_info;
+static const unsigned int (*g3d_asv_volt_info)[ARM_ASV_GRP_NR + 1];
+static const unsigned int (*g3d_sram_asv_volt_info)[ARM_ASV_GRP_NR + 1];
 static struct asv_info *g3d_asv_member;
 
 static const char * const special_lot_list[] = {
@@ -117,7 +117,7 @@ static unsigned int exynos5420_set_asv_info(struct asv_info *asv_inform,
 	unsigned int i;
 	unsigned int target_asv_grp_nr = asv_inform->result_asv_grp;
 	unsigned int level = asv_inform->dvfs_level_nr;
-	unsigned int (*asv_volt_info)[ARM_ASV_GRP_NR + 1];
+	const unsigned int (*asv_volt_info)[ARM_ASV_GRP_NR + 1];
 
 	exynos5420_set_abb(asv_inform);
 
@@ -182,47 +182,47 @@ out1:
 	return -ENOMEM;
 }
 
-struct asv_ops exynos5420_asv_ops_arm = {
+static const struct asv_ops exynos5420_asv_ops_arm = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-struct asv_ops exynos5420_asv_ops_kfc = {
+static const struct asv_ops exynos5420_asv_ops_kfc = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_g3d = {
+static const struct asv_ops exynos5420_asv_ops_g3d = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_int = {
+static const struct asv_ops exynos5420_asv_ops_int = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_mif = {
+static const struct asv_ops exynos5420_asv_ops_mif = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_mif_sram = {
+static const struct asv_ops exynos5420_asv_ops_mif_sram = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_g3d_sram = {
+static const struct asv_ops exynos5420_asv_ops_g3d_sram = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_g3d_mp6 = {
+static const struct asv_ops exynos5420_asv_ops_g3d_mp6 = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };
 
-static struct asv_ops exynos5420_asv_ops_g3d_mp6_sram = {
+static const struct asv_ops exynos5420_asv_ops_g3d_mp6_sram = {
 	.get_asv_group	= exynos5420_get_asv_group,
 	.set_asv_info	= exynos5420_set_asv_info,
 };

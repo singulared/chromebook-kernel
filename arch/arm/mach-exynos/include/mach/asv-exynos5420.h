@@ -42,53 +42,53 @@
 #define G3D_MP6_SRAM_ASV_GRP_NR		15
 #define G3D_MP6_SRAM_MAX_VOLT		1200000
 
-static unsigned int refer_table_get_asv[2][ARM_ASV_GRP_NR] = {
+static const unsigned int refer_table_get_asv[2][ARM_ASV_GRP_NR] = {
 	{ 0, 11, 15, 20, 24, 29, 36, 43, 52, 63, 76, 91, 100, 110, 999},
 	{ 0, 65, 69, 72, 74, 76, 78, 80, 82, 84, 87, 89,  91,  92, 999},
 };
 
-static unsigned int refer_use_table_get_asv[2][ARM_ASV_GRP_NR] = {
+static const unsigned int refer_use_table_get_asv[2][ARM_ASV_GRP_NR] = {
 	{ 0, 1,  1,  1,  1,  1,  1,  1,  1,  1,   1,  1,   1,   1,  1},
 	{ 0, 1,  1,  1,  1,  1,  1,  1,  1,  1,   1,  1,   1,   1,  1},
 };
 
-static unsigned int arm_asv_abb_info[ARM_ASV_GRP_NR] = {
+static const unsigned int arm_asv_abb_info[ARM_ASV_GRP_NR] = {
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 };
 
-static unsigned int kfc_asv_abb_info[KFC_ASV_GRP_NR] = {
+static const unsigned int kfc_asv_abb_info[KFC_ASV_GRP_NR] = {
 	ABB_X080, ABB_X080, ABB_X080, ABB_X080, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 };
 
-static unsigned int g3d_mp4_asv_abb_info[G3D_MP4_ASV_GRP_NR] = {
+static const unsigned int g3d_mp4_asv_abb_info[G3D_MP4_ASV_GRP_NR] = {
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 };
 
-static unsigned int g3d_mp6_asv_abb_info[G3D_MP6_ASV_GRP_NR] = {
+static const unsigned int g3d_mp6_asv_abb_info[G3D_MP6_ASV_GRP_NR] = {
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 };
 
-static unsigned int int_asv_abb_info[INT_ASV_GRP_NR] = {
+static const unsigned int int_asv_abb_info[INT_ASV_GRP_NR] = {
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 	ABB_BYPASS, ABB_BYPASS, ABB_BYPASS,
 };
 
-static unsigned int mif_asv_abb_info[MIF_ASV_GRP_NR] = {
+static const unsigned int mif_asv_abb_info[MIF_ASV_GRP_NR] = {
 	ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130,
 	ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130, ABB_X130,
 	ABB_X130,
 };
 
-static unsigned int arm_asv_volt_info[ARM_DVFS_LEVEL_NR][ARM_ASV_GRP_NR + 1] = {
+static const unsigned int arm_asv_volt_info[ARM_DVFS_LEVEL_NR][ARM_ASV_GRP_NR + 1] = {
 	{ 2000000, 1362500, 1350000, 1337500, 1325000, 1312500, 1325000,
 		1312500, 1300000, 1287500, 1262500, 1237500, 1237500,
 		1225000, 1212500, 1200000},
@@ -148,7 +148,7 @@ static unsigned int arm_asv_volt_info[ARM_DVFS_LEVEL_NR][ARM_ASV_GRP_NR + 1] = {
 		900000,  900000,  900000},
 };
 
-static unsigned int kfc_asv_volt_info[KFC_DVFS_LEVEL_NR][KFC_ASV_GRP_NR + 1] = {
+static const unsigned int kfc_asv_volt_info[KFC_DVFS_LEVEL_NR][KFC_ASV_GRP_NR + 1] = {
 	{ 1300000, 1275000, 1262500, 1250000, 1237500, 1237500, 1225000,
 		1212500, 1200000, 1187500, 1175000, 1162500, 1150000,
 		1137500, 1125000, 1125000},
@@ -187,7 +187,7 @@ static unsigned int kfc_asv_volt_info[KFC_DVFS_LEVEL_NR][KFC_ASV_GRP_NR + 1] = {
 		900000,  900000,  900000},
 };
 
-static unsigned int g3d_mp4_asv_volt_info[G3D_MP4_DVFS_LEVEL_NR]
+static const unsigned int g3d_mp4_asv_volt_info[G3D_MP4_DVFS_LEVEL_NR]
 						[G3D_MP4_ASV_GRP_NR + 1] = {
 	{ 600000, 1025000, 1012500, 1000000,  987500,  975000,  962500,  950000,
 	937500,  925000,  912500,  900000,  887500,  875000,  862500,  850000},
@@ -207,7 +207,7 @@ static unsigned int g3d_mp4_asv_volt_info[G3D_MP4_DVFS_LEVEL_NR]
 	800000,  800000,  800000,  800000,  800000,  800000,  800000,  800000},
 };
 
-static unsigned int g3d_mp6_asv_volt_info[G3D_MP6_DVFS_LEVEL_NR]
+static const unsigned int g3d_mp6_asv_volt_info[G3D_MP6_DVFS_LEVEL_NR]
 						[G3D_MP6_ASV_GRP_NR + 1] = {
 	{ 533000, 1062500, 1050000, 1037500, 1025000, 1012500, 1000000,  987500,
 	975000,  962500,  950000,  937500,  925000,  912500,  900000,  900000},
@@ -225,7 +225,7 @@ static unsigned int g3d_mp6_asv_volt_info[G3D_MP6_DVFS_LEVEL_NR]
 	800000,  800000,  800000,  800000,  800000,  800000,  800000,  800000},
 };
 
-static unsigned int int_asv_volt_info[INT_DVFS_LEVEL_NR][INT_ASV_GRP_NR + 1] = {
+static const unsigned int int_asv_volt_info[INT_DVFS_LEVEL_NR][INT_ASV_GRP_NR + 1] = {
 	{ 600000, 1025000, 1012500, 1000000,  987500,  975000,  962500,  950000,
 	962500,  950000,  937500,  925000,  912500,  900000,  900000,  900000},
 	{ 500000,  962500,  950000,  937500,  925000,  912500,  900000,  900000,
@@ -242,23 +242,23 @@ static unsigned int int_asv_volt_info[INT_DVFS_LEVEL_NR][INT_ASV_GRP_NR + 1] = {
 	900000,  887500,  875000,  862500,  850000,  850000,  850000,  850000},
 };
 
-static unsigned int mif_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
+static const unsigned int mif_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
 	{      0, 1012500, 1012500, 1000000, 1000000,  987500,  987500,  975000,
 	975000,  962500,  962500,  950000,  950000,  937500,  937500,  937500},
 };
 
-static unsigned int mif_sram_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
+static const unsigned int mif_sram_asv_volt_info[1][MIF_ASV_GRP_NR + 1] = {
 	{      0, 1025000, 1025000, 1000000, 1000000, 1000000, 1000000,  975000,
 	975000,  975000,  975000,  950000,  950000,  950000,  950000,  950000},
 };
 
-static unsigned int g3d_mp4_sram_asv_volt_info[1]
+static const unsigned int g3d_mp4_sram_asv_volt_info[1]
 					[G3D_MP4_SRAM_ASV_GRP_NR + 1] = {
 	{      0, 1025000, 1025000, 1000000, 1000000,  975000,  975000,  950000,
 	950000,  925000,  925000,  900000,  900000,  900000,  900000,  900000},
 };
 
-static unsigned int g3d_mp6_sram_asv_volt_info[1]
+static const unsigned int g3d_mp6_sram_asv_volt_info[1]
 					[G3D_MP6_SRAM_ASV_GRP_NR + 1] = {
 	{      0, 1075000, 1050000, 1050000, 1025000, 1025000, 1000000, 1000000,
 	975000,  975000,  950000,  950000,  925000,  925000,  900000,  900000},

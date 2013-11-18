@@ -85,7 +85,7 @@ struct asv_info {
 	struct list_head	node;
 	enum asv_type_id	asv_type;
 	const char		*name;
-	struct asv_ops		*ops;
+	const struct asv_ops	*ops;
 	unsigned int		asv_group_nr;
 	unsigned int		dvfs_level_nr;
 	unsigned int		result_asv_grp;
