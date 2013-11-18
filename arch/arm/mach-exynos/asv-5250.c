@@ -144,7 +144,7 @@ static const unsigned int asv_voltage[CPUFREQ_LEVEL_END][12] = {
 };
 
 /* Original ASV table had 10 levels */
-static struct asv_table exynos5250_limit_orig[] = {
+static const struct asv_table exynos5250_limit_orig[] = {
 	/* HPM, IDS */
 	{ 0, 0},		/* Reserved Group */
 	{ 9, 7},
@@ -161,7 +161,7 @@ static struct asv_table exynos5250_limit_orig[] = {
 };
 
 /* New ASV table has 12 levels */
-static struct asv_table exynos5250_limit[] = {
+static const struct asv_table exynos5250_limit[] = {
 	/* HPM, IDS */
 	{ 6, 7},
 	{ 8, 9},
@@ -179,7 +179,7 @@ static struct asv_table exynos5250_limit[] = {
 };
 
 /* For MIF busfreq support */
-static struct asv_table exynos5250_mif_limit[] = {
+static const struct asv_table exynos5250_mif_limit[] = {
 	/* HPM, LOCK */
 	{ 0, 0},		/* Reserved Group */
 	{ 12, 100},
@@ -198,7 +198,7 @@ const unsigned int exynos5250_cpufreq_get_asv(unsigned int index)
 	}
 }
 
-char *special_lot_id_list[] = {
+static const char * const special_lot_id_list[] = {
 	"NZVPU",
 	"NZVR7",
 };
