@@ -1182,54 +1182,6 @@ static int i915_drpc_info(struct seq_file *m, void *unused)
 		return ironlake_drpc_info(m);
 }
 
-static int i915_fbc_status(struct seq_file *m, void *unused)
-{
-	struct drm_info_node *node = (struct drm_info_node *) m->private;
-	struct drm_device *dev = node->minor->dev;
-	drm_i915_private_t *dev_priv = dev->dev_private;
-
-	if (!I915_HAS_FBC(dev)) {
-		seq_printf(m, "FBC unsupported on this chipset\n");
-		return 0;
-	}
-
-	if (intel_fbc_enabled(dev)) {
-		seq_printf(m, "FBC enabled\n");
-	} else {
-		seq_printf(m, "FBC disabled: ");
-		switch (dev_priv->no_fbc_reason) {
-		case FBC_NO_OUTPUT:
-			seq_printf(m, "no outputs");
-			break;
-		case FBC_STOLEN_TOO_SMALL:
-			seq_printf(m, "not enough stolen memory");
-			break;
-		case FBC_UNSUPPORTED_MODE:
-			seq_printf(m, "mode not supported");
-			break;
-		case FBC_MODE_TOO_LARGE:
-			seq_printf(m, "mode too large");
-			break;
-		case FBC_BAD_PLANE:
-			seq_printf(m, "FBC unsupported on plane");
-			break;
-		case FBC_NOT_TILED:
-			seq_printf(m, "scanout buffer not tiled");
-			break;
-		case FBC_MULTIPLE_PIPES:
-			seq_printf(m, "multiple pipes are enabled");
-			break;
-		case FBC_MODULE_PARAM:
-			seq_printf(m, "disabled per module param (default off)");
-			break;
-		default:
-			seq_printf(m, "unknown reason");
-		}
-		seq_printf(m, "\n");
-	}
-	return 0;
-}
-
 static int i915_ips_status(struct seq_file *m, void *unused)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
@@ -1615,6 +1567,104 @@ static int i915_dpio_info(struct seq_file *m, void *data)
 
 	return 0;
 }
+
+static ssize_t
+i915_fbc_read(struct file *filp, char __user *ubuf, size_t max, loff_t *ppos)
+{
+	struct drm_device *dev = filp->private_data;
+	drm_i915_private_t *dev_priv = dev->dev_private;
+	char buf[128];
+	int len;
+
+	if (!I915_HAS_FBC(dev)) {
+		len = snprintf(buf, sizeof(buf),
+				"FBC unsupported on this chipset\n");
+		goto out;
+	}
+
+	if (intel_fbc_enabled(dev)) {
+		len = snprintf(buf, sizeof(buf), "FBC enabled\n");
+		goto out;
+	}
+
+	len = snprintf(buf, sizeof(buf), "FBC disabled: ");
+	switch (dev_priv->no_fbc_reason) {
+	case FBC_NO_OUTPUT:
+		len += snprintf(buf + len, sizeof(buf) - len, "no outputs");
+		break;
+	case FBC_STOLEN_TOO_SMALL:
+		len += snprintf(buf + len, sizeof(buf) - len,
+				"not enough stolen memory");
+		break;
+	case FBC_UNSUPPORTED_MODE:
+		len += snprintf(buf + len, sizeof(buf) - len,
+				"mode not supported");
+		break;
+	case FBC_MODE_TOO_LARGE:
+		len += snprintf(buf + len, sizeof(buf) - len, "mode too large");
+		break;
+	case FBC_BAD_PLANE:
+		len += snprintf(buf + len, sizeof(buf) - len,
+				"FBC unsupported on plane");
+		break;
+	case FBC_NOT_TILED:
+		len += snprintf(buf + len, sizeof(buf) - len,
+				"scanout buffer not tiled");
+		break;
+	case FBC_MULTIPLE_PIPES:
+		len += snprintf(buf + len, sizeof(buf) - len,
+				"multiple pipes are enabled");
+		break;
+	case FBC_MODULE_PARAM:
+		len += snprintf(buf + len, sizeof(buf) - len,
+			"disabled per module param (default off)");
+		break;
+	default:
+		len += snprintf(buf + len, sizeof(buf) - len, "unknown reason");
+	}
+	len += snprintf(buf + len, sizeof(buf) - len, "\n");
+
+out:
+	return simple_read_from_buffer(ubuf, max, ppos, buf, len);
+}
+
+static ssize_t
+i915_fbc_write(struct file *filp, const char __user *ubuf, size_t cnt,
+		loff_t *ppos)
+{
+	struct drm_device *dev = filp->private_data;
+	unsigned long val;
+	int ret;
+
+	if (!I915_HAS_FBC(dev))
+		return -ENODEV;
+
+	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
+	if (ret)
+		return ret;
+
+	DRM_DEBUG_DRIVER("%s framebuffer compression\n", val ? "Enabling" :
+				"Disabling");
+
+	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	if (ret)
+		return ret;
+
+	i915_enable_fbc = val ? 1 : 0;
+	intel_update_fbc(dev);
+
+	mutex_unlock(&dev->struct_mutex);
+
+	return cnt;
+}
+
+static const struct file_operations i915_fbc_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = i915_fbc_read,
+	.write = i915_fbc_write,
+	.llseek = default_llseek,
+};
 
 static ssize_t
 i915_wedged_read(struct file *filp,
@@ -2080,7 +2130,6 @@ static struct drm_info_list i915_debugfs_list[] = {
 	{"i915_emon_status", i915_emon_status, 0},
 	{"i915_ring_freq_table", i915_ring_freq_table, 0},
 	{"i915_gfxec", i915_gfxec, 0},
-	{"i915_fbc_status", i915_fbc_status, 0},
 	{"i915_ips_status", i915_ips_status, 0},
 	{"i915_sr_status", i915_sr_status, 0},
 	{"i915_opregion", i915_opregion, 0},
@@ -2096,6 +2145,11 @@ static struct drm_info_list i915_debugfs_list[] = {
 int i915_debugfs_init(struct drm_minor *minor)
 {
 	int ret;
+
+	ret = i915_debugfs_create(minor->debugfs_root, minor, "i915_fbc",
+				  &i915_fbc_fops);
+	if (ret)
+		return ret;
 
 	ret = i915_debugfs_create(minor->debugfs_root, minor,
 				  "i915_wedged",
