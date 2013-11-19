@@ -484,10 +484,6 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 	val |= WINCONx_ENWIN;
 	writel(val, ctx->regs + WINCON(win));
 
-	/* only apply dithering on default window */
-	if (win == ctx->default_win)
-		exynos_set_dithering(ctx);
-
 	/* Enable DMA channel and unprotect windows */
 	val = readl(ctx->regs + SHADOWCON);
 	val |= SHADOWCON_CHx_ENABLE(win);
@@ -693,6 +689,8 @@ static void fimd_commit(void *in_ctx)
 	 */
 	val |= VIDCON0_ENVID | VIDCON0_ENVID_F;
 	writel(val, ctx->regs + VIDCON0);
+
+	exynos_set_dithering(ctx);
 }
 
 static int fimd_enable_vblank(void *in_ctx)
