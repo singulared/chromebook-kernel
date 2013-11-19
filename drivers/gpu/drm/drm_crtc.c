@@ -36,6 +36,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_modeset_lock.h>
 
 /**
  * drm_modeset_lock_all - take all modeset locks
@@ -46,14 +47,42 @@
  */
 void drm_modeset_lock_all(struct drm_device *dev)
 {
-	struct drm_crtc *crtc;
+	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_modeset_acquire_ctx *ctx;
+	int ret;
 
-	mutex_lock(&dev->mode_config.mutex);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (WARN_ON(!ctx))
+		return;
 
-	mutex_lock(&dev->mode_config.connection_mutex);
+	mutex_lock(&config->mutex);
 
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		mutex_lock_nest_lock(&crtc->mutex, &dev->mode_config.mutex);
+	drm_modeset_acquire_init(ctx, 0);
+
+retry:
+	ret = drm_modeset_lock(&config->connection_mutex, ctx);
+	if (ret)
+		goto fail;
+	ret = drm_modeset_lock_all_crtcs(dev, ctx);
+	if (ret)
+		goto fail;
+
+	WARN_ON(config->acquire_ctx);
+
+	/* now we hold the locks, so now that it is safe, stash the
+	 * ctx for drm_modeset_unlock_all():
+	 */
+	config->acquire_ctx = ctx;
+
+	drm_warn_on_modeset_not_all_locked(dev);
+
+	return;
+
+fail:
+	if (ret == -EDEADLK) {
+		drm_modeset_backoff(ctx);
+		goto retry;
+	}
 }
 EXPORT_SYMBOL(drm_modeset_lock_all);
 
@@ -63,12 +92,17 @@ EXPORT_SYMBOL(drm_modeset_lock_all);
  */
 void drm_modeset_unlock_all(struct drm_device *dev)
 {
-	struct drm_crtc *crtc;
+	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_modeset_acquire_ctx *ctx = config->acquire_ctx;
 
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		mutex_unlock(&crtc->mutex);
+	if (WARN_ON(!ctx))
+		return;
 
-	mutex_unlock(&dev->mode_config.connection_mutex);
+	config->acquire_ctx = NULL;
+	drm_modeset_drop_locks(ctx);
+	drm_modeset_acquire_fini(ctx);
+
+	kfree(ctx);
 
 	mutex_unlock(&dev->mode_config.mutex);
 }
@@ -83,9 +117,9 @@ void drm_warn_on_modeset_not_all_locked(struct drm_device *dev)
 	struct drm_crtc *crtc;
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		WARN_ON(!mutex_is_locked(&crtc->mutex));
+		WARN_ON(!drm_modeset_is_locked(&crtc->mutex));
 
-	WARN_ON(!mutex_is_locked(&dev->mode_config.connection_mutex));
+	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 	WARN_ON(!mutex_is_locked(&dev->mode_config.mutex));
 }
 EXPORT_SYMBOL(drm_warn_on_modeset_not_all_locked);
@@ -622,6 +656,8 @@ void drm_framebuffer_remove(struct drm_framebuffer *fb)
 }
 EXPORT_SYMBOL(drm_framebuffer_remove);
 
+DEFINE_WW_CLASS(crtc_ww_class);
+
 /**
  * drm_crtc_init_with_planes - Initialise a new CRTC object with
  *    specified primary and cursor planes.
@@ -641,6 +677,7 @@ int drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *crtc,
 			      void *cursor,
 			      const struct drm_crtc_funcs *funcs)
 {
+	struct drm_mode_config *config = &dev->mode_config;
 	int ret;
 
 	crtc->dev = dev;
@@ -648,8 +685,9 @@ int drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *crtc,
 	crtc->invert_dimensions = false;
 
 	drm_modeset_lock_all(dev);
-	mutex_init(&crtc->mutex);
-	mutex_lock_nest_lock(&crtc->mutex, &dev->mode_config.mutex);
+	drm_modeset_lock_init(&crtc->mutex);
+	/* dropped by _unlock_all(): */
+	drm_modeset_lock(&crtc->mutex, config->acquire_ctx);
 
 	ret = drm_mode_object_get(dev, &crtc->base, DRM_MODE_OBJECT_CRTC);
 	if (ret)
@@ -657,8 +695,8 @@ int drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *crtc,
 
 	crtc->base.properties = &crtc->properties;
 
-	list_add_tail(&crtc->head, &dev->mode_config.crtc_list);
-	dev->mode_config.num_crtc++;
+	list_add_tail(&crtc->head, &config->crtc_list);
+	config->num_crtc++;
 
 	crtc->primary = primary;
 	if (primary)
@@ -684,6 +722,8 @@ void drm_crtc_cleanup(struct drm_crtc *crtc)
 
 	kfree(crtc->gamma_store);
 	crtc->gamma_store = NULL;
+
+	drm_modeset_lock_fini(&crtc->mutex);
 
 	drm_mode_object_put(dev, &crtc->base);
 	list_del(&crtc->head);
@@ -1747,12 +1787,12 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 	out_resp->mm_height = connector->display_info.height_mm;
 	out_resp->subpixel = connector->display_info.subpixel_order;
 	out_resp->connection = connector->status;
-	mutex_lock(&dev->mode_config.connection_mutex);
+	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 	if (connector->encoder)
 		out_resp->encoder_id = connector->encoder->base.id;
 	else
 		out_resp->encoder_id = 0;
-	mutex_unlock(&dev->mode_config.connection_mutex);
+	drm_modeset_unlock(&dev->mode_config.connection_mutex);
 
 	/*
 	 * This ioctl is called twice, once to determine how much space is
@@ -2396,7 +2436,7 @@ int drm_mode_cursor_ioctl(struct drm_device *dev,
 		return -EINVAL;
 	}
 
-	mutex_lock(&crtc->mutex);
+	drm_modeset_lock(&crtc->mutex, NULL);
 	if (req->flags & DRM_MODE_CURSOR_BO) {
 		if (!crtc->funcs->cursor_set) {
 			ret = -ENXIO;
@@ -2416,7 +2456,7 @@ int drm_mode_cursor_ioctl(struct drm_device *dev,
 		}
 	}
 out:
-	mutex_unlock(&crtc->mutex);
+	drm_modeset_unlock(&crtc->mutex);
 
 	return ret;
 }
@@ -3953,7 +3993,7 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	if (!crtc)
 		return -ENOENT;
 
-	mutex_lock(&crtc->mutex);
+	drm_modeset_lock(&crtc->mutex, NULL);
 	if (crtc->primary->fb == NULL) {
 		/* The framebuffer is currently unbound, presumably
 		 * due to a hotplug event, that userspace has not
@@ -4022,7 +4062,7 @@ out:
 		drm_framebuffer_unreference(fb);
 	if (old_fb)
 		drm_framebuffer_unreference(old_fb);
-	mutex_unlock(&crtc->mutex);
+	drm_modeset_unlock(&crtc->mutex);
 
 	return ret;
 }
@@ -4308,7 +4348,7 @@ EXPORT_SYMBOL(drm_format_vert_chroma_subsampling);
 void drm_mode_config_init(struct drm_device *dev)
 {
 	mutex_init(&dev->mode_config.mutex);
-	mutex_init(&dev->mode_config.connection_mutex);
+	drm_modeset_lock_init(&dev->mode_config.connection_mutex);
 	mutex_init(&dev->mode_config.idr_mutex);
 	mutex_init(&dev->mode_config.fb_lock);
 	INIT_LIST_HEAD(&dev->mode_config.fb_list);
@@ -4409,5 +4449,6 @@ void drm_mode_config_cleanup(struct drm_device *dev)
 	}
 
 	idr_destroy(&dev->mode_config.crtc_idr);
+	drm_modeset_lock_fini(&dev->mode_config.connection_mutex);
 }
 EXPORT_SYMBOL(drm_mode_config_cleanup);

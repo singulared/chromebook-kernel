@@ -629,9 +629,11 @@ struct intel_load_detect_pipe {
 };
 extern bool intel_get_load_detect_pipe(struct drm_connector *connector,
 				       struct drm_display_mode *mode,
-				       struct intel_load_detect_pipe *old);
+				       struct intel_load_detect_pipe *old,
+				       struct drm_modeset_acquire_ctx *ctx);
 extern void intel_release_load_detect_pipe(struct drm_connector *connector,
-					   struct intel_load_detect_pipe *old);
+				           struct intel_load_detect_pipe *old,
+				           struct drm_modeset_acquire_ctx *ctx);
 
 extern void intelfb_restore(void);
 extern void intel_crtc_fb_gamma_set(struct drm_crtc *crtc, u16 red, u16 green,
