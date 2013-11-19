@@ -123,7 +123,7 @@ struct fimd_context {
 	wait_queue_head_t		wait_vsync_queue;
 	atomic_t			wait_vsync_event;
 	enum dither_mode		dither_mode;
-	u32				dither_rgb_bpc[3];
+	u32				dither_rgb;
 	unsigned int			irq;
 };
 
@@ -281,14 +281,15 @@ static void fimd_win_set_colkey(struct fimd_context *ctx, unsigned int win)
 	writel(keycon1, ctx->regs + WKEYCON1_BASE(win));
 }
 
-static void fimd_set_dithering(struct fimd_context *ctx)
+static int fimd_parse_dither_rgb(struct fimd_context *ctx,
+		const u32 rgb_bpc[3])
 {
 	u32 val, reg = 0;
 	int i;
 
 	for (i = 0; i < 3; i++) {
 		val = 0;
-		switch (ctx->dither_rgb_bpc[i]) {
+		switch (rgb_bpc[i]) {
 		case 5:
 			val |= 2;
 			break;
@@ -298,17 +299,22 @@ static void fimd_set_dithering(struct fimd_context *ctx)
 		case 8:
 			break;
 		default:
-			DRM_ERROR("Unsupported bpc value\n");
-			return;
+			DRM_ERROR("FIMD: Unsupported bpc value, %d\n",
+					rgb_bpc[i]);
+			return -EINVAL;
 		}
 		val <<= (2 * (2 - i));
 		reg |= val;
 	}
 
-	reg <<= 1;
-	reg |= DITHMODE_DITH_EN;
+	ctx->dither_rgb = reg << 1;
 
-	writel(reg, ctx->regs + DITHMODE);
+	return 0;
+}
+
+static void fimd_set_dithering(struct fimd_context *ctx)
+{
+	writel(ctx->dither_rgb | DITHMODE_DITH_EN, ctx->regs + DITHMODE);
 }
 
 static void mie_set_6bit_dithering(struct fimd_context *ctx)
@@ -1121,9 +1127,8 @@ static int fimd_probe(struct platform_device *pdev)
 
 	ctx->dither_mode = pdata->dither_mode;
 	if (ctx->dither_mode == USE_FIMD_DITHERING) {
-		ctx->dither_rgb_bpc[0] = pdata->dither_rgb_bpc[0];
-		ctx->dither_rgb_bpc[1] = pdata->dither_rgb_bpc[1];
-		ctx->dither_rgb_bpc[2] = pdata->dither_rgb_bpc[2];
+		if (fimd_parse_dither_rgb(ctx, pdata->dither_rgb_bpc))
+			ctx->dither_mode = USE_NO_DITHERING;
 	}
 	DRM_INFO("FIMD: using %s dithering\n",
 			exynos_drm_fimd_dithering_name(ctx->dither_mode));
