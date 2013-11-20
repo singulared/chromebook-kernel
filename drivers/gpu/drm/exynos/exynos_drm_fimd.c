@@ -576,7 +576,7 @@ static bool fimd_mode_fixup(void *in_ctx, const struct drm_display_mode *mode,
 	return true;
 }
 
-static void fimd_update(void *in_ctx, const struct drm_display_mode *in_mode)
+static void fimd_mode_set(void *in_ctx, const struct drm_display_mode *in_mode)
 {
 	struct fimd_context *ctx = in_ctx;
 	struct fimd_mode_data *mode = &ctx->mode;
@@ -861,7 +861,7 @@ static struct exynos_drm_manager_ops fimd_manager_ops = {
 	.remove = fimd_mgr_remove,
 	.dpms = fimd_dpms,
 	.mode_fixup = fimd_mode_fixup,
-	.update = fimd_update,
+	.mode_set = fimd_mode_set,
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,

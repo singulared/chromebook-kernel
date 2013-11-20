@@ -195,8 +195,8 @@ struct exynos_drm_display {
  * @dpms: control device power.
  * @adjust_modes: allows manager to adjust modes in the fill_modes path
  * @mode_fixup: fix mode data before applying it
- * @update: set the given mode to the manager
- * @commit: set current hw specific display mode to hw.
+ * @mode_set: copy drm display mode to hw specific display mode.
+ * @commit: appl current hw specific display mode to hw.
  * @enable_vblank: specific driver callback for enabling vblank interrupt.
  * @disable_vblank: specific driver callback for disabling vblank interrupt.
  * @win_mode_set: copy drm overlay info to hw specific overlay info.
@@ -211,7 +211,7 @@ struct exynos_drm_manager_ops {
 	void (*adjust_modes)(void *ctx, struct drm_connector *connector);
 	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
-	void (*update)(void *ctx, const struct drm_display_mode *mode);
+	void (*mode_set)(void *ctx, const struct drm_display_mode *mode);
 	void (*commit)(void *ctx);
 	int (*enable_vblank)(void *ctx);
 	void (*disable_vblank)(void *ctx);

@@ -99,16 +99,12 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 				   struct drm_framebuffer *fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 
 	crtc_w = fb->width - crtc->x;
 	crtc_h = fb->height - crtc->y;
-
-	if (manager->ops->update)
-		manager->ops->update(manager->ctx, &crtc->mode);
 
 	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
 			      crtc->x, crtc->y, crtc_w, crtc_h);
@@ -325,6 +321,7 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 			  struct drm_framebuffer *old_fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -335,6 +332,14 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 				 DRM_HZ/20);
 	if (!ret)
 		DRM_ERROR("Timed out waiting for flips to complete\n");
+
+	/*
+	 * manager mode_set() computes new register values for adjusted mode.
+	 * These new registers values are saved in the manager ctx, and
+	 * committed to hardware when we call manager->commit().
+	 */
+	if (manager->ops->mode_set)
+		manager->ops->mode_set(manager->ctx, adjusted_mode);
 
 	return 0;
 }
