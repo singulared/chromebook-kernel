@@ -47,6 +47,11 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 	}
 
 	ret = mmc_io_rw_direct(card, 0, 0, SDIO_CCCR_INTx, 0, &pending);
+
+	if (pending && (card->quirks & MMC_QUIRK_BROKEN_IRQ_POLLING) &&
+	    !(host->caps & MMC_CAP_SDIO_IRQ))
+		mmc_fixup_broken_irq_polling(card);
+
 	if (ret) {
 		pr_debug("%s: error %d reading SDIO_CCCR_INTx\n",
 		       mmc_card_id(card), ret);
