@@ -14,21 +14,17 @@
 #ifndef _DRM_BRIDGE_PTN3460_H_
 #define _DRM_BRIDGE_PTN3460_H_
 
-struct drm_device;
-struct i2c_client;
-struct device_node;
+struct drm_encoder;
 
 #ifdef CONFIG_DRM_PTN3460
 
-extern int ptn3460_init(struct drm_device *dev, struct i2c_client *client,
-			struct device_node *node);
+extern int ptn3460_init(struct drm_encoder *encoder);
 
 #else
 
-static inline int ptn3460_init(struct drm_device *dev,
-		struct i2c_client *client, struct device_node *node)
+static inline int ptn3460_init(struct drm_encoder *encoder)
 {
-	return 0;
+	return -ENODEV;
 }
 
 #endif
