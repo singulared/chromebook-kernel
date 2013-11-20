@@ -113,6 +113,7 @@ struct fimd_context {
 	unsigned long			lcd_clk_rate;
 	void __iomem			*regs;
 	void __iomem			*regs_mie;
+	void __iomem			*regs_timing;
 	struct fimd_mode_data		mode;
 	struct fimd_win_data		win_data[FIMD_WIN_NR];
 	unsigned int			default_win;
@@ -638,11 +639,8 @@ static void fimd_commit(void *in_ctx)
 {
 	struct fimd_context *ctx = in_ctx;
 	struct fimd_mode_data *mode = &ctx->mode;
-	struct fimd_driver_data *driver_data;
-	struct platform_device *pdev = to_platform_device(ctx->dev);
 	u32 val;
 
-	driver_data = drm_fimd_get_driver_data(pdev);
 	if (ctx->suspended)
 		return;
 
@@ -653,26 +651,26 @@ static void fimd_commit(void *in_ctx)
 	DRM_DEBUG_KMS("%ux%u\n", mode->htotal, mode->vtotal);
 
 	/* setup polarity values from machine code. */
-	writel(ctx->vidcon1, ctx->regs + driver_data->timing_base + VIDCON1);
+	writel(ctx->vidcon1, ctx->regs_timing + VIDCON1);
 
 	/* setup vertical timing values. */
 	val = VIDTCON0_VBPD(mode->vbpd - 1) |
 		VIDTCON0_VFPD(mode->vfpd - 1) |
 		VIDTCON0_VSPW(mode->vsync_len - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON0);
+	writel(val, ctx->regs_timing + VIDTCON0);
 
 	/* setup horizontal timing values.  */
 	val = VIDTCON1_HBPD(mode->hbpd - 1) |
 		VIDTCON1_HFPD(mode->hfpd - 1) |
 		VIDTCON1_HSPW(mode->hsync_len - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON1);
+	writel(val, ctx->regs_timing + VIDTCON1);
 
 	/* setup horizontal and vertical display size. */
 	val = VIDTCON2_LINEVAL(mode->vdisplay - 1) |
 	       VIDTCON2_HOZVAL(mode->hdisplay - 1) |
 	       VIDTCON2_LINEVAL_E(mode->vdisplay - 1) |
 	       VIDTCON2_HOZVAL_E(mode->hdisplay - 1);
-	writel(val, ctx->regs + driver_data->timing_base + VIDTCON2);
+	writel(val, ctx->regs_timing + VIDTCON2);
 
 	/* setup clock source, clock divider, enable dma. */
 	val = ctx->vidcon0;
@@ -1046,6 +1044,7 @@ static int fimd_probe(struct platform_device *pdev)
 	struct fimd_context *ctx;
 	struct exynos_drm_fimd_pdata *pdata = pdev->dev.platform_data;
 	struct exynos_drm_panel_info *panel;
+	struct fimd_driver_data *fimd_driver_data;
 	struct resource *res;
 	int win;
 	int ret = -EINVAL;
@@ -1109,6 +1108,10 @@ static int fimd_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to map registers\n");
 		return -ENXIO;
 	}
+
+	/* timing registers are at a platform specific offset */
+	fimd_driver_data = drm_fimd_get_driver_data(pdev);
+	ctx->regs_timing = ctx->regs + fimd_driver_data->timing_base;
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
