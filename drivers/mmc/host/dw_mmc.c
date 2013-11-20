@@ -1054,7 +1054,7 @@ static void dw_mci_init_card(struct mmc_host *mmc, struct mmc_card *card)
 	 * description of the CLKENA register we should disable low power mode
 	 * for SDIO cards if we need SDIO interrupts to work.
 	 */
-	if (mmc->caps | MMC_CAP_SDIO_IRQ) {
+	if (mmc->caps & MMC_CAP_SDIO_IRQ) {
 		const u32 clken_low_pwr = SDMMC_CLKEN_LOW_PWR << slot->id;
 		u32 clk_en_a_old;
 		u32 clk_en_a;
