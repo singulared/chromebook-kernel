@@ -15,6 +15,7 @@
 #include <drm/drmP.h>
 #include <drm/bridge/ptn3460.h>
 #include <drm/bridge/ps8622.h>
+#include <drm/bridge/anx7808.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
@@ -28,17 +29,25 @@ static LIST_HEAD(exynos_drm_display_list);
 
 struct exynos_drm_bridge {
 	enum exynos_drm_output_type type;
+	bool implements_connector;
 	int (*init)(struct drm_encoder *encoder);
 };
 
 static struct exynos_drm_bridge exynos_possible_bridges[] = {
 	{
 		.type = EXYNOS_DISPLAY_TYPE_LCD,
+		.implements_connector = true,
 		.init = ptn3460_init,
 	},
 	{
 		.type = EXYNOS_DISPLAY_TYPE_LCD,
+		.implements_connector = true,
 		.init = ps8622_init,
+	},
+	{
+		.type = EXYNOS_DISPLAY_TYPE_HDMI,
+		.implements_connector = false,
+		.init = anx7808_init,
 	},
 };
 
@@ -54,8 +63,12 @@ static int exynos_drm_attach_bridge(struct drm_encoder *encoder,
 		if (type != bridge->type)
 			continue;
 
+		/*
+		 * If the bridge doesn't implement a connector, return positive
+		 * value so the caller knows to create its own connector.
+		 */
 		if (!bridge->init(encoder))
-			return 0;
+			return bridge->implements_connector ? 0 : 1;
 	}
 	return -ENODEV;
 }
