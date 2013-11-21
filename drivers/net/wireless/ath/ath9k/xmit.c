@@ -617,7 +617,7 @@ static void ath_tx_complete_aggr(struct ath_softc *sc, struct ath_txq *txq,
 
 	if (needreset) {
 		RESET_STAT_INC(sc, RESET_TYPE_TX_ERROR);
-		ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+		ath_queue_reset_work(sc);
 	}
 }
 
@@ -1585,7 +1585,8 @@ void ath_txq_schedule(struct ath_softc *sc, struct ath_txq *txq)
 	struct ath_atx_ac *ac, *ac_tmp, *last_ac;
 	struct ath_atx_tid *tid, *last_tid;
 
-	if (work_pending(&sc->hw_reset_work) || list_empty(&txq->axq_acq) ||
+	if (delayed_work_pending(&sc->hw_reset_work) ||
+	    list_empty(&txq->axq_acq) ||
 	    txq->axq_ampdu_depth >= ATH_AGGR_MIN_QDEPTH)
 		return;
 
@@ -2175,7 +2176,7 @@ static void ath_tx_processq(struct ath_softc *sc, struct ath_txq *txq)
 
 	ath_txq_lock(sc, txq);
 	for (;;) {
-		if (work_pending(&sc->hw_reset_work))
+		if (delayed_work_pending(&sc->hw_reset_work))
 			break;
 
 		if (list_empty(&txq->axq_q)) {
@@ -2266,7 +2267,7 @@ static void ath_tx_complete_poll_work(struct work_struct *work)
 		ath_dbg(ath9k_hw_common(sc->sc_ah), RESET,
 			"tx hung, resetting the chip\n");
 		RESET_STAT_INC(sc, RESET_TYPE_TX_HANG);
-		ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+		ath_queue_reset_work(sc);
 		return;
 	}
 
@@ -2299,7 +2300,7 @@ void ath_tx_edma_tasklet(struct ath_softc *sc)
 	int status;
 
 	for (;;) {
-		if (work_pending(&sc->hw_reset_work))
+		if (delayed_work_pending(&sc->hw_reset_work))
 			break;
 
 		status = ath9k_hw_txprocdesc(ah, NULL, (void *)&ts);
