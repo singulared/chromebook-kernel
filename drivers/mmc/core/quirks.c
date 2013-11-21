@@ -13,6 +13,9 @@
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/sdio_ids.h>
+
+#include "sdio_ops.h"
 
 #ifndef SDIO_VENDOR_ID_TI
 #define SDIO_VENDOR_ID_TI		0x0097
@@ -28,6 +31,10 @@
 
 #ifndef SDIO_DEVICE_ID_STE_CW1200
 #define SDIO_DEVICE_ID_STE_CW1200	0x2280
+#endif
+
+#ifndef SDIO_DEVICE_ID_MARVELL_8797_F0
+#define SDIO_DEVICE_ID_MARVELL_8797_F0	0x9128
 #endif
 
 /*
@@ -57,6 +64,9 @@ static const struct mmc_fixup mmc_fixup_methods[] = {
 
 	SDIO_FIXUP(SDIO_VENDOR_ID_STE, SDIO_DEVICE_ID_STE_CW1200,
 		   add_quirk, MMC_QUIRK_BROKEN_BYTE_MODE_512),
+
+	SDIO_FIXUP(SDIO_VENDOR_ID_MARVELL, SDIO_DEVICE_ID_MARVELL_8797_F0,
+		   add_quirk, MMC_QUIRK_BROKEN_IRQ_POLLING),
 
 	END_FIXUP
 };
@@ -89,3 +99,14 @@ void mmc_fixup_device(struct mmc_card *card, const struct mmc_fixup *table)
 	}
 }
 EXPORT_SYMBOL(mmc_fixup_device);
+
+void mmc_fixup_broken_irq_polling(struct mmc_card *card)
+{
+	unsigned char dummy;
+
+	/* A fake interrupt could be created when we poll SDIO_CCCR_INTx
+	 * register with a Marvell SD8797 card. A dummy CMD52 read to
+	 * function 0 register 0xff can aviod this.
+	 */
+	mmc_io_rw_direct(card, 0, 0, 0xff, 0, &dummy);
+}
