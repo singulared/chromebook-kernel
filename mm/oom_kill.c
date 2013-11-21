@@ -410,16 +410,6 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL,
 					      DEFAULT_RATELIMIT_BURST);
 
-	/*
-	 * If the task is already exiting, don't alarm the sysadmin or kill
-	 * its children or threads, just set TIF_MEMDIE so it can die quickly
-	 */
-	if (p->flags & PF_EXITING) {
-		set_tsk_thread_flag(p, TIF_MEMDIE);
-		put_task_struct(p);
-		return;
-	}
-
 	if (__ratelimit(&oom_rs))
 		dump_header(p, gfp_mask, order, memcg, nodemask);
 
@@ -428,13 +418,30 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 		message, task_pid_nr(p), p->comm, points);
 	task_unlock(p);
 
+	 /*
+	  * while_each_thread is currently not RCU safe. Lets hold the
+	  * tasklist_lock across all invocations of while_each_thread (including
+	  * the one in find_lock_task_mm) in this function.
+	  */
+	read_lock(&tasklist_lock);
+
+	/*
+	 * If the task is already exiting, don't alarm the sysadmin or kill
+	 * its children or threads, just set TIF_MEMDIE so it can die quickly
+	 */
+	if (p->flags & PF_EXITING || !pid_alive(p)) {
+		set_tsk_thread_flag(p, TIF_MEMDIE);
+		put_task_struct(p);
+		read_unlock(&tasklist_lock);
+		return;
+	}
+
 	/*
 	 * If any of p's children has a different mm and is eligible for kill,
 	 * the one with the highest oom_badness() score is sacrificed for its
 	 * parent.  This attempts to lose the minimal amount of work done while
 	 * still freeing memory.
 	 */
-	read_lock(&tasklist_lock);
 	do {
 		list_for_each_entry(child, &t->children, sibling) {
 			unsigned int child_points;
@@ -454,12 +461,17 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 			}
 		}
 	} while_each_thread(p, t);
+
+	p = find_lock_task_mm(victim);
+
+	/*
+	 * Since while_each_thread is currently not RCU safe, this unlock of
+	 * tasklist_lock may need to be moved further down if any additional
+	 * while_each_thread loops get added to this function.
+	 */
 	read_unlock(&tasklist_lock);
 
-	rcu_read_lock();
-	p = find_lock_task_mm(victim);
 	if (!p) {
-		rcu_read_unlock();
 		put_task_struct(victim);
 		return;
 	} else if (victim != p) {
@@ -485,6 +497,7 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 	 * That thread will now get access to memory reserves since it has a
 	 * pending fatal signal.
 	 */
+	rcu_read_lock();
 	for_each_process(p)
 		if (p->mm == mm && !same_thread_group(p, victim) &&
 		    !(p->flags & PF_KTHREAD)) {
