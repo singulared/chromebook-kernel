@@ -880,6 +880,12 @@ static int mxt_proc_messages(struct mxt_data *data, u8 count, bool report)
 	if (!report)
 		return 0;
 
+	/* There could be a race condition for entering BL mode,
+	 * it is a sanity check.
+	 */
+	if (!data->input_dev)
+		return 0;
+
 	update_input = false;
 	for (msg = messages; msg < &messages[count]; msg++) {
 		mxt_dump_message(dev, msg);
@@ -944,12 +950,14 @@ static int mxt_enter_bl(struct mxt_data *data)
 	if (mxt_in_bootloader(data))
 		return 0;
 
-	disable_irq(data->irq);
-
 	if (data->input_dev) {
 		input_unregister_device(data->input_dev);
+		/* Clean up message queue in device */
+		mxt_handle_messages(data, false);
 		data->input_dev = NULL;
 	}
+
+	disable_irq(data->irq);
 
 	/* Change to the bootloader mode */
 	ret = mxt_write_object(data, MXT_GEN_COMMAND_T6, 0,
@@ -966,7 +974,7 @@ static int mxt_enter_bl(struct mxt_data *data)
 	else
 		client->addr = MXT_BOOT_HIGH;
 
-	INIT_COMPLETION(data->bl_completion);
+	init_completion(&data->bl_completion);
 	enable_irq(data->irq);
 
 	/* Wait for CHG assert to indicate successful reset into bootloader */
@@ -991,6 +999,7 @@ static void mxt_exit_bl(struct mxt_data *data)
 
 	if (!mxt_in_bootloader(data))
 		return;
+	init_completion(&data->bl_completion);
 
 	/* Wait for reset */
 	mxt_wait_for_chg(data, MXT_FWRESET_TIME);
