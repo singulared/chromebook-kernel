@@ -3799,6 +3799,7 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 	struct drm_i915_gem_object *obj = to_intel_bo(gem_obj);
 	struct drm_device *dev = obj->base.dev;
 	drm_i915_private_t *dev_priv = dev->dev_private;
+	int ring_id;
 
 	trace_i915_gem_object_destroy(obj);
 
@@ -3816,6 +3817,15 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 
 		dev_priv->mm.interruptible = was_interruptible;
 	}
+
+
+	/* Make sure that there is no dangling pointer to the deleted
+	 * context if it was the last context that was switched away
+	 * from
+	 */
+	for (ring_id = 0; ring_id < I915_NUM_RINGS; ring_id++)
+		if (obj == dev_priv->ring[ring_id].last_context_obj)
+			dev_priv->ring[ring_id].last_context_obj = NULL;
 
 	obj->pages_pin_count = 0;
 	i915_gem_object_put_pages(obj);
