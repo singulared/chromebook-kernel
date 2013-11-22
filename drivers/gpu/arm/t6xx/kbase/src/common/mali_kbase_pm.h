@@ -812,6 +812,26 @@ mali_error kbasep_pm_metrics_init(struct kbase_device *kbdev);
  */
 void kbasep_pm_metrics_term(struct kbase_device *kbdev);
 
+/** Suspend the metrics gathering framework.
+ *
+ * Stop the pm metrics timer.  Usually called upon system suspend.
+ * Further calls to kbasep_pm_record_gpu_active() and
+ * kbasep_pm_record_gpu_idle() will essentially be ignored, since they will not
+ * be used to generate any dvfs events.
+ *
+ * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ */
+void kbasep_pm_metrics_suspend(struct kbase_device *kbdev);
+
+/** Resume the metrics gathering framework.
+ *
+ * Restart the pm metrics timer.  Usually called upon system resume.
+ * All metrics are first reset to 0, and the GPU is considered initially idle.
+ *
+ * @param kbdev     The kbase device structure for the device (must be a valid pointer)
+ */
+void kbasep_pm_metrics_resume(struct kbase_device *kbdev);
+
 /** Record that the GPU is active.
  *
  * This records that the GPU is now active. The previous GPU state must have been idle, the function will assert if

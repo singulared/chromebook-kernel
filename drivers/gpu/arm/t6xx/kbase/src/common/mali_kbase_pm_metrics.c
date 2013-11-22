@@ -102,6 +102,46 @@ void kbasep_pm_metrics_term(kbase_device *kbdev)
 
 KBASE_EXPORT_TEST_API(kbasep_pm_metrics_term)
 
+void kbasep_pm_metrics_suspend(kbase_device *kbdev)
+{
+	unsigned long flags;
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+
+	spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
+	kbdev->pm.metrics.timer_active = MALI_FALSE;
+	spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
+
+	hrtimer_cancel(&kbdev->pm.metrics.timer);
+
+	kbase_pm_unregister_vsync_callback(kbdev);
+}
+
+KBASE_EXPORT_TEST_API(kbasep_pm_metrics_suspend)
+
+void  kbasep_pm_metrics_resume(kbase_device *kbdev)
+{
+	unsigned long flags;
+	KBASE_DEBUG_ASSERT(kbdev != NULL);
+
+	/* reset pm.metrics */
+	spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
+	kbdev->pm.metrics.vsync_hit = 0;
+	kbdev->pm.metrics.utilisation = 0;
+	kbdev->pm.metrics.time_period_start = ktime_get();
+	kbdev->pm.metrics.time_busy = 0;
+	kbdev->pm.metrics.time_idle = 0;
+	/* Unlike at init, gpu is initially idle at resume */
+	kbdev->pm.metrics.gpu_active = MALI_FALSE;
+	kbdev->pm.metrics.timer_active = MALI_TRUE;
+	spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
+
+	hrtimer_start(&kbdev->pm.metrics.timer, HR_TIMER_DELAY_MSEC(kbdev->pm.platform_dvfs_frequency), HRTIMER_MODE_REL);
+
+	kbase_pm_register_vsync_callback(kbdev);
+}
+
+KBASE_EXPORT_TEST_API(kbasep_pm_metrics_resume)
+
 void kbasep_pm_record_gpu_idle(kbase_device *kbdev)
 {
 	unsigned long flags;
