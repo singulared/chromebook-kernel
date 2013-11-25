@@ -282,10 +282,6 @@
 		dump-oops;
 	};
 
-	watchdog {
-		status = "okay";
-	};
-
 	rtc {
 		status = "okay";
 	};
