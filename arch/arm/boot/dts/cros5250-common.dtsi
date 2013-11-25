@@ -148,6 +148,8 @@
 			pinctrl-0 = <&max77686_irq>;
 			wakeup-source;
 			reg = <0x09>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 
 			voltage-regulators {
 				ldo1_reg: LDO1 {
