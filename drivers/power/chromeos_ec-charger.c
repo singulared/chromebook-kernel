@@ -72,9 +72,9 @@ static int is_debounced(struct ec_response_power_info *ec_data)
 static void update_psu_type(struct power_supply *psy,
 			    struct ec_response_power_info *ec_data)
 {
-	dev_dbg(psy->dev, "dev_type = 0x%06x cur_limit = %d\n",
-		ec_data->usb_dev_type & CHARGING_MASK,
-		ec_data->usb_current_limit);
+	dev_info(psy->dev, "dev_type = 0x%06x cur_limit = %d\n",
+		 ec_data->usb_dev_type & CHARGING_MASK,
+		 ec_data->usb_current_limit);
 
 	psy->type = POWER_SUPPLY_TYPE_UNKNOWN;
 	if (is_debounced(ec_data)) {
