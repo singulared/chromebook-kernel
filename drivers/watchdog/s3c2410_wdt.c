@@ -83,10 +83,6 @@ static void __iomem	*wdt_base;
 static unsigned int	 wdt_count;
 static DEFINE_SPINLOCK(wdt_lock);
 
-static void __iomem	*pmu_wdt_disable_reg;
-static void __iomem	*pmu_wdt_mask_reset_reg;
-static int		pmu_wdt_mask_bit;
-
 /* watchdog control routines */
 
 #define DBG(fmt, ...)					\
@@ -96,33 +92,6 @@ do {							\
 } while (0)
 
 /* functions */
-
-static void s3c2410wdt_mask_and_disable_reset(int mask, int mask_bit)
-{
-	unsigned int value;
-
-	if (IS_ERR(pmu_wdt_disable_reg) || IS_ERR(pmu_wdt_mask_reset_reg)
-					|| (mask_bit < 0))
-		return;
-
-	if (mask) {
-		value = readl(pmu_wdt_disable_reg);
-		value |= (1 << mask_bit);
-		writel(value, pmu_wdt_disable_reg);
-
-		value = readl(pmu_wdt_mask_reset_reg);
-		value |= (1 << mask_bit);
-		writel(value, pmu_wdt_mask_reset_reg);
-	} else {
-		value = readl(pmu_wdt_disable_reg);
-		value &= ~(1 << mask_bit);
-		writel(value, pmu_wdt_disable_reg);
-
-		value = readl(pmu_wdt_mask_reset_reg);
-		value &= ~(1 << mask_bit);
-		writel(value, pmu_wdt_mask_reset_reg);
-	}
-}
 
 static int s3c2410wdt_keepalive(struct watchdog_device *wdd)
 {
@@ -341,8 +310,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	int started = 0;
 	int ret;
 	int size;
-	struct resource *res;
-	unsigned int mask_bit;
 
 	DBG("%s: probe=%p\n", __func__, pdev);
 
@@ -376,25 +343,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to ioremap() region\n");
 		ret = -EINVAL;
 		goto err_req;
-	}
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	pmu_wdt_disable_reg = devm_ioremap_resource(&pdev->dev, res);
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
-	pmu_wdt_mask_reset_reg = devm_ioremap_resource(&pdev->dev, res);
-
-	if (!IS_ERR(pmu_wdt_disable_reg) && !IS_ERR(pmu_wdt_mask_reset_reg)) {
-		if (pdev->dev.of_node) {
-			if (of_property_read_u32(pdev->dev.of_node,
-							"reset-mask-bit",
-							&mask_bit)) {
-				dev_warn(dev, "reset-mask-bit not specified\n");
-				pmu_wdt_mask_bit = -EINVAL;
-			} else {
-				pmu_wdt_mask_bit = mask_bit;
-			}
-		}
 	}
 
 	DBG("probe: mapped wdt_base=%p\n", wdt_base);
@@ -464,7 +412,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		 (wtcon & S3C2410_WTCON_RSTEN) ? "en" : "dis",
 		 (wtcon & S3C2410_WTCON_INTEN) ? "en" : "dis");
 
-	s3c2410wdt_mask_and_disable_reset(0, pmu_wdt_mask_bit);
 	return 0;
 
  err_irq:
@@ -492,7 +439,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 
 static int s3c2410wdt_remove(struct platform_device *dev)
 {
-	s3c2410wdt_mask_and_disable_reset(1, pmu_wdt_mask_bit);
 	watchdog_unregister_device(&s3c2410_wdd);
 
 	free_irq(wdt_irq->start, dev);
@@ -513,7 +459,6 @@ static int s3c2410wdt_remove(struct platform_device *dev)
 
 static void s3c2410wdt_shutdown(struct platform_device *dev)
 {
-	s3c2410wdt_mask_and_disable_reset(1, pmu_wdt_mask_bit);
 	s3c2410wdt_stop(&s3c2410_wdd);
 }
 
@@ -528,7 +473,6 @@ static int s3c2410wdt_suspend(struct platform_device *dev, pm_message_t state)
 	wtcon_save = readl(wdt_base + S3C2410_WTCON);
 	wtdat_save = readl(wdt_base + S3C2410_WTDAT);
 
-	s3c2410wdt_mask_and_disable_reset(1, pmu_wdt_mask_bit);
 	/* Note that WTCNT doesn't need to be saved. */
 	s3c2410wdt_stop(&s3c2410_wdd);
 
@@ -543,7 +487,6 @@ static int s3c2410wdt_resume(struct platform_device *dev)
 	writel(wtdat_save, wdt_base + S3C2410_WTCNT); /* Reset count */
 	writel(wtcon_save, wdt_base + S3C2410_WTCON);
 
-	s3c2410wdt_mask_and_disable_reset(0, pmu_wdt_mask_bit);
 	pr_info("watchdog %sabled\n",
 		(wtcon_save & S3C2410_WTCON_ENABLE) ? "en" : "dis");
 
