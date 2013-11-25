@@ -234,7 +234,8 @@ exynos_drm_connector_detect(struct drm_connector *connector, bool force)
 }
 
 static int exynos_drm_connector_set_property(struct drm_connector *connector,
-		struct drm_property *property, uint64_t val)
+		void *state, struct drm_property *property, uint64_t val,
+		void *blob_data)
 {
 	struct exynos_drm_connector *exynos_connector =
 					to_exynos_connector(connector);
