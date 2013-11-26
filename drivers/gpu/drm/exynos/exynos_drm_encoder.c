@@ -40,7 +40,8 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_encoder->display;
 
-	DRM_DEBUG_KMS("%s, encoder dpms: %d\n", __FILE__, mode);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s] [DPMS:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder), drm_get_dpms_name(mode));
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -60,7 +61,8 @@ exynos_drm_encoder_mode_fixup(struct drm_encoder *encoder,
 	struct exynos_drm_display *display = exynos_encoder->display;
 	struct drm_connector *connector;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s] [MODE:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder), mode->name);
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		if (connector->encoder != encoder)
@@ -81,7 +83,9 @@ static void exynos_drm_encoder_mode_set(struct drm_encoder *encoder,
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_encoder->display;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s] [MODE:%s] [ADJ_MODE:%s]\n",
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder),
+			mode->name, adjusted_mode->name);
 
 	if (display->ops->mode_set)
 		display->ops->mode_set(display->ctx, adjusted_mode);
@@ -89,7 +93,8 @@ static void exynos_drm_encoder_mode_set(struct drm_encoder *encoder,
 
 static void exynos_drm_encoder_prepare(struct drm_encoder *encoder)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	/* drm framework doesn't check NULL. */
 }
@@ -98,6 +103,9 @@ static void exynos_drm_encoder_commit(struct drm_encoder *encoder)
 {
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_encoder->display;
+
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	if (display->ops->dpms)
 		display->ops->dpms(display->ctx, DRM_MODE_DPMS_ON);
@@ -110,6 +118,9 @@ static void exynos_drm_encoder_disable(struct drm_encoder *encoder)
 {
 	struct drm_plane *plane;
 	struct drm_device *dev = encoder->dev;
+
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
 
@@ -133,7 +144,8 @@ static void exynos_drm_encoder_destroy(struct drm_encoder *encoder)
 {
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	drm_encoder_cleanup(encoder);
 	kfree(exynos_encoder);
@@ -151,6 +163,9 @@ static unsigned int exynos_drm_encoder_clones(struct drm_encoder *encoder)
 	struct exynos_drm_display *display = exynos_encoder->display;
 	unsigned int clone_mask = 0;
 	int cnt = 0;
+
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	list_for_each_entry(clone, &dev->mode_config.encoder_list, head) {
 		switch (display->type) {
@@ -171,7 +186,7 @@ void exynos_drm_encoder_setup(struct drm_device *dev)
 {
 	struct drm_encoder *encoder;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("\n");
 
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head)
 		encoder->possible_clones = exynos_drm_encoder_clones(encoder);
@@ -185,7 +200,9 @@ exynos_drm_encoder_create(struct drm_device *dev,
 	struct drm_encoder *encoder;
 	struct exynos_drm_encoder *exynos_encoder;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DISPLAY:%s] possible_crtcs:0x%lx\n",
+			exynos_drm_output_type_name(display->type),
+			possible_crtcs);
 
 	if (!possible_crtcs)
 		return NULL;
@@ -200,14 +217,13 @@ exynos_drm_encoder_create(struct drm_device *dev,
 	encoder = &exynos_encoder->drm_encoder;
 	encoder->possible_crtcs = possible_crtcs;
 
-	DRM_DEBUG_KMS("possible_crtcs = 0x%x\n", encoder->possible_crtcs);
-
 	drm_encoder_init(dev, encoder, &exynos_encoder_funcs,
 			DRM_MODE_ENCODER_TMDS);
 
 	drm_encoder_helper_add(encoder, &exynos_encoder_helper_funcs);
 
-	DRM_DEBUG_KMS("encoder has been created\n");
+	DRM_DEBUG_KMS("Created [ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	return encoder;
 }

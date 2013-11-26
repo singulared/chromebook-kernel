@@ -32,7 +32,8 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 	int ret;
 	unsigned long possible_crtcs = 0;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[DISPLAY:%s]\n",
+			exynos_drm_output_type_name(display->type));
 
 	/* Find possible crtcs for this display */
 	list_for_each_entry(manager, &exynos_drm_manager_list, list)
@@ -45,6 +46,9 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 		DRM_ERROR("failed to create encoder\n");
 		return -EFAULT;
 	}
+	DRM_DEBUG_KMS("Created [ENCODER:%d:%s] for [DISPLAY:%s]\n",
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder),
+			exynos_drm_output_type_name(display->type));
 
 	/*
 	 * create and initialize a connector for this sub driver and
@@ -56,6 +60,10 @@ static int exynos_drm_create_enc_conn(struct drm_device *dev,
 		ret = -EFAULT;
 		goto err_destroy_encoder;
 	}
+	DRM_DEBUG_DRIVER("Created [CONNECTOR:%d:%s] for [DISPLAY:%s]\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector),
+			exynos_drm_output_type_name(display->type));
 
 	display->encoder = encoder;
 	display->connector = connector;
@@ -70,6 +78,8 @@ err_destroy_encoder:
 static int exynos_drm_subdrv_probe(struct drm_device *dev,
 					struct exynos_drm_subdrv *subdrv)
 {
+	DRM_DEBUG_DRIVER("[SUBDRV:%s]\n", dev_name(subdrv->dev));
+
 	if (subdrv->probe) {
 		int ret;
 
@@ -94,7 +104,7 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 static void exynos_drm_subdrv_remove(struct drm_device *dev,
 				      struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[SUBDRV:%s]\n", dev_name(subdrv->dev));
 
 	if (subdrv->remove)
 		subdrv->remove(dev, subdrv->dev);
@@ -104,6 +114,8 @@ int exynos_drm_initialize_managers(struct drm_device *dev)
 {
 	struct exynos_drm_manager *manager, *n;
 	int ret, pipe = 0;
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(manager, &exynos_drm_manager_list, list) {
 		if (manager->ops->initialize) {
@@ -141,6 +153,8 @@ void exynos_drm_remove_managers(struct drm_device *dev)
 {
 	struct exynos_drm_manager *manager, *n;
 
+	DRM_DEBUG_DRIVER("\n");
+
 	list_for_each_entry_safe(manager, n, &exynos_drm_manager_list, list)
 		exynos_drm_manager_unregister(manager);
 }
@@ -161,6 +175,8 @@ int exynos_drm_initialize_displays(struct drm_device *dev)
 {
 	struct exynos_drm_display *display, *n;
 	int ret, initialized = 0;
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(display, &exynos_drm_display_list, list) {
 		if (display->ops->initialize) {
@@ -197,6 +213,8 @@ void exynos_drm_remove_displays(struct drm_device *dev)
 {
 	struct exynos_drm_display *display, *n;
 
+	DRM_DEBUG_DRIVER("\n");
+
 	list_for_each_entry_safe(display, n, &exynos_drm_display_list, list)
 		exynos_drm_display_unregister(display);
 }
@@ -206,15 +224,17 @@ int exynos_drm_device_register(struct drm_device *dev)
 	struct exynos_drm_subdrv *subdrv, *n;
 	int err;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
-
 	if (!dev)
 		return -EINVAL;
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry_safe(subdrv, n, &exynos_drm_subdrv_list, list) {
 		err = exynos_drm_subdrv_probe(dev, subdrv);
 		if (err) {
-			DRM_DEBUG("exynos drm subdrv probe failed.\n");
+			DRM_ERROR("[SUBDRV:%s] probe failed, %d\n",
+					dev_name(subdrv->dev), err);
+
 			list_del(&subdrv->list);
 			continue;
 		}
@@ -227,12 +247,12 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 {
 	struct exynos_drm_subdrv *subdrv;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
-
 	if (!dev) {
 		WARN(1, "Unexpected drm device unregister!\n");
 		return -EINVAL;
 	}
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(subdrv, &exynos_drm_subdrv_list, list) {
 		exynos_drm_subdrv_remove(dev, subdrv);
@@ -243,6 +263,9 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 
 int exynos_drm_manager_register(struct exynos_drm_manager *manager)
 {
+	DRM_DEBUG_KMS("[MANAGER:%s]\n",
+			exynos_drm_output_type_name(manager->type));
+
 	BUG_ON(!manager->ops);
 	list_add_tail(&manager->list, &exynos_drm_manager_list);
 	return 0;
@@ -250,6 +273,9 @@ int exynos_drm_manager_register(struct exynos_drm_manager *manager)
 
 int exynos_drm_manager_unregister(struct exynos_drm_manager *manager)
 {
+	DRM_DEBUG_KMS("[MANAGER:%s]\n",
+			exynos_drm_output_type_name(manager->type));
+
 	if (manager->ops->remove)
 		manager->ops->remove(manager->ctx);
 
@@ -259,6 +285,9 @@ int exynos_drm_manager_unregister(struct exynos_drm_manager *manager)
 
 int exynos_drm_display_register(struct exynos_drm_display *display)
 {
+	DRM_DEBUG_KMS("[DISPLAY:%s]\n",
+			exynos_drm_output_type_name(display->type));
+
 	BUG_ON(!display->ops);
 	list_add_tail(&display->list, &exynos_drm_display_list);
 	return 0;
@@ -266,6 +295,9 @@ int exynos_drm_display_register(struct exynos_drm_display *display)
 
 int exynos_drm_display_unregister(struct exynos_drm_display *display)
 {
+	DRM_DEBUG_KMS("[DISPLAY:%s]\n",
+			exynos_drm_output_type_name(display->type));
+
 	if (display->ops->remove)
 		display->ops->remove(display->ctx);
 
@@ -275,10 +307,10 @@ int exynos_drm_display_unregister(struct exynos_drm_display *display)
 
 int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
-
 	if (!subdrv)
 		return -EINVAL;
+
+	DRM_DEBUG_DRIVER("[SUBDRV:%s]\n", dev_name(subdrv->dev));
 
 	list_add_tail(&subdrv->list, &exynos_drm_subdrv_list);
 
@@ -287,10 +319,10 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *subdrv)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
-
 	if (!subdrv)
 		return -EINVAL;
+
+	DRM_DEBUG_DRIVER("[SUBDRV:%s]\n", dev_name(subdrv->dev));
 
 	list_del(&subdrv->list);
 
@@ -301,6 +333,8 @@ int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct exynos_drm_subdrv *subdrv;
 	int ret;
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(subdrv, &exynos_drm_subdrv_list, list) {
 		if (subdrv->open) {
@@ -323,6 +357,8 @@ err:
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file)
 {
 	struct exynos_drm_subdrv *subdrv;
+
+	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(subdrv, &exynos_drm_subdrv_list, list) {
 		if (subdrv->close)

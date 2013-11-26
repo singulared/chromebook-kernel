@@ -43,7 +43,13 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	unsigned long vm_size;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __func__);
+	DRM_DEBUG_KMS("pgoff: 0x%lx vma: 0x%lx - 0x%lx (0x%lx)\n",
+			vma->vm_pgoff, vma->vm_start, vma->vm_end,
+			vma->vm_end - vma->vm_start);
+
+	DRM_DEBUG_KMS("screen: 0x%p (0x%lx) smem: 0x%lx (0x%x)\n",
+			info->screen_base, info->screen_size,
+			info->fix.smem_start, info->fix.smem_len);
 
 	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
 
@@ -88,7 +94,8 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct drm_gem_object *drm_gem_object = &exynos_gem_obj->base;
 	size_t size = drm_gem_object->size;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FB:%d] [NEW FB:%d]\n", DRM_BASE_ID(helper->fb),
+			DRM_BASE_ID(fb));
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(fbi, helper, fb_width, fb_height);
@@ -143,11 +150,10 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 	unsigned long size;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	DRM_DEBUG_KMS("surface width(%d), height(%d) and bpp(%d\n",
+	DRM_DEBUG_KMS("fb: %ux%u surface: %ux%u bpp: %u depth: %u\n",
+			sizes->fb_width, sizes->fb_height,
 			sizes->surface_width, sizes->surface_height,
-			sizes->surface_bpp);
+			sizes->surface_bpp, sizes->surface_depth);
 
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
@@ -203,6 +209,8 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 		goto err_dealloc_cmap;
 
 	mutex_unlock(&dev->struct_mutex);
+
+	DRM_DEBUG_KMS("fbdev using [FB:%d]\n", DRM_BASE_ID(helper->fb));
 	return ret;
 
 err_dealloc_cmap:
@@ -229,10 +237,14 @@ static int exynos_drm_fbdev_probe(struct drm_fb_helper *helper,
 {
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FB:%d]: %ux%u surface: %ux%u bpp: %u depth: %u\n",
+			DRM_BASE_ID(helper->fb),
+			sizes->fb_width, sizes->fb_height,
+			sizes->surface_width, sizes->surface_height,
+			sizes->surface_bpp, sizes->surface_depth);
 
 	/*
-	 * with !helper->fb, it means that this funcion is called first time
+	 * with !helper->fb, it means that this function is called first time
 	 * and after that, the helper->fb would be used as clone mode.
 	 */
 	if (!helper->fb) {
@@ -264,7 +276,7 @@ int exynos_drm_fbdev_init(struct drm_device *dev)
 	unsigned int num_crtc;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("\n");
 
 	if (!dev->mode_config.num_crtc || !dev->mode_config.num_connector)
 		return 0;
@@ -318,6 +330,9 @@ static void exynos_drm_fbdev_destroy(struct drm_device *dev,
 	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
 	struct drm_framebuffer *fb;
 
+	DRM_DEBUG_KMS("[FB:%d]\n",
+			fb_helper ? DRM_BASE_ID(fb_helper->fb) : -1);
+
 	if (is_drm_iommu_supported(dev) && exynos_gem_obj->buffer->kvaddr)
 		vunmap(exynos_gem_obj->buffer->kvaddr);
 
@@ -352,6 +367,8 @@ void exynos_drm_fbdev_fini(struct drm_device *dev)
 	struct exynos_drm_private *private = dev->dev_private;
 	struct exynos_drm_fbdev *fbdev;
 
+	DRM_DEBUG_KMS("\n");
+
 	if (!private || !private->fb_helper)
 		return;
 
@@ -368,6 +385,8 @@ void exynos_drm_fbdev_fini(struct drm_device *dev)
 void exynos_drm_fbdev_restore_mode(struct drm_device *dev)
 {
 	struct exynos_drm_private *private = dev->dev_private;
+
+	DRM_DEBUG_KMS("\n");
 
 	if (!private || !private->fb_helper)
 		return;

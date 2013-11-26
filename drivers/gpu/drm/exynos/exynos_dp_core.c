@@ -31,6 +31,8 @@
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
+	DRM_DEBUG_KMS("\n");
+
 	exynos_dp_reset(dp);
 
 	exynos_dp_swreset(dp);
@@ -84,6 +86,8 @@ static int exynos_dp_read_edid(struct exynos_dp_device *dp)
 	unsigned char sum;
 	unsigned char test_vector;
 	int retval;
+
+	DRM_DEBUG_KMS("\n");
 
 	/*
 	 * EDID device address is 0x50.
@@ -879,6 +883,8 @@ static void exynos_dp_commit(void *in_ctx)
 	struct exynos_dp_device *dp = in_ctx;
 	int ret;
 
+	DRM_DEBUG_KMS("\n");
+
 	ret = exynos_dp_detect_hpd(dp);
 	if (ret) {
 		/* Cable has been disconnected, we're done */
@@ -942,6 +948,8 @@ static void exynos_dp_phy_init(struct exynos_dp_device *dp)
 	struct exynos_dp_platdata *pdata = dp->dev->platform_data;
 	u32 reg;
 
+	DRM_DEBUG_KMS("\n");
+
 	if (dp->phy_addr) {
 		reg = readl(dp->phy_addr);
 		reg |= dp->enable_mask;
@@ -956,6 +964,8 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 {
 	struct exynos_dp_platdata *pdata = dp->dev->platform_data;
 	u32 reg;
+
+	DRM_DEBUG_KMS("\n");
 
 	if (dp->phy_addr) {
 		reg = readl(dp->phy_addr);
@@ -972,6 +982,8 @@ static void exynos_dp_poweron(struct exynos_dp_device *dp)
 	if (dp->dpms_mode == DRM_MODE_DPMS_ON)
 		return;
 
+	DRM_DEBUG_KMS("\n");
+
 	clk_prepare_enable(dp->clock);
 	exynos_dp_phy_init(dp);
 	exynos_dp_init_dp(dp);
@@ -984,6 +996,8 @@ static void exynos_dp_poweroff(struct exynos_dp_device *dp)
 	if (dp->dpms_mode != DRM_MODE_DPMS_ON)
 		return;
 
+	DRM_DEBUG_KMS("\n");
+
 	disable_irq(dp->irq);
 	flush_work(&dp->hotplug_work);
 	exynos_dp_phy_exit(dp);
@@ -993,6 +1007,8 @@ static void exynos_dp_poweroff(struct exynos_dp_device *dp)
 static void exynos_dp_dpms(void *in_ctx, int mode)
 {
 	struct exynos_dp_device *dp = in_ctx;
+
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
@@ -1208,6 +1224,8 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	int ret = 0;
 
+	DRM_DEBUG_KMS("\n");
+
 	dp = devm_kzalloc(&pdev->dev, sizeof(struct exynos_dp_device),
 				GFP_KERNEL);
 	if (!dp) {
@@ -1310,6 +1328,8 @@ static int exynos_dp_remove(struct platform_device *pdev)
 {
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
 
+	DRM_DEBUG_KMS("\n");
+
 	exynos_drm_display_unregister(&exynos_dp_display);
 	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
 
@@ -1320,6 +1340,8 @@ int exynos_dp_suspend(struct device *dev)
 {
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
 
+	DRM_DEBUG_KMS("\n");
+
 	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
 	return 0;
 }
@@ -1327,6 +1349,8 @@ int exynos_dp_suspend(struct device *dev)
 int exynos_dp_resume(struct device *dev)
 {
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
+
+	DRM_DEBUG_KMS("\n");
 
 	exynos_dp_dpms(dp, DRM_MODE_DPMS_ON);
 	return 0;

@@ -39,8 +39,8 @@ enum exynos_crtc_mode {
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 struct exynos_drm_flip_desc {
-        struct drm_framebuffer  *fb;
-        struct kds_resource_set *kds;
+	struct drm_framebuffer  *fb;
+	struct kds_resource_set *kds;
 };
 #endif
 
@@ -216,6 +216,8 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 	struct exynos_drm_flip_desc next_desc;
 	unsigned int ret;
 
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
+
 	if (cur_desc->kds)
 		kds_resource_set_release(&cur_desc->kds);
 
@@ -260,7 +262,8 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 
-	DRM_DEBUG_KMS("crtc[%d] mode[%d]\n", crtc->base.id, mode);
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(crtc),
+			drm_get_dpms_name(mode));
 
 	if (manager->ops->dpms)
 		manager->ops->dpms(manager->ctx, mode);
@@ -273,7 +276,7 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 
 static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	/* drm framework doesn't check NULL. */
 }
@@ -288,7 +291,7 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
 
@@ -304,7 +307,7 @@ exynos_drm_crtc_mode_fixup(struct drm_crtc *crtc,
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [MODE:%s]\n", DRM_BASE_ID(crtc), mode->name);
 
 	if (manager->ops->mode_fixup)
 		return manager->ops->mode_fixup(manager->ctx, mode,
@@ -322,7 +325,9 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [MODE:%s] [ADJ_MODE:%s] @ (%d, %d) [OLD_FB:%d]\n",
+			DRM_BASE_ID(crtc), mode->name, adjusted_mode->name,
+			x, y, DRM_BASE_ID(old_fb));
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
@@ -349,7 +354,8 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(crtc->fb);
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] @ (%d, %d) [OLD_FB:%d]\n",
+			DRM_BASE_ID(crtc), x, y, DRM_BASE_ID(old_fb));
 
 	exynos_drm_fb_get(exynos_fb);
 
@@ -368,7 +374,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 	/* drm framework doesn't check NULL */
 }
 
@@ -377,7 +383,7 @@ static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 	struct drm_plane *plane;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	list_for_each_entry(plane, &crtc->dev->mode_config.plane_list, head) {
 		if (plane->crtc != crtc)
@@ -438,7 +444,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 #endif
 	int ret = -EINVAL;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] [FB:%d]\n", DRM_BASE_ID(crtc),
+			DRM_BASE_ID(fb));
 
 	/* We don't support flipping to non-RGBA buffers. */
 	if (exynos_drm_fb_get_buf_cnt(exynos_fb) != 1) {
@@ -542,7 +549,7 @@ static void exynos_drm_crtc_destroy(struct drm_crtc *crtc)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_private *private = crtc->dev->dev_private;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	private->crtc[exynos_crtc->pipe] = NULL;
 
@@ -558,7 +565,8 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 
-	DRM_DEBUG_KMS("%s\n", __func__);
+	DRM_DEBUG_KMS("[CRTC:%d] [PROPERTY:%s] = %llu\n", DRM_BASE_ID(crtc),
+			property->name, val);
 
 	if (property == dev_priv->crtc_mode_property) {
 		enum exynos_crtc_mode mode = val;
@@ -604,8 +612,6 @@ static void exynos_drm_crtc_attach_mode_property(struct drm_crtc *crtc)
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct drm_property *prop;
 
-	DRM_DEBUG_KMS("%s\n", __func__);
-
 	prop = dev_priv->crtc_mode_property;
 	if (!prop) {
 		prop = drm_property_create_enum(dev, 0, "mode", mode_names,
@@ -617,6 +623,9 @@ static void exynos_drm_crtc_attach_mode_property(struct drm_crtc *crtc)
 	}
 
 	drm_object_attach_property(&crtc->base, prop, 0);
+
+	DRM_DEBUG_KMS("[CRTC:%d]: attached [PROPERTY:%s] == %llu\n",
+			DRM_BASE_ID(crtc), prop->name, prop->values[0]);
 }
 
 int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
@@ -625,7 +634,8 @@ int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
 	struct exynos_drm_private *private = manager->drm_dev->dev_private;
 	struct drm_crtc *crtc;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[MANAGER:%s]\n",
+			exynos_drm_output_type_name(manager->type));
 
 	exynos_crtc = kzalloc(sizeof(*exynos_crtc), GFP_KERNEL);
 	if (!exynos_crtc) {
@@ -656,6 +666,11 @@ int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
 
 	exynos_drm_crtc_attach_mode_property(crtc);
 
+	DRM_DEBUG_KMS("Created [CRTC:%d] for [MANAGER:%s] on pipe:%d\n",
+			DRM_BASE_ID(crtc),
+			exynos_drm_output_type_name(manager->type),
+			manager->pipe);
+
 	return 0;
 }
 
@@ -667,12 +682,12 @@ int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int pipe)
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] pipe: %d\n", DRM_BASE_ID(crtc), pipe);
 
 	if (manager->ops->enable_vblank)
 		ret = manager->ops->enable_vblank(manager->ctx);
 
-	DRM_DEBUG_KMS("pipe: %d = %d\n", pipe, ret);
+	DRM_DEBUG_KMS("enable_vblank(pipe: %d) = %d\n", pipe, ret);
 
 	return ret;
 }
@@ -684,7 +699,7 @@ void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int pipe)
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] pipe: %d\n", DRM_BASE_ID(crtc), pipe);
 
 	if (manager->ops->disable_vblank)
 		manager->ops->disable_vblank(manager->ctx);
@@ -700,7 +715,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 	struct exynos_drm_flip_desc next_desc;
 #endif
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] pipe: %d\n", DRM_BASE_ID(crtc), pipe);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (!kfifo_peek(&exynos_crtc->flip_fifo, &next_desc))
@@ -739,7 +754,7 @@ void exynos_drm_crtc_plane_mode_set(struct drm_crtc *crtc,
 {
 	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	if (manager->ops->win_mode_set)
 		manager->ops->win_mode_set(manager->ctx, overlay);
@@ -749,7 +764,7 @@ void exynos_drm_crtc_plane_commit(struct drm_crtc *crtc, int zpos)
 {
 	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
 
 	if (manager->ops->win_commit)
 		manager->ops->win_commit(manager->ctx, zpos);
@@ -759,7 +774,7 @@ void exynos_drm_crtc_plane_enable(struct drm_crtc *crtc, int zpos)
 {
 	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
 
 	if (manager->ops->win_enable)
 		manager->ops->win_enable(manager->ctx, zpos);
@@ -769,7 +784,7 @@ void exynos_drm_crtc_plane_disable(struct drm_crtc *crtc, int zpos)
 {
 	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
 
 	if (manager->ops->win_disable)
 		manager->ops->win_disable(manager->ctx, zpos);

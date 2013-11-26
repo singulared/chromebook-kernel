@@ -931,7 +931,9 @@ static void hdmi_reg_infoframe(struct hdmi_context *hdata,
 	u32 mod;
 	u32 vic;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	/* TODO: stringify HDMI_PACKET_TYPE */
+	DRM_DEBUG_KMS("type: %d ver: %d len: %d\n", infoframe->type,
+			infoframe->ver, infoframe->len);
 
 	mod = hdmi_reg_read(hdata, HDMI_MODE_SEL);
 	if (hdata->dvi_mode) {
@@ -1008,10 +1010,11 @@ static struct edid *hdmi_get_edid(void *ctx, struct drm_connector *connector)
 	struct edid *raw_edid;
 	struct hdmi_context *hdata = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (!hdata->ddc_port)
 		return ERR_PTR(-ENODEV);
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	raw_edid = drm_get_edid(connector, hdata->ddc_port->adapter);
 	if (!raw_edid)
@@ -1030,7 +1033,7 @@ static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
 	const struct hdmiphy_config *confs;
 	int count, i;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("pixel_clock: %u\n", pixel_clock);
 
 	if (hdata->version == HDMI_VER_EXYNOS4210) {
 		confs = hdmiphy_4210_configs;
@@ -1048,7 +1051,8 @@ static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
 		if (confs[i].pixel_clock == pixel_clock)
 			return i;
 
-	DRM_DEBUG_KMS("Could not find phy config for %d\n", pixel_clock);
+	DRM_DEBUG_KMS("Could not find phy config for pixel_clock: %u\n",
+			pixel_clock);
 	return -EINVAL;
 }
 
@@ -1056,11 +1060,6 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx;
 	int ret;
-
-	DRM_DEBUG_KMS("xres=%d, yres=%d, refresh=%d, intl=%d clock=%d\n",
-		mode->hdisplay, mode->vdisplay, mode->vrefresh,
-		(mode->flags & DRM_MODE_FLAG_INTERLACE) ? true :
-		false, mode->clock * 1000);
 
 	/* We're only dependent on mixer in 4212 & 5420 hdmi */
 	if (hdata->version != HDMI_VER_EXYNOS4210) {
@@ -1072,6 +1071,13 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 	ret = hdmi_find_phy_conf(hdata, mode->clock * 1000);
 	if (ret < 0)
 		return ret;
+
+	DRM_DEBUG_KMS("[MODE:%s] %ux%u vrefresh: %d, interlace:%d clock: %d kHz is OK\n",
+			mode->name, mode->hdisplay, mode->vdisplay,
+			mode->vrefresh,
+			!!(mode->flags & DRM_MODE_FLAG_INTERLACE),
+			mode->clock);
+
 	return 0;
 }
 
@@ -1082,7 +1088,8 @@ static void hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 	struct drm_display_mode *m;
 	int mode_ok;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector), mode->name);
 
 	/*
 	 * Match the incoming mode to a mode in the connector list and copy it
@@ -1106,11 +1113,9 @@ static void hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 		mode_ok = hdmi_check_mode(in_ctx, m);
 
 		if (mode_ok == 0) {
-			DRM_INFO("desired mode doesn't exist so\n");
-			DRM_INFO("use the most suitable mode among modes.\n");
-
-			DRM_DEBUG_KMS("Adjusted Mode: [%d]x[%d] [%d]Hz\n",
-				m->hdisplay, m->vdisplay, m->vrefresh);
+			DRM_INFO("HDMI: desired [MODE:%s] does not exist. Using [%dx%d @ %d Hz]\n",
+					mode->name, m->hdisplay, m->vdisplay,
+					m->vrefresh);
 
 			drm_mode_copy(adjusted_mode, m);
 			break;
@@ -2142,10 +2147,10 @@ static void hdmiphy_conf_reset(struct hdmi_context *hdata)
 
 static void hdmiphy_poweron(struct hdmi_context *hdata)
 {
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (hdata->version == HDMI_VER_EXYNOS4210)
 		return;
+
+	DRM_DEBUG_KMS("\n");
 
 	/* For PHY Mode Setting */
 	hdmiphy_reg_writeb(hdata, HDMIPHY_MODE_SET_DONE,
@@ -2162,10 +2167,10 @@ static void hdmiphy_poweron(struct hdmi_context *hdata)
 
 static void hdmiphy_poweroff(struct hdmi_context *hdata)
 {
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (hdata->version == HDMI_VER_EXYNOS4210)
 		return;
+
+	DRM_DEBUG_KMS("\n");
 
 	/* PHY SW Reset */
 	hdmiphy_conf_reset(hdata);
@@ -2185,6 +2190,8 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 	const u8 *hdmiphy_data;
 	int ret;
 	int i;
+
+	DRM_DEBUG_KMS("\n");
 
 	/* pixel clock */
 	i = hdmi_find_phy_conf(hdata, hdata->mode_conf.pixel_clock);
@@ -2222,7 +2229,7 @@ static void hdmiphy_conf_apply(struct hdmi_context *hdata)
 
 static void hdmi_conf_apply(struct hdmi_context *hdata)
 {
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("\n");
 
 	hdmiphy_conf_reset(hdata);
 	hdmiphy_conf_apply(hdata);
@@ -2258,6 +2265,8 @@ static void hdmi_4210_mode_set(struct hdmi_context *hdata,
 		&hdata->mode_conf.conf.v4210_conf.core;
 	struct hdmi_tg_regs *tg = &hdata->mode_conf.conf.v4210_conf.tg;
 	unsigned int val;
+
+	DRM_DEBUG_KMS("[MODE:%s]\n", m->name);
 
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
@@ -2355,6 +2364,8 @@ static void hdmi_4212_mode_set(struct hdmi_context *hdata,
 	struct hdmi_4212_core_regs *core =
 		&hdata->mode_conf.conf.v4212_conf.core;
 	u32 hact_offset = 0;
+
+	DRM_DEBUG_KMS("[MODE:%s]\n", m->name);
 
 	hdata->mode_conf.cea_video_id =
 		drm_match_cea_mode((struct drm_display_mode *)m);
@@ -2476,12 +2487,8 @@ static void hdmi_4212_mode_set(struct hdmi_context *hdata,
 static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx;
-	struct drm_display_mode *m = mode;
 
-	DRM_DEBUG_KMS("[%s]: xres=%d, yres=%d, refresh=%d, intl=%s\n",
-		__func__, m->hdisplay, m->vdisplay,
-		m->vrefresh, (m->flags & DRM_MODE_FLAG_INTERLACE) ?
-		"INTERLACED" : "PROGERESSIVE");
+	DRM_DEBUG_KMS("[MODE:%s]\n", mode->name);
 
 	/* preserve mode information for later use. */
 	drm_mode_copy(&hdata->current_mode, mode);
@@ -2495,20 +2502,20 @@ static void hdmi_mode_set(void *ctx, struct drm_display_mode *mode)
 static void hdmi_get_max_resol(void *ctx, unsigned int *width,
 					unsigned int *height)
 {
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	*width = MAX_WIDTH;
 	*height = MAX_HEIGHT;
+
+	DRM_DEBUG_KMS("%ux%u\n", *width, *height);
 }
 
 static void hdmi_commit(void *ctx)
 {
 	struct hdmi_context *hdata = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (!hdata->powered)
 		return;
+
+	DRM_DEBUG_KMS("\n");
 
 	hdmi_conf_apply(hdata);
 }
@@ -2524,6 +2531,8 @@ static int hdmi_set_property(void *ctx, struct drm_property *property,
 
 	if (property != mode_config->content_protection_property)
 		return 0;
+
+	DRM_DEBUG_KMS("[PROPERTY:%s] = %llu\n", property->name, val);
 
 	hdata->hdcp_desired = val;
 
@@ -2542,10 +2551,10 @@ static void hdmi_poweron(struct hdmi_context *hdata)
 {
 	struct hdmi_resources *res = &hdata->res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (hdata->powered)
 		return;
+
+	DRM_DEBUG_KMS("\n");
 
 	regulator_bulk_enable(res->regul_count, res->regul_bulk);
 	/* HDMI PHY Enable */
@@ -2569,10 +2578,10 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 {
 	struct hdmi_resources *res = &hdata->res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
-
 	if (!hdata->powered)
 		return;
+
+	DRM_DEBUG_KMS("\n");
 
 	hdcp_stop(hdata);
 
@@ -2595,7 +2604,7 @@ static void hdmi_dpms(void *ctx, int mode)
 {
 	struct hdmi_context *hdata = ctx;
 
-	DRM_DEBUG_KMS("[%d] %s mode %d\n", __LINE__, __func__, mode);
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
@@ -2637,6 +2646,8 @@ static void hdmi_hotplug_work_func(struct work_struct *work)
 	hdata = container_of(work, struct hdmi_context, hotplug_work.work);
 
 	hdata->hpd = gpio_get_value(hdata->hpd_gpio);
+
+	DRM_DEBUG_KMS("hpd: %d\n", hdata->hpd);
 
 	/* Update the block's internal HPD status (necessary for HDCP) */
 	if (!hdata->hpd)
@@ -2849,6 +2860,8 @@ int hdmi_register_audio_device(struct platform_device *pdev)
 	struct platform_device *audio_dev;
 	int ret;
 
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
+
 	audio_dev = platform_device_alloc("exynos-hdmi-audio", -1);
 	if (!audio_dev) {
 		DRM_ERROR("hdmi audio device allocation failed.\n");
@@ -2884,6 +2897,7 @@ err:
 
 void hdmi_unregister_audio_device(void)
 {
+	DRM_DEBUG_KMS("\n");
 	platform_device_unregister(hdmi_audio_device);
 }
 
@@ -2897,7 +2911,7 @@ static int hdmi_probe(struct platform_device *pdev)
 	struct device_node *ddc_node, *phy_node, *hdcp_node;
 	int ret;
 
-	DRM_DEBUG_KMS("[%d]\n", __LINE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	if (pdev->dev.of_node) {
 		pdata = drm_hdmi_dt_parse_pdata(dev);
@@ -3089,7 +3103,7 @@ static int hdmi_remove(struct platform_device *pdev)
 	struct hdmi_context *hdata = get_hdmi_context(dev);
 	struct hdmi_resources *res = &hdata->res;
 
-	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	hdmi_unregister_audio_device();
 

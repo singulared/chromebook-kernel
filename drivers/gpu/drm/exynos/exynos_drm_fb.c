@@ -85,7 +85,7 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 	struct drm_device *drm_dev = fb->dev;
 	unsigned int i;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FB:%d]\n", DRM_BASE_ID(fb));
 
 	mutex_lock(&drm_dev->struct_mutex);
 	drm_framebuffer_cleanup(fb);
@@ -119,11 +119,15 @@ static int exynos_drm_fb_create_handle(struct drm_framebuffer *fb,
 					unsigned int *handle)
 {
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	return drm_gem_handle_create(file_priv,
+	ret = drm_gem_handle_create(file_priv,
 			&exynos_fb->exynos_gem_obj[0]->base, handle);
+	if (!ret)
+		DRM_DEBUG_KMS("[FB:%d] Created handle: [BO:%u]\n",
+				DRM_BASE_ID(fb), *handle);
+
+	return ret;
 }
 
 static int exynos_drm_fb_dirty(struct drm_framebuffer *fb,
@@ -131,7 +135,8 @@ static int exynos_drm_fb_dirty(struct drm_framebuffer *fb,
 				unsigned color, struct drm_clip_rect *clips,
 				unsigned num_clips)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FB:%d] flags: 0x%x color: %u num_clips: %u\n",
+			DRM_BASE_ID(fb), flags, color, num_clips);
 
 	/* TODO */
 
@@ -163,6 +168,11 @@ struct exynos_drm_fb *exynos_drm_fb_init(struct drm_device *dev,
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	int ret;
 
+	DRM_DEBUG_KMS("%ux%u format: %u flags: 0x%x handles[0]: [BO:%u]\n",
+			mode_cmd->width, mode_cmd->height,
+			mode_cmd->pixel_format, mode_cmd->flags,
+			mode_cmd->handles[0]);
+
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
 	ret = check_fb_gem_memory_type(dev, exynos_gem_obj);
@@ -186,6 +196,7 @@ struct exynos_drm_fb *exynos_drm_fb_init(struct drm_device *dev,
 		DRM_ERROR("failed to initialize framebuffer\n");
 		goto err_free_fb;
 	}
+	DRM_DEBUG_KMS("Created [FB:%d]\n", DRM_BASE_ID(&exynos_fb->fb));
 
 	return exynos_fb;
 
@@ -240,7 +251,10 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 	struct exynos_drm_fb *exynos_fb;
 	int i, ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("%ux%u format: %u flags: 0x%x handles[0]: [BO:%u]\n",
+			mode_cmd->width, mode_cmd->height,
+			mode_cmd->pixel_format, mode_cmd->flags,
+			mode_cmd->handles[0]);
 
 	exynos_fb = kzalloc(sizeof(*exynos_fb), GFP_KERNEL);
 	if (!exynos_fb) {
@@ -278,6 +292,7 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		DRM_ERROR("failed to init framebuffer.\n");
 		goto err_unreference;
 	}
+	DRM_DEBUG_KMS("Created [FB:%d]\n", DRM_BASE_ID(&exynos_fb->fb));
 
 	return &exynos_fb->fb;
 
@@ -296,7 +311,8 @@ exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb, int index)
 {
 	struct exynos_drm_gem_buf *buffer;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[FB:%d] index: %d\n", DRM_BASE_ID(&exynos_fb->fb),
+			index);
 
 	BUG_ON(index >= MAX_FB_BUFFER);
 
@@ -310,8 +326,6 @@ exynos_drm_fb_buffer(struct exynos_drm_fb *exynos_fb, int index)
 struct exynos_drm_gem_obj *exynos_drm_fb_obj(struct exynos_drm_fb *exynos_fb,
 					     int index)
 {
-	DRM_DEBUG_KMS("%s\n", __func__);
-
 	BUG_ON(index >= MAX_FB_BUFFER);
 
 	return exynos_fb->exynos_gem_obj[index];
@@ -321,6 +335,8 @@ static void exynos_drm_output_poll_changed(struct drm_device *dev)
 {
 	struct exynos_drm_private *private = dev->dev_private;
 	struct drm_fb_helper *fb_helper = private->fb_helper;
+
+	DRM_DEBUG_KMS("\n");
 
 	if (fb_helper)
 		drm_fb_helper_hotplug_event(fb_helper);
@@ -333,6 +349,8 @@ static const struct drm_mode_config_funcs exynos_drm_mode_config_funcs = {
 
 void exynos_drm_mode_config_init(struct drm_device *dev)
 {
+	DRM_DEBUG_KMS("\n");
+
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
 

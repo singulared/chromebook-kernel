@@ -15,6 +15,9 @@
 #define to_exynos_gem_obj(x)	container_of(x,\
 			struct exynos_drm_gem_obj, base)
 
+#define gem_get_name(o)		((o) ? o->name : -1)
+#define exynos_gem_get_name(o)	((o) ? (o)->base.name : -1)
+
 #define IS_NONCONTIG_BUFFER(f)		(f & EXYNOS_BO_NONCONTIG)
 
 /*

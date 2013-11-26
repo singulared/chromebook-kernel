@@ -23,6 +23,8 @@
 #include <linux/kds.h>
 #endif
 
+#define DRM_BASE_ID(obj)	((obj) ? (obj)->base.id : -1)
+
 #define MAX_CRTC	3
 #define MAX_PLANE	5
 #define MAX_FB_BUFFER	4
@@ -64,6 +66,8 @@ enum exynos_drm_output_type {
 	/* Virtual Display Interface. */
 	EXYNOS_DISPLAY_TYPE_VIDI,
 };
+
+const char *exynos_drm_output_type_name(enum exynos_drm_output_type type);
 
 /*
  * Exynos drm common overlay structure.

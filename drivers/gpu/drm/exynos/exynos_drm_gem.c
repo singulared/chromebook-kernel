@@ -148,8 +148,7 @@ static int exynos_drm_gem_handle_create(struct drm_gem_object *obj,
 	ret = drm_gem_handle_create(file_priv, obj, handle);
 	if (ret)
 		return ret;
-
-	DRM_DEBUG_KMS("gem handle = 0x%x\n", *handle);
+	DRM_DEBUG_KMS("Created handle: [BO:%u]\n", *handle);
 
 	/* drop reference from allocate - handle holds it now. */
 	drm_gem_object_unreference_unlocked(obj);
@@ -162,7 +161,7 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 	struct drm_gem_object *obj;
 	struct exynos_drm_gem_buf *buf;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[GEM:%d]\n", exynos_gem_get_name(exynos_gem_obj));
 
 	obj = &exynos_gem_obj->base;
 	buf = exynos_gem_obj->buffer;
@@ -206,6 +205,8 @@ struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	int ret;
 
+	DRM_DEBUG_KMS("size: %lu\n", size);
+
 	exynos_gem_obj = kzalloc(sizeof(*exynos_gem_obj), GFP_KERNEL);
 	if (!exynos_gem_obj) {
 		DRM_ERROR("failed to allocate exynos gem object\n");
@@ -234,13 +235,14 @@ struct exynos_drm_gem_obj *exynos_drm_gem_create(struct drm_device *dev,
 	struct exynos_drm_gem_buf *buf;
 	int ret;
 
+	DRM_DEBUG_KMS("flags: 0x%x size: %lu\n", flags, size);
+
 	if (!size) {
 		DRM_ERROR("invalid size.\n");
 		return ERR_PTR(-EINVAL);
 	}
 
 	size = roundup_gem_size(size, flags);
-	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	ret = check_gem_flags(flags);
 	if (ret)
@@ -283,7 +285,7 @@ int exynos_drm_gem_create_ioctl(struct drm_device *dev, void *data,
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("size: %llu flags: 0x%x\n", args->size, args->flags);
 
 	exynos_gem_obj = exynos_drm_gem_create(dev, args->flags, args->size);
 	if (IS_ERR(exynos_gem_obj))
@@ -295,6 +297,7 @@ int exynos_drm_gem_create_ioctl(struct drm_device *dev, void *data,
 		exynos_drm_gem_destroy(exynos_gem_obj);
 		return ret;
 	}
+	DRM_DEBUG_KMS("Created [BO:%u]\n", args->handle);
 
 	return 0;
 }
@@ -345,19 +348,21 @@ int exynos_drm_gem_map_offset_ioctl(struct drm_device *dev, void *data,
 				    struct drm_file *file_priv)
 {
 	struct drm_exynos_gem_map_off *args = data;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	DRM_DEBUG_KMS("handle = 0x%x, offset = 0x%lx\n",
-			args->handle, (unsigned long)args->offset);
+	int ret;
 
 	if (!(dev->driver->driver_features & DRIVER_GEM)) {
 		DRM_ERROR("does not support GEM.\n");
 		return -ENODEV;
 	}
 
-	return exynos_drm_gem_dumb_map_offset(file_priv, dev, args->handle,
+	ret = exynos_drm_gem_dumb_map_offset(file_priv, dev, args->handle,
 			&args->offset);
+	if (ret) {
+		DRM_ERROR("failed to map [BO:%u], %d\n", args->handle, ret);
+		return ret;
+	}
+	DRM_DEBUG_KMS("[BO:%u] mapped to 0x%llx\n", args->handle, args->offset);
+	return ret;
 }
 
 static struct drm_file *exynos_drm_find_drm_file(struct drm_device *drm_dev,
@@ -392,7 +397,9 @@ static int exynos_drm_gem_mmap_buffer(struct file *filp,
 	unsigned long vm_size;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[GEM:%d] vma->pgoff: 0x%lx vma: 0x%lx -> 0x%lx\n",
+			gem_get_name(obj), vma->vm_pgoff, vma->vm_start,
+			vma->vm_end);
 
 	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
 	vma->vm_private_data = obj;
@@ -454,8 +461,6 @@ int exynos_drm_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	struct drm_gem_object *obj;
 	unsigned int addr;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
 	if (!(dev->driver->driver_features & DRIVER_GEM)) {
 		DRM_ERROR("does not support GEM.\n");
 		return -ENODEV;
@@ -493,7 +498,8 @@ int exynos_drm_gem_mmap_ioctl(struct drm_device *dev, void *data,
 
 	args->mapped = addr;
 
-	DRM_DEBUG_KMS("mapped = 0x%lx\n", (unsigned long)args->mapped);
+	DRM_DEBUG_KMS("[BO:%u] %llu bytes mapped to 0x%llx\n",
+			args->handle, args->size, args->mapped);
 
 	return 0;
 }
@@ -520,6 +526,9 @@ int exynos_drm_gem_get_ioctl(struct drm_device *dev, void *data,
 
 	drm_gem_object_unreference(obj);
 	mutex_unlock(&dev->struct_mutex);
+
+	DRM_DEBUG_KMS("[BO:%u]: size: %llu flags: 0x%x\n",
+			args->handle, args->size, args->flags);
 
 	return 0;
 }
@@ -670,7 +679,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	struct exynos_drm_gem_obj_node *gem_node;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[BO:%u] flags: 0x%x\n", args->handle, args->flags);
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -756,7 +765,7 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 	struct list_head *cur;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[BO:%u]\n", args->handle);
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -823,7 +832,7 @@ void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	struct exynos_drm_gem_buf *buf;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[GEM:%d]\n", gem_get_name(obj));
 
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 	buf = exynos_gem_obj->buffer;
@@ -841,7 +850,8 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("%ux%u bpp: %u flags: 0x%x\n",
+			args->width, args->height, args->bpp, args->flags);
 
 	/*
 	 * alocate memory to be used for framebuffer.
@@ -864,6 +874,8 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 		exynos_drm_gem_destroy(exynos_gem_obj);
 		return ret;
 	}
+	DRM_DEBUG_KMS("Created [BO:%u] size: %llu pitch: %u\n",
+			args->handle, args->size, args->pitch);
 
 	return 0;
 }
@@ -875,7 +887,7 @@ int exynos_drm_gem_dumb_map_offset(struct drm_file *file_priv,
 	struct drm_gem_object *obj;
 	int ret = 0;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[BO:%u]\n", handle);
 
 	mutex_lock(&dev->struct_mutex);
 
@@ -899,7 +911,7 @@ int exynos_drm_gem_dumb_map_offset(struct drm_file *file_priv,
 	}
 
 	*offset = (u64)obj->map_list.hash.key << PAGE_SHIFT;
-	DRM_DEBUG_KMS("offset = 0x%lx\n", (unsigned long)*offset);
+	DRM_DEBUG_KMS("[BO:%u] mapped to 0x%llx\n", handle, *offset);
 
 out:
 	drm_gem_object_unreference(obj);
@@ -914,7 +926,7 @@ int exynos_drm_gem_dumb_destroy(struct drm_file *file_priv,
 {
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[BO:%u]\n", handle);
 
 	/*
 	 * obj->refcount and obj->handle_count are decreased and
@@ -959,7 +971,7 @@ int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_gem_object *obj;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("pgoff: 0x%lx\n", vma->vm_pgoff);
 
 	/* set vm_area_struct. */
 	ret = drm_gem_mmap(filp, vma);

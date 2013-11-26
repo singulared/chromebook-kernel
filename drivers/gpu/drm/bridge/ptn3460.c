@@ -80,6 +80,8 @@ static void ptn3460_power_up(struct ptn3460_bridge *bridge)
 {
 	int ret;
 
+	DRM_DEBUG_KMS("\n");
+
 	if (bridge->enabled)
 		return;
 
@@ -111,6 +113,8 @@ static void ptn3460_power_down(struct ptn3460_bridge *bridge)
 	if (!bridge->enabled)
 		return;
 
+	DRM_DEBUG_KMS("\n");
+
 	bridge->enabled = false;
 
 	if (gpio_is_valid(bridge->gpio_rst_n))
@@ -123,6 +127,8 @@ static void ptn3460_power_down(struct ptn3460_bridge *bridge)
 static void ptn3460_dpms(struct drm_bridge *dbridge, int mode)
 {
 	struct ptn3460_bridge *bridge = (struct ptn3460_bridge *)dbridge;
+
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	if (mode == DRM_MODE_DPMS_ON)
 		ptn3460_power_up(bridge);

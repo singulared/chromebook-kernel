@@ -89,7 +89,8 @@ static bool vidi_display_is_connected(void *in_ctx)
 {
 	struct vidi_context *ctx = in_ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] connected => %d\n",
+			DRM_BASE_ID(vidi_ctx->crtc), vidi_ctx->connected);
 
 	/*
 	 * connection request would come from user side
@@ -104,7 +105,7 @@ static struct edid *vidi_get_edid(void *in_ctx, struct drm_connector *connector)
 	struct edid *edid;
 	int edid_len;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/*
 	 * the edid data comes from user side and it would be set
@@ -128,7 +129,9 @@ static struct edid *vidi_get_edid(void *in_ctx, struct drm_connector *connector)
 
 static void *vidi_get_panel(void *in_ctx)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	struct vidi_context *vidi_ctx = ctx;
+
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/* TODO. */
 
@@ -137,7 +140,9 @@ static void *vidi_get_panel(void *in_ctx)
 
 static int vidi_check_mode(struct device *dev, struct drm_display_mode *mode)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	struct vidi_context *vidi_ctx = ctx;
+
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	/* TODO. */
 
@@ -156,7 +161,8 @@ static void vidi_dpms(void *in_ctx, int mode)
 {
 	struct vidi_context *ctx = in_ctx;
 
-	DRM_DEBUG_KMS("%s, %d\n", __FILE__, mode);
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(vidi_ctx->crtc),
+			drm_get_dpms_name(mode));
 
 	mutex_lock(&ctx->lock);
 
@@ -201,7 +207,7 @@ static void vidi_commit(void *in_ctx)
 {
 	struct vidi_context *ctx = in_ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (ctx->suspended)
 		return;
@@ -235,7 +241,7 @@ static void vidi_disable_vblank(void *in_ctx)
 {
 	struct vidi_context *ctx = in_ctx;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (ctx->suspended)
 		return;
@@ -251,7 +257,7 @@ static void vidi_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
 	int win;
 	unsigned long offset;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(vidi_ctx->crtc));
 
 	if (!overlay) {
 		DRM_ERROR("overlay is NULL\n");
@@ -304,7 +310,7 @@ static void vidi_win_commit(void *in_ctx, int zpos)
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(vidi_ctx->crtc), win);
 
 	if (ctx->suspended)
 		return;
@@ -331,7 +337,7 @@ static void vidi_win_disable(void *in_ctx, int zpos)
 	struct vidi_win_data *win_data;
 	int win = zpos;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(vidi_ctx->crtc), win);
 
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
@@ -414,7 +420,8 @@ static void vidi_subdrv_remove(struct drm_device *drm_dev, struct device *dev)
 
 static int vidi_power_on(struct vidi_context *ctx, bool enable)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d] enable: %u\n", DRM_BASE_ID(vidi_ctx->crtc),
+			enable);
 
 	if (enable != false && enable != true)
 		return -EINVAL;
@@ -456,7 +463,7 @@ static int vidi_store_connection(struct device *dev,
 	struct vidi_context *ctx = get_vidi_context(dev);
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
 
 	ret = kstrtoint(buf, 0, &ctx->connected);
 	if (ret)
@@ -495,7 +502,7 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 	struct drm_exynos_vidi_connection *vidi = data;
 	int edid_len;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("\n");
 
 	if (!vidi) {
 		DRM_DEBUG_KMS("user data for vidi is null.\n");
@@ -566,7 +573,7 @@ static int vidi_probe(struct platform_device *pdev)
 	struct exynos_drm_subdrv *subdrv;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -599,7 +606,7 @@ static int vidi_remove(struct platform_device *pdev)
 {
 	struct vidi_context *ctx = platform_get_drvdata(pdev);
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	exynos_drm_subdrv_unregister(&ctx->subdrv);
 

@@ -297,6 +297,8 @@ static void ps8622_dpms(struct drm_bridge *dbridge, int mode)
 {
 	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
 
+	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
+
 	if (mode == DRM_MODE_DPMS_ON)
 		ps8622_power_up(bridge);
 	else

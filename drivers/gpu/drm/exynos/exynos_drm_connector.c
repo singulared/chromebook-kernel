@@ -33,7 +33,7 @@ convert_to_display_mode(struct drm_display_mode *mode,
 			struct exynos_drm_panel_info *panel)
 {
 	struct fb_videomode *timing = &panel->timing;
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[MODE:%s]\n", mode->name);
 
 	mode->clock = timing->pixclock / 1000;
 	mode->vrefresh = timing->refresh;
@@ -66,7 +66,8 @@ static int exynos_drm_connector_get_modes(struct drm_connector *connector)
 	unsigned int count = 0;
 	int ret;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	/*
 	 * if get_edid() exists then get_edid() callback of hdmi side
@@ -131,7 +132,9 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 	struct exynos_drm_display *display = exynos_connector->display;
 	int ret = MODE_BAD;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector), mode->name);
 
 	if (display->ops->check_mode)
 		if (!display->ops->check_mode(display->ctx, mode))
@@ -149,7 +152,8 @@ static struct drm_encoder *exynos_drm_best_encoder(
 	struct drm_mode_object *obj;
 	struct drm_encoder *encoder;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	obj = drm_mode_object_find(dev, exynos_connector->encoder_id,
 				   DRM_MODE_OBJECT_ENCODER);
@@ -160,6 +164,11 @@ static struct drm_encoder *exynos_drm_best_encoder(
 	}
 
 	encoder = obj_to_encoder(obj);
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] == [ENCODER:%d:%s]\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector),
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder));
 
 	return encoder;
 }
@@ -192,6 +201,10 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 	struct exynos_drm_manager *manager;
 	int ret;
 	unsigned int width, height;
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] max: %ux%u\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector), max_width,
+			max_height);
 
 	width = max_width;
 	height = max_height;
@@ -226,14 +239,17 @@ exynos_drm_connector_detect(struct drm_connector *connector, bool force)
 	struct exynos_drm_display *display = exynos_connector->display;
 	enum drm_connector_status status = connector_status_disconnected;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
 	if (display->ops->is_connected) {
 		if (display->ops->is_connected(display->ctx))
 			status = connector_status_connected;
 		else
 			status = connector_status_disconnected;
 	}
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] force: %d == %s\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector), force,
+			drm_get_connector_status_name(status));
 
 	return status;
 }
@@ -260,7 +276,8 @@ static void exynos_drm_connector_destroy(struct drm_connector *connector)
 	struct exynos_drm_connector *exynos_connector =
 		to_exynos_connector(connector);
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
 
 	drm_sysfs_connector_remove(connector);
 	drm_connector_cleanup(connector);
@@ -284,7 +301,8 @@ struct drm_connector *exynos_drm_connector_create(struct drm_device *dev,
 	int type;
 	int err;
 
-	DRM_DEBUG_KMS("%s\n", __FILE__);
+	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
+			drm_get_encoder_name(encoder));
 
 	exynos_connector = kzalloc(sizeof(*exynos_connector), GFP_KERNEL);
 	if (!exynos_connector) {
@@ -334,7 +352,10 @@ struct drm_connector *exynos_drm_connector_create(struct drm_device *dev,
 		goto err_sysfs;
 	}
 
-	DRM_DEBUG_KMS("connector has been created\n");
+	DRM_DEBUG_KMS("New [CONNECTOR:%d:%s] attached to [ENCODER:%d:%s]\n",
+			DRM_BASE_ID(connector),
+			drm_get_connector_name(connector),
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder));
 
 	return connector;
 

@@ -85,7 +85,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	int nr;
 	struct bridge_init bridge;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("flags: 0x%lx\n", flags);
 
 	private = kzalloc(sizeof(struct exynos_drm_private), GFP_KERNEL);
 	if (!private) {
@@ -236,7 +236,7 @@ static int exynos_drm_unload(struct drm_device *dev)
 {
 	struct exynos_drm_private *private = dev->dev_private;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	exynos_drm_fbdev_fini(dev);
 	exynos_drm_device_unregister(dev);
@@ -262,6 +262,8 @@ static int exynos_drm_suspend(struct drm_device *dev, pm_message_t state)
 {
 	struct drm_connector *connector;
 
+	DRM_DEBUG_DRIVER("pm_event:%d\n", state.event);
+
 	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		int old_dpms = connector->dpms;
@@ -281,6 +283,8 @@ static int exynos_drm_resume(struct drm_device *dev)
 {
 	struct drm_connector *connector;
 
+	DRM_DEBUG_DRIVER("\n");
+
 	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		if (connector->funcs->dpms)
@@ -297,7 +301,7 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	file_priv = kzalloc(sizeof(*file_priv), GFP_KERNEL);
 	if (!file_priv)
@@ -315,7 +319,7 @@ static void exynos_drm_preclose(struct drm_device *dev,
 	struct drm_exynos_file_private *file_private = file->driver_priv;
 	struct exynos_drm_gem_obj_node *cur, *d;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	mutex_lock(&dev->struct_mutex);
 	/* release kds resource sets for outstanding GEM object acquires */
@@ -336,7 +340,7 @@ static void exynos_drm_preclose(struct drm_device *dev,
 
 static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	if (!file->driver_priv)
 		return;
@@ -347,7 +351,7 @@ static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 
 static void exynos_drm_lastclose(struct drm_device *dev)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	exynos_drm_fbdev_restore_mode(dev);
 }
@@ -443,7 +447,7 @@ static struct drm_driver exynos_drm_driver = {
 
 static int exynos_drm_platform_probe(struct platform_device *pdev)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[PDEV:%s]\n", pdev->name);
 
 	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	exynos_drm_driver.num_ioctls = DRM_ARRAY_SIZE(exynos_ioctls);
@@ -456,11 +460,27 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 
 static int exynos_drm_platform_remove(struct platform_device *pdev)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("[PDEV:%s]\n", pdev->name);
 
 	drm_platform_exit(&exynos_drm_driver, pdev);
 
 	return 0;
+}
+
+const char *exynos_drm_output_type_name(enum exynos_drm_output_type type)
+{
+	switch (type) {
+	case EXYNOS_DISPLAY_TYPE_NONE:
+		return "NONE";
+	case EXYNOS_DISPLAY_TYPE_LCD:
+		return "LCD";
+	case EXYNOS_DISPLAY_TYPE_HDMI:
+		return "HDMI";
+	case EXYNOS_DISPLAY_TYPE_VIDI:
+		return "VIDI";
+	default:
+		return "?";
+	}
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -531,7 +551,7 @@ static int __init exynos_drm_init(void)
 {
 	int ret;
 
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 #ifdef CONFIG_DRM_EXYNOS_DP
 	ret = platform_driver_register(&dp_driver);
@@ -659,7 +679,7 @@ out_dp:
 
 static void __exit exynos_drm_exit(void)
 {
-	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+	DRM_DEBUG_DRIVER("\n");
 
 	platform_device_unregister(exynos_drm_pdev);
 

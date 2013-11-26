@@ -28,6 +28,9 @@ static int exynos_gem_attach_dma_buf(struct dma_buf *dmabuf,
 {
 	struct exynos_drm_dmabuf_attachment *exynos_attach;
 
+	DRM_DEBUG_PRIME("[DEV:%s] size:%zd\n", dev_name(attach->dev),
+			attach->dmabuf->size);
+
 	exynos_attach = kzalloc(sizeof(*exynos_attach), GFP_KERNEL);
 	if (!exynos_attach)
 		return -ENOMEM;
@@ -46,6 +49,9 @@ static void exynos_gem_detach_dma_buf(struct dma_buf *dmabuf,
 
 	if (!exynos_attach)
 		return;
+
+	DRM_DEBUG_PRIME("[DEV:%s] size:%zd\n", dev_name(attach->dev),
+			attach->dmabuf->size);
 
 	sgt = &exynos_attach->sgt;
 
@@ -71,7 +77,8 @@ static struct sg_table *
 	unsigned int i;
 	int nents, ret;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("[DEV:%s] size:%zd dir:%d\n", dev_name(attach->dev),
+			attach->dmabuf->size, dir);
 
 	/* just return current sgt if already requested. */
 	if (exynos_attach->dir == dir && exynos_attach->is_mapped)
@@ -127,13 +134,15 @@ static void exynos_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 						enum dma_data_direction dir)
 {
 	/* Nothing to do. */
+	DRM_DEBUG_PRIME("[DEV:%s] size:%zd dir:%d\n", dev_name(attach->dev),
+			attach->dmabuf->size, dir);
 }
 
 static void exynos_dmabuf_release(struct dma_buf *dmabuf)
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj = dmabuf->priv;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("size: %zd\n", dmabuf->size);
 
 	/*
 	 * exynos_dmabuf_release() call means that file object's
@@ -229,6 +238,8 @@ struct dma_buf *exynos_dmabuf_prime_export(struct drm_device *drm_dev,
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj = to_exynos_gem_obj(obj);
 
+	DRM_DEBUG_PRIME("[GEM:%d] flags:0x%08x\n", gem_get_name(obj), flags);
+
 	return dma_buf_export(exynos_gem_obj, &exynos_dmabuf_ops,
 				exynos_gem_obj->base.size, flags);
 }
@@ -243,7 +254,7 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 	struct exynos_drm_gem_buf *buffer;
 	int ret;
 
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
+	DRM_DEBUG_PRIME("size: %zd\n", dma_buf->size);
 
 	/* is this one of own objects? */
 	if (dma_buf->ops == &exynos_dmabuf_ops) {
