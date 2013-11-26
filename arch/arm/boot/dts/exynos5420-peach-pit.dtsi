@@ -1322,4 +1322,13 @@
 			powerdown-settings = <6 3 6 3 1 3 3>;
 		};
 	};
+
+	/*
+	 * Use longest HW watchdog in SoC (32 seconds) since the hardware
+	 * watchdog provides no debugging information (compared to soft/hard
+	 * lockup detectors) and so should be last resort.
+	 */
+	watchdog@101D0000 {
+		timeout-sec = <32>;
+	};
 };
