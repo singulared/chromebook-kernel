@@ -667,10 +667,51 @@ static int hdmi_audio_remove(struct platform_device *pdev)
 	return ret;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int hdmi_audio_suspend(struct device *dev)
+{
+	struct hdmi_audio_context *ctx = NULL;
+	struct audio_codec_plugin *plugin;
+
+	snd_printdd("[%d] %s\n", __LINE__, __func__);
+
+	plugin = dev_get_drvdata(dev);
+	ctx = container_of(plugin, struct hdmi_audio_context, plugin);
+
+	disable_irq(ctx->int_irq);
+	atomic_set(&ctx->plugged, 0);
+	return 0;
+}
+
+static int hdmi_audio_resume(struct device *dev)
+{
+	struct hdmi_audio_context *ctx = NULL;
+	struct audio_codec_plugin *plugin;
+	u32 val;
+
+	snd_printdd("[%d] %s\n", __LINE__, __func__);
+
+	plugin = dev_get_drvdata(dev);
+	ctx = container_of(plugin, struct hdmi_audio_context, plugin);
+
+	val = gpio_get_value(ctx->hpd_gpio);
+	atomic_set(&ctx->plugged, !!val);
+
+	queue_delayed_work(ctx->hpd_wq, &ctx->hotplug_work, 0);
+	enable_irq(ctx->int_irq);
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops hdmi_audio_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(hdmi_audio_suspend, hdmi_audio_resume)
+};
+
 static struct platform_driver hdmi_audio_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
+		.pm = &hdmi_audio_pm_ops,
 	},
 	.probe = hdmi_audio_probe,
 	.remove = hdmi_audio_remove,
