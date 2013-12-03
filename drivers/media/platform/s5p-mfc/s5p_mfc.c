@@ -1117,10 +1117,11 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 }
 
 #ifdef CONFIG_EXYNOS_IOMMU
-void s5p_mfc_cleanup_memdevs_iommu(void)
+void s5p_mfc_cleanup_memdevs_iommu(struct platform_device *pdev)
 {
 	if (mapping) {
 		s5p_mfc_clock_on();
+		arm_iommu_detach_device(&pdev->dev);
 		arm_iommu_release_mapping(mapping);
 		s5p_mfc_clock_off();
 	}
@@ -1140,7 +1141,7 @@ void s5p_mfc_cleanup_memdevs_noiommu(struct platform_device *pdev)
 void s5p_mfc_cleanup_memdevs(struct platform_device *pdev)
 {
 #ifdef CONFIG_EXYNOS_IOMMU
-	s5p_mfc_cleanup_memdevs_iommu();
+	s5p_mfc_cleanup_memdevs_iommu(pdev);
 #else
 	s5p_mfc_cleanup_memdevs_noiommu(pdev);
 #endif
