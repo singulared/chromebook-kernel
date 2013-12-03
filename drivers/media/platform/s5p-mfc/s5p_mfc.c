@@ -1046,22 +1046,23 @@ static void *mfc_get_drv_data(struct platform_device *pdev);
 static int s5p_mfc_alloc_memdevs_iommu(struct s5p_mfc_dev *dev)
 {
 	struct device *mdev = &dev->plat_dev->dev;
+	int ret;
 
 	s5p_mfc_clock_on();
 	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
 			SZ_512M, 4);
-	if (mapping == NULL) {
+	if (IS_ERR_OR_NULL(mapping)) {
 		mfc_err("IOMMU mapping failed\n");
-		s5p_mfc_clock_off();
-		return -EFAULT;
+		ret = mapping ? PTR_ERR(mapping) : -ENOMEM;
+		goto out;
 	}
 	mdev->dma_parms = devm_kzalloc(&dev->plat_dev->dev,
 			sizeof(*mdev->dma_parms), GFP_KERNEL);
 	dma_set_max_seg_size(mdev, 0xffffffffu);
-	arm_iommu_attach_device(mdev, mapping);
-
+	ret = arm_iommu_attach_device(mdev, mapping);
+out:
 	s5p_mfc_clock_off();
-	return 0;
+	return ret;
 }
 
 #else
@@ -1200,8 +1201,11 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 
 	if (pdev->dev.of_node) {
-		if (s5p_mfc_alloc_memdevs(dev) < 0)
+		ret = s5p_mfc_alloc_memdevs(dev);
+		if (ret) {
+			dev_err(&pdev->dev, "Failed to create device memory\n");
 			goto err_res;
+		}
 	} else {
 		dev->mem_dev_l = device_find_child(&dev->plat_dev->dev,
 				"s5p-mfc-l", match_child);
