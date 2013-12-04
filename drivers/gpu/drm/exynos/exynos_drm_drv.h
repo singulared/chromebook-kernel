@@ -54,8 +54,6 @@ struct drm_device;
 struct exynos_drm_overlay;
 struct drm_connector;
 
-extern unsigned int drm_vblank_offdelay;
-
 /* this enumerates display type. */
 enum exynos_drm_output_type {
 	EXYNOS_DISPLAY_TYPE_NONE,
