@@ -124,13 +124,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 
 	exynos_drm_mode_config_init(dev);
 
-	/*
-	 * with vblank_disable_allowed = 1, vblank interrupt will be disabled
-	 * by drm timer once a current process gives up ownership of
-	 * vblank event (after drm_vblank_put function is called).
-	 */
-	dev->vblank_disable_allowed = 1;
-
 	ret = exynos_drm_initialize_managers(dev);
 	if (ret)
 		goto err_mode_config_cleanup;
@@ -151,6 +144,13 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = drm_vblank_init(dev, MAX_CRTC);
 	if (ret)
 		goto err_display_cleanup;
+
+	/*
+	 * with vblank_disable_allowed = 1, vblank interrupt will be disabled
+	 * by drm timer once a current process gives up ownership of
+	 * vblank event (after drm_vblank_put function is called).
+	 */
+	dev->vblank_disable_allowed = 1;
 
 	ret = find_bridge("ptn3460-bridge", &bridge);
 	if (ret) {
