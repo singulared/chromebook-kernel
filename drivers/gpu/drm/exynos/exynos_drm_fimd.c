@@ -728,6 +728,8 @@ static void fimd_window_resume(struct fimd_context *ctx)
 	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		win_data->enabled = win_data->resume;
+		if (win_data->enabled)
+			fimd_win_commit(ctx, i);
 	}
 }
 
