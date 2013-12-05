@@ -703,33 +703,6 @@ static void fimd_disable_vblank(void *in_ctx)
 	disable_irq(ctx->irq);
 }
 
-static void fimd_wait_for_vblank(struct fimd_context *ctx)
-{
-	u32 val;
-
-	if (ctx->suspended)
-		return;
-
-	DRM_DEBUG_KMS("\n");
-
-	val = readl(ctx->regs + VIDINTCON0);
-
-	drm_vblank_get(ctx->drm_dev, ctx->pipe);
-
-	atomic_set(&ctx->wait_vsync_event, 1);
-
-	/*
-	 * wait for FIMD to signal VSYNC interrupt or return after
-	 * timeout which is set to 50ms (refresh rate of 20).
-	 */
-	if (!wait_event_timeout(ctx->wait_vsync_queue,
-				!atomic_read(&ctx->wait_vsync_event),
-				DRM_HZ/20))
-		DRM_ERROR("vblank wait timed out.\n");
-
-	drm_vblank_put(ctx->drm_dev, ctx->pipe);
-}
-
 static void fimd_window_suspend(struct fimd_context *ctx)
 {
 	struct fimd_win_data *win_data;
@@ -743,7 +716,6 @@ static void fimd_window_suspend(struct fimd_context *ctx)
 		if (win_data->enabled)
 			fimd_win_disable(ctx, i);
 	}
-	fimd_wait_for_vblank(ctx);
 }
 
 static void fimd_window_resume(struct fimd_context *ctx)
@@ -831,8 +803,6 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	 * a destroyed buffer later.
 	 */
 	fimd_window_suspend(ctx);
-
-	fimd_disable_vblank(ctx);
 
 	writel(0, ctx->regs + DPCLKCON);
 
