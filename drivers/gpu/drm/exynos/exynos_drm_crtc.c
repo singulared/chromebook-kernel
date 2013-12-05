@@ -302,6 +302,8 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 
 	if (manager->ops->commit)
 		manager->ops->commit(manager->ctx);
+
+	drm_vblank_post_modeset(crtc->dev, exynos_crtc->pipe);
 }
 
 static bool
@@ -333,6 +335,8 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	DRM_DEBUG_KMS("[CRTC:%d] [MODE:%s] [ADJ_MODE:%s] @ (%d, %d) [OLD_FB:%d]\n",
 			DRM_BASE_ID(crtc), mode->name, adjusted_mode->name,
 			x, y, DRM_BASE_ID(old_fb));
+
+	drm_vblank_pre_modeset(crtc->dev, exynos_crtc->pipe);
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
