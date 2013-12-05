@@ -237,6 +237,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 			exynos_drm_fb_put(to_exynos_fb(next_desc.fb));
 		if (next_desc.kds)
 			kds_resource_set_release(&next_desc.kds);
+		drm_vblank_put(drm_dev, exynos_crtc->pipe);
 	}
 
 	/* Now we'll promote the pending frame to front */
@@ -244,6 +245,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 	BUG_ON(!ret);
 
 	atomic_set(&exynos_crtc->flip_pending, 0);
+	drm_vblank_put(drm_dev, exynos_crtc->pipe);
 
 	exynos_drm_crtc_wait_and_release_kds(&next_desc);
 
