@@ -90,9 +90,9 @@ static int ps8622_set(struct i2c_client *client, u8 page, u8 reg, u8 val)
 	return !(ret == 1);
 }
 
-static int ps8622_send_config(struct ps8622_bridge *bridge)
+static int ps8622_send_config(struct ps8622_bridge *ps_bridge)
 {
-	struct i2c_client *cl = bridge->client;
+	struct i2c_client *cl = ps_bridge->client;
 	int err = 0;
 
 	/* wait 20ms after power ON */
@@ -135,10 +135,10 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 	/* EQ Training State Machine Setting */
 	err |= ps8622_set(cl, 0x04, 0x54, 0x10); /* RCO calibration start */
 	/* Logic, needs more than 10 I2C command */
-	err |= ps8622_set(cl, 0x01, 0x02, 0x80 | bridge->max_lane_count);
+	err |= ps8622_set(cl, 0x01, 0x02, 0x80 | ps_bridge->max_lane_count);
 						 /* [4:0] MAX_LANE_COUNT set to
 						  * max supported lanes */
-	err |= ps8622_set(cl, 0x01, 0x21, 0x80 | bridge->lane_count);
+	err |= ps8622_set(cl, 0x01, 0x21, 0x80 | ps_bridge->lane_count);
 						 /* [4:0] LANE_COUNT_SET set to
 						  * chosen lane count */
 	err |= ps8622_set(cl, 0x00, 0x52, 0x20);
@@ -167,10 +167,11 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 						  * revision '01' */
 	err |= ps8622_set(cl, 0x01, 0xcb, 0x05); /* DPCD40B, Initial Code minor
 						  * revision '05' */
-	if (bridge->bl) {
+	if (ps_bridge->bl) {
 		err |= ps8622_set(cl, 0x01, 0xa5, 0xa0);
 						/* DPCD720, internal PWM */
-		err |= ps8622_set(cl, 0x01, 0xa7, bridge->bl->props.brightness);
+		err |= ps8622_set(cl, 0x01, 0xa7,
+				ps_bridge->bl->props.brightness);
 						 /* FFh for 100% brightness,
 						  *  0h for 0% brightness */
 	} else {
@@ -193,23 +194,23 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 	return err ? -EIO : 0;
 }
 
-static void ps8622_power_up(struct ps8622_bridge *bridge)
+static void ps8622_power_up(struct ps8622_bridge *ps_bridge)
 {
 	int ret;
 
-	if (bridge->enabled)
+	if (ps_bridge->enabled)
 		return;
 
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 0);
+	if (gpio_is_valid(ps_bridge->gpio_rst_n))
+		gpio_set_value(ps_bridge->gpio_rst_n, 0);
 
-	if (bridge->v12)
-		regulator_enable(bridge->v12);
-	regulator_enable(bridge->bck_fet);
-	regulator_enable(bridge->lcd_fet);
+	if (ps_bridge->v12)
+		regulator_enable(ps_bridge->v12);
+	regulator_enable(ps_bridge->bck_fet);
+	regulator_enable(ps_bridge->lcd_fet);
 
-	if (gpio_is_valid(bridge->gpio_slp_n))
-		gpio_set_value(bridge->gpio_slp_n, 1);
+	if (gpio_is_valid(ps_bridge->gpio_slp_n))
+		gpio_set_value(ps_bridge->gpio_slp_n, 1);
 
 	/*
 	 * T1 is the range of time that it takes for the power to rise after we
@@ -224,24 +225,24 @@ static void ps8622_power_up(struct ps8622_bridge *bridge)
 	usleep_range(PS8622_RST_HIGH_T2_MIN_US + PS8622_POWER_RISE_T1_MAX_US,
 		     PS8622_RST_HIGH_T2_MAX_US + PS8622_POWER_RISE_T1_MIN_US);
 
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 1);
+	if (gpio_is_valid(ps_bridge->gpio_rst_n))
+		gpio_set_value(ps_bridge->gpio_rst_n, 1);
 
-	ret = ps8622_send_config(bridge);
+	ret = ps8622_send_config(ps_bridge);
 	if (ret)
 		DRM_ERROR("Failed to send config to bridge (%d)\n", ret);
 
-	bridge->enabled = true;
+	ps_bridge->enabled = true;
 }
 
-static void ps8622_power_down(struct ps8622_bridge *bridge)
+static void ps8622_power_down(struct ps8622_bridge *ps_bridge)
 {
-	if (!bridge->enabled)
+	if (!ps_bridge->enabled)
 		return;
 
-	bridge->enabled = false;
+	ps_bridge->enabled = false;
 
-	regulator_disable(bridge->bck_fet);
+	regulator_disable(ps_bridge->bck_fet);
 	msleep(PS8622_PWMO_END_T12_MS);
 
 	/*
@@ -249,12 +250,12 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 	 * else might keep them on. In that case, we want to assert the slp gpio
 	 * to lower power.
 	 */
-	if (gpio_is_valid(bridge->gpio_slp_n))
-		gpio_set_value(bridge->gpio_slp_n, 0);
+	if (gpio_is_valid(ps_bridge->gpio_slp_n))
+		gpio_set_value(ps_bridge->gpio_slp_n, 0);
 
-	regulator_disable(bridge->lcd_fet);
-	if (bridge->v12)
-		regulator_disable(bridge->v12);
+	regulator_disable(ps_bridge->lcd_fet);
+	if (ps_bridge->v12)
+		regulator_disable(ps_bridge->v12);
 
 	/*
 	 * Sleep for at least the amount of time that it takes the power rail to
@@ -262,25 +263,25 @@ static void ps8622_power_down(struct ps8622_bridge *bridge)
 	 */
 	usleep_range(PS8622_POWER_FALL_T16_MAX_US,
 		     2 * PS8622_POWER_FALL_T16_MAX_US);
-	if (gpio_is_valid(bridge->gpio_rst_n))
-		gpio_set_value(bridge->gpio_rst_n, 0);
+	if (gpio_is_valid(ps_bridge->gpio_rst_n))
+		gpio_set_value(ps_bridge->gpio_rst_n, 0);
 
 	msleep(PS8622_POWER_OFF_T17_MS);
 }
 
 static int ps8622_backlight_update(struct backlight_device *bl)
 {
-	struct ps8622_bridge *bridge = dev_get_drvdata(&bl->dev);
+	struct ps8622_bridge *ps_bridge = dev_get_drvdata(&bl->dev);
 	int brightness = bl->props.brightness;
 
-	if (!bridge->enabled)
+	if (!ps_bridge->enabled)
 		return -EINVAL;
 
 	if (bl->props.power != FB_BLANK_UNBLANK ||
 	    bl->props.state & (BL_CORE_SUSPENDED | BL_CORE_FBBLANK))
 		brightness = 0;
 
-	return ps8622_set(bridge->client, 0x01, 0xa7, brightness);
+	return ps8622_set(ps_bridge->client, 0x01, 0xa7, brightness);
 }
 
 static int ps8622_backlight_get(struct backlight_device *bl)
@@ -295,21 +296,21 @@ static const struct backlight_ops ps8622_backlight_ops = {
 
 static void ps8622_dpms(struct drm_bridge *dbridge, int mode)
 {
-	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
+	struct ps8622_bridge *ps_bridge = (struct ps8622_bridge *)dbridge;
 
 	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	if (mode == DRM_MODE_DPMS_ON)
-		ps8622_power_up(bridge);
+		ps8622_power_up(ps_bridge);
 	else
-		ps8622_power_down(bridge);
+		ps8622_power_down(ps_bridge);
 }
 
 static void ps8622_prepare(struct drm_bridge *dbridge)
 {
-	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
+	struct ps8622_bridge *ps_bridge = (struct ps8622_bridge *)dbridge;
 
-	ps8622_power_up(bridge);
+	ps8622_power_up(ps_bridge);
 }
 
 struct drm_bridge_helper_funcs ps8622_bridge_helper_funcs = {
@@ -319,11 +320,11 @@ struct drm_bridge_helper_funcs ps8622_bridge_helper_funcs = {
 
 void ps8622_destroy(struct drm_bridge *dbridge)
 {
-	struct ps8622_bridge *bridge = (struct ps8622_bridge *)dbridge;
+	struct ps8622_bridge *ps_bridge = (struct ps8622_bridge *)dbridge;
 
 	drm_bridge_cleanup(dbridge);
-	if (bridge->bl)
-		backlight_device_unregister(bridge->bl);
+	if (ps_bridge->bl)
+		backlight_device_unregister(ps_bridge->bl);
 }
 
 struct drm_bridge_funcs ps8622_bridge_funcs = {
@@ -334,49 +335,49 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 		struct device_node *node)
 {
 	int ret;
-	struct ps8622_bridge *bridge;
+	struct ps8622_bridge *ps_bridge;
 
-	bridge = devm_kzalloc(dev->dev, sizeof(*bridge), GFP_KERNEL);
-	if (!bridge) {
+	ps_bridge = devm_kzalloc(dev->dev, sizeof(*ps_bridge), GFP_KERNEL);
+	if (!ps_bridge) {
 		DRM_ERROR("could not allocate memory\n");
 		return -ENOMEM;
 	}
 
-	bridge->client = client;
-	bridge->v12 = devm_regulator_get(&client->dev, "vdd_bridge");
-	if (IS_ERR(bridge->v12)) {
+	ps_bridge->client = client;
+	ps_bridge->v12 = devm_regulator_get(&client->dev, "vdd_bridge");
+	if (IS_ERR(ps_bridge->v12)) {
 		DRM_INFO("no 1.2v regulator found for PS8622\n");
-		bridge->v12 = NULL;
+		ps_bridge->v12 = NULL;
 	}
-	bridge->bck_fet = devm_regulator_get(&client->dev, "vcd_led");
-	if (IS_ERR(bridge->bck_fet)) {
+	ps_bridge->bck_fet = devm_regulator_get(&client->dev, "vcd_led");
+	if (IS_ERR(ps_bridge->bck_fet)) {
 		DRM_ERROR("no regulator found for backlight FET\n");
-		ret = PTR_ERR(bridge->bck_fet);
+		ret = PTR_ERR(ps_bridge->bck_fet);
 		goto err;
 	}
-	bridge->lcd_fet = devm_regulator_get(&client->dev, "lcd_vdd");
-	if (IS_ERR(bridge->lcd_fet)) {
+	ps_bridge->lcd_fet = devm_regulator_get(&client->dev, "lcd_vdd");
+	if (IS_ERR(ps_bridge->lcd_fet)) {
 		DRM_ERROR("no regulator found for LCD FET\n");
-		ret = PTR_ERR(bridge->lcd_fet);
+		ret = PTR_ERR(ps_bridge->lcd_fet);
 		goto err;
 	}
 
-	bridge->gpio_slp_n = of_get_named_gpio(node, "sleep-gpio", 0);
-	if (gpio_is_valid(bridge->gpio_slp_n)) {
-		ret = devm_gpio_request_one(&client->dev, bridge->gpio_slp_n,
+	ps_bridge->gpio_slp_n = of_get_named_gpio(node, "sleep-gpio", 0);
+	if (gpio_is_valid(ps_bridge->gpio_slp_n)) {
+		ret = devm_gpio_request_one(&client->dev, ps_bridge->gpio_slp_n,
 					    GPIOF_OUT_INIT_HIGH,
 					    "PS8622_SLP_N");
 		if (ret)
 			goto err;
 	}
 
-	bridge->gpio_rst_n = of_get_named_gpio(node, "reset-gpio", 0);
-	if (gpio_is_valid(bridge->gpio_rst_n)) {
+	ps_bridge->gpio_rst_n = of_get_named_gpio(node, "reset-gpio", 0);
+	if (gpio_is_valid(ps_bridge->gpio_rst_n)) {
 		/*
 		 * Assert the reset pin high to avoid the bridge being
 		 * initialized prematurely
 		 */
-		ret = devm_gpio_request_one(&client->dev, bridge->gpio_rst_n,
+		ret = devm_gpio_request_one(&client->dev, ps_bridge->gpio_rst_n,
 					    GPIOF_OUT_INIT_HIGH,
 					    "PS8622_RST_N");
 		if (ret)
@@ -384,46 +385,47 @@ int ps8622_init(struct drm_device *dev, struct i2c_client *client,
 	}
 
 	if (of_device_is_compatible(node, "parade,ps8625"))
-		bridge->max_lane_count = PS8625_MAX_LANE_COUNT;
+		ps_bridge->max_lane_count = PS8625_MAX_LANE_COUNT;
 	else
-		bridge->max_lane_count = PS8622_MAX_LANE_COUNT;
+		ps_bridge->max_lane_count = PS8622_MAX_LANE_COUNT;
 
-	if (of_property_read_u8(node, "lane-count", &bridge->lane_count))
-		bridge->lane_count = bridge->max_lane_count;
-	else if (bridge->lane_count > bridge->max_lane_count) {
+	if (of_property_read_u8(node, "lane-count", &ps_bridge->lane_count))
+		ps_bridge->lane_count = ps_bridge->max_lane_count;
+	else if (ps_bridge->lane_count > ps_bridge->max_lane_count) {
 		DRM_ERROR("lane-count property is too high for DP bridge\n");
-		bridge->lane_count = bridge->max_lane_count;
+		ps_bridge->lane_count = ps_bridge->max_lane_count;
 	}
 
 	if (!of_find_property(node, "use-external-pwm", NULL)) {
-		bridge->bl = backlight_device_register("ps8622-backlight",
-				dev->dev, bridge, &ps8622_backlight_ops, NULL);
-		if (IS_ERR(bridge->bl)) {
+		ps_bridge->bl = backlight_device_register("ps8622-backlight",
+				dev->dev, ps_bridge, &ps8622_backlight_ops,
+				NULL);
+		if (IS_ERR(ps_bridge->bl)) {
 			DRM_ERROR("failed to register backlight\n");
-			ret = PTR_ERR(bridge->bl);
-			bridge->bl = NULL;
+			ret = PTR_ERR(ps_bridge->bl);
+			ps_bridge->bl = NULL;
 			goto err;
 		}
-		bridge->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
-		bridge->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
+		ps_bridge->bl->props.max_brightness = PS8622_MAX_BRIGHTNESS;
+		ps_bridge->bl->props.brightness = PS8622_MAX_BRIGHTNESS;
 	}
 
-	ret = drm_bridge_init(dev, (struct drm_bridge *)bridge,
+	ret = drm_bridge_init(dev, (struct drm_bridge *)ps_bridge,
 			&ps8622_bridge_funcs);
 	if (ret) {
 		DRM_ERROR("Failed to initialize bridge with drm\n");
 		goto err;
 	}
-	drm_bridge_helper_add((struct drm_bridge *)bridge,
+	drm_bridge_helper_add((struct drm_bridge *)ps_bridge,
 			&ps8622_bridge_helper_funcs);
-	bridge->bridge.connector_type = DRM_MODE_CONNECTOR_eDP;
-	bridge->enabled = false;
+	ps_bridge->bridge.connector_type = DRM_MODE_CONNECTOR_eDP;
+	ps_bridge->enabled = false;
 
 	return 0;
 
 err:
-	if (bridge->bl)
-		backlight_device_unregister(bridge->bl);
+	if (ps_bridge->bl)
+		backlight_device_unregister(ps_bridge->bl);
 	DRM_ERROR("device probe failed : %d\n", ret);
 	return ret;
 }
