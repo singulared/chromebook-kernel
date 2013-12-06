@@ -172,6 +172,8 @@ static int sec_pmic_probe(struct i2c_client *i2c,
 			ret = PTR_ERR(pdata);
 			return ret;
 		}
+		/* TODO(tbroch): remove hack below, convert to irq_domain */
+		pdata->irq_base = MAX77686_IRQ_BASE;
 		pdata->device_type = sec_pmic->type;
 	}
 	if (pdata) {
