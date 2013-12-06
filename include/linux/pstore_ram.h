@@ -22,6 +22,7 @@
 #include <linux/list.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/pm.h>
 
 struct persistent_ram_buffer;
 struct rs_control;
@@ -44,6 +45,7 @@ struct persistent_ram_zone {
 
 	char *old_log;
 	size_t old_log_size;
+	struct pm_suspend_volatile_chunk volatile_chunk;
 };
 
 struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,

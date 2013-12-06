@@ -384,6 +384,10 @@ static int persistent_ram_buffer_map(phys_addr_t start, phys_addr_t size,
 		return -ENOMEM;
 	}
 
+	prz->volatile_chunk.start = start;
+	prz->volatile_chunk.num_bytes = size;
+	pm_register_suspend_volatile(&prz->volatile_chunk);
+
 	prz->buffer = prz->vaddr + offset_in_page(start);
 	prz->buffer_size = size - sizeof(struct persistent_ram_buffer);
 
@@ -431,6 +435,7 @@ void persistent_ram_free(struct persistent_ram_zone *prz)
 		return;
 
 	if (prz->vaddr) {
+		pm_unregister_suspend_volatile(&prz->volatile_chunk);
 		if (pfn_valid(prz->paddr >> PAGE_SHIFT)) {
 			vunmap(prz->vaddr);
 		} else {

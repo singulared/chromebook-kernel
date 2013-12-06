@@ -28,6 +28,7 @@
 #include <linux/types.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
+#include <linux/pm.h>
 
 /* types */
 enum pstore_type_id {
@@ -64,6 +65,7 @@ struct pstore_info {
 			int count, struct timespec time,
 			struct pstore_info *psi);
 	void		*data;
+	struct pm_suspend_volatile_chunk buf_volatile_chunk;
 };
 
 #ifdef CONFIG_PSTORE

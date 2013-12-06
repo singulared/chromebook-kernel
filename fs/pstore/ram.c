@@ -491,6 +491,10 @@ static int ramoops_probe(struct platform_device *pdev)
 		goto fail_clear;
 	}
 
+	cxt->pstore.buf_volatile_chunk.start = virt_to_phys(cxt->pstore.buf);
+	cxt->pstore.buf_volatile_chunk.num_bytes = cxt->pstore.bufsize;
+	pm_register_suspend_volatile(&cxt->pstore.buf_volatile_chunk);
+
 	err = pstore_register(&cxt->pstore);
 	if (err) {
 		pr_err("registering with pstore failed\n");
@@ -513,6 +517,7 @@ static int ramoops_probe(struct platform_device *pdev)
 	return 0;
 
 fail_buf:
+	pm_unregister_suspend_volatile(&cxt->pstore.buf_volatile_chunk);
 	kfree(cxt->pstore.buf);
 fail_clear:
 	cxt->pstore.bufsize = 0;
