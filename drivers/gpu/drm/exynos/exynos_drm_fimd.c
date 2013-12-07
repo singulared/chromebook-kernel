@@ -120,8 +120,6 @@ struct fimd_context {
 	u32				vidcon1;
 	bool				suspended;
 	int				pipe;
-	wait_queue_head_t		wait_vsync_queue;
-	atomic_t			wait_vsync_event;
 	enum dither_mode		dither_mode;
 	u32				dither_rgb_bpc[3];
 	unsigned int			irq;
@@ -876,11 +874,6 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 	drm_handle_vblank(ctx->drm_dev, ctx->pipe);
 	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
-	/* set wait vsync event to zero and wake up queue. */
-	if (atomic_read(&ctx->wait_vsync_event)) {
-		atomic_set(&ctx->wait_vsync_event, 0);
-		DRM_WAKEUP(&ctx->wait_vsync_queue);
-	}
 out:
 	return IRQ_HANDLED;
 }
@@ -1065,8 +1058,6 @@ static int fimd_probe(struct platform_device *pdev)
 			exynos_drm_fimd_dithering_name(ctx->dither_mode));
 
 	ctx->suspended = true;
-	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
-	atomic_set(&ctx->wait_vsync_event, 0);
 
 	platform_set_drvdata(pdev, ctx);
 
