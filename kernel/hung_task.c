@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/freezer.h>
+#include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/lockdep.h>
 #include <linux/export.h>
@@ -30,10 +31,18 @@ unsigned long __read_mostly sysctl_hung_task_check_count = PID_MAX_LIMIT;
  */
 #define HUNG_TASK_BATCHING 1024
 
+
+/*
+ * Steal the MSB of last_switch_count to keep track of tasks that
+ * are blocked after one timeout but get unblocked before two timeouts.
+ */
+#define HUNG_TASK_MASK LONG_MIN
+
 /*
  * Zero means infinite timeout - no checking done:
  */
-unsigned long __read_mostly sysctl_hung_task_timeout_secs = CONFIG_DEFAULT_HUNG_TASK_TIMEOUT;
+unsigned long __read_mostly sysctl_hung_task_timeout_secs =
+	CONFIG_DEFAULT_HUNG_TASK_TIMEOUT / 2;
 
 unsigned long __read_mostly sysctl_hung_task_warnings = 10;
 
@@ -70,14 +79,14 @@ static struct notifier_block panic_block = {
 
 static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
-	unsigned long switch_count = t->nvcsw + t->nivcsw;
+	long switch_count = t->nvcsw + t->nivcsw;
 
 	/*
 	 * Ensure the task is not frozen.
 	 * Also, skip vfork and any other user process that freezer should skip.
 	 */
 	if (unlikely(t->flags & (PF_FROZEN | PF_FREEZER_SKIP)))
-	    return;
+		return;
 
 	/*
 	 * When a freshly created task is scheduled once, changes its state to
@@ -87,8 +96,25 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 	if (unlikely(!switch_count))
 		return;
 
-	if (switch_count != t->last_switch_count) {
+	/*
+	 * A high bit set in last_switch_count indicates that the
+	 * process was hung at the halfway timeout.
+	 */
+	if (switch_count != (t->last_switch_count & ~HUNG_TASK_MASK)) {
+		if (t->last_switch_count & HUNG_TASK_MASK)
+			WARN(1, "task %s:%d was hung but is longer hung\n",
+				t->comm, t->pid);
 		t->last_switch_count = switch_count;
+		return;
+	}
+	if (!(t->last_switch_count & HUNG_TASK_MASK)) {
+		/*
+		 * To decide if a shorter timeout is good enough, keep track
+		 * of tasks that aren't making progress, but don't panic yet.
+		 */
+		WARN(1, "task %s:%d is hung for %ld seconds\n",
+			t->comm, t->pid, timeout);
+		t->last_switch_count |= HUNG_TASK_MASK;
 		return;
 	}
 	if (!sysctl_hung_task_warnings)
@@ -96,9 +122,10 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 	sysctl_hung_task_warnings--;
 
 	/*
-	 * Ok, the task did not get scheduled for more than 2 minutes,
+	 * Ok, the task did not get scheduled for more than 2 timeouts,
 	 * complain:
 	 */
+	timeout *= 2;
 	printk(KERN_ERR "INFO: task %s:%d blocked for more than "
 			"%ld seconds.\n", t->comm, t->pid, timeout);
 	printk(KERN_ERR "\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
