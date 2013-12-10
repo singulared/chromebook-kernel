@@ -1,0 +1,21 @@
+/*
+ * Google Peach Pi Rev 8+ board device tree source
+ *
+ * Copyright (c) 2013 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+#include "exynos5420.dtsi"
+#include "exynos5420-peach.dtsi"
+
+/ {
+	model = "Google Peach Pi Rev 8+";
+
+	compatible = "google,pi-rev11", "google,pi-rev10",
+		"google,pi-rev9", "google,pi-rev8",
+		"google,pi", "google,peach", "samsung,exynos5420";
+};
