@@ -15,8 +15,6 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/sdio_ids.h>
 
-#include "sdio_ops.h"
-
 #ifndef SDIO_VENDOR_ID_TI
 #define SDIO_VENDOR_ID_TI		0x0097
 #endif
@@ -99,14 +97,3 @@ void mmc_fixup_device(struct mmc_card *card, const struct mmc_fixup *table)
 	}
 }
 EXPORT_SYMBOL(mmc_fixup_device);
-
-void mmc_fixup_broken_irq_polling(struct mmc_card *card)
-{
-	unsigned char dummy;
-
-	/* A fake interrupt could be created when we poll SDIO_CCCR_INTx
-	 * register with a Marvell SD8797 card. A dummy CMD52 read to
-	 * function 0 register 0xff can aviod this.
-	 */
-	mmc_io_rw_direct(card, 0, 0, 0xff, 0, &dummy);
-}

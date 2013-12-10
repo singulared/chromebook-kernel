@@ -475,6 +475,11 @@ static inline int mmc_card_long_read_time(const struct mmc_card *c)
 	return c->quirks & MMC_QUIRK_LONG_READ_TIME;
 }
 
+static inline int mmc_card_broken_irq_polling(const struct mmc_card *c)
+{
+	return c->quirks & MMC_QUIRK_BROKEN_IRQ_POLLING;
+}
+
 #define mmc_card_name(c)	((c)->cid.prod_name)
 #define mmc_card_id(c)		(dev_name(&(c)->dev))
 
@@ -500,6 +505,5 @@ extern void mmc_unregister_driver(struct mmc_driver *);
 
 extern void mmc_fixup_device(struct mmc_card *card,
 			     const struct mmc_fixup *table);
-extern void mmc_fixup_broken_irq_polling(struct mmc_card *card);
 
 #endif /* LINUX_MMC_CARD_H */

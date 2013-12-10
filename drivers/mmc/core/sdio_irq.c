@@ -47,16 +47,22 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 	}
 
 	ret = mmc_io_rw_direct(card, 0, 0, SDIO_CCCR_INTx, 0, &pending);
-
-	if (pending && (card->quirks & MMC_QUIRK_BROKEN_IRQ_POLLING) &&
-	    (!(host->caps & MMC_CAP_SDIO_IRQ) ||
-	     (host->caps2 & MMC_CAP2_EDGE_TRIG_IRQ)))
-		mmc_fixup_broken_irq_polling(card);
-
 	if (ret) {
 		pr_debug("%s: error %d reading SDIO_CCCR_INTx\n",
 		       mmc_card_id(card), ret);
 		return ret;
+	}
+
+	if (pending && mmc_card_broken_irq_polling(card) &&
+	    (!(host->caps & MMC_CAP_SDIO_IRQ) ||
+	     (host->caps2 & MMC_CAP2_EDGE_TRIG_IRQ))) {
+		unsigned char dummy;
+
+		/* A fake interrupt could be created when we poll SDIO_CCCR_INTx
+		 * register with a Marvell SD8797 card. A dummy CMD52 read to
+		 * function 0 register 0xff can aviod this.
+		 */
+		mmc_io_rw_direct(card, 0, 0, 0xff, 0, &dummy);
 	}
 
 	count = 0;
