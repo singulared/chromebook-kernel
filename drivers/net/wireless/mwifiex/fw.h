@@ -422,8 +422,6 @@ enum P2P_MODES {
 #define EVENT_GET_BSS_TYPE(event_cause)         \
 	(((event_cause) >> 24) & 0x00ff)
 
-#define CFG_DATA_TYPE_CAL		2
-
 struct mwifiex_ie_types_header {
 	__le16 type;
 	__le16 len;
@@ -1464,12 +1462,6 @@ struct mwifiex_ie_list {
 	struct mwifiex_ie ie_list[MAX_MGMT_IE_INDEX];
 } __packed;
 
-struct host_cmd_ds_802_11_cfg_data {
-	__le16 action;
-	__le16 type;
-	__le16 data_len;
-} __packed;
-
 struct host_cmd_ds_command {
 	__le16 command;
 	__le16 size;
@@ -1526,7 +1518,6 @@ struct host_cmd_ds_command {
 		struct host_cmd_ds_802_11_eeprom_access eeprom;
 		struct host_cmd_ds_802_11_subsc_evt subsc_evt;
 		struct host_cmd_ds_sys_config uap_sys_config;
-		struct host_cmd_ds_802_11_cfg_data cfg_data;
 	} params;
 } __packed;
 
