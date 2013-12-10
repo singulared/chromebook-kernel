@@ -728,6 +728,7 @@ struct mwifiex_adapter {
 	u16 max_mgmt_ie_index;
 	u8 scan_delay_cnt;
 	u8 empty_tx_q_cnt;
+	const struct firmware *cal_data;
 	atomic_t is_tx_received;
 	atomic_t pending_bridged_pkts;
 };
