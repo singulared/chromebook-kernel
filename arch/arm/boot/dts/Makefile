@@ -48,9 +48,8 @@ dtb-$(CONFIG_ARCH_EXYNOS) += exynos4210-origen.dtb \
 	exynos5250-snow-rev5.dtb \
 	exynos5250-spring.dtb \
 	exynos5420-peach-kirby.dtb \
-	exynos5420-peach-pit-rev3.dtb \
+	exynos5420-peach-pit-rev3_5.dtb \
 	exynos5420-peach-pit-rev4.dtb \
-	exynos5420-peach-pit-rev5.dtb \
 	exynos5420-peach-pit.dtb \
 	exynos5420-smdk5420.dtb \
 	exynos5420-smdk5420-evt0.dtb \
