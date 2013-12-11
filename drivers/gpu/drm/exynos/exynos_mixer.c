@@ -100,6 +100,7 @@ struct mixer_context {
 	enum mixer_version_id	mxr_ver;
 	wait_queue_head_t	wait_vsync_queue;
 	atomic_t		wait_vsync_event;
+	atomic_t		vblank_ref;
 	enum workaround_state	workaround_state;
 };
 
@@ -676,6 +677,9 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	mixer_vsync_set_update(ctx, true);
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 
+	drm_vblank_get(ctx->drm_dev, ctx->pipe);
+	atomic_inc(&ctx->vblank_ref);
+
 	vp_regs_dump(ctx);
 }
 
@@ -807,6 +811,9 @@ static void mixer_graph_buffer(struct mixer_context *ctx, int win)
 
 	mixer_vsync_set_update(ctx, true);
 	spin_unlock_irqrestore(&res->reg_slock, flags);
+
+	drm_vblank_get(ctx->drm_dev, ctx->pipe);
+	atomic_inc(&ctx->vblank_ref);
 }
 
 static void vp_win_reset(struct mixer_context *ctx)
@@ -892,6 +899,9 @@ static void mixer_win_reset(struct mixer_context *ctx)
 
 	mixer_vsync_set_update(ctx, true);
 	spin_unlock_irqrestore(&res->reg_slock, flags);
+
+	drm_vblank_get(ctx->drm_dev, ctx->pipe);
+	atomic_inc(&ctx->vblank_ref);
 }
 
 static int mixer_initialize(void *ctx, struct drm_device *drm_dev, int pipe)
@@ -1084,6 +1094,9 @@ static void mixer_win_disable(void *ctx, int zpos)
 
 	mixer_vsync_set_update(mixer_ctx, true);
 	spin_unlock_irqrestore(&res->reg_slock, flags);
+
+	drm_vblank_get(mixer_ctx->drm_dev, mixer_ctx->pipe);
+	atomic_inc(&mixer_ctx->vblank_ref);
 
 	mixer_ctx->win_data[win].enabled = false;
 }
@@ -1340,6 +1353,9 @@ out:
 
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 
+	if (atomic_dec_if_positive(&ctx->vblank_ref) >= 0)
+		drm_vblank_put(ctx->drm_dev, ctx->pipe);
+
 	if (finish_pageflip)
 		exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
@@ -1514,6 +1530,7 @@ static int mixer_probe(struct platform_device *pdev)
 	ctx->mxr_ver = drv->version;
 	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);
+	atomic_set(&ctx->vblank_ref, 0);
 
 	platform_set_drvdata(pdev, ctx);
 
