@@ -1,5 +1,5 @@
 /*
- * Google Peach Pi Rev 10+ board device tree source
+ * Google Peach Pi Rev 8/9 board device tree source
  *
  * Copyright (c) 2013 Google, Inc
  *
@@ -13,8 +13,20 @@
 #include "exynos5420-peach.dtsi"
 
 / {
-	model = "Google Peach Pi Rev 10+";
+	model = "Google Peach Pi Rev 8/9";
 
-	compatible = "google,pi-rev12", "google,pi-rev11", "google,pi-rev10",
+	compatible = "google,pi-rev9", "google,pi-rev8",
 		"google,pi", "google,peach", "samsung,exynos5420";
+
+	hsi2c@12CA0000 {
+		max77802-pmic@9 {
+			voltage-regulators {
+				/* This is used for SDRAM on PoP */
+				ldo2_reg: LDO2 {
+					regulator-always-on;
+					regulator-op-mode = <3>;
+				};
+			};
+		};
+	};
 };
