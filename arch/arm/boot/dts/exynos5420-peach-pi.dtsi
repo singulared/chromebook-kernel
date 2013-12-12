@@ -36,4 +36,21 @@
 		enable-gpio = <&gpx2 2 0>;
 		pinctrl-0 = <&backlight_pwm &backlight_en>;
 	};
+
+	spi@12d40000 {
+		cros-ec@0 {
+			i2c-tunnel {
+				power-regulator@48 {
+						regulators {
+							fet1 {
+								regulator-always-on;
+							};
+							fet6 {
+								regulator-always-on;
+							};
+						};
+					};
+				};
+			};
+		};
 };
