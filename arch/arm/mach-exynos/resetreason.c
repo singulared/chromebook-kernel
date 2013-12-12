@@ -90,7 +90,7 @@ static int __init resetreason_init(void)
 	u32 reasons = __raw_readl(EXYNOS_RST_STAT);
 	struct resetreason_flags *soc_reset_reason;
 
-	if (soc_is_exynos5420()) {
+	if (soc_is_exynos542x()) {
 		soc_reset_reason = &reset_reason_exynos5420[0];
 		array_size = ARRAY_SIZE(reset_reason_exynos5420);
 	} else if (soc_is_exynos5250()) {

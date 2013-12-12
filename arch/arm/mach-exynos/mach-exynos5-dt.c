@@ -221,7 +221,8 @@ static void __init exynos5_panic_init(void)
 			exynos5_cpu_debug[i] =
 				ioremap(EXYNOS5250_DEBUG_PA_CPU(i), SZ_4K);
 		}
-	} else if (of_machine_is_compatible("samsung,exynos5420")) {
+	} else if (of_machine_is_compatible("samsung,exynos5420") ||
+			of_machine_is_compatible("samsung,exynos5422")) {
 		for (i = 0; i < 4; i++) {
 			exynos5_cpu_debug[i] =
 				ioremap(EXYNOS5420_A15_DEBUG_PA_CPU(i), SZ_4K);
@@ -272,7 +273,8 @@ static void __init exynos5_dt_machine_init(void)
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
 		platform_device_register(&exynos5_lcd);
-	} else if (of_machine_is_compatible("samsung,exynos5420")) {
+	} else if ((of_machine_is_compatible("samsung,exynos5420") ||
+			of_machine_is_compatible("samsung,exynos5422"))) {
 		of_platform_populate(NULL, of_default_bus_match_table,
 				     NULL, NULL);
 #ifdef CONFIG_PM_DEVFREQ
@@ -286,6 +288,7 @@ static void __init exynos5_dt_machine_init(void)
 static char const *exynos5_dt_compat[] __initdata = {
 	"samsung,exynos5250",
 	"samsung,exynos5420",
+	"samsung,exynos5422",
 	"samsung,exynos5440",
 	NULL
 };

@@ -247,7 +247,7 @@ static void __init exynos_smp_prepare_cpus(unsigned int max_cpus)
 bool __init exynos_smp_init(void)
 {
 #ifdef CONFIG_MCPM
-	if (soc_is_exynos5420()) {
+	if (soc_is_exynos542x()) {
 		mcpm_smp_set_ops();
 		return true;
 	}

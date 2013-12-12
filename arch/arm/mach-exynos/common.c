@@ -63,6 +63,7 @@ static const char name_exynos4212[] = "EXYNOS4212";
 static const char name_exynos4412[] = "EXYNOS4412";
 static const char name_exynos5250[] = "EXYNOS5250";
 static const char name_exynos5420[] = "EXYNOS5420";
+static const char name_exynos5422[] = "EXYNOS5422";
 static const char name_exynos5440[] = "EXYNOS5440";
 
 static void exynos4_map_io(void);
@@ -109,6 +110,12 @@ static struct cpu_table cpu_ids[] __initdata = {
 		.map_io		= exynos5_map_io,
 		.init		= exynos_init,
 		.name		= name_exynos5420,
+	}, {
+		.idcode		= EXYNOS5422_SOC_ID,
+		.idmask		= EXYNOS5_SOC_MASK,
+		.map_io		= exynos5_map_io,
+		.init		= exynos_init,
+		.name		= name_exynos5422,
 	}, {
 		.idcode		= EXYNOS5440_SOC_ID,
 		.idmask		= EXYNOS5_SOC_MASK,
@@ -346,7 +353,8 @@ void exynos5_restart(char mode, const char *cmd)
 	void __iomem *addr;
 
 	if (of_machine_is_compatible("samsung,exynos5250") ||
-			of_machine_is_compatible("samsung,exynos5420")) {
+			of_machine_is_compatible("samsung,exynos5420") ||
+			of_machine_is_compatible("samsung,exynos5422")) {
 		val = 0x1;
 		addr = EXYNOS_SWRESET;
 	} else if (of_machine_is_compatible("samsung,exynos5440")) {
@@ -386,14 +394,14 @@ static void wdt_reset_init(void)
 	__raw_writel(0xffff, S3C2410_WTCNT);
 
 	value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
-	if (soc_is_exynos5420())
+	if (soc_is_exynos542x())
 		value &= ~EXYNOS5420_SYS_WDTRESET;
 	else
 		value &= ~EXYNOS5_SYS_WDTRESET;
 	__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
 
 	value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
-	if (soc_is_exynos5420())
+	if (soc_is_exynos542x())
 		value &= ~EXYNOS5420_SYS_WDTRESET;
 	else
 		value &= ~EXYNOS5_SYS_WDTRESET;
@@ -477,7 +485,7 @@ static void __init exynos4_map_io(void)
 static void __init exynos5_map_io(void)
 {
 	iotable_init(exynos5_iodesc, ARRAY_SIZE(exynos5_iodesc));
-	if (soc_is_exynos5420())
+	if (soc_is_exynos542x())
 		iotable_init(exynos5420_iodesc, ARRAY_SIZE(exynos5420_iodesc));
 }
 
@@ -579,7 +587,7 @@ static void __init combiner_cascade_irq(unsigned int combiner_nr, unsigned int i
 {
 	unsigned int max_nr;
 
-	if (soc_is_exynos5250() || soc_is_exynos5420())
+	if (soc_is_exynos5250() || soc_is_exynos542x())
 		max_nr = EXYNOS5_MAX_COMBINER_NR;
 	else
 		max_nr = EXYNOS4_MAX_COMBINER_NR;
@@ -704,7 +712,7 @@ static void __init combiner_init(void __iomem *combiner_base,
 	int i, irq, irq_base;
 	unsigned int nr_irq, soc_max_nr;
 
-	soc_max_nr = (soc_is_exynos5250() || soc_is_exynos5420())
+	soc_max_nr = (soc_is_exynos5250() || soc_is_exynos542x())
 			? EXYNOS5_MAX_COMBINER_NR : EXYNOS4_MAX_COMBINER_NR;
 
 	if (np) {
@@ -841,7 +849,7 @@ static int __init exynos4_l2x0_cache_init(void)
 {
 	int ret;
 
-	if (soc_is_exynos5250() || soc_is_exynos5420() || soc_is_exynos5440())
+	if (soc_is_exynos5250() || soc_is_exynos542x() || soc_is_exynos5440())
 		return 0;
 
 	ret = l2x0_of_init(L2_AUX_VAL, L2_AUX_MASK);

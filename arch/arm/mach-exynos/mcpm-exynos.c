@@ -499,7 +499,7 @@ static int __init exynos_mcpm_init(void)
 	int i, ret = 0;
 	unsigned long temp;
 
-	if (!soc_is_exynos5420())
+	if (!(soc_is_exynos542x()))
 		return 0;
 
 	clear_boot_flag(0, EXYNOS_RESET);
@@ -536,7 +536,7 @@ static int __init exynos_bl_status_init(void)
 {
 	int ret;
 
-	if (!soc_is_exynos5420())
+	if (!(soc_is_exynos542x()))
 		return 0;
 
 	ret = misc_register(&bL_status_device);
