@@ -1153,6 +1153,8 @@ static void mixer_window_resume(struct mixer_context *ctx)
 		win_data = &ctx->win_data[i];
 		win_data->enabled = win_data->resume;
 		win_data->resume = false;
+		if (win_data->enabled)
+			mixer_win_commit(ctx, i);
 	}
 
 	if (ctx->workaround_state != WORKAROUND_STATE_INACTIVE)
