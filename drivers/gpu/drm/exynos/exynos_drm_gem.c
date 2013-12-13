@@ -733,6 +733,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	}
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	WARN_ON(exynos_gem_obj->resource_set);
 	exynos_gem_obj->resource_set = rset;
 #endif
 
@@ -808,7 +809,7 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	/* kds_resource_set_release NULLs the pointer */
-	BUG_ON(exynos_gem_obj->resource_set == NULL);
+	WARN_ON(exynos_gem_obj->resource_set == NULL);
 	kds_resource_set_release(&exynos_gem_obj->resource_set);
 #endif
 
