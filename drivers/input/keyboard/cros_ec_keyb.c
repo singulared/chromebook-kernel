@@ -40,6 +40,7 @@
  * @keymap_data: Matrix keymap data used to convert to keyscan values
  * @ghost_filter: true to enable the matrix key-ghosting filter
  * @valid_keys: bitmap of existing keys for each matrix column
+ * @old_kb_state: bitmap of keys pressed last scan
  * @dev: Device pointer
  * @idev: Input device
  * @ec: Top level ChromeOS device to use to talk to EC
@@ -51,6 +52,7 @@ struct cros_ec_keyb {
 	const struct matrix_keymap_data *keymap_data;
 	bool ghost_filter;
 	uint8_t *valid_keys;
+	uint8_t *old_kb_state;
 
 	struct device *dev;
 	struct input_dev *idev;
@@ -109,6 +111,7 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
 	struct cros_ec_device *ec = ckdev->ec;
 	int col, row;
 	int new_state;
+	int old_state;
 	int num_cols;
 	num_cols = len;
 
@@ -130,7 +133,8 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
 
 			code = keycodes[pos];
 			new_state = kb_state[col] & (1 << row);
-			if (!!new_state != test_bit(code, idev->key)) {
+			old_state = ckdev->old_kb_state[col] & (1 << row);
+			if (new_state != old_state) {
 				dev_dbg(ckdev->dev,
 					"changed: [r%d c%d]: byte %02x\n",
 					row, col, new_state);
@@ -143,6 +147,7 @@ static void cros_ec_keyb_process(struct cros_ec_keyb *ckdev,
 				input_report_key(idev, code, new_state);
 			}
 		}
+		ckdev->old_kb_state[col] = kb_state[col];
 	}
 	input_sync(ckdev->idev);
 }
@@ -274,6 +279,9 @@ static int cros_ec_keyb_probe(struct platform_device *pdev)
 		return err;
 	ckdev->valid_keys = devm_kzalloc(&pdev->dev, ckdev->cols, GFP_KERNEL);
 	if (!ckdev->valid_keys)
+		return -ENOMEM;
+	ckdev->old_kb_state = devm_kzalloc(&pdev->dev, ckdev->cols, GFP_KERNEL);
+	if (!ckdev->old_kb_state)
 		return -ENOMEM;
 
 	idev = devm_input_allocate_device(&pdev->dev);
