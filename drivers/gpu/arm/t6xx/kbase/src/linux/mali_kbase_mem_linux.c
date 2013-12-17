@@ -149,7 +149,7 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO | VM_MIXEDMAP;
 #else
-	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_IO | VM_MIXEDMAP;
+	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_RESERVED | VM_IO | VM_MIXEDMAP;
 #endif
 	vma->vm_ops = &kbase_vm_ops;
 	vma->vm_private_data = reg;
@@ -679,6 +679,7 @@ static int kbase_tracking_page_setup(struct kbase_context * kctx, struct vm_area
 	spin_unlock(&kctx->mm_update_lock);
 
 	/* no real access */
+	vma->vm_flags &= ~(VM_READ | VM_WRITE | VM_EXEC);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
 #else
