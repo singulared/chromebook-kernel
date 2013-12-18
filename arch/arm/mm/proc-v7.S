@@ -126,6 +126,48 @@ ENTRY(cpu_v7_do_resume)
 	mcr	p15, 0, r7, c2, c0, 1	@ TTB 1
 	mcr	p15, 0, r11, c2, c0, 2	@ TTB control register
 
+#ifdef CONFIG_ARM_ERRATA_773769
+	/* get the arm rev id */
+	mrc	p15, 0, r3, c0, c0, 0		@ read main ID register
+	and	r4, r3, #0xff000000		@ ARM?
+	teq	r4, #0x41000000
+	bne	6f
+	and	r5, r3, #0x00f00000		@ variant
+	and	r7, r3, #0x0000000f		@ revision
+	orr	r7, r7, r5, lsr #20-4		@ combine variant and revision
+	ubfx	r3, r3, #4, #12			@ primary part number
+
+	ldr	r4, =0x00000c0f			@ Cortex-A15 primary part number
+	teq	r3, r4
+	bne	6f
+
+	cmp	r7, #0x21			@ present prior to r2p1
+	bge	6f
+	mrc	p15, 0, r3, c1, c0, 0		@ read system control register
+	tst	r3, #0x4			@ check if cache is on/off
+	bne	6f				@ Do nothing when cache is on
+
+	/*
+	 * if DATA_RAM_LATENCY >= 0x2)
+	 *	DATA_RAM_SETUP = 0
+	 * if (DATA_RAM_LATENCY > 0x2)
+	 *	DATA_RAM_LATENCY = 0x2
+	 *
+	 * For our calculations we'll assume that if DATA_RAM_LATENCY = 0x00
+	 * then we don't need to do anything.
+	 * Although 0x00 might mean latency 2 or 8 (docs are unclear).
+	 */
+	mrc	p15, 1, r5, c9, c0, 2		@ read L2 control register
+	and	r4, r5, #0x7			@ r4 = Data RAM latency
+	cmp	r4, #0x2			@ if Data RAM latency >= 0x2
+	bicge	r5, r5, #(1 << 5)		@ DATA_RAM_SETUP = 0
+						@ if DATA_RAM_LATENCY > 0x2
+	bicgt	r5, r5, #0x7			@ clear old DATA_RAM_LATENCY
+	orrgt	r5, r5, #0x2			@ and set it to 0x2
+	mcrge	p15, 1, r5, c9, c0, 2		@ set L2 control register
+6:
+#endif
+
 	/*
 	 * Insert dummy load while setting SMP bit. This is as per the
 	 * ARM errata 799270. In addition to this, the ACTLR register
@@ -340,6 +382,26 @@ __v7_setup:
 	mrceq	p15, 0, r10, c1, c0, 1		@ read aux control register
 	orreq	r10, r10, #1 << 1		@ set bit #1
 	mcreq	p15, 0, r10, c1, c0, 1		@ write aux control register
+#endif
+
+#ifdef CONFIG_ARM_ERRATA_773769
+	cmp	r6, #0x21			@ present prior to r2p1
+	bge	5f
+	mrc	p15, 0, r3, c1, c0, 0		@ read system control register
+	tst	r3, #0x4			@ check if cache is on/off
+	bne	5f				@ Do nothing when cache is on
+
+	/* See (mostly) duplicated code for ERRATA_773769 above for details */
+
+	mrc	p15, 1, r5, c9, c0, 2		@ read L2 control register
+	and	r3, r5, #0x7			@ r4 = Data RAM latency
+	cmp	r3, #0x2			@ if Data RAM latency >= 0x2
+	bicge	r5, r5, #(1 << 5)		@ DATA_RAM_SETUP = 0
+						@ if DATA_RAM_LATENCY > 0x2
+	bicgt	r5, r5, #0x7			@ clear old DATA_RAM_LATENCY
+	orrgt	r5, r5, #0x2			@ and set it to 0x2
+	mcrge	p15, 1, r5, c9, c0, 2		@ set L2 control register
+5:
 #endif
 
 #ifdef CONFIG_ARM_ERRATA_774769

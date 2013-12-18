@@ -1450,6 +1450,20 @@ config ARM_ERRATA_773022
 	  erratum. In certain rare sequences of code, the loop buffer may deliver
 	  incorrect instructions. This workaround is to disable loop buffer.
 
+config ARM_ERRATA_773769
+	bool "ARM errata: Large data RAM latencies can lead to rare data corruption"
+	depends on CPU_V7
+	help
+	  This option enables the workaround for the erratum 773769, which affects
+	  Cortex-A15 (rev r2p0 or earlier).
+	  In systems with effective L2 Data RAM latency of 4 or more cycles,
+	  or with ACP in use, or with a L2 Data RAM slice configured, rare collision
+	  between non-cacheable stores and L1 data cache evictions may lead to
+	  data corruption in L2 cache or memory.
+	  This workaround is to always enforce an effective Data RAM latency of
+	  3 or less. Note, however, that if a Data RAM slice is configured in A15
+	  then the workaround is not applied.
+
 config ARM_ERRATA_774769
 	bool "ARM errata: data corruption may occur with store streaming in a system"
 	depends on CPU_V7
