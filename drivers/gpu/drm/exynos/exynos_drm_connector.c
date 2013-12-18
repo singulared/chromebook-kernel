@@ -130,11 +130,16 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 	struct exynos_drm_connector *exynos_connector =
 					to_exynos_connector(connector);
 	struct exynos_drm_display *display = exynos_connector->display;
+	struct exynos_drm_manager *manager =
+					exynos_drm_manager_from_display(display);
 	int ret = MODE_BAD;
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n",
 			DRM_BASE_ID(connector),
 			drm_get_connector_name(connector), mode->name);
+
+	if (manager && manager->ops->adjust_mode)
+		manager->ops->adjust_mode(display->ctx, connector, mode);
 
 	if (display->ops->check_mode)
 		if (!display->ops->check_mode(display->ctx, mode))
@@ -198,7 +203,6 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 	struct exynos_drm_connector *exynos_connector =
 					to_exynos_connector(connector);
 	struct exynos_drm_display *display = exynos_connector->display;
-	struct exynos_drm_manager *manager;
 	int ret;
 	unsigned int width, height;
 
@@ -210,7 +214,7 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 	height = max_height;
 
 	/*
-	 * if specific driver want to find desired_mode using maxmum
+	 * if specific driver want to find desired_mode using maximum
 	 * resolution then get max width and height from that driver.
 	 */
 	if (display->ops->get_max_resol)
@@ -222,10 +226,6 @@ static int exynos_drm_connector_fill_modes(struct drm_connector *connector,
 		DRM_ERROR("Failed to probe connector modes ret=%d\n", ret);
 		return ret;
 	}
-
-	manager = exynos_drm_manager_from_display(display);
-	if (manager && manager->ops->adjust_modes)
-		manager->ops->adjust_modes(manager->ctx, connector);
 
 	return ret;
 }

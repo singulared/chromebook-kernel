@@ -276,22 +276,6 @@ enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height,
 {
 	int i;
 
-	/*
-	 * If the mode matches an adjustment, adjust it before finding the
-	 * mode type
-	 */
-	if (version != MXR_VER_128_0_0_184) {
-		for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
-			const struct mixer_scan_adjustment *adj =
-							&scan_adjustments[i];
-
-			if (width == adj->res[0] && height == adj->res[1]) {
-				width = adj->new_res[0];
-				height = adj->new_res[1];
-			}
-		}
-	}
-
 	for (i = 0; i < ARRAY_SIZE(scan_ranges); i++) {
 		const struct mixer_scan_range *range = &scan_ranges[i];
 
@@ -303,7 +287,8 @@ enum exynos_mixer_mode_type exynos_mixer_get_mode_type(int width, int height,
 	return EXYNOS_MIXER_MODE_INVALID;
 }
 
-static void mixer_adjust_modes(void *ctx, struct drm_connector *connector)
+static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
+				 struct drm_display_mode *mode_to_adjust)
 {
 	struct mixer_context *mctx = ctx;
 	int i;
@@ -313,32 +298,25 @@ static void mixer_adjust_modes(void *ctx, struct drm_connector *connector)
 
 	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
 		const struct mixer_scan_adjustment *adj = &scan_adjustments[i];
-		struct drm_display_mode *mode;
-		bool native_support = false;
+		if (adj->res[0] == mode_to_adjust->hdisplay &&
+		    adj->res[1] == mode_to_adjust->vdisplay) {
+			struct drm_display_mode *mode;
 
-		/*
-		 * Make sure the mode resulting from the adjustment is not
-		 * already natively supported. This might cause us to do
-		 * something stupid like choose a chopped 1280x800 resolution
-		 * over native 720p.
-		 */
-		list_for_each_entry(mode, &connector->modes, head) {
-			if (adj->new_res[0] == mode->hdisplay &&
-			    adj->new_res[1] == mode->vdisplay) {
-				native_support = true;
-				break;
+			/*
+			 * Make sure the mode resulting from the adjustment is
+			 * not already natively supported. This might cause us
+			 * to do something stupid like choose a chopped 1280x800
+			 * resolution over native 720p.
+			 */
+			list_for_each_entry(mode, &connector->modes, head) {
+				if (adj->new_res[0] == mode->hdisplay &&
+				    adj->new_res[1] == mode->vdisplay) {
+				    return;
+				}
 			}
-		}
-		if (native_support)
-			continue;
-
-		list_for_each_entry(mode, &connector->modes, head) {
-			if (adj->res[0] == mode->hdisplay &&
-			    adj->res[1] == mode->vdisplay) {
-				mode->hdisplay = adj->new_res[0];
-				mode->vdisplay = adj->new_res[1];
-				break;
-			}
+			mode_to_adjust->hdisplay = adj->new_res[0];
+			mode_to_adjust->vdisplay = adj->new_res[1];
+			return;
 		}
 	}
 }
@@ -1259,7 +1237,7 @@ static struct exynos_drm_manager_ops mixer_manager_ops = {
 	.initialize		= mixer_initialize,
 	.remove			= mixer_mgr_remove,
 	.dpms			= mixer_dpms,
-	.adjust_modes		= mixer_adjust_modes,
+	.adjust_mode		= mixer_adjust_mode,
 	.enable_vblank		= mixer_enable_vblank,
 	.disable_vblank		= mixer_disable_vblank,
 	.win_mode_set		= mixer_win_mode_set,
