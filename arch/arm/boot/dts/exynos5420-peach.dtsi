@@ -1,5 +1,5 @@
 /*
- * Common device tree include for all Peach Pit board revisions
+ * Common device tree include for all Peach board revisions
  *
  * Copyright (c) 2013 Google, Inc
  *
@@ -110,20 +110,6 @@
 		power_key_irq: power-key-irq {
 			samsung,pins = "gpx1-2";
 			samsung,pin-function = <0>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
-		ps8625_reset: ps8625-reset {
-			samsung,pins = "gpy7-7";
-			samsung,pin-function = <1>;
-			samsung,pin-pud = <0>;
-			samsung,pin-drv = <0>;
-		};
-
-		ps8625_sleep: ps8625-sleep {
-			samsung,pins = "gpx3-5";
-			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
@@ -996,17 +982,6 @@
 		status = "okay";
 		clock-frequency = <400000>;
 
-		ps8625-bridge@48 {
-			compatible = "parade,ps8625";
-			reg = <0x48>;
-			sleep-gpio = <&gpx3 5 0>;
-			reset-gpio = <&gpy7 7 0>;
-			lane-count = <2>;
-			use-external-pwm;
-			pinctrl-names = "default";
-			pinctrl-0 = <&ps8625_sleep &ps8625_reset>;
-		};
-
 		max98090: codec@10 {
 			compatible = "maxim,max98090";
 			reg = <0x10>;
@@ -1090,15 +1065,8 @@
 		samsung,fimd-inv-vclk;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
-		samsung,fimd-src-clk-rate = <70500000>;
 		samsung,use-fimd-dithering;
 		samsung-rgb-dithpos = <6 6 6>;
-	};
-
-	lcd_dp0: lcd_panel0 {
-		lcd-htiming = <40 40 32 1366>;
-		lcd-vtiming = <10 12 6 768>;
-		lcd-dimensions = <256 144>;
 	};
 
 	display-port-controller {
@@ -1108,7 +1076,6 @@
 		samsung,dynamic-range = <0>;
 		samsung,ycbcr-coeff = <0>;
 		samsung,color-depth = <1>;
-		samsung,link-rate = <0x06>;
 		samsung,lane-count = <2>;
 		samsung,hpd-gpio = <&gpx2 6 0>;
 		pinctrl-names = "default";

@@ -11,6 +11,7 @@
 /dts-v1/;
 #include "exynos5420.dtsi"
 #include "exynos5420-peach.dtsi"
+#include "exynos5420-peach-pi.dtsi"
 
 / {
 	model = "Google Peach Pi Rev 8/9";

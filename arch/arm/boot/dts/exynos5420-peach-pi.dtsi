@@ -1,0 +1,39 @@
+/*
+ * Common device tree include for all Peach Pi board revisions
+ *
+ * Copyright (c) 2013 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/ {
+	pinctrl@13400000 {
+		backlight_en: backlight-en {
+			samsung,pins = "gpx2-2";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+	};
+
+	fimd {
+		samsung,fimd-src-clk-rate = <150000000>;
+	};
+
+	lcd_dp0: lcd_panel0 {
+		lcd-htiming = <172 60 80 1920>;
+		lcd-vtiming = <25 10 10 1080>;
+		lcd-dimensions = <360 202>;
+	};
+
+	display-port-controller {
+		samsung,link-rate = <0x0a>;
+	};
+
+	backlight {
+		enable-gpio = <&gpx2 2 0>;
+		pinctrl-0 = <&backlight_pwm &backlight_en>;
+	};
+};
