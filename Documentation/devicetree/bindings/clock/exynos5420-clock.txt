@@ -264,6 +264,7 @@ clock which they consume.
   mout_sw_aclk333_432_gscl	1034
   mout_user_aclk333_432_gscl	1035
   mout_g3d		1036
+  mout_epll2		1037 /* 5422 specific */
 
   Divider		ID
   ----------------------------
