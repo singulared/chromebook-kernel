@@ -22,6 +22,7 @@
 #include <linux/pm_qos.h>
 #include <linux/reboot.h>
 #include <linux/kobject.h>
+#include <linux/of.h>
 
 #include <mach/regs-clock.h>
 #include <mach/devfreq.h>
@@ -565,6 +566,30 @@ static struct devfreq_dev_profile exynos5_int_devfreq_profile = {
 	.get_dev_status	= exynos5_int_bus_get_dev_status,
 };
 
+static int get_vtiming(struct device *dev) {
+	u32 ldata[4];
+	struct device_node *dpc_node, *dp_node;
+
+	dpc_node = of_find_compatible_node(NULL, NULL, "samsung,exynos5-dp");
+	if (!dpc_node) {
+		dev_err(dev, "samsung,exynos5-dp node does not exist\n");
+		return -1;
+	}
+
+	dp_node = of_parse_phandle(dpc_node, "samsung,dp-display", 0);
+	if (!dp_node) {
+		dev_err(dev, "samsung,dp-display node does not exist\n");
+		return -1;
+	}
+
+	if (of_property_read_u32_array(dp_node, "lcd-vtiming", ldata, 4)) {
+		dev_err(dev, "invalid vertical timing\n");
+		return -1;
+	}
+
+	return ldata[3];
+}
+
 static int exynos5420_init_int_table(struct busfreq_data_int *data)
 {
 	unsigned int i;
@@ -589,6 +614,12 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	opp_disable(data->dev, 600000);
 	opp_disable(data->dev, 500000);
 	opp_disable(data->dev, 400000);
+
+	if (get_vtiming(data->dev) >= 1080) {
+		opp_disable(data->dev, 111000);
+		opp_disable(data->dev, 83000);
+	}
+
 	return 0;
 }
 
