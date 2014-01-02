@@ -10,7 +10,7 @@
 
 /dts-v1/;
 #include "exynos5420.dtsi"
-#include "exynos5420-peach.dtsi"
+#include "exynos542x-peach.dtsi"
 #include "exynos5420-peach-pit.dtsi"
 
 / {

@@ -1,5 +1,5 @@
 /*
- * Google Peach Pit board device tree source
+ * Google Peach Pi board device tree source
  *
  * Copyright (c) 2013 Google, Inc
  *
@@ -12,9 +12,9 @@
 
 / {
 
-	compatible = "samsung,exynos5420";
+	compatible = "samsung,exynos5422";
 
 	clock: clock-controller@0x10010000 {
-		compatible = "samsung,exynos5420-clock";
+		compatible = "samsung,exynos5422-clock";
 	};
 };
