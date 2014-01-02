@@ -275,20 +275,13 @@ dma_pointer(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct runtime_data *prtd = runtime->private_data;
-	unsigned long offset;
-	unsigned long xfd; /* Number of bytes transfered by current dma. */
+	unsigned long res;
 
 	pr_debug("Entered %s\n", __func__);
 
-	/* If we can inspect how much of the transfer is left, use that for a
-	 * more accurate number.  Otherwise, assume no bytes have been
-	 * transfered.
-	 */
-	xfd = prtd->dma_period;
-	if (prtd->params->ops->residue)
-		xfd -= prtd->params->ops->residue(prtd->params->ch);
+	res = prtd->dma_pos - prtd->dma_start;
 
-	offset = prtd->dma_pos + xfd - prtd->dma_start;
+	pr_debug("Pointer offset: %lu\n", res);
 
 	/* we seem to be getting the odd error from the pcm library due
 	 * to out-of-bounds pointers. this is maybe due to the dma engine
@@ -296,12 +289,12 @@ dma_pointer(struct snd_pcm_substream *substream)
 	 * called... (todo - fix )
 	 */
 
-	if (offset >= snd_pcm_lib_buffer_bytes(substream))
-		offset = 0;
+	if (res >= snd_pcm_lib_buffer_bytes(substream)) {
+		if (res == snd_pcm_lib_buffer_bytes(substream))
+			res = 0;
+	}
 
-	pr_debug("Pointer offset: %lu\n", offset);
-
-	return bytes_to_frames(substream->runtime, offset);
+	return bytes_to_frames(substream->runtime, res);
 }
 
 static int dma_open(struct snd_pcm_substream *substream)
