@@ -17,15 +17,7 @@
 #include <drm/exynos_drm.h>
 #include "exynos_drm_drv.h"
 #include "exynos_drm_encoder.h"
-
-#define to_exynos_connector(x)	container_of(x, struct exynos_drm_connector,\
-				drm_connector)
-
-struct exynos_drm_connector {
-	struct drm_connector		drm_connector;
-	uint32_t			encoder_id;
-	struct exynos_drm_display	*display;
-};
+#include "exynos_drm_connector.h"
 
 /* convert exynos_video_timings to drm_display_mode */
 static inline void

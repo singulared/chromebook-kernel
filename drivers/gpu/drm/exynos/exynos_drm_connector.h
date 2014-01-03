@@ -17,4 +17,13 @@
 struct drm_connector *exynos_drm_connector_create(struct drm_device *dev,
 						   struct drm_encoder *encoder);
 
+#define to_exynos_connector(x)	container_of(x, struct exynos_drm_connector,\
+				drm_connector)
+
+struct exynos_drm_connector {
+	struct drm_connector		drm_connector;
+	uint32_t			encoder_id;
+	struct exynos_drm_display	*display;
+};
+
 #endif

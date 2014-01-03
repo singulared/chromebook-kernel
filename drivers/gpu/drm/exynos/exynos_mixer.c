@@ -38,6 +38,7 @@
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_iommu.h"
 #include "exynos_mixer.h"
+#include "exynos_drm_connector.h"
 
 #define get_mixer_context(dev)	platform_get_drvdata(to_platform_device(dev))
 
@@ -291,6 +292,9 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 				 struct drm_display_mode *mode_to_adjust)
 {
 	struct mixer_context *mctx = ctx;
+	struct exynos_drm_connector *exynos_connector =
+					to_exynos_connector(connector);
+	struct exynos_drm_display *display = exynos_connector->display;
 	int i;
 
 	if (mctx->mxr_ver == MXR_VER_128_0_0_184)
@@ -310,12 +314,19 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 			 */
 			list_for_each_entry(mode, &connector->modes, head) {
 				if (adj->new_res[0] == mode->hdisplay &&
-				    adj->new_res[1] == mode->vdisplay) {
-				    return;
+				    adj->new_res[1] == mode->vdisplay &&
+				    !(mode->private_flags & EXYNOS_MODE_ADJUSTED)) {
+					/* do not compare with invalid modes */
+					if (display->ops->check_mode)
+						if (display->ops->check_mode(display->ctx,
+										mode))
+							continue;
+					return;
 				}
 			}
 			mode_to_adjust->hdisplay = adj->new_res[0];
 			mode_to_adjust->vdisplay = adj->new_res[1];
+			mode_to_adjust->private_flags |= EXYNOS_MODE_ADJUSTED;
 			return;
 		}
 	}

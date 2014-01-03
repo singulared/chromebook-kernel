@@ -50,6 +50,9 @@
 
 #define wait_for(COND, TO_MS, INTVL_MS) _wait_for(COND, TO_MS, INTVL_MS)
 
+/* private flag to mark adjusted display modes */
+#define EXYNOS_MODE_ADJUSTED 0x1
+
 struct drm_device;
 struct exynos_drm_overlay;
 struct drm_connector;
