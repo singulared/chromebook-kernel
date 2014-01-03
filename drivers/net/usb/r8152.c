@@ -2709,7 +2709,7 @@ static bool rtl_ops_init(struct r8152 *tp, const struct usb_device_id *id)
 			ops->unload		= rtl8153_unload;
 			break;
 		default:
-			ret = -EFAULT;
+			ret = false;
 			break;
 		}
 		break;
