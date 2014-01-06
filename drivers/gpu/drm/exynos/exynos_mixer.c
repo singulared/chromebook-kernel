@@ -1168,6 +1168,8 @@ static void mixer_poweron(struct mixer_context *ctx)
 		clk_prepare_enable(res->sclk_mixer);
 	}
 
+	ctx->powered = true;
+
 	spin_lock_irqsave(&res->reg_slock, flags);
 	mixer_reg_write(res, MXR_INT_EN, ctx->int_en);
 	spin_unlock_irqrestore(&res->reg_slock, flags);
@@ -1175,8 +1177,6 @@ static void mixer_poweron(struct mixer_context *ctx)
 	mixer_win_reset(ctx);
 
 	mixer_window_resume(ctx);
-
-	ctx->powered = true;
 }
 
 static void mixer_poweroff(struct mixer_context *ctx)
