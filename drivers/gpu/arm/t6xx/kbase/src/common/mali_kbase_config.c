@@ -158,7 +158,7 @@ kbase_platform_config *kbasep_get_platform_config(void)
 {
 	if (soc_is_exynos5250())
 		platform_config.attributes = config_attributes_exynos5250;
-	else if (soc_is_exynos5420())
+	else if (soc_is_exynos542x())
 		platform_config.attributes = config_attributes_exynos5420;
 
 	platform_config.midgard_type = KBASE_MALI_T604;

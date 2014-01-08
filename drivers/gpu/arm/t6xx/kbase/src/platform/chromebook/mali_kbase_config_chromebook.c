@@ -1332,7 +1332,7 @@ static ssize_t mali_sysfs_show_asv(struct device *dev,
 	if (soc_is_exynos5250()) {
 		ret += scnprintf(buf, PAGE_SIZE, "asv group:%d exynos_lot_id:%d\n",
 				asv_group, exynos_lot_id);
-	} else if (soc_is_exynos5420()) {
+	} else if (soc_is_exynos542x()) {
 		ret += scnprintf(buf, PAGE_SIZE, "asv group:%d mp%d\n",
 				asv_group, exynos5420_is_g3d_mp6() ? 6 : 4);
 	}
@@ -1752,7 +1752,7 @@ int kbase_platform_dvfs_init(kbase_device *kbdev)
 				mali_dvfs_asv_vol_tbl_special_exynos5250;
 		mali_dvfs_asv_vol_tbl = mali_dvfs_asv_vol_tbl_exynos5250;
 #endif
-	} else if (soc_is_exynos5420())
+	} else if (soc_is_exynos542x())
 		mali_dvfs_infotbl_init_exynos5420(kbdev);
 
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, irqflags);
@@ -1924,7 +1924,7 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 			mout_gpll = clk_get(kbdev->osdev.dev, "mout_gpll");
 			fin_gpll = clk_get(kbdev->osdev.dev, "ext_xtal");
 			fout_gpll = clk_get(kbdev->osdev.dev, "fout_gpll");
-		} else if (soc_is_exynos5420()) {
+		} else if (soc_is_exynos542x()) {
 			mout_gpll = clk_get(kbdev->osdev.dev, "mout_vpll");
 			fin_gpll = clk_get(kbdev->osdev.dev, "ext_xtal");
 			fout_gpll = clk_get(kbdev->osdev.dev, "fout_vpll");
@@ -1980,7 +1980,7 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 		default:
 			return;
 		}
-	} else if (soc_is_exynos5420()) {
+	} else if (soc_is_exynos542x()) {
 		/*
 		 * For exynos5420, program gpll directly to desired frequency.
 		 * sclk_g3d is always mout_gpll / 1.
@@ -1994,7 +1994,7 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 		/*for stable clock input.*/
 		if (soc_is_exynos5250())
 			clk_set_rate(platform->sclk_g3d, 100000000);
-		else if (soc_is_exynos5420())
+		else if (soc_is_exynos542x())
 			clk_set_rate(platform->sclk_g3d, 100000000);
 		clk_set_parent(mout_gpll, fin_gpll);
 
