@@ -32,6 +32,7 @@
 #include <net/lib80211.h>
 #include <linux/firmware.h>
 #include <linux/ctype.h>
+#include <linux/of.h>
 
 #include "decl.h"
 #include "ioctl.h"
@@ -729,6 +730,7 @@ struct mwifiex_adapter {
 	u8 scan_delay_cnt;
 	u8 empty_tx_q_cnt;
 	const struct firmware *cal_data;
+	struct device_node *dt_node;
 	atomic_t is_tx_received;
 	atomic_t pending_bridged_pkts;
 };
