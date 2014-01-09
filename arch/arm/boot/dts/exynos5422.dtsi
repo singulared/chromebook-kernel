@@ -17,4 +17,9 @@
 	clock: clock-controller@0x10010000 {
 		compatible = "samsung,exynos5422-clock";
 	};
+
+	cam_pd: pd@10045100 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10045100 0x20>;
+	};
 };
