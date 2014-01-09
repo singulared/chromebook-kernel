@@ -7,7 +7,7 @@ way:
 
 Required properties:
 
-  - compatible : value should be "arm,mali"
+  - compatible : value should be "arm,mali-midgard"
   - reg	: Physical base address of the IP registers and
 		length of the memory mapped region.
   - interrupts : ARM Mali interrupts to the CPU.
@@ -15,15 +15,19 @@ Required properties:
 		1) JOB IRQ number
 		2) MMU IRQ number
 		3) GPU IRQ number
+  - interrupt-names : Contains the names of IRQ resources in the order they
+		were provided in the interrupts property.
+		Must contain: "JOB, "MMU", "GPU".
   - clocks : From common clock binding : handle to g3d clock and aclk_400_g3d
   - clock-names : From common clock binding : Shall be "g3d" and "aclk_400_g3d"
 
 Example :
 
 	mali {
-		compatible = "arm,mali";
+		compatible = "arm,mali-midgard";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 118 0>, <0 119 0>, <0 117 0>;
+		interrupt-names = "JOB", "MMU", "GPU";
 		clocks = <&clock 345>, <&clock 346>;
 		clock-names = "g3d", "aclk_400_g3d";
 	};
