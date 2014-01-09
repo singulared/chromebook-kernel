@@ -49,7 +49,7 @@ int exynos_asv_group_get(enum asv_type_id asv_type_id)
 
 	if (soc_is_exynos5250())
 		asv_group = exynos_result_of_asv & 0xf;
-	else if (soc_is_exynos5420())
+	else if (soc_is_exynos542x())
 		asv_group = asv_get(asv_type_id)->result_asv_grp;
 
 	return asv_group;
@@ -172,7 +172,7 @@ static int __init asv_init(void)
 	}
 
 	/* Define init function for each SoC types */
-	if (soc_is_exynos5420())
+	if (soc_is_exynos542x())
 		ret = exynos5420_init_asv(exynos_asv_common);
 	else {
 		pr_err("ASV : Unknown SoC type\n");

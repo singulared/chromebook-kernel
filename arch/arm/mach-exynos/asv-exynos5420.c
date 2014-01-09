@@ -361,7 +361,7 @@ static int __init exynos5420_set_asv_volt_mif_sram(void)
 	struct regulator *mif_sram_regulator;
 	struct regulator *g3d_sram_regulator;
 
-	if (!(soc_is_exynos5420()))
+	if (!(soc_is_exynos542x()))
 		return 0;
 
 	mif_regulator = regulator_get(NULL, "vdd_mif");
