@@ -227,7 +227,8 @@ static int hdmi_audio_control(struct hdmi_audio_context *ctx,
 		return -EINVAL;
 	}
 
-	hdmi_reg_writeb(ctx, HDMI_AUI_CON, onoff ? 2 : 0);
+	hdmi_reg_writeb(ctx, HDMI_AUI_CON, onoff ?
+			HDMI_AUI_CON_TRANS_EVERY_VSYNC : HDMI_AUI_CON_NO_TRAN);
 	hdmi_reg_writemask(ctx, HDMI_CON_0, onoff ?
 			HDMI_ASP_EN : HDMI_ASP_DIS, HDMI_ASP_MASK);
 	return 0;
@@ -251,7 +252,6 @@ static void hdmi_reg_infoframe(struct hdmi_audio_context *ctx,
 {
 	u32 hdr_sum;
 	u8 chksum;
-	hdmi_reg_writeb(ctx, HDMI_AUI_CON, 0x02);
 	hdmi_reg_writeb(ctx, HDMI_AUI_HEADER0, infoframe->type);
 	hdmi_reg_writeb(ctx, HDMI_AUI_HEADER1, infoframe->ver);
 	hdmi_reg_writeb(ctx, HDMI_AUI_HEADER2, infoframe->len);
