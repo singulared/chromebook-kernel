@@ -685,7 +685,7 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	/*
 	 * TRIMINFO values should always be valid on Exynos5420
 	 */
-	if (!soc_is_exynos5420()) {
+	if (!soc_is_exynos542x()) {
 		if ((EFUSE_MIN_VALUE > data->temp_error1) ||
 				(data->temp_error1 > EFUSE_MAX_VALUE) ||
 				(data->temp_error2 != 0))
