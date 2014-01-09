@@ -314,7 +314,7 @@ static int __init exynos_cpufreq_init(void)
 	int ret = -EINVAL;
 
 #ifdef CONFIG_ARM_EXYNOS_IKS_CORE
-	if (soc_is_exynos5420())
+	if (soc_is_exynos542x())
 		return exynos_iks_cpufreq_init();
 #endif
 
@@ -328,7 +328,7 @@ static int __init exynos_cpufreq_init(void)
 		ret = exynos4x12_cpufreq_init(exynos_info);
 	else if (soc_is_exynos5250())
 		ret = exynos5250_cpufreq_init(exynos_info);
-	else if (soc_is_exynos5420())
+	else if (soc_is_exynos542x())
 		ret = exynos5420_cpufreq_init(exynos_info);
 	else
 		pr_err("%s: CPU type not found\n", __func__);
