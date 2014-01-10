@@ -7785,6 +7785,7 @@ intel_modeset_update_state(struct drm_device *dev, unsigned prepare_pipes)
 	list_for_each_entry(intel_crtc, &dev->mode_config.crtc_list,
 			    base.head) {
 		WARN_ON(intel_crtc->base.enabled != intel_crtc_in_use(&intel_crtc->base));
+		WARN_ON(intel_crtc->new_config != &intel_crtc->config);
 	}
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
@@ -7949,6 +7950,7 @@ int intel_set_mode(struct drm_crtc *crtc,
 
 			goto out;
 		}
+		to_intel_crtc(crtc)->new_config = pipe_config;
 	}
 
 	DRM_DEBUG_KMS("set mode pipe masks: modeset: %x, prepare: %x, disable: %x\n",
@@ -7970,6 +7972,7 @@ int intel_set_mode(struct drm_crtc *crtc,
 		/* mode_set/enable/disable functions rely on a correct pipe
 		 * config. */
 		to_intel_crtc(crtc)->config = *pipe_config;
+		to_intel_crtc(crtc)->new_config = &to_intel_crtc(crtc)->config;
 	}
 
 	/* Only after disabling all output pipelines that will be changed can we
@@ -8420,6 +8423,8 @@ static void intel_crtc_init(struct drm_device *dev, int pipe)
 	       dev_priv->plane_to_crtc_mapping[intel_crtc->plane] != NULL);
 	dev_priv->plane_to_crtc_mapping[intel_crtc->plane] = &intel_crtc->base;
 	dev_priv->pipe_to_crtc_mapping[intel_crtc->pipe] = &intel_crtc->base;
+
+	intel_crtc->new_config = &intel_crtc->config;
 
 	drm_crtc_helper_add(&intel_crtc->base, &intel_helper_funcs);
 }
