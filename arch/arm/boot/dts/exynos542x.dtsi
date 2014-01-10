@@ -856,7 +856,6 @@
 	};
 
 	mfc: codec@11000000 {
-		compatible = "samsung,mfc-v7";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
 		clocks = <&clock 401>;

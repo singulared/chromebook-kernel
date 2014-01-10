@@ -22,4 +22,8 @@
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10045100 0x20>;
 	};
+
+	mfc: codec@11000000 {
+		compatible = "samsung,mfc-v8";
+	};
 };
