@@ -257,6 +257,7 @@ struct intel_crtc {
 	bool cursor_visible;
 
 	struct intel_crtc_config config;
+	bool new_enabled;
 
 	/* We can share PLLs across outputs if the timings match */
 	struct intel_pch_pll *pch_pll;
@@ -551,6 +552,7 @@ extern enum drm_connector_status intel_panel_detect(struct drm_device *dev);
 struct intel_set_config {
 	struct drm_encoder **save_connector_encoders;
 	struct drm_crtc **save_encoder_crtcs;
+	bool *save_crtc_enabled;
 
 	bool fb_changed;
 	bool mode_changed;
