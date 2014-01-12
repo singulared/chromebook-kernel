@@ -80,7 +80,7 @@ static DEFINE_PER_CPU(unsigned int, req_freq);
 
 static struct cpufreq_policy fake_policy[CA_END][NR_CPUS];
 
-static bool use_cluster_switching = true;
+static bool use_cluster_switching;
 
 static void switch_complete_cb(void *cookie)
 {
@@ -782,6 +782,9 @@ int __init exynos_iks_cpufreq_init(void)
 	int cpu;
 
 	boot_cluster = 0;
+
+	if (soc_is_exynos5420())
+		use_cluster_switching = true;
 
 	if (!bL_switcher_get_enabled()) {
 		bL_switcher_put_enabled();
