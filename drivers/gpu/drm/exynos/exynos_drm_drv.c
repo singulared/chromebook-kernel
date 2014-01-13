@@ -123,7 +123,17 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	 * by drm timer once a current process gives up ownership of
 	 * vblank event (after drm_vblank_put function is called).
 	 */
-	dev->vblank_disable_allowed = 1;
+	/*
+	 * crbug.com/328953: exynos drm does not update crtc vblank counters
+	 * when crtc vblank irqs are disabled.
+	 * EGL does not (yet) provide a "GetMscRate", so EGL applications
+	 * compute MSC rate using MSC and UCT (ie, the vblank_count and its
+	 * corresponding timestamp) values returned from by
+	 * DRM_IOCTL_WAIT_VBLANK.  Since vblanks aren't counted during idle
+	 * periods, this computed MSC rate is wrong.
+	 * Disallow vblank_disable until this is fixed.
+	 */
+	dev->vblank_disable_allowed = 0;
 
 	/*
 	 * probe sub drivers such as display controller and hdmi driver,
