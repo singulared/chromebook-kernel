@@ -599,9 +599,9 @@ static struct chromeos_laptop bolt = {
 		/* Touchscreen. */
 		{ .add = setup_atmel_1664s_ts, I2C_ADAPTER_I2C1 },
 		/* Touchpad. */
-		{. add = setup_atmel_224s_tp, I2C_ADAPTER_I2C0 },
+		{ .add = setup_atmel_224s_tp, I2C_ADAPTER_I2C0 },
 		/* Light Sensor. */
-		{. add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
+		{ .add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 	},
 	.has_keyboard_backlight = true,
 };
@@ -609,7 +609,7 @@ static struct chromeos_laptop bolt = {
 static struct chromeos_laptop samus = {
 	.i2c_peripherals = {
 		/* Touchpad. */
-		{. add = setup_atmel_224s_tp, I2C_ADAPTER_I2C0 },
+		{ .add = setup_atmel_224s_tp, I2C_ADAPTER_I2C0 },
 		/* NFC. */
 		{ .add = setup_pn544_hci_samus, I2C_ADAPTER_I2C0 },
 		/* Touchscreen. */
