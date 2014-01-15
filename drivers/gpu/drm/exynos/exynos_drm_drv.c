@@ -230,17 +230,40 @@ static int exynos_drm_suspend(struct drm_device *dev, pm_message_t state)
 static int exynos_drm_resume(struct drm_device *dev)
 {
 	struct drm_connector *connector;
+	enum drm_connector_status status;
+	bool changed = false;
 
 	DRM_DEBUG_DRIVER("\n");
 
 	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		int desired_mode = connector->dpms;
+
+		connector->dpms = DRM_MODE_DPMS_OFF;
+
+		/*
+		 * If the connector has been disconnected during suspend,
+		 * disconnect it from the encoder and leave it off. We'll notify
+		 * userspace at the end.
+		 */
+		if (desired_mode == DRM_MODE_DPMS_ON) {
+			status = connector->funcs->detect(connector, true);
+			if (status == connector_status_disconnected) {
+				connector->encoder = NULL;
+				changed = true;
+				continue;
+			}
+		}
+
 		if (connector->funcs->dpms)
-			connector->funcs->dpms(connector, connector->dpms);
+			connector->funcs->dpms(connector, desired_mode);
 	}
 
 	drm_helper_resume_force_mode(dev);
 	mutex_unlock(&dev->mode_config.mutex);
+
+	if (changed)
+		drm_kms_helper_hotplug_event(dev);
 
 	return 0;
 }
