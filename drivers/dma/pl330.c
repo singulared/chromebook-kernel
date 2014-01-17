@@ -2886,6 +2886,8 @@ int pl330_dma_getposition(struct dma_chan *chan,
 	struct pl330_info *pi;
 	void __iomem *regs;
 	struct pl330_thread *thrd;
+	unsigned long flags;
+	int i;
 
 	if (unlikely(!pch))
 		return -EINVAL;
@@ -2894,8 +2896,37 @@ int pl330_dma_getposition(struct dma_chan *chan,
 	pi = &pch->dmac->pif;
 	regs = pi->base;
 
-	*src = readl(regs + SA(thrd->id));
-	*dst = readl(regs + DA(thrd->id));
+	/*
+	 * Add a lock and loop here to avoid cases where we read a zero for
+	 * SA or DA.
+	 *
+	 * Specifically we're trying to guard against:
+	 *   pl330_irq_handler() -> pl330_update() -> _start() -> _trigger() ->
+	 *   _execute_DBGINSN()
+	 *
+	 * The executing of the DBGINSN appears to zero the SA / DA for a very
+	 * short period of time.  By grabbing the lock we know that no more
+	 * DBGINSN calls can happen while we're running.
+	 *
+	 * We loop to see that SA is non-zero; we don't expect to actually
+	 * loop very often but it happens periodically that we loop once.
+	 */
+	spin_lock_irqsave(&thrd->dmac->lock, flags);
+
+	for (i = 0; i < 10; i++) {
+		*src = readl(regs + SA(thrd->id));
+		*dst = readl(regs + DA(thrd->id));
+
+		if (*src && *dst)
+			break;
+
+		udelay(1);
+	}
+
+	/* Only warn once so we don't spam the logs. */
+	WARN_ONCE(i == 10, "no valid addresses\n");
+
+	spin_unlock_irqrestore(&thrd->dmac->lock, flags);
 
 	return 0;
 }
