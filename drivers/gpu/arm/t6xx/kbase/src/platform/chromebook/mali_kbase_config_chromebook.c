@@ -130,8 +130,10 @@ static struct mali_dvfs_info *mali_dvfs_infotbl;
 
 /* TODO(sleffler) should be const but for voltage */
 static struct mali_dvfs_info mali_dvfs_infotbl_exynos5250[MALI_DVFS_STEP] = {
-/* A duumy level is added in 5250 to make 8 levels. Since, max_threshold
- * value of step 6 is 100, the dvfs code will never come to dummy step 7
+/*
+ * A dummy level is added in 5250 and 5422 to make 8 levels. In 5250 since the
+ * max_threshold value of step 6 is 100, the dvfs code will never come to dummy
+ * step 7.
  */
 #if (MALI_DVFS_STEP == 8)
 	{ 912500, 100000000,  0,   0, DVFS_TIME_TO_CNT(0), DVFS_TIME_TO_CNT(0)},
@@ -163,6 +165,31 @@ static struct mali_dvfs_info mali_dvfs_infotbl_exynos5420[MALI_DVFS_STEP] = {
 #error no table
 #endif
 };
+
+static struct mali_dvfs_info mali_dvfs_infotbl_exynos5422[MALI_DVFS_STEP] = {
+#if (MALI_DVFS_STEP == 8)
+	{  825000, 100000000,  0,  60, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(2000)},
+	{  825000, 177000000, 40,  75, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(2000)},
+	{  887500, 266000000, 65,  85, DVFS_TIME_TO_CNT(1000),
+					DVFS_TIME_TO_CNT(3000)},
+	{  912500, 350000000, 65,  85, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(1500)},
+	{  937500, 420000000, 65,  85, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(1500)},
+	{  975000, 480000000, 65, 100, DVFS_TIME_TO_CNT(1000),
+					DVFS_TIME_TO_CNT(1500)},
+	{ 1025000, 543000000, 75, 100, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(1500)},
+	{ 1025000, 543000000, 75, 100, DVFS_TIME_TO_CNT(750),
+					DVFS_TIME_TO_CNT(1500)},
+
+#else
+#error no table
+#endif
+};
+
 int kbase_platform_dvfs_init(kbase_device *kbdev);
 void kbase_platform_dvfs_term(void);
 int kbase_platform_dvfs_get_control_status(void);
@@ -1460,7 +1487,10 @@ mali_error kbase_platform_init(kbase_device *kbdev)
 
 	kbdev->platform_context = (void *) platform;
 
-	platform->t6xx_default_clock = 533000000;
+	if (soc_is_exynos542x())
+		platform->t6xx_default_clock = 420000000;
+	else
+		platform->t6xx_default_clock = 533000000;
 
 	platform->cmu_pmu_status = 0;
 	spin_lock_init(&platform->cmu_pmu_lock);
@@ -1700,11 +1730,14 @@ int kbase_platform_dvfs_get_control_status(void)
 }
 
 
-static void mali_dvfs_infotbl_init_exynos5420(kbase_device *kbdev)
+static void mali_dvfs_infotbl_init_exynos542x(kbase_device *kbdev)
 {
 	int i;
 
-	mali_dvfs_infotbl = mali_dvfs_infotbl_exynos5420;
+	if (soc_is_exynos5420())
+		mali_dvfs_infotbl = mali_dvfs_infotbl_exynos5420;
+	else
+		mali_dvfs_infotbl = mali_dvfs_infotbl_exynos5422;
 
 	for (i = 0; i < MALI_DVFS_STEP; i++) {
 		unsigned int asv_volt;
@@ -1753,7 +1786,7 @@ int kbase_platform_dvfs_init(kbase_device *kbdev)
 		mali_dvfs_asv_vol_tbl = mali_dvfs_asv_vol_tbl_exynos5250;
 #endif
 	} else if (soc_is_exynos542x())
-		mali_dvfs_infotbl_init_exynos5420(kbdev);
+		mali_dvfs_infotbl_init_exynos542x(kbdev);
 
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, irqflags);
 
