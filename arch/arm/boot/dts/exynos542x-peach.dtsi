@@ -683,7 +683,7 @@
 					regulator-op-mode = <2>;
 				};
 				ldo2_reg: LDO2 {
-					regulator-name = "vdd_1v2";
+					regulator-name = "vdd_1v2_2";
 					regulator-min-microvolt = <1200000>;
 					regulator-max-microvolt = <1200000>;
 				};
