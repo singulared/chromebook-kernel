@@ -797,6 +797,9 @@ static int fimd_poweroff(struct fimd_context *ctx)
 
 	DRM_DEBUG_KMS("\n");
 
+	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
+		fimd_disable_vblank(ctx);
+
 	/*
 	 * We need to make sure that all windows are disabled before we
 	 * suspend that connector. Otherwise we might try to scan from
