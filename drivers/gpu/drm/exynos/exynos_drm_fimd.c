@@ -654,9 +654,16 @@ static void fimd_commit(void *in_ctx)
 	writel(val, ctx->regs + VIDCON0);
 }
 
-static void fimd_do_enable_vblank(struct fimd_context *ctx)
+static int fimd_enable_vblank(void *in_ctx)
 {
+	struct fimd_context *ctx = in_ctx;
 	u32 val;
+
+	DRM_DEBUG_KMS("\n");
+
+	if (ctx->suspended)
+		return -EPERM;
+
 	val = readl(ctx->regs + VIDINTCON0);
 
 	val |= VIDINTCON0_INT_ENABLE;
@@ -668,18 +675,6 @@ static void fimd_do_enable_vblank(struct fimd_context *ctx)
 	val |= VIDINTCON0_FRAMESEL1_NONE;
 
 	writel(val, ctx->regs + VIDINTCON0);
-}
-
-static int fimd_enable_vblank(void *in_ctx)
-{
-	struct fimd_context *ctx = in_ctx;
-
-	DRM_DEBUG_KMS("\n");
-
-	if (ctx->suspended)
-		return -EPERM;
-
-	fimd_do_enable_vblank(ctx);
 
 	enable_irq(ctx->irq);
 
@@ -767,8 +762,13 @@ static int fimd_poweron(struct fimd_context *ctx)
 	 * Restore the vblank interrupts to whichever state DRM
 	 * wants them.
 	 */
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-		fimd_do_enable_vblank(ctx);
+	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe]) {
+		ret = fimd_enable_vblank(ctx);
+		if (ret) {
+			DRM_ERROR("Failed to re-enable vblank [%d]\n", ret);
+			goto enable_vblank_err;
+		}
+	}
 
 	fimd_window_resume(ctx);
 	/*
@@ -780,6 +780,9 @@ static int fimd_poweron(struct fimd_context *ctx)
 
 	return 0;
 
+enable_vblank_err:
+	writel(0, ctx->regs + DPCLKCON);
+	clk_disable_unprepare(ctx->lcd_clk);
 lcd_clk_err:
 	clk_disable_unprepare(ctx->bus_clk);
 bus_clk_err:
