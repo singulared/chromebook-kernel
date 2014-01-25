@@ -35,7 +35,7 @@ struct exynos_drm_fb {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct dma_buf			*dma_buf;
 	bool				rendered;
-	bool				prepared;
+	unsigned long			prepared;
 #endif
 };
 

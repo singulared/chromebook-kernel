@@ -147,12 +147,13 @@ static void exynos_drm_crtc_try_do_flip(struct drm_crtc *crtc)
 	 */
 	if (kfifo_peek(&exynos_crtc->flip_fifo, &next_desc)) {
 		struct exynos_drm_fb *exynos_fb = to_exynos_fb(next_desc.fb);
-		if (exynos_fb->rendered && !exynos_fb->prepared &&
+		if (exynos_fb->rendered &&
+		    !(exynos_fb->prepared & (1ul << exynos_crtc->pipe)) &&
 		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
 			exynos_drm_crtc_update(crtc, next_desc.fb);
 			trace_exynos_page_flip_state(exynos_crtc->pipe,
 					DRM_BASE_ID(next_desc.fb), "prepared");
-			exynos_fb->prepared = true;
+			exynos_fb->prepared |= 1ul << exynos_crtc->pipe;
 		}
 	}
 
@@ -251,7 +252,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 
 	to_exynos_fb(next_desc.fb)->rendered = true;
 	exynos_drm_crtc_update(crtc, next_desc.fb);
-	to_exynos_fb(next_desc.fb)->prepared = true;
+	to_exynos_fb(next_desc.fb)->prepared |= 1ul << exynos_crtc->pipe;
 
 	if (exynos_crtc->event) {
 		exynos_drm_crtc_flip_complete(drm_dev, exynos_crtc->event);
@@ -484,7 +485,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	flip_desc.fb = fb;
 	exynos_fb->rendered = false;
-	exynos_fb->prepared = false;
+	exynos_fb->prepared &= ~(1ul << exynos_crtc->pipe);
 	if (kfifo_is_full(&exynos_crtc->flip_fifo)) {
 		DRM_ERROR("flip queue: crtc already busy\n");
 		ret = -EBUSY;
@@ -733,7 +734,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (!kfifo_peek(&exynos_crtc->flip_fifo, &next_desc))
 		return;
-	if (!to_exynos_fb(next_desc.fb)->prepared)
+	if (!(to_exynos_fb(next_desc.fb)->prepared & (1ul << exynos_crtc->pipe)))
 		return;
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
 		return;
