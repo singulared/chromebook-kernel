@@ -794,10 +794,7 @@
 					regulator-max-microvolt = <1400000>;
 					regulator-always-on;
 					regulator-boot-on;
-
-					/* Use op-mode 2 due to errata */
-					regulator-op-mode = <2>;
-
+					regulator-op-mode = <1>;
 					regulator-ramp-delay = <12500>;
 				};
 				buck4_reg: BUCK4 {
