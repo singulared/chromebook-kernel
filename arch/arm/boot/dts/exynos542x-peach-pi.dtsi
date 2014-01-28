@@ -45,6 +45,13 @@
 		samsung,txpreempamptune = <0x2>;
 	};
 
+	/*hsi2c7*/
+	hsi2c@12CD0000 {
+		max98090: codec@10 {
+			compatible = "maxim,max98091";
+		};
+	};
+
 	spi@12d40000 {
 		cros-ec@0 {
 			i2c-tunnel {
@@ -57,8 +64,12 @@
 								regulator-always-on;
 							};
 						};
-					};
 				};
 			};
 		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98091";
+	};
 };

@@ -53,6 +53,10 @@
 			pinctrl-0 = <&ps8625_sleep &ps8625_reset>;
 			display-timings = <&lcd_display_timings>;
 		};
+
+		max98090: codec@10 {
+			compatible = "maxim,max98090";
+		};
 	};
 
 	fimd {
@@ -75,5 +79,9 @@
 
 	usb3_phy1: usbphy@12500000 {
 		samsung,txpreempamptune = <0x1>;
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98090";
 	};
 };
