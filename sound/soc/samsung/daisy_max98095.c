@@ -477,7 +477,8 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	/* Microphone BIAS is needed to power the analog mic.
 	 * MICBIAS2 is connected to analog mic (MIC3, which is in turn
 	 * connected to MIC2 via 'External MIC') on the max98095 codec.
-	 * Microphone BIAS is controlled by MICBIAS on the max98090 codec.
+	 * Microphone BIAS is controlled by MICBIAS
+	 * on the max98090 / max98091 codec.
 	 *
 	 * Ultimately, the following should hold:
 	 *
@@ -656,7 +657,8 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	if (of_device_is_compatible(codec_node, "maxim,max98090") ||
+	if (of_device_is_compatible(codec_node, "maxim,max98091") ||
+	    of_device_is_compatible(codec_node, "maxim,max98090") ||
 	    of_device_is_compatible(codec_node, "maxim,max98089")) {
 		card->dapm_routes = max98090_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(max98090_audio_map);
@@ -700,6 +702,7 @@ static int daisy_max98095_driver_remove(struct platform_device *pdev)
 
 static const struct of_device_id daisy_max98095_of_match[] = {
 	{ .compatible = "google,daisy-audio-max98095", },
+	{ .compatible = "google,daisy-audio-max98091", },
 	{ .compatible = "google,daisy-audio-max98090", },
 	{ .compatible = "google,daisy-audio-max98089", },
 	{},
