@@ -2441,6 +2441,7 @@ static const struct dev_pm_ops max98090_pm = {
 
 static const struct i2c_device_id max98090_i2c_id[] = {
 	{ "max98090", MAX98090 },
+	{ "max98091", MAX98091 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max98090_i2c_id);
