@@ -132,6 +132,7 @@
 /* Status register defines */
 #define SDMMC_GET_FCNT(x)		(((x)>>17) & 0x1FFF)
 #define SDMMC_STATUS_BUSY		BIT(9)
+#define SDMMC_STATUS_DMA_REQ		BIT(31)
 /* FIFOTH register defines */
 #define SDMMC_SET_FIFOTH(m, r, t)	(((m) & 0x7) << 28 | \
 					 ((r) & 0xFFF) << 16 | \
