@@ -17,6 +17,9 @@
 / {
 	model = "Google Peach Pi Rev 10+";
 
-	compatible = "google,pi-rev12", "google,pi-rev11", "google,pi-rev10",
+	compatible = "google,pi-rev16",
+		"google,pi-rev15", "google,pi-rev14",
+		"google,pi-rev13", "google,pi-rev12",
+		"google,pi-rev11", "google,pi-rev10",
 		"google,pi", "google,peach", "samsung,exynos5422";
 };

@@ -17,7 +17,11 @@
 / {
 	model = "Google Peach Pit Rev 6+";
 
-	compatible = "google,pit-rev10", "google,pit-rev9", "google,pit-rev8",
+	compatible = "google,pit-rev16",
+		"google,pit-rev15", "google,pit-rev14",
+		"google,pit-rev13", "google,pit-rev12",
+		"google,pit-rev11", "google,pit-rev10",
+		"google,pit-rev9", "google,pit-rev8",
 		"google,pit-rev7", "google,pit-rev6",
 		"google,pit", "google,peach", "samsung,exynos5420";
 };
