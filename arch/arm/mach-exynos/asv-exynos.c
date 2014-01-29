@@ -172,9 +172,9 @@ static int __init asv_init(void)
 	}
 
 	/* Define init function for each SoC types */
-	if (soc_is_exynos542x())
-		ret = exynos5420_init_asv(exynos_asv_common);
-	else {
+	if (soc_is_exynos542x()) {
+		ret = exynos542x_init_asv(exynos_asv_common);
+	} else {
 		pr_err("ASV : Unknown SoC type\n");
 		ret = -EINVAL;
 		goto out2;
