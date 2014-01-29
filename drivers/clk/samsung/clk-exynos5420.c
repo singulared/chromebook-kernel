@@ -1173,6 +1173,7 @@ static __initdata struct of_device_id ext_clk_match[] = {
 static const struct samsung_pll_rate_table apll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_35XX_RATE(rate, m, p, s) */
+	PLL_35XX_RATE(2100000000, 175, 2, 0),
 	PLL_35XX_RATE(2000000000, 250, 3, 0),
 	PLL_35XX_RATE(1900000000, 475, 6, 0),
 	PLL_35XX_RATE(1800000000, 225, 3, 0),
@@ -1230,6 +1231,7 @@ static struct samsung_pll_rate_table vpll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_35XX_RATE(rate, m, p, s) */
 	PLL_35XX_RATE(600000000, 100, 2, 1),
+	PLL_35XX_RATE(543000000, 181, 2, 2),
 	PLL_35XX_RATE(533000000, 266, 3, 2),
 	PLL_35XX_RATE(480000000, 320, 4, 2),
 	PLL_35XX_RATE(420000000, 140, 2, 2),
