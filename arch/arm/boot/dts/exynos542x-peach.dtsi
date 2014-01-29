@@ -773,7 +773,7 @@
 				};
 				buck1_reg: BUCK1 {
 					regulator-name = "vdd_mif";
-					regulator-min-microvolt = <900000>;
+					regulator-min-microvolt = <800000>;
 					regulator-max-microvolt = <1300000>;
 					regulator-always-on;
 					regulator-boot-on;
@@ -800,7 +800,7 @@
 				};
 				buck4_reg: BUCK4 {
 					regulator-name = "vdd_g3d";
-					regulator-min-microvolt = <800000>;
+					regulator-min-microvolt = <700000>;
 					regulator-max-microvolt = <1400000>;
 					/*
 					 * TODO(sjg@chromium.org): Maybe remove
