@@ -41,8 +41,6 @@ static inline void __iomem *cpu_boot_reg_base(void)
 {
 	if (soc_is_exynos4210() && samsung_rev() == EXYNOS4210_REV_1_1)
 		return S5P_INFORM5;
-	else if (soc_is_exynos5420())
-		return S5P_VA_SYSRAM_NS + 0x1C;
 	return S5P_VA_SYSRAM;
 }
 
@@ -164,16 +162,6 @@ static int __cpuinit exynos_boot_secondary(unsigned int cpu, struct task_struct 
 	timeout = jiffies + (1 * HZ);
 	while (time_before(jiffies, timeout)) {
 		smp_rmb();
-
-		/*
-		 * Following is a software workaround for an iROM bug
-		 * related to CPU#2. This will be fixed in EVT1 hardware.
-		 */
-		if (soc_is_exynos5420() && samsung_rev() == EXYNOS5420_REV_0) {
-			if (cpu == 2)
-				__raw_writel(__raw_readl(S5P_VA_SYSRAM),
-					S5P_VA_SYSRAM + 0x4);
-		}
 
 		__raw_writel(virt_to_phys(exynos4_secondary_startup),
 							cpu_boot_reg(phys_cpu));
