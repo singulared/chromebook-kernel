@@ -92,6 +92,7 @@ extern int gsc_dbg;
 #define	GSC_CTX_OUTPUT			(1 << 4)
 #define	GSC_CTX_START			(1 << 5)
 #define	GSC_CTX_STOP_REQ		(1 << 6)
+#define	GSC_CTX_ABORT			(1 << 7)
 #define	GSC_CTX_CAP			(1 << 10)
 #define MAX_MDEV			2
 
@@ -177,27 +178,27 @@ enum gsc_yuv_fmt {
 	((pad == GSC_PAD_SINK) ? &ctx->s_frame : &ctx->d_frame)
 /**
  * struct gsc_fmt - the driver's internal color format data
- * @mbus_code: Media Bus pixel code, -1 if not applicable
  * @name: format description
  * @pixelformat: the fourcc code for this format, 0 if not applicable
  * @yorder: Y/C order
  * @corder: Chrominance order control
  * @num_planes: number of physically non-contiguous data planes
  * @nr_comp: number of physically contiguous data planes
- * @depth: per plane driver's private 'number of bits per pixel'
- * @flags: flags indicating which operation mode format applies to
+ * @depth: bit depth of each component
+ * @sampling: sampling frequency of each component, X and Y
+ * @mbus_code: Media Bus pixel code, -1 if not applicable
  */
 struct gsc_fmt {
-	enum v4l2_mbus_pixelcode mbus_code;
 	char	*name;
 	u32	pixelformat;
 	u32	color;
 	u32	yorder;
 	u32	corder;
-	u16	num_planes;
-	u16	nr_comp;
+	u8	num_planes;
+	u8	nr_comp;
 	u8	depth[VIDEO_MAX_PLANES];
-	u32	flags;
+	u8	sampling[VIDEO_MAX_PLANES][2];
+	enum	v4l2_mbus_pixelcode mbus_code;
 };
 
 /**

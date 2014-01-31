@@ -1,0 +1,39 @@
+[427415.830560] ADDRCONF(NETDEV_CHANGE): wlan0: link becomes ready
+[470547.229109] ------------[ cut here ]------------
+[470547.229130] kernel BUG at /mnt/host/source/src/third_party/kernel/files/fs/proc/breakme.c:35!
+[470547.229149] invalid opcode: 0000 [#1] SMP
+[470547.233697] gsmi: Log Shutdown Reason 0x03
+[470547.233714] CPU 2
+[470547.233726] Modules linked in: i2c_dev uinput uvcvideo rfcomm videobuf2_core videodev videobuf2_vmalloc videobuf2_memops snd_hda_codec_hdmi ath9k_btcoex mac80211 snd_hda_codec_ca0132 ath9k_common_btcoex aesni_intel ath9k_hw_btcoex snd_hda_intel snd_hda_codec ath cryptd snd_hwdep memconsole snd_pcm aes_x86_64 snd_timer cfg80211 nm10_gpio zram(C) snd_page_alloc zsmalloc(C) isl29018(C) lzo_decompress lzo_compress industrialio(C) fuse nf_conntrack_ipv6 nf_defrag_ipv6 ip6table_filter xt_mark ip6_tables option usb_wwan cdc_ether asix usbnet ath3k btusb bluetooth joydev
+[470547.233917]
+[470547.233927] Pid: 27935, comm: bash Tainted: G        WC   3.4.0 #78
+[470547.233943] RIP: 0010:[<ffffffff8111f68a>]  [<ffffffff8111f68a>] write_breakme+0xae/0x1a0
+[470547.233974] RSP: 0018:ffff88007eec7e28  EFLAGS: 00010246
+[470547.233987] RAX: 0000000000000000 RBX: 0000000000000004 RCX: 0000000000000000
+[470547.234002] RDX: 0000000000000000 RSI: ffffffff8173909f RDI: ffff88007eec7e4f
+[470547.234017] RBP: ffff88007eec7ea8 R08: ffffffff81118b86 R09: 00007fefd8665700
+[470547.234033] R10: 00007fefd87a9dd9 R11: ffff88007efc2300 R12: 00007fefd8718000
+[470547.234048] R13: ffffffff8111f5dc R14: ffff88014a808f80 R15: ffff88007eec7f60
+[470547.234065] FS:  00007fefd8665700(0000) GS:ffff88014f300000(0000) knlGS:0000000000000000
+[470547.234082] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[470547.234096] CR2: 00007fefd902a400 CR3: 000000007ee33000 CR4: 00000000001407e0
+[470547.234111] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
+[470547.234126] DR3: 0000000000000000 DR6: 00000000ffff0ff0 DR7: 0000000000000400
+[470547.234143] Process bash (pid: 27935, threadinfo ffff88007eec6000, task ffff88013c27c0b0)
+[470547.234159] Stack:
+[470547.234166]  ffff88007eec7ef8 dead4ead00000000 00000000ffffffff ffffffffffffffff
+[470547.234188]  6200000761cadfcd ffff88007e006775 0000000000000000 ffff880148540510
+[470547.234211]  ffff88008cef85e0 0000000200000301 00007fefd8718000 ffff88014a808f00
+[470547.234233] Call Trace:
+[470547.234250]  [<ffffffff81118c13>] proc_reg_write+0x8d/0xac
+[470547.234269]  [<ffffffff810d387a>] vfs_write+0x98/0xda
+[470547.234285]  [<ffffffff810d3a49>] sys_write+0x43/0x73
+[470547.234301]  [<ffffffff81470212>] system_call_fastpath+0x16/0x1b
+[470547.234315] Code: 0b 00 85 c0 75 11 48 c7 04 25 00 00 00 00 00 00 00 00 e9 d1 00 00 00 48 8d 7d a7 48 c7 c6 9f 90 73 81 e8 86 b7 0b 00 85 c0 75 02 <0f> 0b 48 8d 7d a7 48 c7 c6 51 bc 71 81 e8 70 b7 0b 00 85 c0 75
+[470547.234462] RIP  [<ffffffff8111f68a>] write_breakme+0xae/0x1a0
+[470547.234480]  RSP <ffff88007eec7e28>
+[470547.234526] ---[ end trace fedd16ea4e4cf985 ]---
+[470547.249797] Kernel panic - not syncing: Fatal exception
+[470547.327051] gsmi: Log Shutdown Reason 0x02
+[470547.327057] ACPI MEMORY or I/O RESET_REG.
+[ 209.331940] Kernel Offset: 0x2a400000 from 0xffffffff81000000 (relocation range: 0xffffffff80000000-0xffffffffbfffffff)

@@ -1,0 +1,55 @@
+/*
+ * Google Snow Rev 5+ board device tree source
+ *
+ * Copyright (c) 2013 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+/include/ "exynos5250.dtsi"
+/include/ "cros5250-common.dtsi"
+/include/ "exynos5250-snow.dtsi"
+
+/ {
+	model = "Google Snow Rev 5+";
+
+	/*
+	 * Define with revisions this tree is compatible with.
+	 * - Purposely don't add "google,snow" so old firmware (which didn't
+	 *   include a -revN suffix) won't pick this one.  We put an ugly
+	 *   "google,snow-any" here to provide the kernel a way to test for
+	 *   any snow device.
+	 * - Note that revision here is logical revision (monotonically
+	 *   increasing) which means it's not exactly what's read from board
+	 *   strappings.
+	 */
+	compatible = "google,snow-rev5", "google,snow-any",
+		"samsung,exynos5250";
+
+	/* No thermistors on rev5; just disable the whole adc. */
+	adc@12D10000 {
+		status = "disabled";
+	};
+
+	i2c@12CD0000 {
+		codec {
+			compatible = "maxim,max98090";
+			reg = <0x10>;
+			interrupts = <4 0>;
+			interrupt-parent = <&wakeup_eint>;
+			mic-left-digital;
+			mic-right-digital;
+			mclk-pin = <1>;
+		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98090";
+		card-name = "DAISY-I2S-98090";
+		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
+		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
+	};
+};

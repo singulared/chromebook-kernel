@@ -204,10 +204,58 @@ static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
 	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 	wake_up_interruptible(&e->base.file_priv->event_wait);
-	trace_exynos_fake_flip_complete(e->pipe);
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+static void exynos_drm_crtc_try_do_flip(struct drm_crtc *crtc)
+{
+	struct exynos_drm_flip_desc next_desc;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+
+	/*
+	 * Barrier in case we've recently enqueued the head of the framebuffer
+	 * in one thread, and it's had rendered=true set in another. Without
+	 * the barrier, one thread could get "fifo empty, rendered is true",
+	 * and the other could get "fifo non-empty, rendered is false".
+	 *
+	 * Also ensures we observe prepared and flip_pending strictly after any
+	 * other thread has written to prepared (which would've followed from a
+	 * successful cmpxchg of flip_pending)
+	 */
+	smp_mb();
+
+	/*
+	 * Only try the flip if there was a rendered framebuffer at the head of
+	 * the fifo, and we're not already doing a flip.
+	 *
+	 * Note that we can only flip the head of flip_fifo since we must
+	 * always do flips in the order they are enqueued.
+	 *
+	 * Note also that we must check if the fb has already been prepared to
+	 * ensure we don't race with exynos_drm_crtc_finish_pageflip() between
+	 * when it clears flip_pending and removes the head fb from the
+	 * flip_fifo.  Otherwise we may try flipping an already-flipped fb just
+	 * before it is removed from flip_fifo.  Since the fb would no longer
+	 * be the head of the flip_fifo, flip_pending would never get cleared,
+	 * blocking all future flips.
+	 */
+	if (kfifo_peek(&exynos_crtc->flip_fifo, &next_desc)) {
+		struct exynos_drm_fb *exynos_fb = to_exynos_fb(next_desc.fb);
+		if (exynos_fb->rendered && !exynos_fb->prepared &&
+		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
+			struct exynos_drm_overlay *overlay;
+
+			overlay = get_exynos_drm_overlay(exynos_crtc->plane);
+			exynos_drm_crtc_update(crtc, next_desc.fb);
+			exynos_drm_crtc_apply(crtc, overlay);
+			trace_exynos_page_flip_state(exynos_crtc->pipe,
+					DRM_BASE_ID(next_desc.fb), "wait_flip");
+			exynos_fb->prepared = true;
+		}
+	}
+
+}
+
 static void exynos_drm_crtc_wait_and_release_kds(
 		struct exynos_drm_flip_desc *desc)
 {
@@ -484,10 +532,9 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 {
 	struct drm_framebuffer	*fb = callback_parameter;
 	struct drm_crtc *crtc =  callback_extra_parameter;
-	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 
-	trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
-			"wait_apply");
+	trace_exynos_page_flip_state(to_exynos_crtc(crtc)->pipe,
+			DRM_BASE_ID(fb), "wait_apply");
 
 	/*
 	 * Under rare circumstances (modeset followed by flip) it is possible
@@ -501,16 +548,17 @@ void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_para
 
 	to_exynos_fb(fb)->rendered = true;
 
-	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
-		struct exynos_drm_overlay *overlay;
-
-		overlay = get_exynos_drm_overlay(exynos_crtc->plane);
-		exynos_drm_crtc_update(crtc, fb);
-		exynos_drm_crtc_apply(crtc, overlay);
-		trace_exynos_page_flip_state(exynos_crtc->pipe, DRM_BASE_ID(fb),
-				"wait_flip");
-		to_exynos_fb(fb)->prepared = true;
-	}
+	/*
+	 * KDS callbacks can come out-of-order, particularly during job failure
+	 * or abnormal termination.
+	 *
+	 * Hence, only try to do the head of the queue flip. Note: If the head
+	 * is a different (but also rendered) framebuffer, then it is still
+	 * safe to do this at this time, since either:
+	 * a) the flip to the head fb will already be pending, or
+	 * b) finish_pageflip is about to flip to the head fb anyway.
+	 */
+	exynos_drm_crtc_try_do_flip(crtc);
 }
 #endif
 
@@ -607,7 +655,13 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	kfifo_put(&exynos_crtc->flip_fifo, &flip_desc);
 	crtc->fb = fb;
 
-	trace_exynos_flip_request(exynos_crtc->pipe);
+	/*
+	 * The KDS callback could've been triggered before we put on the fifo,
+	 * in which case we might need to take care of the flip ourselves
+	 * (since the cb can only take care of flips that were put on the
+	 * queue)
+	 */
+	exynos_drm_crtc_try_do_flip(crtc);
 
 	return 0;
 
@@ -638,7 +692,6 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
 		return;
 
-	trace_exynos_flip_complete(crtc_idx);
 	trace_exynos_page_flip_state(crtc_idx, DRM_BASE_ID(next_desc.fb),
 			"flipped");
 
@@ -658,20 +711,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	 * exynos_drm_kds_callback can't update the shadow registers if there
 	 * is a pending flip ahead. So we do the update here.
 	 */
-	if (kfifo_peek(&exynos_crtc->flip_fifo, &next_desc)) {
-		if (unlikely(to_exynos_fb(next_desc.fb)->rendered) &&
-		    !atomic_cmpxchg(&exynos_crtc->flip_pending, 0, 1)) {
-			struct exynos_drm_overlay *overlay;
-
-			overlay = get_exynos_drm_overlay(exynos_crtc->plane);
-			exynos_drm_crtc_update(crtc, next_desc.fb);
-			exynos_drm_crtc_apply(crtc, overlay);
-			to_exynos_fb(next_desc.fb)->prepared = true;
-			trace_exynos_page_flip_state(crtc_idx,
-					DRM_BASE_ID(next_desc.fb),
-					"wait_flip");
-		}
-	}
+	exynos_drm_crtc_try_do_flip(crtc);
 
 	drm_vblank_put(drm_dev, crtc_idx);
 }

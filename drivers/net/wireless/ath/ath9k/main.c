@@ -236,7 +236,7 @@ static void __ath_cancel_work(struct ath_softc *sc)
 	del_timer_sync(&sc->rx_poll_timer);
 	cancel_work_sync(&sc->paprd_work);
 	cancel_work_sync(&sc->hw_check_work);
-	cancel_work_sync(&sc->hw_reset_work);
+	cancel_delayed_work_sync(&sc->hw_reset_work);
 	cancel_delayed_work_sync(&sc->tx_complete_work);
 	cancel_delayed_work_sync(&sc->hw_pll_work);
 }
@@ -973,7 +973,7 @@ void ath_rx_poll_work(unsigned long data)
 
 queue_reset_work:
 	ath9k_ps_restore(sc);
-	ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+	ath_queue_reset_work(sc);
 	iter = match_count = 0;
 }
 
@@ -1004,7 +1004,7 @@ void ath9k_tasklet(unsigned long data)
 		spin_lock(&sc->sc_bb_lock);
 		sc->sc_flags |= SC_OP_BB_WATCHDOG;
 		spin_unlock(&sc->sc_bb_lock);
-		ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+		ath_queue_reset_work(sc);
 		goto out;
 	}
 
@@ -1252,9 +1252,31 @@ static int ath_reset(struct ath_softc *sc, bool retry_tx)
 
 void ath_reset_work(struct work_struct *work)
 {
-	struct ath_softc *sc = container_of(work, struct ath_softc, hw_reset_work);
+	struct ath_softc *sc = container_of(work, struct ath_softc,
+					    hw_reset_work.work);
 
 	ath_reset(sc, true);
+}
+
+#define MINIMUM_RESET_INTERVAL_MSECS 10000
+
+void ath_queue_reset_work(struct ath_softc *sc)
+{
+	static unsigned long last_queued_reset;
+	unsigned long reset_delta = jiffies - last_queued_reset;
+	unsigned long reset_delay = 0;
+
+	if (delayed_work_pending(&sc->hw_reset_work))
+		return;
+
+	if (last_queued_reset &&
+	    jiffies_to_msecs(reset_delta) < MINIMUM_RESET_INTERVAL_MSECS) {
+		reset_delay = msecs_to_jiffies(MINIMUM_RESET_INTERVAL_MSECS) -
+				reset_delta;
+	}
+
+	ieee80211_queue_delayed_work(sc->hw, &sc->hw_reset_work, reset_delay);
+	last_queued_reset = jiffies;
 }
 
 void ath_hw_check(struct work_struct *work)
@@ -1277,7 +1299,7 @@ void ath_hw_check(struct work_struct *work)
 	if (busy >= 99) {
 		if (++sc->hw_busy_count >= 3) {
 			RESET_STAT_INC(sc, RESET_TYPE_BB_HANG);
-			ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+			ath_queue_reset_work(sc);
 		}
 
 	} else if (busy >= 0)
@@ -1298,7 +1320,7 @@ static bool ath_hw_pll_rx_hang_check(struct ath_softc *sc, u32 pll_sqsum)
 			/* Rx is hung for more than 500ms. Reset it */
 			ath_dbg(common, RESET, "Possible RX hang, resetting\n");
 			RESET_STAT_INC(sc, RESET_TYPE_PLL_HANG);
-			ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+			ath_queue_reset_work(sc);
 			count = 0;
 			return true;
 		}

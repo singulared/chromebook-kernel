@@ -59,6 +59,7 @@
 		card-detect-delay = <200>;
 		samsung,dw-mshc-sdr-timing = <2 3 3>;
 		samsung,dw-mshc-ddr-timing = <1 2 3>;
+		edge-triggered-interrupts;
 
 		slot0 {
 			bus-width = <4>;
@@ -260,6 +261,16 @@
 					reg_op_mode = <0>; /* Off Mode */
 				};
 
+				s5m_buck8_reg: BUCK8 {
+					regulator-name = "vdd_1v35_ldoin";
+					regulator-min-microvolt = <1350000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-always-on;
+					regulator-boot-on;
+					reg_op_mode = <3>; /* Normal Mode */
+					pmu_mode = <3>;
+				};
+
 				s5m_buck9_reg: BUCK9 {
 					regulator-name = "vdd_ummc";
 					regulator-min-microvolt = <900000>;
@@ -287,23 +298,6 @@
 					reg_op_mode = <1>; /* Normal Mode */
 				};
 			};
-		};
-	};
-
-	i2c@12C70000 {
-		trackpad-alt {
-			reg=<0x4b>;
-			compatible="atmel,atmel_mxt_tp";
-			interrupts=<10 0>;
-			interrupt-parent=<&wakeup_eint>;
-			wakeup-source;
-		};
-		trackpad-bootloader {
-			reg=<0x25>;
-			compatible="atmel,atmel_mxt_tp";
-			interrupts=<10 0>;
-			interrupt-parent=<&wakeup_eint>;
-			wakeup-source;
 		};
 	};
 

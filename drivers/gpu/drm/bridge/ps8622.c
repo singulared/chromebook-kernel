@@ -106,7 +106,7 @@ static int ps8622_send_config(struct ps8622_bridge *bridge)
 						  * 20000ppm/80000ppm.
 						  * Lock out 2 times. */
 	/* 2.7G CDR settings */
-	err |= ps8622_set(cl, 0x04, 0x7d, 0x07); /* NOF=40LSB for HBR CDR
+	err |= ps8622_set(cl, 0x04, 0x7d, 0x04); /* NOF=64LSB for HBR CDR
 						  * setting */
 	err |= ps8622_set(cl, 0x04, 0x7b, 0x00); /* [1:0] Fmin=+4bands */
 	err |= ps8622_set(cl, 0x04, 0x7a, 0xfd); /* [7:5] DCO_FTRNG=+-40% */

@@ -8,14 +8,7 @@
  * published by the Free Software Foundation.
 */
 
-/dts-v1/;
-/include/ "exynos5250.dtsi"
-/include/ "cros5250-common.dtsi"
-
 / {
-	model = "Google Snow";
-	compatible = "google,snow", "samsung,exynos5250";
-
 	mipi {
 		status = "disabled";
 	};
@@ -118,9 +111,10 @@
 				VFET7 {
 					tps65090-control-reg-offset = <21>;
 					tps65090-overcurrent-wait = <3>;
-					regulator-name = "ts";
+					regulator-name = "video_mid_1a";
 					regulator-min-microvolt = <5000000>;
 					regulator-max-microvolt = <5000000>;
+					regulator-always-on;
 				};
 			};
 
@@ -138,14 +132,6 @@
 			edid-emulation = <5>;
 		};
 
-		codec {
-			compatible = "maxim,max98095";
-			reg = <0x11>;
-			mic-left-digital;
-			mic-right-digital;
-			mclk-pin = <1>;
-		};
-
 		light-sensor {
 			compatible = "invn,isl29018";
 			reg = <0x44>;
@@ -161,17 +147,12 @@
 	 * reduce EMI.
 	 */
 	dwmmc3@12230000 {
+		edge-triggered-interrupts;
 		slot0 {
 			gpios = <&gpc4 1 2 3 0>, <&gpc4 0 2 0 0>,
 				<&gpc4 3 2 3 0>, <&gpc4 4 2 3 0>,
 				<&gpc4 5 2 3 0>, <&gpc4 6 2 3 0>;
 		};
-	};
-
-	sound {
-		compatible = "google,daisy-audio-max98095";
-		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
-		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
 	};
 
 	gpio-controllers {
@@ -334,14 +315,5 @@
 			compatible = "samsung,exynos-usbphy";
 			clock-enable-gpio = <&gpy1 1 1 0 3>;
 		};
-	};
-
-	max98095-en {
-		compatible = "regulator-fixed";
-		regulator-name = "codec-en";
-		gpio = <&gpx1 7 0 0 0>;
-		enable-active-high;
-		regulator-boot-on;
-		regulator-always-on;
 	};
 };

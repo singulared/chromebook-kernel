@@ -47,6 +47,12 @@ static int process_sdio_pending_irqs(struct mmc_host *host)
 	}
 
 	ret = mmc_io_rw_direct(card, 0, 0, SDIO_CCCR_INTx, 0, &pending);
+
+	if (pending && (card->quirks & MMC_QUIRK_BROKEN_IRQ_POLLING) &&
+	    (!(host->caps & MMC_CAP_SDIO_IRQ) ||
+	     (host->caps2 & MMC_CAP2_EDGE_TRIG_IRQ)))
+		mmc_fixup_broken_irq_polling(card);
+
 	if (ret) {
 		pr_debug("%s: error %d reading SDIO_CCCR_INTx\n",
 		       mmc_card_id(card), ret);
@@ -118,8 +124,10 @@ static int sdio_irq_thread(void *_host)
 		ret = __mmc_claim_host(host, &host->sdio_irq_thread_abort);
 		if (ret)
 			break;
-		ret = process_sdio_pending_irqs(host);
-		host->sdio_irq_pending = false;
+		if (!atomic_read(&host->sdio_irq_thread_suspend)) {
+			ret = process_sdio_pending_irqs(host);
+			host->sdio_irq_pending = false;
+		}
 		mmc_release_host(host);
 
 		/*
@@ -146,6 +154,20 @@ static int sdio_irq_thread(void *_host)
 				if (period > idle_period)
 					period = idle_period;
 			}
+		} else if (host->caps2 & MMC_CAP2_EDGE_TRIG_IRQ) {
+			/*
+			 * Do an exponentially decaying fast-poll until we
+			 * are reasonably sure we are at the end of a burst
+			 * of interrupts.  This allows a system that may lose
+			 * back-to-back interrupts to successfully catch the
+			 * tail of the burst.
+			 */
+			if (ret > 0)
+				period = idle_period;
+			else if (period < msecs_to_jiffies(10000))
+				period *= 4;
+			else
+				period = MAX_SCHEDULE_TIMEOUT;
 		}
 
 		set_current_state(TASK_INTERRUPTIBLE);

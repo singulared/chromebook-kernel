@@ -98,6 +98,7 @@ struct s5m_regulator_data {
 	struct regulator_init_data	*initdata;
 	struct device_node		*reg_node;
 	unsigned int			reg_op_mode;
+	unsigned int			pmu_mode;
 };
 
 #endif /*  __LINUX_MFD_S5M_PMIC_H */

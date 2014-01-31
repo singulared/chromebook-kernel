@@ -176,7 +176,7 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 
 	jc_head = katom->jc;
 	kctx = katom->kctx;
-	kbase_device_context_integrity_check(kctx, "kbase_job_done_slot dequeued atom");
+
 	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_JOB_DONE, kctx, katom, jc_head, s, completion_code);
 
 	if (completion_code != BASE_JD_EVENT_DONE && completion_code != BASE_JD_EVENT_STOPPED) {
@@ -590,9 +590,6 @@ static void kbasep_job_slot_soft_or_hard_stop(kbase_device *kbdev, kbase_context
 	u16 core_reqs;
 	kbasep_js_device_data *js_devdata;
 
-	if (kctx)
-		kbase_device_context_integrity_check(kctx, "kbasep_job_slot_soft_or_hard_stop enter");
-
 	KBASE_DEBUG_ASSERT(action == JSn_COMMAND_HARD_STOP || action == JSn_COMMAND_SOFT_STOP);
 	KBASE_DEBUG_ASSERT(kbdev);
 	js_devdata = &kbdev->js_data;
@@ -935,8 +932,39 @@ void kbase_job_slot_hardstop(kbase_context *kctx, int js, kbase_jd_atom *target_
 			kbase_reset_gpu_locked(kbdev);
 		}
 	}
-	if (kctx)
-		kbase_device_context_integrity_check(kctx, "kbasep_job_slot_soft_or_hard_stop exit");
+}
+
+void kbase_debug_dump_registers(kbase_device *kbdev)
+{
+	int i;
+	dev_err(kbdev->osdev.dev, "Register state:");
+	dev_err(kbdev->osdev.dev, "  GPU_IRQ_RAWSTAT=0x%08x GPU_STATUS=0x%08x",
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_RAWSTAT), NULL),
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_STATUS), NULL));
+	dev_err(kbdev->osdev.dev, "  JOB_IRQ_RAWSTAT=0x%08x JOB_IRQ_JS_STATE=0x%08x JOB_IRQ_THROTTLE=0x%08x",
+		kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_RAWSTAT), NULL),
+		kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_JS_STATE), NULL),
+		kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_THROTTLE), NULL));
+	for (i = 0; i < 3; i++) {
+		dev_err(kbdev->osdev.dev, "  JS%d_STATUS=0x%08x      JS%d_HEAD_LO=0x%08x",
+			i, kbase_reg_read(kbdev, JOB_SLOT_REG(i, JSn_STATUS),
+					NULL),
+			i, kbase_reg_read(kbdev, JOB_SLOT_REG(i, JSn_HEAD_LO),
+					NULL));
+	}
+	dev_err(kbdev->osdev.dev, "  MMU_IRQ_RAWSTAT=0x%08x GPU_FAULTSTATUS=0x%08x",
+		kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_RAWSTAT), NULL),
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_FAULTSTATUS), NULL));
+	dev_err(kbdev->osdev.dev, "  GPU_IRQ_MASK=0x%08x    JOB_IRQ_MASK=0x%08x     MMU_IRQ_MASK=0x%08x",
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), NULL),
+		kbase_reg_read(kbdev, JOB_CONTROL_REG(JOB_IRQ_MASK), NULL),
+		kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_MASK), NULL));
+	dev_err(kbdev->osdev.dev, "  PWR_OVERRIDE0=0x%08x   PWR_OVERRIDE1=0x%08x",
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(PWR_OVERRIDE0), NULL),
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(PWR_OVERRIDE1), NULL));
+	dev_err(kbdev->osdev.dev, "  SHADER_CONFIG=0x%08x   L2_MMU_CONFIG=0x%08x",
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(SHADER_CONFIG), NULL),
+		kbase_reg_read(kbdev, GPU_CONTROL_REG(L2_MMU_CONFIG), NULL));
 }
 
 void kbasep_reset_timeout_worker(struct work_struct *data)
@@ -994,6 +1022,11 @@ void kbasep_reset_timeout_worker(struct work_struct *data)
 		hwcnt_setup.l3_cache_bm = kbase_reg_read(kbdev, GPU_CONTROL_REG(PRFCNT_L3_CACHE_EN), kctx);
 		hwcnt_setup.mmu_l2_bm = kbase_reg_read(kbdev, GPU_CONTROL_REG(PRFCNT_MMU_L2_EN), kctx);
 	}
+
+	/* Output the state of some interesting registers to help in the
+	 * debugging of GPU resets */
+	kbase_debug_dump_registers(kbdev);
+
 	bckp_state = kbdev->hwcnt.state;
 	kbdev->hwcnt.state = KBASE_INSTR_STATE_RESETTING;
 	kbdev->hwcnt.triggered = 0;

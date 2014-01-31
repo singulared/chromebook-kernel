@@ -343,20 +343,6 @@ static bool __buffer_in_use(struct vb2_queue *q, struct vb2_buffer *vb)
 }
 
 /**
- * __buffers_in_use() - return true if any buffers on the queue are in use and
- * the queue cannot be freed (by the means of REQBUFS(0)) call
- */
-static bool __buffers_in_use(struct vb2_queue *q)
-{
-	unsigned int buffer;
-	for (buffer = 0; buffer < q->num_buffers; ++buffer) {
-		if (__buffer_in_use(q, q->bufs[buffer]))
-			return true;
-	}
-	return false;
-}
-
-/**
  * __fill_v4l2_buffer() - fill in a struct v4l2_buffer with information to be
  * returned to userspace
  */
@@ -574,15 +560,6 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 	}
 
 	if (req->count == 0 || q->num_buffers != 0 || q->memory != req->memory) {
-		/*
-		 * We already have buffers allocated, so first check if they
-		 * are not in use and can be freed.
-		 */
-		if (q->memory == V4L2_MEMORY_MMAP && __buffers_in_use(q)) {
-			dprintk(1, "reqbufs: memory in use, cannot free\n");
-			return -EBUSY;
-		}
-
 		__vb2_queue_free(q, q->num_buffers);
 
 		/*
@@ -964,12 +941,6 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		return ret;
 
 	for (plane = 0; plane < vb->num_planes; ++plane) {
-		/* Skip the plane if already verified */
-		if (vb->v4l2_planes[plane].m.userptr &&
-		    vb->v4l2_planes[plane].m.userptr == planes[plane].m.userptr
-		    && vb->v4l2_planes[plane].length == planes[plane].length)
-			continue;
-
 		dprintk(3, "qbuf: userspace address for plane %d changed, "
 				"reacquiring memory\n", plane);
 
@@ -978,14 +949,6 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 			ret = -EINVAL;
 			goto err;
 		}
-
-		/* Release previously acquired memory if present */
-		if (vb->planes[plane].mem_priv)
-			call_memop(q, put_userptr, vb->planes[plane].mem_priv);
-
-		vb->planes[plane].mem_priv = NULL;
-		vb->v4l2_planes[plane].m.userptr = 0;
-		vb->v4l2_planes[plane].length = 0;
 
 		/* Acquire each plane's memory */
 		mem_priv = call_memop(q, get_userptr, q->alloc_ctx[plane],
@@ -1498,6 +1461,16 @@ static void __vb2_dqbuf(struct vb2_buffer *vb)
 				continue;
 			call_memop(q, unmap_dmabuf, vb->planes[i].mem_priv);
 			vb->planes[i].dbuf_mapped = 0;
+		}
+	} else if (q->memory == V4L2_MEMORY_USERPTR) {
+		for (i = 0; i < vb->num_planes; ++i) {
+			if (vb->planes[i].mem_priv)
+				call_memop(q, put_userptr,
+						vb->planes[i].mem_priv);
+
+			vb->planes[i].mem_priv = NULL;
+			vb->v4l2_planes[i].m.userptr = 0;
+			vb->v4l2_planes[i].length = 0;
 		}
 	}
 }

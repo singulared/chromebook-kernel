@@ -1,0 +1,61 @@
+/*
+ * Google Snow Rev 0-4 board device tree source
+ *
+ * Copyright (c) 2012 Google, Inc
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+/include/ "exynos5250.dtsi"
+/include/ "cros5250-common.dtsi"
+/include/ "exynos5250-snow.dtsi"
+
+/ {
+	/* NOTE: Don't change this to include rev; old mosys relies on it */
+	model = "Google Snow";
+
+	/*
+	 * Define with revisions this tree is compatible with.
+	 * - Any real rev 0-3 boards in the field will match "google,snow",
+	 *   since older U-Boots don't look for a revision specific device tree.
+	 * - Any real rev 4 boards in the field will match "google,snow-rev4"
+	 *   first.  If that's not present they will pick the first
+	 *   "google,snow" device tree that they find (ignoring the kernel
+	 *   ordering).
+	 * - We put an ugly "google,snow-any" here to provide the kernel a way
+	 *   to test for any snow device.
+	 * - Note that revision here is logical revision (monotonically
+	 *   increasing) which means it's not exactly what's read from board
+	 *   strappings.
+	 */
+	compatible = "google,snow-rev4", "google,snow", "google,snow-any",
+		"samsung,exynos5250";
+
+	i2c@12CD0000 {
+		codec {
+			compatible = "maxim,max98095";
+			reg = <0x11>;
+			mic-left-digital;
+			mic-right-digital;
+			mclk-pin = <1>;
+		};
+	};
+
+	sound {
+		compatible = "google,daisy-audio-max98095";
+		samsung,mic-det-gpios = <&gpx2 0 2 0x10000 0>;
+		samsung,hp-det-gpios = <&gpx2 2 2 0 0>;
+	};
+
+	max98095-en {
+		compatible = "regulator-fixed";
+		regulator-name = "codec-en";
+		gpio = <&gpx1 7 0 0 0>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+};

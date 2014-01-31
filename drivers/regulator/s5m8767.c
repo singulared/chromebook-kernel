@@ -28,6 +28,10 @@
 #define S5M8767_OPMODE_MASK	0x3
 #define S5M8767_OPMODE_SHIFT	6
 #define S5M8767_OPMODE_SM       (S5M8767_OPMODE_MASK << S5M8767_OPMODE_SHIFT)
+#define S5M8767_PMUMODE_MASK	0x3
+#define S5M8767_PMUMODE_SHIFT	2
+#define S5M8767_PMUMODE_SM      (S5M8767_PMUMODE_MASK << S5M8767_PMUMODE_SHIFT)
+#define S5M8767_PMUMODE_DEFAULT 0x2
 
 struct s5m8767_info {
 	struct device *dev;
@@ -122,7 +126,7 @@ static const struct s5m_voltage_desc *reg_voltage_map[] = {
 	[S5M8767_BUCK5] = &buck_voltage_val1,
 	[S5M8767_BUCK6] = &buck_voltage_val1,
 	[S5M8767_BUCK7] = NULL,
-	[S5M8767_BUCK8] = NULL,
+	[S5M8767_BUCK8] = &buck_voltage_val3,
 	[S5M8767_BUCK9] = &buck_voltage_val3,
 	[S5M8767_EN32KHZ_AP] = NULL,
 	[S5M8767_EN32KHZ_CP] = NULL,
@@ -150,6 +154,37 @@ static int s5m8767_list_voltage(struct regulator_dev *rdev,
 	return val;
 }
 
+static int s5m8767_get_ctrl_ridx(int reg_id)
+{
+	int ridx;
+	switch (reg_id) {
+	case S5M8767_LDO1 ... S5M8767_LDO2:
+		ridx = S5M8767_REG_LDO1CTRL + (reg_id - S5M8767_LDO1);
+		break;
+	case S5M8767_LDO3 ... S5M8767_LDO28:
+		ridx = S5M8767_REG_LDO3CTRL + (reg_id - S5M8767_LDO3);
+		break;
+	case S5M8767_BUCK1:
+		ridx = S5M8767_REG_BUCK1CTRL1;
+		break;
+	case S5M8767_BUCK2 ... S5M8767_BUCK4:
+		ridx = S5M8767_REG_BUCK2CTRL + (reg_id - S5M8767_BUCK2) * 9;
+		break;
+	case S5M8767_BUCK5:
+		ridx = S5M8767_REG_BUCK5CTRL1;
+		break;
+	case S5M8767_BUCK6 ... S5M8767_BUCK9:
+		ridx = S5M8767_REG_BUCK6CTRL1 + (reg_id - S5M8767_BUCK6) * 2;
+		break;
+	case S5M8767_EN32KHZ_AP...S5M8767_EN32KHZ_BT:
+		ridx = S5M8767_REG_CTRL1;
+		break;
+	default:
+		ridx = -EINVAL;
+	}
+	return ridx;
+}
+
 static int s5m8767_get_register(struct regulator_dev *rdev,
 				int *reg, int *mask, int *pattern)
 {
@@ -157,6 +192,7 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 	struct s5m8767_info *s5m8767 = rdev_get_drvdata(rdev);
 	int i;
 	int op_mode = 0x3;
+
 	for (i = 0; i < s5m8767->iodev->pdata->num_regulators; i++)
 		if (reg_id == s5m8767->iodev->pdata->regulators[i].id)
 			break;
@@ -168,30 +204,13 @@ static int s5m8767_get_register(struct regulator_dev *rdev,
 #ifdef CONFIG_OF
 	op_mode = s5m8767->iodev->pdata->regulators[i].reg_op_mode;
 #endif
-	*pattern = op_mode << S5M8767_OPMODE_SHIFT;
-	*mask = S5M8767_OPMODE_SM;
-
+	*reg = s5m8767_get_ctrl_ridx(reg_id);
 	switch (reg_id) {
-	case S5M8767_LDO1 ... S5M8767_LDO2:
-		*reg = S5M8767_REG_LDO1CTRL + (reg_id - S5M8767_LDO1);
-		break;
-	case S5M8767_LDO3 ... S5M8767_LDO28:
-		*reg = S5M8767_REG_LDO3CTRL + (reg_id - S5M8767_LDO3);
-		break;
-	case S5M8767_BUCK1:
-		*reg = S5M8767_REG_BUCK1CTRL1;
-		break;
-	case S5M8767_BUCK2 ... S5M8767_BUCK4:
-		*reg = S5M8767_REG_BUCK2CTRL + (reg_id - S5M8767_BUCK2) * 9;
-		break;
-	case S5M8767_BUCK5:
-		*reg = S5M8767_REG_BUCK5CTRL1;
-		break;
-	case S5M8767_BUCK6 ... S5M8767_BUCK9:
-		*reg = S5M8767_REG_BUCK6CTRL1 + (reg_id - S5M8767_BUCK6) * 2;
+	case S5M8767_LDO1 ... S5M8767_BUCK9:
+		*pattern = op_mode << S5M8767_OPMODE_SHIFT;
+		*mask = S5M8767_OPMODE_SM;
 		break;
 	case S5M8767_EN32KHZ_AP...S5M8767_EN32KHZ_BT:
-		*reg = S5M8767_REG_CTRL1;
 		*pattern = 1 << (reg_id - S5M8767_EN32KHZ_AP);
 		*mask = 1 << (reg_id - S5M8767_EN32KHZ_AP);
 		break;
@@ -349,9 +368,9 @@ static int s5m8767_set_voltage(struct regulator_dev *rdev,
 	case S5M8767_BUCK1 ... S5M8767_BUCK6:
 		mask = 0xff;
 		break;
-	case S5M8767_BUCK7 ... S5M8767_BUCK8:
+	case S5M8767_BUCK7:
 		return -EINVAL;
-	case S5M8767_BUCK9:
+	case S5M8767_BUCK8 ... S5M8767_BUCK9:
 		mask = 0xff;
 		break;
 	default:
@@ -404,7 +423,7 @@ static int s5m8767_set_voltage_buck(struct regulator_dev *rdev,
 	const struct s5m_voltage_desc *desc;
 	int new_val, old_val, i = 0;
 
-	if (reg_id < S5M8767_BUCK1 || reg_id > S5M8767_BUCK6)
+	if (reg_id < S5M8767_BUCK1 || reg_id > S5M8767_BUCK9)
 		return -EINVAL;
 
 	switch (reg_id) {
@@ -414,7 +433,7 @@ static int s5m8767_set_voltage_buck(struct regulator_dev *rdev,
 		break;
 	case S5M8767_BUCK5 ... S5M8767_BUCK6:
 		return s5m8767_set_voltage(rdev, min_uV, max_uV, selector);
-	case S5M8767_BUCK9:
+	case S5M8767_BUCK8 ... S5M8767_BUCK9:
 		return s5m8767_set_voltage(rdev, min_uV, max_uV, selector);
 	}
 
@@ -622,7 +641,7 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 		rdata->reg_node = reg_np;
 		if (of_property_read_u32(reg_np, "reg_op_mode",
 				&rdata->reg_op_mode)) {
-			dev_warn(iodev->dev, "no op_mode property property at %s\n",
+			dev_warn(iodev->dev, "no op_mode property at %s\n",
 				reg_np->full_name);
 			/*
 			 * Set operating mode to NORMAL "ON" as default. The
@@ -632,6 +651,7 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 			 */
 			rdata->reg_op_mode = S5M8767_OPMODE_MASK;
 		}
+		of_property_read_u32(reg_np, "pmu_mode", &rdata->pmu_mode);
 		rdata++;
 	}
 
@@ -657,7 +677,28 @@ static int s5m8767_pmic_dt_parse_pdata(struct s5m87xx_dev *iodev,
 }
 #endif	/* CONFIG_OF */
 
-static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
+static void s5m8767_config_pmu_mode(struct device *dev, int low_power)
+{
+	struct s5m8767_info *s5m8767 = dev_get_drvdata(dev);
+	struct s5m87xx_dev *iodev = s5m8767->iodev;
+	struct s5m_platform_data *pdata = iodev->pdata;
+	struct regulator_dev **rdev = s5m8767->rdev;
+	int i;
+
+	for (i = 0; i < pdata->num_regulators; i++) {
+		if (pdata->regulators[i].pmu_mode) {
+			int pmu_mode = (low_power) ? S5M8767_PMUMODE_DEFAULT :
+				pdata->regulators[i].pmu_mode;
+			int reg_id = rdev_get_id(rdev[i]);
+			regmap_update_bits(iodev->pmic,
+					   s5m8767_get_ctrl_ridx(reg_id),
+					   S5M8767_PMUMODE_SM,
+					   pmu_mode << S5M8767_PMUMODE_SHIFT);
+		}
+	}
+}
+
+static int s5m8767_pmic_probe(struct platform_device *pdev)
 {
 	struct s5m87xx_dev *iodev = dev_get_drvdata(pdev->dev.parent);
 	struct s5m_platform_data *pdata = iodev->pdata;
@@ -885,6 +926,7 @@ static __devinit int s5m8767_pmic_probe(struct platform_device *pdev)
 			goto err;
 		}
 	}
+	s5m8767_config_pmu_mode(s5m8767->dev, 0);
 
 	return 0;
 err:
@@ -914,10 +956,30 @@ static const struct platform_device_id s5m8767_pmic_id[] = {
 };
 MODULE_DEVICE_TABLE(platform, s5m8767_pmic_id);
 
+#ifdef CONFIG_PM_SLEEP
+
+static int s5m8767_suspend(struct device *dev)
+{
+	/* set BUCKs to 'auto' mode if they were in 'force' PWM mode */
+	s5m8767_config_pmu_mode(dev, 1);
+	return 0;
+}
+
+static int s5m8767_resume(struct device *dev)
+{
+	/* return BUCKs to 'force PWM' mode if necessary */
+	s5m8767_config_pmu_mode(dev, 0);
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(s5m8767_pm_ops, s5m8767_suspend, s5m8767_resume);
+#endif
+
 static struct platform_driver s5m8767_pmic_driver = {
 	.driver = {
 		.name = "s5m8767-pmic",
 		.owner = THIS_MODULE,
+		.pm = &s5m8767_pm_ops,
 	},
 	.probe = s5m8767_pmic_probe,
 	.remove = __devexit_p(s5m8767_pmic_remove),

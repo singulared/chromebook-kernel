@@ -28,6 +28,7 @@
 #include <linux/rtc.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
+#include <linux/pm_dark_resume.h>
 #include <linux/mfd/s5m87xx/s5m-core.h>
 #include <linux/mfd/s5m87xx/s5m-rtc.h>
 
@@ -36,6 +37,7 @@ struct s5m_rtc_info {
 	struct s5m87xx_dev *s5m87xx;
 	struct regmap *rtc;
 	struct rtc_device *rtc_dev;
+	struct dev_dark_resume dark_resume;
 	int irq;
 	int device_type;
 	int rtc_24hr_mode;
@@ -594,6 +596,8 @@ static int __devinit s5m_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to request alarm IRQ: %d: %d\n",
 			info->irq, ret);
 
+	dev_dark_resume_init(&pdev->dev, &info->dark_resume, info->s5m87xx->irq,
+			NULL);
 	dev_info(&pdev->dev, "RTC CHIP NAME: %s\n", pdev->id_entry->name);
 
 	return 0;
@@ -604,6 +608,7 @@ static int __devexit s5m_rtc_remove(struct platform_device *pdev)
 	struct s5m_rtc_info *info = platform_get_drvdata(pdev);
 
 	if (info) {
+		dev_dark_resume_remove(&pdev->dev);
 		free_irq(info->irq, info);
 		rtc_device_unregister(info->rtc_dev);
 	}

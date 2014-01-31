@@ -368,6 +368,14 @@ static int put_hdmi(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+static int daisy_hdmi_jack_report(int plugged)
+{
+	snd_soc_jack_report(&daisy_hdmi_jack,
+			    plugged ? SND_JACK_AVOUT : 0,
+			    SND_JACK_AVOUT);
+	return 0;
+}
+
 static struct snd_kcontrol_new daisy_dapm_controls[] = {
 	SOC_SINGLE_BOOL_EXT("HDMI Playback Switch", 0, get_hdmi, put_hdmi),
 };
@@ -378,6 +386,7 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_card *card = codec->card;
 	struct device_node *dn = card->dev->of_node;
+	struct device_node *codec_dn = codec->dev->of_node;
 	struct audio_codec_plugin *plugin;
 
 	if (dn) {
@@ -413,17 +422,20 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	plugin = (void *)daisy_dapm_controls[0].private_value;
-	if (plugin)
+	if (plugin) {
 		snd_soc_jack_new(codec, "HDMI Jack",
 				 SND_JACK_AVOUT, &daisy_hdmi_jack);
+
+		plugin->jack_cb = daisy_hdmi_jack_report;
+	}
 
 	/* Microphone BIAS has to be kept on so that the mic-detection circuit
 	 * will operate correctly.
 	 */
-	if (of_machine_is_compatible("google,spring"))
-		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
-	else
+	if (of_device_is_compatible(codec_dn, "maxim,max98095"))
 		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	else
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
 
 	snd_soc_dapm_sync(dapm);
 
@@ -438,14 +450,6 @@ static int daisy_resume_post(struct snd_soc_card *card)
 	if (gpio_is_valid(daisy_hp_jack_gpio.gpio))
 		snd_soc_jack_gpio_detect(&daisy_hp_jack_gpio);
 
-	return 0;
-}
-
-static int daisy_hdmi_jack_report(int plugged)
-{
-	snd_soc_jack_report(&daisy_hdmi_jack,
-			    plugged ? SND_JACK_AVOUT : 0,
-			    SND_JACK_AVOUT);
 	return 0;
 }
 
@@ -501,8 +505,6 @@ static int plugin_init(struct audio_codec_plugin **pplugin)
 	else
 		*pplugin = plugin;
 
-	plugin->jack_cb = daisy_hdmi_jack_report;
-
 	return 0;
 }
 
@@ -512,6 +514,7 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 	struct device_node *dn;
 	struct daisy_max98095 *machine;
 	struct audio_codec_plugin *plugin = NULL;
+	const char *name;
 	int i, ret;
 
 	if (!pdev->dev.platform_data && !pdev->dev.of_node) {
@@ -519,19 +522,14 @@ static __devinit int daisy_max98095_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	/* The below needs to be replaced with proper full device-tree probing
-	 * of the ASoC device, but the core plumbing hasn't been completed yet
-	 * so we're doing this only half-way now.
-	 */
-
-	if (!of_machine_is_compatible("google,snow") &&
-	    !of_machine_is_compatible("google,spring") &&
-	    !of_machine_is_compatible("google,daisy"))
-		return -ENODEV;
+	name = of_get_property(pdev->dev.of_node, "card-name", NULL);
+	if (name)
+		card->name = name;
 
 	dn = of_find_compatible_node(NULL, NULL, "maxim,max98095");
 	if (!dn) {
-		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089");
+		dn = of_find_compatible_node(NULL, NULL, "maxim,max98089") ? :
+		     of_find_compatible_node(NULL, NULL, "maxim,max98090");
 		if (!dn)
 			return -ENODEV;
 		card->dapm_routes = max98089_audio_map;
@@ -595,6 +593,7 @@ static int __devexit daisy_max98095_driver_remove(struct platform_device *pdev)
 static const struct of_device_id daisy_max98095_of_match[] __devinitconst = {
 	{ .compatible = "google,daisy-audio-max98095", },
 	{ .compatible = "google,daisy-audio-max98089", },
+	{ .compatible = "google,daisy-audio-max98090", },
 	{},
 };
 

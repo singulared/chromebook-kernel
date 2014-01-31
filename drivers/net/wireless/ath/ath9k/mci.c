@@ -187,7 +187,7 @@ static void ath_mci_cal_msg(struct ath_softc *sc, u8 opcode, u8 *rx_payload)
 	case MCI_GPM_BT_CAL_REQ:
 		if (ar9003_mci_state(ah, MCI_STATE_BT, NULL) == MCI_BT_AWAKE) {
 			ar9003_mci_state(ah, MCI_STATE_SET_BT_CAL_START, NULL);
-			ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+			ath_queue_reset_work(sc);
 		} else {
 			ath_dbg(common, MCI, "MCI State mismatch: %d\n",
 				ar9003_mci_state(ah, MCI_STATE_BT, NULL));

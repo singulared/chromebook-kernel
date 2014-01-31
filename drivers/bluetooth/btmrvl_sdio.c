@@ -370,7 +370,7 @@ static int btmrvl_sdio_download_fw_w_helper(struct btmrvl_sdio_card *card)
 	firmware = fw_firmware->data;
 	firmwarelen = fw_firmware->size;
 
-	BT_DBG("Downloading FW image (%d bytes)", firmwarelen);
+	BT_INFO("Downloading FW image (%d bytes)", firmwarelen);
 
 	tmpfwbufsz = ALIGN_SZ(BTM_UPLD_SIZE, BTSDIO_DMA_ALIGN);
 	tmpfwbuf = kzalloc(tmpfwbufsz, GFP_KERNEL);
@@ -884,7 +884,7 @@ static int btmrvl_sdio_download_fw(struct btmrvl_sdio_card *card)
 	}
 
 	if (!btmrvl_sdio_verify_fw_download(card, 1)) {
-		BT_DBG("Firmware already downloaded!");
+		BT_INFO("Firmware already downloaded!");
 		return 0;
 	}
 
@@ -898,7 +898,7 @@ static int btmrvl_sdio_download_fw(struct btmrvl_sdio_card *card)
 		goto done;
 	}
 	if (fws0) {
-		BT_DBG("BT not the winner (%#x). Skip FW downloading", fws0);
+		BT_INFO("BT not the winner (%#x). Skip FW downloading", fws0);
 
 		/* Give other function more time to download the firmware */
 		pollnum *= 10;

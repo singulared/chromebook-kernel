@@ -17,6 +17,7 @@
 #include <linux/fb.h>
 #include <linux/backlight.h>
 #include <linux/err.h>
+#include <linux/pm_dark_resume.h>
 #include <linux/pwm.h>
 #include <linux/pwm_backlight.h>
 #include <linux/slab.h>
@@ -24,6 +25,7 @@
 struct pwm_bl_data {
 	struct pwm_device	*pwm;
 	struct device		*dev;
+	struct dev_dark_resume	dark_resume;
 	unsigned int		period;
 	unsigned int		lth_brightness;
 	int			(*notify)(struct device *,
@@ -136,6 +138,7 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 		goto err_bl;
 	}
 
+	dev_dark_resume_init(&pdev->dev, &pb->dark_resume, -1, NULL);
 	bl->props.brightness = data->dft_brightness;
 	backlight_update_status(bl);
 
@@ -156,6 +159,7 @@ static int pwm_backlight_remove(struct platform_device *pdev)
 	struct backlight_device *bl = platform_get_drvdata(pdev);
 	struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
 
+	dev_dark_resume_remove(&pdev->dev);
 	backlight_device_unregister(bl);
 	pwm_config(pb->pwm, 0, pb->period);
 	pwm_disable(pb->pwm);
@@ -183,6 +187,11 @@ static int pwm_backlight_suspend(struct device *dev)
 static int pwm_backlight_resume(struct device *dev)
 {
 	struct backlight_device *bl = dev_get_drvdata(dev);
+
+	if (dev_dark_resume_active(dev)) {
+		dev_info(dev, "disabled for dark resume\n");
+		return 0;
+	}
 
 	backlight_update_status(bl);
 	return 0;

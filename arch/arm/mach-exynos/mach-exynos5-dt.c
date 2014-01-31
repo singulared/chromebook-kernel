@@ -235,6 +235,8 @@ static struct exynos_drm_fimd_pdata smdk5250_lcd1_pdata = {
 			.lower_margin   = 4,
 			.refresh        = 60,
 		},
+		.width_mm = 256,
+		.height_mm = 144,
 	},
 	.vidcon0        = VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1        = VIDCON1_INV_VCLK,
@@ -334,7 +336,7 @@ static void lcd_set_power(struct plat_lcd_data *pd,
 			unsigned int power)
 {
 	if (of_machine_is_compatible("google,daisy") ||
-			of_machine_is_compatible("google,snow")) {
+			of_machine_is_compatible("google,snow-any")) {
 		struct regulator *lcd_fet;
 
 		lcd_fet = regulator_get(NULL, "lcd_vdd");
@@ -348,7 +350,7 @@ static void lcd_set_power(struct plat_lcd_data *pd,
 		}
 	}
 
-	if (!of_machine_is_compatible("google,snow")) {
+	if (!of_machine_is_compatible("google,snow-any")) {
 		/* reset */
 		gpio_request_one(EXYNOS5_GPX1(5), GPIOF_OUT_INIT_HIGH, "GPX1");
 		mdelay(20);
@@ -363,7 +365,7 @@ static void lcd_set_power(struct plat_lcd_data *pd,
 
 	/* Turn on regulator for backlight */
 	if (of_machine_is_compatible("google,daisy") ||
-			of_machine_is_compatible("google,snow")) {
+			of_machine_is_compatible("google,snow-any")) {
 		struct regulator *backlight_fet;
 
 		backlight_fet = regulator_get(NULL, "vcd_led");
@@ -697,7 +699,7 @@ static void exynos_wifi_bt_set_power(u32 slot_id, u32 volt)
 	static bool already_ran;
 
 	if (already_ran ||
-	    volt == 0 || (!of_machine_is_compatible("google,snow") &&
+	    volt == 0 || (!of_machine_is_compatible("google,snow-any") &&
 			  !of_machine_is_compatible("google,spring") &&
 			  !of_machine_is_compatible("google,daisy")))
 		return;
@@ -1069,7 +1071,7 @@ static void __init exynos5250_dt_machine_init(void)
 	 * Parade eDP bridge which has an internal PWN for the backlight.
 	 */
 	if (!of_find_compatible_node(NULL, NULL, "parade,ps8622")) {
-		if (of_machine_is_compatible("google,snow")) {
+		if (of_machine_is_compatible("google,snow-any")) {
 			smdk5250_bl_data.max_brightness = 2800;
 			smdk5250_bl_data.dft_brightness = 2800;
 		}
@@ -1117,7 +1119,7 @@ static void __init exynos5250_dt_machine_init(void)
 #endif
 		dsim_lcd_info.lcd_size.width = 1366;
 		dsim_lcd_info.lcd_size.height = 768;
-	} else if ((of_machine_is_compatible("google,snow")) ||
+	} else if ((of_machine_is_compatible("google,snow-any")) ||
 		   (of_machine_is_compatible("google,spring"))) {
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 		smdk5250_lcd1_pdata.panel.timing = snow_fb_window;
@@ -1186,7 +1188,7 @@ static void __init exynos5250_dt_machine_init(void)
 				exynos5250_auxdata_lookup, NULL);
 
 #ifdef CONFIG_DRM_EXYNOS_FIMD
-	if (of_machine_is_compatible("google,snow"))
+	if (of_machine_is_compatible("google,snow-any"))
 		exynos_dp_gpio_setup_24bpp();
 	else
 		exynos_fimd_gpio_setup_24bpp();

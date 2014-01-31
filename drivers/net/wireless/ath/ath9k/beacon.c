@@ -379,7 +379,7 @@ void ath_beacon_tasklet(unsigned long data)
 		} else if (sc->beacon.bmisscnt >= BSTUCK_THRESH) {
 			ath_dbg(common, BSTUCK, "beacon is officially stuck\n");
 			sc->sc_flags |= SC_OP_TSF_RESET;
-			ieee80211_queue_work(sc->hw, &sc->hw_reset_work);
+			ath_queue_reset_work(sc);
 		}
 
 		return;

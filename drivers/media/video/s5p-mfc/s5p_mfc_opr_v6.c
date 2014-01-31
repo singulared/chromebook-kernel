@@ -1159,6 +1159,9 @@ static int s5p_mfc_init_decode_v6(struct s5p_mfc_ctx *ctx)
 		WRITEL(ctx->display_delay, S5P_FIMV_D_DISPLAY_DELAY_V6);
 	}
 
+	WRITEL(reg, S5P_FIMV_D_DEC_OPTIONS_V6);
+	reg = 0;
+
 	/* Setup loop filter, for decoding this is only valid for MPEG4 */
 	if (ctx->codec_mode == S5P_MFC_CODEC_MPEG4_DEC) {
 		mfc_debug(2, "Set loop filter to: %d\n",
@@ -1169,7 +1172,7 @@ static int s5p_mfc_init_decode_v6(struct s5p_mfc_ctx *ctx)
 	if (ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16)
 		reg |= (0x1 << S5P_FIMV_D_OPT_TILE_MODE_SHIFT_V6);
 
-	WRITEL(reg, S5P_FIMV_D_DEC_OPTIONS_V6);
+	WRITEL(reg, S5P_FIMV_D_INIT_BUFFER_OPTIONS_V6);
 
 	/* 0: NV12(CbCr), 1: NV21(CrCb) */
 	if (ctx->dst_fmt->fourcc == V4L2_PIX_FMT_NV21M)

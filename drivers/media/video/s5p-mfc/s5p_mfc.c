@@ -242,11 +242,14 @@ static void s5p_mfc_handle_frame_copy_time(struct s5p_mfc_ctx *ctx)
 	size_t dec_y_addr;
 	unsigned int frame_type;
 
-	dec_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dec_y_adr, dev);
+	/* Make sure we actually have a new frame before continuing. */
 	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_dec_frame_type, dev);
+	if (frame_type == S5P_FIMV_DECODE_FRAME_SKIPPED)
+		return;
+	dec_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dec_y_adr, dev);
 
 	/* Copy timestamp / timecode from decoded src to dst and set
-	   appropraite flags */
+	   appropriate flags. */
 	src_buf = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
 	list_for_each_entry(dst_buf, &ctx->dst_queue, list) {
 		if (vb2_dma_contig_plane_dma_addr(dst_buf->b, 0) == dec_y_addr) {
@@ -267,6 +270,11 @@ static void s5p_mfc_handle_frame_copy_time(struct s5p_mfc_ctx *ctx)
 				dst_buf->b->v4l2_buf.flags |=
 						V4L2_BUF_FLAG_BFRAME;
 				break;
+			default:
+				/* Don't know how to handle
+				   S5P_FIMV_DECODE_FRAME_OTHER_FRAME. */
+				mfc_debug(2, "Unexpected frame type: %d\n",
+						frame_type);
 			}
 			break;
 		}
@@ -388,7 +396,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 								list);
 		ctx->consumed_stream += s5p_mfc_hw_call(dev->mfc_ops,
 						get_consumed_stream, dev);
-		if (ctx->codec_mode != S5P_MFC_CODEC_H264_DEC &&
+		if (ctx->codec_mode == S5P_MFC_CODEC_MPEG4_DEC &&
 			ctx->consumed_stream + STUFF_BYTE <
 			src_buf->b->v4l2_planes[0].bytesused) {
 			/* Run MFC again on the same buffer */

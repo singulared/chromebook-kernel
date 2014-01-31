@@ -541,6 +541,13 @@ static int disable_periodic (struct ehci_hcd *ehci)
 	ehci_writel(ehci, cmd, &ehci->regs->command);
 	/* posted write ... */
 
+	/* Wait until schedule is disabled before freeing (s)iTDs */
+	status = handshake_on_error_set_halt(ehci, &ehci->regs->status,
+					     STS_PSS, 0, 9 * 125);
+	if (status) {
+		usb_hc_died(ehci_to_hcd(ehci));
+		return status;
+	}
 	free_cached_lists(ehci);
 
 	ehci->next_uframe = -1;
