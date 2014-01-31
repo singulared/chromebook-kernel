@@ -15,8 +15,8 @@
             entry = <0>;
         };
         fdt@1{
-            description = "exynos5250-snow.dtb";
-            data = /incbin/("arch/arm/boot/exynos5250-snow.dtb");
+            description = "exynos5250-snow-rev5.dtb";
+            data = /incbin/("arch/arm/boot/exynos5250-snow-rev5.dtb");
             type = "flat_dt";
             arch = "arm";
             compression = "none";
