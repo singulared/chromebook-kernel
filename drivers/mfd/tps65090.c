@@ -149,21 +149,11 @@ static struct regmap_irq_chip tps65090_irq_chip = {
 	.mask_invert = true,
 };
 
-static bool is_volatile_reg(struct device *dev, unsigned int reg)
-{
-	if ((reg == TPS65090_INT_STS) || (reg == TPS65090_INT_STS2))
-		return true;
-	else
-		return false;
-}
-
 static const struct regmap_config tps65090_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = TOTAL_NUM_REG,
 	.num_reg_defaults_raw = TOTAL_NUM_REG,
-	.cache_type = REGCACHE_RBTREE,
-	.volatile_reg = is_volatile_reg,
 };
 
 #ifdef CONFIG_OF
