@@ -206,28 +206,35 @@
 					};
 					fet1 {
 						regulator-name = "vcd_led";
+						ti,overcurrent-wait = <3>;
 					};
 					tps65090_fet2: fet2 {
 						regulator-name = "video_mid";
 						regulator-always-on;
+						ti,overcurrent-wait = <3>;
 					};
 					fet3 {
 						regulator-name = "wwan_r";
 						regulator-always-on;
+						ti,overcurrent-wait = <3>;
 					};
 					fet4 {
 						regulator-name = "sdcard";
+						ti,overcurrent-wait = <3>;
 					};
 					fet5 {
 						regulator-name = "camout";
 						regulator-always-on;
+						ti,overcurrent-wait = <3>;
 					};
 					fet6 {
 						regulator-name = "lcd_vdd";
+						ti,overcurrent-wait = <3>;
 					};
 					tps65090_fet7: fet7 {
 						regulator-name = "video_mid_1a";
 						regulator-always-on;
+						ti,overcurrent-wait = <3>;
 					};
 					ldo1 {
 					};

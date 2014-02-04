@@ -65,4 +65,6 @@ static inline void idr_preload_end(void)
 
 #define netdev_notifier_info_to_dev(ndev)	ndev
 
+#define __genl_const
+
 #endif /* __IWL_CHROME */
