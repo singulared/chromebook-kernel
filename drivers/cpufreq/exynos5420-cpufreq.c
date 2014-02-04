@@ -27,6 +27,7 @@
 #define CPUFREQ_NUM_LEVELS_CA7	(L11 + 1)
 #define EXYNOS5_CLKDIV_STATCPU0_MASK	0x11111111
 #define EXYNOS5_CLKDIV_STATCPU1_MASK	0x111
+#define EXYNOS5420_EVT2_REV_NUM	0x20
 
 static int max_support_idx;
 static int max_support_idx_CA7;
@@ -372,6 +373,7 @@ static void __init set_volt_table(void)
 {
 	unsigned int i;
 	unsigned int asv_volt = 0;
+	unsigned int exynos5420_rev_num;
 
 	for (i = 0; i < CPUFREQ_NUM_LEVELS; i++) {
 #ifdef CONFIG_ARM_EXYNOS5420_ASV
@@ -385,12 +387,19 @@ static void __init set_volt_table(void)
 		pr_debug("CPUFREQ of CA15 L%d : %d uV\n", i,
 				exynos5420_volt_table[i]);
 	}
-	for (i = L0; i < L2; i++)
-		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
-	for (i = L14; i <= L18; i++)
+
+	exynos5420_rev_num = samsung_rev();
+
+	if (exynos5420_rev_num >= EXYNOS5420_EVT2_REV_NUM)
+		max_support_idx = L1;
+	else
+		max_support_idx = L2;
+
+	for (i = L0; i < max_support_idx; i++)
 		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
 
-	max_support_idx = L2;
+	for (i = L14; i <= L18; i++)
+		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
 	min_support_idx = L13;
 }
 
