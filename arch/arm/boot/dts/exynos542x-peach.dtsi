@@ -968,8 +968,6 @@
 		samsung,fimd-inv-vclk;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
-		samsung,use-fimd-dithering;
-		samsung-rgb-dithpos = <6 6 6>;
 	};
 
 	display-port-controller {
