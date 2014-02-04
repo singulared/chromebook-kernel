@@ -172,6 +172,10 @@ clock which they consume.
   smmu_fimd1m0		422
   smmu_fimd1m1		423
   aclk400_disp1		424
+  aclk432_scaler	425
+  aclk432_cam		426
+  aclkfl1_550_cam	427
+  aclk550_cam		428
 
   aclk166		430
   aclk_mixer		431

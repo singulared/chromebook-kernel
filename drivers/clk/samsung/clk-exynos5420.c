@@ -52,6 +52,7 @@
 #define SRC_TOP10		0x10280
 #define SRC_TOP11		0x10284
 #define SRC_TOP12		0x10288
+#define SRC_TOP13		0x1028c
 #define SRC_MASK_TOP2		0x10308
 #define SRC_MASK_DISP10		0x1032c
 #define SRC_MASK_MAU		0x10334
@@ -158,7 +159,8 @@ enum exynos542x_clks {
 	aclk333 = 400, aclk_mfc, smmu_mfcl, smmu_mfcr,
 	aclk200_disp1 = 410, pclk_dsim1, pclk_dp1, pclk_hdmi,
 	aclk300_disp1 = 420, aclk_fimd1, smmu_fimd1m0, smmu_fimd1m1,
-	aclk400_disp1,
+	aclk400_disp1, aclk432_scaler, aclk432_cam, aclkfl1_550_cam,
+	aclk550_cam,
 	aclk166 = 430, aclk_mixer,
 	aclk266 = 440, aclk_rotator, aclk_mdma1, smmu_rotator, smmu_mdma1,
 	aclk300_jpeg = 450, aclk_jpeg, aclk_jpeg2, smmu_jpeg,
@@ -231,6 +233,7 @@ static __initdata unsigned long exynos542x_clk_regs[] = {
 	SRC_TOP10,
 	SRC_TOP11,
 	SRC_TOP12,
+	SRC_TOP13,
 	SRC_MASK_DISP10,
 	SRC_MASK_MAU,
 	SRC_MASK_FSYS,
@@ -425,6 +428,14 @@ PNAME(mout_mau_epll_clk_5422_p)	= { "sclk_epll", "sclk_dpll", "sclk_mpll",
 					"ffactor_dout_spll2" };
 PNAME(mout_user_mau_epll_clk_5422_p)	= { "dout_osc_div",
 						"mout_mau_epll_clk" };
+PNAME(mout_group8_5422_p)	= { "dout_aclk432_scaler", "dout_sclk_sw" };
+PNAME(mout_group9_5422_p)	= { "dout_osc_div", "mout_sw_aclk432_scaler" };
+PNAME(mout_group10_5422_p)	= { "dout_aclk432_cam", "dout_sclk_sw" };
+PNAME(mout_group11_5422_p)	= { "dout_osc_div", "mout_sw_aclk432_cam" };
+PNAME(mout_group12_5422_p)	= { "dout_aclkfl1_550_cam", "dout_sclk_sw" };
+PNAME(mout_group13_5422_p)	= { "dout_osc_div", "mout_sw_aclkfl1_550_cam" };
+PNAME(mout_group14_5422_p)	= { "dout_aclk550_cam", "dout_sclk_sw" };
+PNAME(mout_group15_5422_p)	= { "dout_osc_div", "mout_sw_aclk550_cam" };
 
 /* fixed rate clocks generated outside the soc */
 struct samsung_fixed_rate_clock exynos542x_fixed_rate_ext_clks[] __initdata = {
@@ -475,6 +486,25 @@ struct samsung_mux_clock exynos5422_mux_clks[] __initdata = {
 							"aclk333_432_gsc"),
 	MUX_A(none, "mout_aclk300_gscl", mout_group5_5422_p, SRC_TOP2, 28, 2,
 							"aclk300_gscl"),
+	MUX(none, "mout_aclk432_scaler", mout_group6_5422_p, SRC_TOP8, 28, 2),
+	MUX(none, "mout_sw_aclk432_scaler", mout_group8_5422_p,
+							SRC_TOP13, 28, 1),
+	MUX(none, "mout_user_aclk432_scaler", mout_group9_5422_p,
+							SRC_TOP9, 28, 1),
+	MUX(none, "mout_aclk432_cam", mout_group6_5422_p, SRC_TOP8, 24, 2),
+	MUX(none, "mout_sw_aclk432_cam", mout_group10_5422_p,
+							SRC_TOP13, 24, 1),
+	MUX(none, "mout_user_aclk432_cam", mout_group11_5422_p,
+							SRC_TOP9, 24, 1),
+	MUX(none, "mout_aclkfl1_550_cam", mout_group3_5422_p, SRC_TOP8, 20, 3),
+	MUX(none, "mout_sw_aclkfl1_550_cam", mout_group12_5422_p,
+							SRC_TOP13, 20, 1),
+	MUX(none, "mout_user_aclkfl1_550_cam", mout_group13_5422_p,
+							SRC_TOP9, 20, 1),
+	MUX(none, "mout_aclk550_cam", mout_group3_5422_p, SRC_TOP8, 16, 3),
+	MUX(none, "mout_sw_aclk550_cam", mout_group14_5422_p, SRC_TOP13, 16, 1),
+	MUX(none, "mout_user_aclk550_cam", mout_group15_5422_p,
+							SRC_TOP9, 16, 1),
 	MUX_A(none, "mout_aclk300_disp1", mout_group5_5422_p, SRC_TOP2, 24, 2,
 							"aclk300_disp1"),
 	MUX_A(none, "mout_aclk300_jpeg", mout_group5_5422_p, SRC_TOP2, 20, 2,
@@ -499,6 +529,25 @@ struct samsung_div_clock exynos5422_div_clks[] __initdata = {
 	DIV(none, "dout_osc_div", "fin_pll", DIV_TOP9, 20, 3),
 	DIV_A(none, "dout_aclk400_wcore", "mout_aclk400_wcore",
 					DIV_TOP0, 16, 3, "aclk400_wcore_d"),
+	DIV(none, "dout_aclk432_scaler", "mout_aclk432_scaler",
+							DIV_TOP8, 28, 3),
+	DIV(none, "dout_aclk432_cam", "mout_aclk432_cam",
+							DIV_TOP8, 24, 3),
+	DIV(none, "dout_aclkfl1_550_cam", "mout_aclkfl1_550_cam",
+							DIV_TOP8, 20, 3),
+	DIV(none, "dout_aclk550_cam", "mout_aclk550_cam",
+							DIV_TOP8, 16, 3),
+};
+
+struct samsung_gate_clock exynos5422_gate_clks[] __initdata = {
+	GATE(aclk432_scaler, "aclk432_scaler", "mout_user_aclk432_scaler",
+			GATE_BUS_TOP, 27, 0, 0),
+	GATE(aclk432_cam, "aclk432_cam", "mout_user_aclk432_cam",
+			GATE_BUS_TOP, 26, 0, 0),
+	GATE(aclkfl1_550_cam, "aclkfl1_550_cam", "mout_user_aclkfl1_550_cam",
+			GATE_BUS_TOP, 25, 0, 0),
+	GATE(aclk550_cam, "aclk550_cam", "mout_user_aclk550_cam",
+			GATE_BUS_TOP, 24, 0, 0),
 };
 
 struct samsung_mux_clock exynos5420_mux_clks[] __initdata = {
@@ -1346,6 +1395,8 @@ static void __init exynos542x_clk_init(struct device_node *np,
 				ARRAY_SIZE(exynos5422_mux_clks));
 		samsung_clk_register_div(exynos5422_div_clks,
 				ARRAY_SIZE(exynos5422_div_clks));
+		samsung_clk_register_gate(exynos5422_gate_clks,
+				ARRAY_SIZE(exynos5422_gate_clks));
 	}
 
 	samsung_clk_register_div(exynos542x_div_clks,
