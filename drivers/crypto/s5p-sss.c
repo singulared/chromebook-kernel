@@ -25,6 +25,7 @@
 #include <linux/of.h>
 #include <linux/crypto.h>
 #include <linux/interrupt.h>
+#include <linux/pm_runtime.h>
 
 #include <crypto/algapi.h>
 #include <crypto/aes.h>
@@ -703,9 +704,19 @@ static int s5p_aes_probe(struct platform_device *pdev)
 			goto err_algs;
 	}
 
+	pm_runtime_set_active(&pdev->dev);
+	pm_runtime_enable(&pdev->dev);
+	err = pm_runtime_get_sync(&pdev->dev);
+	if (err  < 0)
+		goto err_pm;
+
 	pr_info("s5p-sss driver registered\n");
 
 	return 0;
+
+ err_pm:
+	pr_err("s5p-sss driver register failed\n");
+	pm_runtime_disable(&pdev->dev);
 
  err_algs:
 	dev_err(dev, "can't register '%s': %d\n", algs[i].cra_name, err);
@@ -736,12 +747,64 @@ static int s5p_aes_remove(struct platform_device *pdev)
 
 	tasklet_kill(&pdata->tasklet);
 
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
 	clk_disable_unprepare(pdata->clk);
 
 	s5p_dev = NULL;
 
 	return 0;
 }
+
+#ifdef CONFIG_PM_RUNTIME
+static int s5p_sss_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct s5p_aes_dev *pdata = platform_get_drvdata(pdev);
+
+	return clk_prepare_enable(pdata->clk);
+}
+
+static int s5p_sss_runtime_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct s5p_aes_dev *pdata = platform_get_drvdata(pdev);
+
+	clk_disable_unprepare(pdata->clk);
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_PM_SLEEP
+static int s5p_sss_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+
+	pm_runtime_put_sync(&pdev->dev);
+	if (pm_runtime_suspended(dev))
+		return s5p_sss_runtime_suspend(dev);
+
+	return 0;
+}
+
+static int s5p_sss_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+
+	pm_runtime_get_sync(&pdev->dev);
+	if (!pm_runtime_suspended(dev))
+		return s5p_sss_runtime_resume(dev);
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops s5p_sss_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(s5p_sss_suspend, s5p_sss_resume)
+	SET_RUNTIME_PM_OPS(s5p_sss_runtime_suspend,
+			   s5p_sss_runtime_resume, NULL)
+};
 
 static struct platform_driver s5p_aes_crypto = {
 	.probe	= s5p_aes_probe,
@@ -750,6 +813,7 @@ static struct platform_driver s5p_aes_crypto = {
 		.owner	= THIS_MODULE,
 		.name	= "s5p-secss",
 		.of_match_table = s5p_sss_dt_match,
+		.pm	= &s5p_sss_pm_ops,
 	},
 };
 
