@@ -748,6 +748,8 @@ static int __init exynos_pmu_init(void)
 		 */
 		value = __raw_readl(EXYNOS5420_LPI_MASK);
 		value |= EXYNOS5420_ATB_ISP_ARM;
+		if (soc_is_exynos5422())
+			value |= EXYNOS5422_POWER_GATE_CTRL;
 		__raw_writel(value, EXYNOS5420_LPI_MASK);
 		value = __raw_readl(EXYNOS5420_LPI_MASK1);
 		value |= EXYNOS5420_ATB_KFC;
