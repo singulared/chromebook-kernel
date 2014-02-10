@@ -137,8 +137,8 @@ struct int_clk_info aclk_100_noc[] = {
 	{LV_2, 100000, D_PLL},
 	{LV_3,  86000, D_PLL},
 	{LV_4,  75000, D_PLL},
-	{LV_5,  67000, M_PLL},
-	{LV_6,  67000, M_PLL},
+	{LV_5,  75000, D_PLL},
+	{LV_6,  75000, D_PLL},
 };
 
 struct int_clk_info aclk_400_wcore[] = {
@@ -189,11 +189,11 @@ struct int_clk_info aclk_400_isp[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 400000, S_PLL},
 	{LV_1, 400000, S_PLL},
-	{LV_2,  67000, M_PLL},
-	{LV_3,  67000, M_PLL},
-	{LV_4,  67000, M_PLL},
-	{LV_5,  67000, M_PLL},
-	{LV_6,  67000, M_PLL},
+	{LV_2, 100000, M_PLL},
+	{LV_3, 100000, M_PLL},
+	{LV_4, 100000, M_PLL},
+	{LV_5, 100000, M_PLL},
+	{LV_6, 100000, M_PLL},
 };
 
 /* TOP 1 */
@@ -210,13 +210,13 @@ struct int_clk_info aclk_166[] = {
 
 struct int_clk_info aclk_266[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 266000, M_PLL},
-	{LV_1, 266000, M_PLL},
-	{LV_2, 266000, M_PLL},
-	{LV_3, 178000, M_PLL},
-	{LV_4, 133000, M_PLL},
-	{LV_5, 133000, M_PLL},
-	{LV_6,  89000, M_PLL},
+	{LV_0, 267000, M_PLL},
+	{LV_1, 267000, M_PLL},
+	{LV_2, 267000, M_PLL},
+	{LV_3, 160000, M_PLL},
+	{LV_4, 134000, M_PLL},
+	{LV_5, 134000, M_PLL},
+	{LV_6,  86000, D_PLL},
 };
 
 struct int_clk_info aclk_66[] = {
