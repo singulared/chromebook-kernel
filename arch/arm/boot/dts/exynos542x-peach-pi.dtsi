@@ -10,7 +10,7 @@
 
 / {
 	pinctrl@13400000 {
-		backlight_en: backlight-en {
+		dp_backlight_en: backlight-en {
 			samsung,pins = "gpx2-2";
 			samsung,pin-function = <1>;
 			samsung,pin-pud = <0>;
@@ -30,11 +30,11 @@
 
 	display-port-controller {
 		samsung,link-rate = <0x0a>;
-	};
-
-	backlight {
-		enable-gpio = <&gpx2 2 0>;
-		pinctrl-0 = <&backlight_pwm &backlight_en>;
+		edp-need-regulator;
+		samsung,power-up-delay = <105>;
+		samsung,power-down-delay = <50>;
+		samsung,led-en-gpio = <&gpx2 2 0>;
+		pinctrl-0 = <&dp_hpd &dp_backlight_en>;
 	};
 
 	usb3_phy0: usbphy@12100000 {
@@ -49,23 +49,6 @@
 	hsi2c@12CD0000 {
 		max98090: codec@10 {
 			compatible = "maxim,max98091";
-		};
-	};
-
-	spi@12d40000 {
-		cros-ec@0 {
-			i2c-tunnel {
-				power-regulator@48 {
-						regulators {
-							fet1 {
-								regulator-always-on;
-							};
-							fet6 {
-								regulator-always-on;
-							};
-						};
-				};
-			};
 		};
 	};
 
