@@ -29,7 +29,6 @@
 #include <mach/asv-exynos.h>
 
 #include <plat/pll.h>
-#include <plat/clock.h>
 
 #include "exynos5420_ppmu.h"
 
@@ -54,7 +53,7 @@ enum int_bus_idx {
 };
 
 enum int_bus_pll {
-	SW_MUX = 0,
+	S_PLL = 0,
 	C_PLL,
 	D_PLL,
 	M_PLL,
@@ -86,10 +85,10 @@ struct int_clk_info {
 
 struct int_pm_clks {
 	struct list_head node;
-	const char *clk_name;
-	struct clk *clk;
-	const char *parent_clk_name;
-	struct clk *parent_clk;
+	const char *mux_clk_name;   /* The parent of the div clock */
+	struct clk *mux_clk;
+	const char *div_clk_name;
+	struct clk *div_clk;
 	struct int_clk_info *clk_info;
 };
 
@@ -144,9 +143,9 @@ struct int_clk_info aclk_100_noc[] = {
 
 struct int_clk_info aclk_400_wcore[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 400000, SW_MUX},
-	{LV_1, 400000, SW_MUX},
-	{LV_2, 400000, SW_MUX},
+	{LV_0, 400000, S_PLL},
+	{LV_1, 400000, S_PLL},
+	{LV_2, 400000, S_PLL},
 	{LV_3, 333000, C_PLL},
 	{LV_4, 222000, C_PLL},
 	{LV_5, 111000, C_PLL},
@@ -177,9 +176,9 @@ struct int_clk_info aclk_200_disp1[] = {
 
 struct int_clk_info aclk_400_mscl[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 400000, SW_MUX},
-	{LV_1, 400000, SW_MUX},
-	{LV_2, 400000, SW_MUX},
+	{LV_0, 400000, S_PLL},
+	{LV_1, 400000, S_PLL},
+	{LV_2, 400000, S_PLL},
 	{LV_3, 333000, C_PLL},
 	{LV_4, 222000, C_PLL},
 	{LV_5, 167000, C_PLL},
@@ -188,8 +187,8 @@ struct int_clk_info aclk_400_mscl[] = {
 
 struct int_clk_info aclk_400_isp[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 400000, SW_MUX},
-	{LV_1, 400000, SW_MUX},
+	{LV_0, 400000, S_PLL},
+	{LV_1, 400000, S_PLL},
 	{LV_2,  67000, M_PLL},
 	{LV_3,  67000, M_PLL},
 	{LV_4,  67000, M_PLL},
@@ -309,11 +308,11 @@ struct int_clk_info aclk_333_g2d[] = {
 	{LV_6,  84000, C_PLL},
 };
 
-#define EXYNOS5_INT_PM_CLK(NAME, CLK, PCLK, CLK_INFO)		\
+#define EXYNOS5_INT_PM_CLK(NAME, CLK, PCLK, CLK_INFO)	\
 static struct int_pm_clks int_pm_clks_##NAME = {	\
-	.clk_name = CLK,					\
-	.parent_clk_name = PCLK,				\
-	.clk_info = CLK_INFO,					\
+	.mux_clk_name = CLK,				\
+	.div_clk_name = PCLK,				\
+	.clk_info = CLK_INFO,				\
 }
 
 EXYNOS5_INT_PM_CLK(aclk_200_fsys, "aclk200_fsys",
@@ -366,13 +365,13 @@ static struct int_pm_clks *exynos5_int_pm_clks[] = {
 	&int_pm_clks_aclk_400_disp1,
 };
 
-static struct clk *exynos5_change_pll(struct busfreq_data_int *data,
-					enum int_bus_idx target_pll)
+static struct clk *exynos5_find_pll(struct busfreq_data_int *data,
+				    enum int_bus_idx target_pll)
 {
 	struct clk *target_src_clk = NULL;
 
 	switch (target_pll) {
-	case SW_MUX:
+	case S_PLL:
 		target_src_clk = data->mout_spll;
 		break;
 	case C_PLL:
@@ -398,7 +397,10 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 	int target_idx = -EINVAL;
 	int pre_idx = -EINVAL;
 	struct int_pm_clks *int_clk;
-	struct clk *temp_clk;
+	struct clk *new_src_pll;
+	struct clk *old_src_pll;
+	unsigned long old_src_rate, new_src_rate;
+	unsigned long rate1, rate2, rate3, rate4;
 
 	/* Find the levels for target and previous frequencies */
 	for (i = 0; i < LV_END; i++) {
@@ -410,41 +412,56 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 
 	list_for_each_entry(int_clk, &data->list, node) {
 		tar_rate = int_clk->clk_info[target_idx].target_freq * 1000;
-		if (int_clk->clk_info[pre_idx].src_pll !=
+
+		if (int_clk->clk_info[pre_idx].src_pll ==
 			int_clk->clk_info[target_idx].src_pll) {
-			if (int_clk->clk_info[pre_idx].target_freq ==
-				int_clk->clk_info[target_idx].target_freq)
-				continue;
 
-			temp_clk = exynos5_change_pll(data,
-					int_clk->clk_info[target_idx].src_pll);
-
-			if (int_clk->clk_info[target_idx].src_pll == SW_MUX) {
-				clk_set_parent(int_clk->clk, temp_clk);
-				continue;
-			}
-
-			if (pre_freq > target_freq) {
-				clk_set_parent(int_clk->parent_clk, temp_clk);
-				clk_set_parent(int_clk->clk,
-						int_clk->parent_clk);
-				clk_set_rate(int_clk->parent_clk, tar_rate);
-			} else {
-				clk_set_rate(int_clk->parent_clk, tar_rate);
-				clk_set_parent(int_clk->clk,
-						int_clk->parent_clk);
-				clk_set_parent(int_clk->parent_clk, temp_clk);
-				/*
-				 * If the clock rate is set before setting
-				 * the parent clock, the clock rate
-				 * is incorrect. Hence re-setting clock rate.
-				 */
-				clk_set_rate(int_clk->parent_clk, tar_rate);
-			}
-		} else {
 			/* No need to change pll */
-			clk_set_rate(int_clk->parent_clk, tar_rate);
+			clk_set_rate(int_clk->div_clk, tar_rate);
+			pr_debug("%s: %s now %lu (%lu)\n", __func__,
+				 int_clk->mux_clk_name,
+				 clk_get_rate(int_clk->div_clk), tar_rate);
+			continue;
 		}
+
+		old_src_pll = exynos5_find_pll(data,
+				int_clk->clk_info[pre_idx].src_pll);
+		old_src_rate = clk_get_rate(old_src_pll);
+		new_src_pll = exynos5_find_pll(data,
+				int_clk->clk_info[target_idx].src_pll);
+		new_src_rate = clk_get_rate(new_src_pll);
+		rate1 = clk_get_rate(int_clk->div_clk);
+
+		/*
+		 * If we're switching to a faster PLL we should bump up the
+		 * divider before switching.
+		 */
+		if (new_src_rate > old_src_rate) {
+			int new_div;
+			unsigned long tmp_rate;
+
+			new_div = DIV_ROUND_UP(new_src_rate, tar_rate);
+			tmp_rate = DIV_ROUND_UP(old_src_rate, new_div);
+			clk_set_rate(int_clk->div_clk, tmp_rate);
+		}
+		rate2 = clk_get_rate(int_clk->div_clk);
+
+		/* We can safely change the mux now */
+		clk_set_parent(int_clk->mux_clk, new_src_pll);
+		rate3 = clk_get_rate(int_clk->div_clk);
+
+		/*
+		 * Give us a proper divider; technically not needed in the case
+		 * where we pre-calculated the divider above (the new_src_rate >
+		 * old_src_rate case), but let's be formal about it.
+		 */
+		clk_set_rate(int_clk->div_clk, tar_rate);
+		rate4 = clk_get_rate(int_clk->div_clk);
+
+		pr_debug("%s: %s => PLL %d; %lu=>%lu=>%lu=>%lu (%lu)\n",
+			 __func__, int_clk->mux_clk_name,
+			 int_clk->clk_info[target_idx].src_pll,
+			 rate1, rate2, rate3, rate4, tar_rate);
 	}
 }
 
@@ -704,8 +721,8 @@ static void exynos5_int_remove_clocks(struct busfreq_data_int *data)
 	struct int_pm_clks *int_clk;
 
 	list_for_each_entry(int_clk, &data->list, node) {
-		clk_put(int_clk->clk);
-		clk_put(int_clk->parent_clk);
+		clk_put(int_clk->mux_clk);
+		clk_put(int_clk->div_clk);
 	}
 }
 
@@ -717,7 +734,7 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 	struct exynos_devfreq_platdata *pdata;
 	int err = 0;
 	int nr_clk;
-	struct clk *tmp_clk, *tmp_parent_clk;
+	struct clk *mux_clk, *div_clk;
 	struct int_pm_clks *int_clk;
 
 	data = kzalloc(sizeof(struct busfreq_data_int), GFP_KERNEL);
@@ -771,23 +788,23 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 	/* Register and add int clocks to list */
 	for (nr_clk = 0; nr_clk < ARRAY_SIZE(exynos5_int_pm_clks); nr_clk++) {
 		int_clk = exynos5_int_pm_clks[nr_clk];
-		tmp_clk = clk_get(NULL, int_clk->clk_name);
-		tmp_parent_clk = clk_get(NULL, int_clk->parent_clk_name);
-		if (IS_ERR(tmp_clk) || IS_ERR(tmp_parent_clk)) {
-			if (IS_ERR(tmp_parent_clk))
+		mux_clk = clk_get(NULL, int_clk->mux_clk_name);
+		div_clk = clk_get(NULL, int_clk->div_clk_name);
+		if (IS_ERR(mux_clk) || IS_ERR(div_clk)) {
+			if (IS_ERR(div_clk))
 				dev_err(dev, "Failed to get %s clock\n",
-					int_clk->parent_clk_name);
+					int_clk->div_clk_name);
 			else
-				clk_put(tmp_parent_clk);
-			if (IS_ERR(tmp_clk))
+				clk_put(div_clk);
+			if (IS_ERR(mux_clk))
 				dev_err(dev, "Failed to get %s clock\n",
-					int_clk->clk_name);
+					int_clk->mux_clk_name);
 			else
-				clk_put(tmp_clk);
+				clk_put(mux_clk);
 			goto err_int_clk;
 		} else {
-			int_clk->clk = tmp_clk;
-			int_clk->parent_clk = tmp_parent_clk;
+			int_clk->mux_clk = mux_clk;
+			int_clk->div_clk = div_clk;
 			list_add_tail(&int_clk->node, &data->list);
 		}
 	}
