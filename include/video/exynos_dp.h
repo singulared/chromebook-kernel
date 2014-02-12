@@ -126,7 +126,13 @@ struct video_info {
 struct exynos_dp_platdata {
 	struct video_info *video_info;
 
-	int hpd_gpio;
+	int	hpd_gpio;
+	int	led_en_gpio;
+	int	lcd_en_gpio;
+	int	power_up_delay;
+	int	power_down_delay;
+
+	bool	need_regulator;
 
 	void (*phy_init)(void);
 	void (*phy_exit)(void);

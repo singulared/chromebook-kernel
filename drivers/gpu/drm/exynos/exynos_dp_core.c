@@ -20,6 +20,8 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
+#include <linux/regulator/fixed.h>
+#include <linux/regulator/machine.h>
 
 #include <video/exynos_dp.h>
 
@@ -977,6 +979,66 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 		pdata->phy_exit();
 }
 
+static void exynos_dp_lcd_powerup(struct exynos_dp_device *dp)
+{
+	bool enable_delay = false;
+
+	if (dp->need_regulator) {
+		if (!IS_ERR_OR_NULL(dp->lcd_fet)) {
+			regulator_enable(dp->lcd_fet);
+			enable_delay = true;
+		}
+	}
+
+	if (gpio_is_valid(dp->lcd_en_gpio)) {
+		gpio_set_value(dp->lcd_en_gpio, 1);
+		enable_delay = true;
+	}
+
+	if (enable_delay)
+		msleep(dp->power_up_delay);
+}
+
+static void exynos_dp_lcd_powerdown(struct exynos_dp_device *dp)
+{
+	bool enable_delay = false;
+
+	if (gpio_is_valid(dp->lcd_en_gpio)) {
+		gpio_set_value(dp->lcd_en_gpio, 0);
+		enable_delay = true;
+	}
+
+	if (dp->need_regulator) {
+		if (!IS_ERR_OR_NULL(dp->lcd_fet)) {
+			regulator_disable(dp->lcd_fet);
+			enable_delay = true;
+		}
+	}
+
+	if (enable_delay)
+		msleep(dp->power_down_delay);
+}
+
+static void exynos_dp_led_powerup(struct exynos_dp_device *dp)
+{
+	if (dp->need_regulator)
+		if (!IS_ERR_OR_NULL(dp->bck_fet))
+			regulator_enable(dp->bck_fet);
+
+	if (gpio_is_valid(dp->led_en_gpio))
+		gpio_set_value(dp->led_en_gpio, 1);
+}
+
+static void exynos_dp_led_powerdown(struct exynos_dp_device *dp)
+{
+	if (gpio_is_valid(dp->led_en_gpio))
+		gpio_set_value(dp->led_en_gpio, 0);
+
+	if (dp->need_regulator)
+		if (!IS_ERR_OR_NULL(dp->bck_fet))
+			regulator_disable(dp->bck_fet);
+}
+
 static void exynos_dp_poweron(struct exynos_dp_device *dp)
 {
 	if (dp->dpms_mode == DRM_MODE_DPMS_ON)
@@ -984,11 +1046,13 @@ static void exynos_dp_poweron(struct exynos_dp_device *dp)
 
 	DRM_DEBUG_KMS("\n");
 
+	exynos_dp_lcd_powerup(dp);
 	clk_prepare_enable(dp->clock);
 	exynos_dp_phy_init(dp);
 	exynos_dp_init_dp(dp);
 	enable_irq(dp->irq);
 	exynos_dp_commit(dp);
+	exynos_dp_led_powerup(dp);
 }
 
 static void exynos_dp_poweroff(struct exynos_dp_device *dp)
@@ -998,10 +1062,12 @@ static void exynos_dp_poweroff(struct exynos_dp_device *dp)
 
 	DRM_DEBUG_KMS("\n");
 
+	exynos_dp_led_powerdown(dp);
 	disable_irq(dp->irq);
 	flush_work(&dp->hotplug_work);
 	exynos_dp_phy_exit(dp);
 	clk_disable_unprepare(dp->clock);
+	exynos_dp_lcd_powerdown(dp);
 }
 
 static void exynos_dp_dpms(void *in_ctx, int mode)
@@ -1116,6 +1182,17 @@ static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 	}
 
 	pd->hpd_gpio = of_get_named_gpio(dp_node, "samsung,hpd-gpio", 0);
+
+	pd->need_regulator = of_property_read_bool(dp_node,
+							"edp-need-regulator");
+
+	pd->lcd_en_gpio = of_get_named_gpio(dp_node, "samsung,lcd-en-gpio", 0);
+	pd->led_en_gpio = of_get_named_gpio(dp_node, "samsung,led-en-gpio", 0);
+
+	of_property_read_u32(dp_node, "samsung,power-up-delay",
+						&pd->power_up_delay);
+	of_property_read_u32(dp_node, "samsung,power-down-delay",
+						&pd->power_down_delay);
 
 	for (i = 0; i < ARRAY_SIZE(exynos_dp_quirks); i++)
 		if (of_property_read_bool(dp_node, exynos_dp_quirks[i].quirk))
@@ -1300,6 +1377,45 @@ static int exynos_dp_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to get irq\n");
 		return -ENODEV;
 	}
+
+	if (pdata->need_regulator) {
+		dp->need_regulator = pdata->need_regulator;
+
+		dp->lcd_fet = regulator_get(dp->dev, "lcd_vdd");
+		if (IS_ERR(dp->lcd_fet))
+			return PTR_ERR(dp->lcd_fet);
+
+		dp->bck_fet = regulator_get(dp->dev, "vcd_led");
+		if (IS_ERR(dp->bck_fet))
+			return PTR_ERR(dp->bck_fet);
+	}
+
+	if (gpio_is_valid(pdata->lcd_en_gpio)) {
+		dp->lcd_en_gpio = pdata->lcd_en_gpio;
+		ret = devm_gpio_request_one(dp->dev, dp->lcd_en_gpio,
+					GPIOF_OUT_INIT_LOW, "lcd_en_gpio");
+		if (ret) {
+			DRM_ERROR("failed to get lcd-en gpio [%d]\n", ret);
+			return ret;
+		}
+	} else {
+		dp->lcd_en_gpio = -ENODEV;
+	}
+
+	if (gpio_is_valid(pdata->led_en_gpio)) {
+		dp->led_en_gpio = pdata->led_en_gpio;
+		ret = devm_gpio_request_one(dp->dev, dp->led_en_gpio,
+					GPIOF_OUT_INIT_LOW, "led_en_gpio");
+		if (ret) {
+			DRM_ERROR("failed to get led-en gpio [%d]\n", ret);
+			return ret;
+		}
+	} else {
+		dp->led_en_gpio = -ENODEV;
+	}
+
+	dp->power_up_delay = pdata->power_up_delay;
+	dp->power_down_delay = pdata->power_down_delay;
 
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
 

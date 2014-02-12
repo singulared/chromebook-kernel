@@ -47,6 +47,18 @@ struct exynos_dp_device {
 	 * registers.
 	 */
 	int			hpd_gpio;
+	/*
+	 * In order to powerdown the power to the LCD and LED
+	 * unit of the panel during DPMS calls
+	 */
+	struct regulator	*bck_fet;
+	struct regulator	*lcd_fet;
+	bool			need_regulator;
+	int			led_en_gpio;
+	int			lcd_en_gpio;
+	int			power_up_delay;
+	int			power_down_delay;
+
 	void __iomem		*reg_base;
 	void __iomem		*phy_addr;
 	unsigned int		enable_mask;
