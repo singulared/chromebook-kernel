@@ -1079,7 +1079,11 @@ static void mixer_win_commit(void *ctx, int zpos)
 	mixer_ctx->win_data[win].enabled = true;
 }
 
-static void mixer_win_disable(void *ctx, int zpos)
+/*
+ * Schedule a window (hardware overlay) to be disabled at the next vblank.
+ * This is useful when disabling multiple windows, for example during suspend.
+ */
+static void mixer_win_disable_nowait(void *ctx, int zpos)
 {
 	struct mixer_context *mixer_ctx = ctx;
 	struct mixer_resources *res = &mixer_ctx->mixer_res;
@@ -1137,20 +1141,42 @@ static void mixer_wait_for_vblank(void *ctx)
 	drm_vblank_put(mixer_ctx->drm_dev, mixer_ctx->pipe);
 }
 
+/*
+ * Schedule a window (hardware overlay) to be disabled at the next vblank, and
+ * synchronously wait for that vblank.
+ * This is called when disabling a single plane.
+ */
+static void mixer_win_disable(void *ctx, int zpos)
+{
+	struct mixer_context *mixer_ctx = ctx;
+
+	mixer_win_disable_nowait(ctx, zpos);
+
+	/* Synchronously wait for window to be disabled */
+	mixer_wait_for_vblank(mixer_ctx);
+}
+
 static void mixer_window_suspend(struct mixer_context *ctx)
 {
 	struct hdmi_win_data *win_data;
 	int i;
+	unsigned count = 0;
 
 	DRM_DEBUG_KMS("\n");
 
+	/* Disable enabled windows and save state to restore them in resume. */
 	for (i = 0; i < MIXER_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		win_data->resume = win_data->enabled;
-		if (win_data->enabled)
-			mixer_win_disable(ctx, i);
+		if (win_data->enabled) {
+			mixer_win_disable_nowait(ctx, i);
+			count += 1;
+		}
 	}
-	mixer_wait_for_vblank(ctx);
+
+	/* Synchronously wait for any window disables to complete */
+	if (count)
+		mixer_wait_for_vblank(ctx);
 }
 
 static void mixer_window_resume(struct mixer_context *ctx)
