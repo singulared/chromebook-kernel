@@ -44,37 +44,6 @@
 		};
 	};
 
-	adc@12D10000 {
-		ncp15wb473@3 {
-			compatible = "ntc,ncp15wb473";
-			pullup-uv = <1800000>;
-			pullup-ohm = <47000>;
-			pulldown-ohm = <0>;
-			io-channels = <&adc 3>;
-		};
-		ncp15wb473@4 {
-			compatible = "ntc,ncp15wb473";
-			pullup-uv = <1800000>;
-			pullup-ohm = <47000>;
-			pulldown-ohm = <0>;
-			io-channels = <&adc 4>;
-		};
-		ncp15wb473@5 {
-			compatible = "ntc,ncp15wb473";
-			pullup-uv = <1800000>;
-			pullup-ohm = <47000>;
-			pulldown-ohm = <0>;
-			io-channels = <&adc 5>;
-		};
-		ncp15wb473@6 {
-			compatible = "ntc,ncp15wb473";
-			pullup-uv = <1800000>;
-			pullup-ohm = <47000>;
-			pulldown-ohm = <0>;
-			io-channels = <&adc 6>;
-		};
-	};
-
 	i2c@12CD0000 {
 		max98095: codec {
 			compatible = "maxim,max98095";
