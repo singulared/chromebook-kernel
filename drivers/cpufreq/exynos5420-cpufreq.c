@@ -404,7 +404,7 @@ static void __init set_volt_table(void)
 			max_support_idx = L3;
 		min_support_idx = L14;
 	} else {
-		max_support_idx = L3;
+		max_support_idx = L0;
 		min_support_idx = L13;
 	}
 
