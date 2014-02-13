@@ -141,12 +141,13 @@
 		status = "okay";
 		num-slots = <1>;
 		supports-highspeed;
+		supports-sdr50-mode;
 		broken-cd;
 		keep-power-in-suspend;
 		edge-triggered-interrupts;
 		fifo-depth = <0x80>;
 		card-detect-delay = <200>;
-		clock-frequency = <400000000>;
+		clock-frequency = <800000000>;
 		samsung,dw-mshc-ciu-div = <3>;
 		samsung,dw-mshc-sdr-timing = <2 3>;
 		samsung,dw-mshc-ddr-timing = <1 2>;
