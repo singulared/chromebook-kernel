@@ -110,9 +110,6 @@ static int get_lightbar_version(struct cros_ec_device *ec,
 	int ret;
 
 	param.cmd = LIGHTBAR_CMD_VERSION;
-	ret = lb_throttle();
-	if (ret)
-		return ret;
 	ret = cros_ec_cmd_xfer(ec, &msg);
 	if (ret < 0)
 		return 0;
@@ -144,6 +141,11 @@ static ssize_t show_version(struct device *dev,
 {
 	uint32_t version, flags;
 	struct cros_ec_device *ec = dev_get_drvdata(dev);
+	int ret;
+
+	ret = lb_throttle();
+	if (ret)
+		return ret;
 
 	/* This should always succeed, because we check during init. */
 	if (!get_lightbar_version(ec, &version, &flags))
