@@ -1913,6 +1913,9 @@ static void hdmi_conf_init(struct hdmi_context *hdata)
 				HDMI_MODE_DVI_EN, HDMI_MODE_MASK);
 		hdmi_reg_writeb(hdata, HDMI_CON_2,
 				HDMI_VID_PREAMBLE_DIS | HDMI_GUARD_BAND_DIS);
+	} else {
+		/* Apply Video preamble and Guard band in HDMI mode only */
+		hdmi_reg_writeb(hdata, HDMI_CON_2, 0);
 	}
 
 	if (hdata->version == HDMI_VER_EXYNOS4210) {
