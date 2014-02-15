@@ -2700,7 +2700,7 @@ static void hdmi_dpms(void *ctx, int mode)
 	}
 }
 
-static struct exynos_drm_display_ops hdmi_display_ops = {
+static const struct exynos_drm_display_ops hdmi_display_ops = {
 	.initialize	= hdmi_initialize,
 	.is_connected	= hdmi_is_connected,
 	.get_max_resol	= hdmi_get_max_resol,

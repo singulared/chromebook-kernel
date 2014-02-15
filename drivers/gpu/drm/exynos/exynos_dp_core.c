@@ -1025,7 +1025,7 @@ static void exynos_dp_dpms(void *in_ctx, int mode)
 	dp->dpms_mode = mode;
 }
 
-static struct exynos_drm_display_ops exynos_dp_display_ops = {
+static const struct exynos_drm_display_ops exynos_dp_display_ops = {
 	.initialize = exynos_dp_initialize,
 	.is_connected = exynos_dp_display_is_connected,
 	.get_panel = exynos_dp_get_panel,

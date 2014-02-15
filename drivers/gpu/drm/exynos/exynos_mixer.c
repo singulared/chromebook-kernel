@@ -1281,7 +1281,7 @@ static void mixer_dpms(void *ctx, int mode)
 	}
 }
 
-static struct exynos_drm_manager_ops mixer_manager_ops = {
+static const struct exynos_drm_manager_ops mixer_manager_ops = {
 	.initialize		= mixer_initialize,
 	.remove			= mixer_mgr_remove,
 	.dpms			= mixer_dpms,

@@ -913,7 +913,7 @@ static void fimd_dpms(void *in_ctx, int mode)
 	}
 }
 
-static struct exynos_drm_manager_ops fimd_manager_ops = {
+static const struct exynos_drm_manager_ops fimd_manager_ops = {
 	.initialize = fimd_mgr_initialize,
 	.remove = fimd_mgr_remove,
 	.dpms = fimd_dpms,
