@@ -22,6 +22,7 @@
 #include <asm/cputype.h>
 #include <asm/sections.h>
 #include <asm/cachetype.h>
+#include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/smp_plat.h>
 #include <asm/tlb.h>
@@ -254,8 +255,15 @@ static struct mem_type mem_types[] = {
 		.prot_l1   = PMD_TYPE_TABLE,
 		.domain    = DOMAIN_USER,
 	},
-	[MT_MEMORY] = {
+	[MT_MEMORY_RWX] = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY,
+		.prot_l1   = PMD_TYPE_TABLE,
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
+		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_RW] = {
+		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
+			     L_PTE_XN,
 		.prot_l1   = PMD_TYPE_TABLE,
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
@@ -264,26 +272,26 @@ static struct mem_type mem_types[] = {
 		.prot_sect = PMD_TYPE_SECT,
 		.domain    = DOMAIN_KERNEL,
 	},
-	[MT_MEMORY_NONCACHED] = {
+	[MT_MEMORY_RWX_NONCACHED] = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
 				L_PTE_MT_BUFFERABLE,
 		.prot_l1   = PMD_TYPE_TABLE,
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
 	},
-	[MT_MEMORY_DTCM] = {
+	[MT_MEMORY_RW_DTCM] = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
 				L_PTE_XN,
 		.prot_l1   = PMD_TYPE_TABLE,
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_XN,
 		.domain    = DOMAIN_KERNEL,
 	},
-	[MT_MEMORY_ITCM] = {
+	[MT_MEMORY_RWX_ITCM] = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY,
 		.prot_l1   = PMD_TYPE_TABLE,
 		.domain    = DOMAIN_KERNEL,
 	},
-	[MT_MEMORY_SO] = {
+	[MT_MEMORY_RW_SO] = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
 				L_PTE_MT_UNCACHED | L_PTE_XN,
 		.prot_l1   = PMD_TYPE_TABLE,
@@ -292,7 +300,8 @@ static struct mem_type mem_types[] = {
 		.domain    = DOMAIN_KERNEL,
 	},
 	[MT_MEMORY_DMA_READY] = {
-		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY,
+		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
+				L_PTE_XN,
 		.prot_l1   = PMD_TYPE_TABLE,
 		.domain    = DOMAIN_KERNEL,
 	},
@@ -303,6 +312,44 @@ const struct mem_type *get_mem_type(unsigned int type)
 	return type < ARRAY_SIZE(mem_types) ? &mem_types[type] : NULL;
 }
 EXPORT_SYMBOL(get_mem_type);
+
+#define PTE_SET_FN(_name, pteop) \
+static int pte_set_##_name(pte_t *ptep, pgtable_t token, unsigned long addr, \
+			void *data) \
+{ \
+	pte_t pte = pteop(*ptep); \
+\
+	set_pte_ext(ptep, pte, 0); \
+	return 0; \
+} \
+
+#define SET_MEMORY_FN(_name, callback) \
+int set_memory_##_name(unsigned long addr, int numpages) \
+{ \
+	unsigned long start = addr; \
+	unsigned long size = PAGE_SIZE*numpages; \
+	unsigned end = start + size; \
+\
+	if (start < MODULES_VADDR || start >= MODULES_END) \
+		return -EINVAL;\
+\
+	if (end < MODULES_VADDR || end >= MODULES_END) \
+		return -EINVAL; \
+\
+	apply_to_page_range(&init_mm, start, size, callback, NULL); \
+	flush_tlb_kernel_range(start, end); \
+	return 0;\
+}
+
+PTE_SET_FN(ro, pte_wrprotect)
+PTE_SET_FN(rw, pte_mkwrite)
+PTE_SET_FN(x, pte_mkexec)
+PTE_SET_FN(nx, pte_mknexec)
+
+SET_MEMORY_FN(ro, pte_set_ro)
+SET_MEMORY_FN(rw, pte_set_rw)
+SET_MEMORY_FN(x, pte_set_x)
+SET_MEMORY_FN(nx, pte_set_nx)
 
 /*
  * Adjust the PMD section entries according to the CPU in use.
@@ -376,6 +423,9 @@ static void __init build_mem_type_table(void)
 			mem_types[MT_DEVICE_NONSHARED].prot_sect |= PMD_SECT_XN;
 			mem_types[MT_DEVICE_CACHED].prot_sect |= PMD_SECT_XN;
 			mem_types[MT_DEVICE_WC].prot_sect |= PMD_SECT_XN;
+
+			/* Also setup NX memory mapping */
+			mem_types[MT_MEMORY_RW].prot_sect |= PMD_SECT_XN;
 		}
 		if (cpu_arch >= CPU_ARCH_ARMv7 && (cr & CR_TRE)) {
 			/*
@@ -450,11 +500,13 @@ static void __init build_mem_type_table(void)
 			mem_types[MT_DEVICE_WC].prot_pte |= L_PTE_SHARED;
 			mem_types[MT_DEVICE_CACHED].prot_sect |= PMD_SECT_S;
 			mem_types[MT_DEVICE_CACHED].prot_pte |= L_PTE_SHARED;
-			mem_types[MT_MEMORY].prot_sect |= PMD_SECT_S;
-			mem_types[MT_MEMORY].prot_pte |= L_PTE_SHARED;
+			mem_types[MT_MEMORY_RWX].prot_sect |= PMD_SECT_S;
+			mem_types[MT_MEMORY_RWX].prot_pte |= L_PTE_SHARED;
+			mem_types[MT_MEMORY_RW].prot_sect |= PMD_SECT_S;
+			mem_types[MT_MEMORY_RW].prot_pte |= L_PTE_SHARED;
 			mem_types[MT_MEMORY_DMA_READY].prot_pte |= L_PTE_SHARED;
-			mem_types[MT_MEMORY_NONCACHED].prot_sect |= PMD_SECT_S;
-			mem_types[MT_MEMORY_NONCACHED].prot_pte |= L_PTE_SHARED;
+			mem_types[MT_MEMORY_RWX_NONCACHED].prot_sect |= PMD_SECT_S;
+			mem_types[MT_MEMORY_RWX_NONCACHED].prot_pte |= L_PTE_SHARED;
 		}
 	}
 
@@ -465,15 +517,15 @@ static void __init build_mem_type_table(void)
 	if (cpu_arch >= CPU_ARCH_ARMv6) {
 		if (cpu_arch >= CPU_ARCH_ARMv7 && (cr & CR_TRE)) {
 			/* Non-cacheable Normal is XCB = 001 */
-			mem_types[MT_MEMORY_NONCACHED].prot_sect |=
+			mem_types[MT_MEMORY_RWX_NONCACHED].prot_sect |=
 				PMD_SECT_BUFFERED;
 		} else {
 			/* For both ARMv6 and non-TEX-remapping ARMv7 */
-			mem_types[MT_MEMORY_NONCACHED].prot_sect |=
+			mem_types[MT_MEMORY_RWX_NONCACHED].prot_sect |=
 				PMD_SECT_TEX(1);
 		}
 	} else {
-		mem_types[MT_MEMORY_NONCACHED].prot_sect |= PMD_SECT_BUFFERABLE;
+		mem_types[MT_MEMORY_RWX_NONCACHED].prot_sect |= PMD_SECT_BUFFERABLE;
 	}
 
 #ifdef CONFIG_ARM_LPAE
@@ -503,10 +555,12 @@ static void __init build_mem_type_table(void)
 
 	mem_types[MT_LOW_VECTORS].prot_l1 |= ecc_mask;
 	mem_types[MT_HIGH_VECTORS].prot_l1 |= ecc_mask;
-	mem_types[MT_MEMORY].prot_sect |= ecc_mask | cp->pmd;
-	mem_types[MT_MEMORY].prot_pte |= kern_pgprot;
+	mem_types[MT_MEMORY_RWX].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RWX].prot_pte |= kern_pgprot;
+	mem_types[MT_MEMORY_RW].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RW].prot_pte |= kern_pgprot;
 	mem_types[MT_MEMORY_DMA_READY].prot_pte |= kern_pgprot;
-	mem_types[MT_MEMORY_NONCACHED].prot_sect |= ecc_mask;
+	mem_types[MT_MEMORY_RWX_NONCACHED].prot_sect |= ecc_mask;
 	mem_types[MT_ROM].prot_sect |= cp->pmd;
 
 	switch (cp->pmd) {
@@ -1216,8 +1270,40 @@ static void __init map_lowmem(void)
 		map.pfn = __phys_to_pfn(start);
 		map.virtual = __phys_to_virt(start);
 		map.length = end - start;
-		map.type = MT_MEMORY;
 
+		if (map.virtual <= (unsigned long)_stext &&
+		    ((unsigned long)_end < (map.virtual + map.length))) {
+			struct map_desc kernel;
+
+			/* Kernel init. Set RW when freeing initmem. */
+			kernel.pfn = __phys_to_pfn(__pa(__init_begin));
+			kernel.virtual = (unsigned long)__init_begin;
+			kernel.length = _sdata - __init_begin;
+			kernel.type = MT_MEMORY_RWX;
+			create_mapping(&kernel);
+
+			/* Kernel text. Set RX when freeing initmem. */
+			kernel.pfn = __phys_to_pfn(__pa(_stext));
+			kernel.virtual = (unsigned long)_stext;
+			kernel.length = __init_begin - _stext;
+			kernel.type = MT_MEMORY_RWX;
+			create_mapping(&kernel);
+
+			/* Before the kernel, set RX when freeing initmem. */
+			if (map.virtual < (unsigned long)_stext) {
+				map.length = (unsigned long)_stext -
+					     map.virtual;
+				map.type = MT_MEMORY_RWX;
+				create_mapping(&map);
+			}
+
+			/* Anything after the kernel. */
+			map.pfn = __phys_to_pfn(__pa(_sdata));
+			map.virtual = (unsigned long)_sdata;
+			map.length = end - __pa(_sdata);
+		}
+
+		map.type = MT_MEMORY_RW;
 		create_mapping(&map);
 	}
 }

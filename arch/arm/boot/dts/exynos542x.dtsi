@@ -856,7 +856,6 @@
 	};
 
 	mfc: codec@11000000 {
-		compatible = "samsung,mfc-v7";
 		reg = <0x11000000 0x10000>;
 		interrupts = <0 96 0>;
 		clocks = <&clock 401>;
@@ -987,6 +986,24 @@
 		io-channel-ranges;
 		clocks = <&clock 270>;
 		clock-names = "adc";
+	};
+
+	pmu@0 {
+		compatible = "arm,cortex-a15-pmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <1 2>,
+			     <7 0>,
+			     <16 6>,
+			     <19 2>;
+	};
+
+	pmu@1 {
+		compatible = "arm,cortex-a7-pmu";
+		interrupt-parent = <&gic>;
+		interrupts = <0 192 4>,
+			     <0 193 4>,
+			     <0 194 4>,
+			     <0 195 4>;
 	};
 
 	pmu_syscon: syscon@10040000 {

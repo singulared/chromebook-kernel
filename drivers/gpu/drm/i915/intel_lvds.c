@@ -410,9 +410,9 @@ static int intel_lid_notify(struct notifier_block *nb, unsigned long val,
 	if (dev_priv->modeset_restore == MODESET_DONE)
 		goto exit;
 
-	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock_all(dev);
 	intel_modeset_setup_hw_state(dev, true);
-	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_unlock_all(dev);
 
 	dev_priv->modeset_restore = MODESET_DONE;
 

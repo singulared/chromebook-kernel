@@ -109,6 +109,7 @@
 #define pud_none(pud)		(!pud_val(pud))
 #define pud_bad(pud)		(!(pud_val(pud) & 2))
 #define pud_present(pud)	(pud_val(pud))
+#define pmd_large(pmd)		pmd_sect(pmd)
 
 #define pud_clear(pudp)			\
 	do {				\

@@ -23,10 +23,11 @@
 #include <mach/cpufreq.h>
 #include <mach/asv-exynos.h>
 
-#define CPUFREQ_NUM_LEVELS	(L18 + 1)
-#define CPUFREQ_NUM_LEVELS_CA7	(L11 + 1)
+#define CPUFREQ_NUM_LEVELS	(L19 + 1)
+#define CPUFREQ_NUM_LEVELS_CA7	(L13 + 1)
 #define EXYNOS5_CLKDIV_STATCPU0_MASK	0x11111111
 #define EXYNOS5_CLKDIV_STATCPU1_MASK	0x111
+#define EXYNOS5420_EVT2_REV_NUM	0x20
 
 static int max_support_idx;
 static int max_support_idx_CA7;
@@ -41,7 +42,6 @@ static struct clk *mout_kfc;
 static struct clk *mout_mspll_kfc;
 static struct clk *mout_kpll;
 static struct clk *fout_kpll;
-static struct clk *fout_spll;
 
 struct cpufreq_clkdiv {
 	unsigned int	index;
@@ -51,42 +51,45 @@ struct cpufreq_clkdiv {
 
 static unsigned int exynos5420_volt_table[CPUFREQ_NUM_LEVELS];
 static struct cpufreq_frequency_table exynos5420_freq_table[] = {
-	{L0,  2000 * 1000},
-	{L1,  1900 * 1000},
-	{L2,  1800 * 1000},
-	{L3,  1700 * 1000},
-	{L4,  1600 * 1000},
-	{L5,  1500 * 1000},
-	{L6,  1400 * 1000},
-	{L7,  1300 * 1000},
-	{L8,  1200 * 1000},
-	{L9,  1100 * 1000},
-	{L10, 1000 * 1000},
-	{L11,  900 * 1000},
-	{L12,  800 * 1000},
-	{L13,  700 * 1000},
-	{L14,  600 * 1000},
-	{L15,  500 * 1000},
-	{L16,  400 * 1000},
-	{L17,  300 * 1000},
-	{L18,  200 * 1000},
+	{L0,  2100 * 1000},
+	{L1,  2000 * 1000},
+	{L2,  1900 * 1000},
+	{L3,  1800 * 1000},
+	{L4,  1700 * 1000},
+	{L5,  1600 * 1000},
+	{L6,  1500 * 1000},
+	{L7,  1400 * 1000},
+	{L8,  1300 * 1000},
+	{L9,  1200 * 1000},
+	{L10, 1100 * 1000},
+	{L11, 1000 * 1000},
+	{L12,  900 * 1000},
+	{L13,  800 * 1000},
+	{L14,  700 * 1000},
+	{L15,  600 * 1000},
+	{L16,  500 * 1000},
+	{L17,  400 * 1000},
+	{L18,  300 * 1000},
+	{L19,  200 * 1000},
 	{0, CPUFREQ_TABLE_END},
 };
 
 static unsigned int exynos5420_volt_table_CA7[CPUFREQ_NUM_LEVELS_CA7];
 static struct cpufreq_frequency_table exynos5420_freq_table_CA7[] = {
-	{L0, 1300 * 1000},
-	{L1, 1200 * 1000},
-	{L2, 1100 * 1000},
-	{L3, 1000 * 1000},
-	{L4,  900 * 1000},
-	{L5,  800 * 1000},
-	{L6,  700 * 1000},
-	{L7,  600 * 1000},
-	{L8,  500 * 1000},
-	{L9,  400 * 1000},
-	{L10, 300 * 1000},
-	{L11, 200 * 1000},
+	{L0, 1500 * 1000},
+	{L1, 1400 * 1000},
+	{L2, 1300 * 1000},
+	{L3, 1200 * 1000},
+	{L4, 1100 * 1000},
+	{L5, 1000 * 1000},
+	{L6,  900 * 1000},
+	{L7,  800 * 1000},
+	{L8,  700 * 1000},
+	{L9,  600 * 1000},
+	{L10, 500 * 1000},
+	{L11, 400 * 1000},
+	{L12, 300 * 1000},
+	{L13, 200 * 1000},
 	{0, CPUFREQ_TABLE_END},
 };
 
@@ -94,108 +97,119 @@ static struct cpufreq_clkdiv
 			exynos5420_clkdiv_table_CA7[CPUFREQ_NUM_LEVELS_CA7];
 static struct cpufreq_clkdiv exynos5420_clkdiv_table[CPUFREQ_NUM_LEVELS];
 
-static unsigned int clkdiv_cpu0_5420[CPUFREQ_NUM_LEVELS][7] = {
+static unsigned int clkdiv_cpu0_5420[CPUFREQ_NUM_LEVELS][6] = {
 	/*
-	 *  Clock divider values for {CPUD, ATB, PCLK_DBG, APLL, ARM2}
+	 *  Clock divider values for
+	 *  {CPUD_5420, CPUD_5422, ATB, PCLK_DBG, APLL, ARM2}
 	 */
-	{ 2, 7, 7, 3, 0 }, /* ARM L0: 2.0GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L1: 1.9GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L2: 1.8GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L3: 1.7GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L4: 1.6GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L5: 1.5GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L6: 1.4GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L7: 1.3GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L8: 1.2GHz */
-	{ 2, 7, 7, 3, 0 }, /* ARM L9: 1.1GHz */
-	{ 2, 6, 6, 3, 0 }, /* ARM L10: 1GHz */
-	{ 2, 6, 6, 3, 0 }, /* ARM L11: 900MHz */
-	{ 2, 5, 5, 3, 0 }, /* ARM L12: 800MHz */
-	{ 2, 5, 5, 3, 0 }, /* ARM L13: 700MHz */
-	{ 2, 4, 4, 3, 0 }, /* ARM L14: 600MHz */
-	{ 2, 3, 3, 3, 0 }, /* ARM L15: 500MHz */
-	{ 2, 3, 3, 3, 0 }, /* ARM L16: 400MHz */
-	{ 2, 3, 3, 3, 0 }, /* ARM L17: 300MHz */
-	{ 2, 3, 3, 3, 0 }, /* ARM L18: 200MHz */
+	{ 2, 4, 7, 7, 3, 0 }, /* ARM L0:  2.1GHz */
+	{ 2, 4, 7, 7, 3, 0 }, /* ARM L1:  2.0GHz */
+	{ 2, 4, 7, 7, 3, 0 }, /* ARM L2:  1.9GHz */
+	{ 2, 4, 7, 7, 3, 0 }, /* ARM L3:  1.8GHz */
+	{ 2, 3, 7, 7, 3, 0 }, /* ARM L4:  1.7GHz */
+	{ 2, 3, 7, 7, 3, 0 }, /* ARM L5:  1.6GHz */
+	{ 2, 3, 7, 7, 3, 0 }, /* ARM L6:  1.5GHz */
+	{ 2, 3, 7, 7, 3, 0 }, /* ARM L7:  1.4GHz */
+	{ 2, 2, 7, 7, 3, 0 }, /* ARM L8:  1.3GHz */
+	{ 2, 2, 7, 7, 3, 0 }, /* ARM L9:  1.2GHz */
+	{ 2, 2, 7, 7, 3, 0 }, /* ARM L10: 1.1GHz */
+	{ 2, 2, 6, 6, 3, 0 }, /* ARM L11: 1.0GHz */
+	{ 2, 2, 6, 6, 3, 0 }, /* ARM L12: 900MHz */
+	{ 2, 2, 5, 5, 3, 0 }, /* ARM L13: 800MHz */
+	{ 2, 2, 5, 5, 3, 0 }, /* ARM L14: 700MHz */
+	{ 2, 2, 4, 4, 3, 0 }, /* ARM L15: 600MHz */
+	{ 2, 2, 3, 3, 3, 0 }, /* ARM L16: 500MHz */
+	{ 2, 2, 3, 3, 3, 0 }, /* ARM L17: 400MHz */
+	{ 2, 2, 3, 3, 3, 0 }, /* ARM L18: 300MHz */
+	{ 2, 2, 3, 3, 3, 0 }, /* ARM L19: 200MHz */
 };
 
-static unsigned int clkdiv_cpu0_5420_CA7[CPUFREQ_NUM_LEVELS_CA7][5] = {
-	/* Clock divider values for { KFC, ACLK, HPM, PCLK, KPLL } */
-	{ 0, 2, 7, 6, 3 },  /* KFC L0:  1.3GHz */
-	{ 0, 2, 7, 5, 3 },  /* KFC L1:  1.2GHz */
-	{ 0, 2, 7, 5, 3 },  /* KFC L2:  1.1GHz */
-	{ 0, 2, 7, 5, 3 },  /* KFC L3:  1.0GHz */
-	{ 0, 2, 7, 5, 3 },  /* KFC L4:  900MHz */
-	{ 0, 2, 7, 5, 3 },  /* KFC L5:  800MHz */
-	{ 0, 2, 7, 4, 3 },  /* KFC L6:  700MHz */
-	{ 0, 2, 7, 4, 3 },  /* KFC L7:  600MHz */
-	{ 0, 2, 7, 4, 3 },  /* KFC L8:  500MHz */
-	{ 0, 2, 7, 3, 3 },  /* KFC L9:  400MHz */
-	{ 0, 2, 7, 3, 3 },  /* KFC L10: 300MHz */
-	{ 0, 2, 7, 3, 3 },  /* KFC L11: 200MHz */
+static unsigned int clkdiv_cpu0_5420_CA7[CPUFREQ_NUM_LEVELS_CA7][6] = {
+	/*
+	 * Clock divider values for
+	 * {KFC, ACLK_5420, ACLK_5422, HPM, PCLK, KPLL}
+	 */
+	{ 0, 2, 3, 7, 5, 3 },  /* KFC L0:  1.5GHz */
+	{ 0, 2, 3, 7, 5, 3 },  /* KFC L1:  1.4GHz */
+	{ 0, 2, 2, 7, 5, 3 },  /* KFC L2:  1.3GHz */
+	{ 0, 2, 2, 7, 5, 3 },  /* KFC L3:  1.2GHz */
+	{ 0, 2, 2, 7, 5, 3 },  /* KFC L4:  1.1GHz */
+	{ 0, 2, 2, 7, 5, 3 },  /* KFC L5:  1.0GHz */
+	{ 0, 2, 2, 7, 5, 3 },  /* KFC L6:  900MHz */
+	{ 0, 2, 1, 7, 5, 3 },  /* KFC L7:  800MHz */
+	{ 0, 2, 1, 7, 4, 3 },  /* KFC L8:  700MHz */
+	{ 0, 2, 1, 7, 4, 3 },  /* KFC L9:  600MHz */
+	{ 0, 2, 1, 7, 4, 3 },  /* KFC L10: 500MHz */
+	{ 0, 2, 1, 7, 3, 3 },  /* KFC L11: 400MHz */
+	{ 0, 2, 1, 7, 3, 3 },  /* KFC L12: 300MHz */
+	{ 0, 2, 1, 7, 3, 3 },  /* KFC L13: 200MHz */
 };
 
 unsigned int clkdiv_cpu1_5420[CPUFREQ_NUM_LEVELS][2] = {
 	/* Clock divider values for { copy, HPM } */
-	{ 7, 7 }, /* ARM L0: 2.0GHz */
-	{ 7, 7 }, /* ARM L1: 1.9GHz */
-	{ 7, 7 }, /* ARM L2: 1.8GHz */
-	{ 7, 7 }, /* ARM L3: 1.7GHz */
-	{ 7, 7 }, /* ARM L4: 1.6GHz */
-	{ 7, 7 }, /* ARM L5: 1.5GHz */
-	{ 7, 7 }, /* ARM L6: 1.4GHz */
-	{ 7, 7 }, /* ARM L7: 1.3GHz */
-	{ 7, 7 }, /* ARM L8: 1.2GHz */
-	{ 7, 7 }, /* ARM L9: 1.1GHz */
-	{ 7, 7 }, /* ARM L10: 1GHz */
-	{ 7, 7 }, /* ARM L11: 900MHz */
-	{ 7, 7 }, /* ARM L12: 800MHz */
-	{ 7, 7 }, /* ARM L13: 700MHz */
-	{ 7, 7 }, /* ARM L14: 600MHz */
-	{ 7, 7 }, /* ARM L15: 500MHz */
-	{ 7, 7 }, /* ARM L16: 400MHz */
-	{ 7, 7 }, /* ARM L17: 300MHz */
-	{ 7, 7 }, /* ARM L18: 200MHz */
+	{ 7, 7 }, /* ARM L0:  2.1GHz */
+	{ 7, 7 }, /* ARM L1:  2.0GHz */
+	{ 7, 7 }, /* ARM L2:  1.9GHz */
+	{ 7, 7 }, /* ARM L3:  1.8GHz */
+	{ 7, 7 }, /* ARM L4:  1.7GHz */
+	{ 7, 7 }, /* ARM L5:  1.6GHz */
+	{ 7, 7 }, /* ARM L6:  1.5GHz */
+	{ 7, 7 }, /* ARM L7:  1.4GHz */
+	{ 7, 7 }, /* ARM L8:  1.3GHz */
+	{ 7, 7 }, /* ARM L9:  1.2GHz */
+	{ 7, 7 }, /* ARM L10: 1.1GHz */
+	{ 7, 7 }, /* ARM L11: 1.0GHz */
+	{ 7, 7 }, /* ARM L12: 900MHz */
+	{ 7, 7 }, /* ARM L13: 800MHz */
+	{ 7, 7 }, /* ARM L14: 700MHz */
+	{ 7, 7 }, /* ARM L15: 600MHz */
+	{ 7, 7 }, /* ARM L16: 500MHz */
+	{ 7, 7 }, /* ARM L17: 400MHz */
+	{ 7, 7 }, /* ARM L18: 300MHz */
+	{ 7, 7 }, /* ARM L19: 200MHz */
 };
 
 /*
  * Default ASV table
  */
 static const unsigned int asv_voltage_5420[CPUFREQ_NUM_LEVELS] = {
-	1300000,	/* L0  2000 */
-	1300000,	/* L1  1900 */
-	1200000,	/* L2  1800 */
-	1200000,	/* L3  1700 */
-	1200000,	/* L4  1600 */
-	1175000,	/* L5  1500 */
-	1150000,	/* L6  1400 */
-	1125000,	/* L7  1300 */
-	1100000,	/* L8  1200 */
-	1075000,	/* L9  1100 */
-	1050000,	/* L10 1000 */
-	1000000,	/* L11  900 */
-	 950000,	/* L12  800 */
-	 925000,	/* L13  700 */
-	 900000,	/* L14  600 */
-	 900000,	/* L15  500 */
-	 900000,	/* L16  400 */
-	 900000,	/* L17  300 */
-	 900000,	/* L18  200 */
+	1362500,	/* L0  2100 */
+	1312500,	/* L1  2000 */
+	1275000,	/* L2  1900 */
+	1225000,	/* L3  1800 */
+	1200000,	/* L4  1700 */
+	1200000,	/* L5  1600 */
+	1175000,	/* L6  1500 */
+	1150000,	/* L7  1400 */
+	1125000,	/* L8  1300 */
+	1100000,	/* L9  1200 */
+	1075000,	/* L10 1100 */
+	1050000,	/* L11 1000 */
+	1000000,	/* L12  900 */
+	 950000,	/* L13  800 */
+	 925000,	/* L14  700 */
+	 900000,	/* L15  600 */
+	 900000,	/* L16  500 */
+	 900000,	/* L17  400 */
+	 900000,	/* L18  300 */
+	 900000,	/* L19  200 */
 };
 
 static const unsigned int asv_voltage_5420_CA7[CPUFREQ_NUM_LEVELS_CA7] = {
-	1300000,	/* LO 1300 */
-	1200000,	/* L1 1200 */
-	1200000,	/* L2 1100 */
-	1100000,	/* L3 1000 */
-	1100000,	/* L4  900 */
-	1100000,	/* L5  800 */
-	1000000,	/* L6  700 */
-	1000000,	/* L7  600 */
-	1000000,	/* L8  500 */
-	1000000,	/* L9  400 */
-	 900000,	/* L10 300 */
-	 900000,	/* L11 200 */
+	1300000,	/* L0 1500 */
+	1300000,	/* L1 1400 */
+	1300000,	/* L2 1300 */
+	1200000,	/* L3 1200 */
+	1200000,	/* L4 1100 */
+	1112500,	/* L5 1000 */
+	1100000,	/* L6  900 */
+	1100000,	/* L7  800 */
+	1000000,	/* L8  700 */
+	1000000,	/* L9  600 */
+	1000000,	/* L10 500 */
+	1000000,	/* L11 400 */
+	 900000,	/* L12 300 */
+	 900000,	/* L13 200 */
 };
 
 static void exynos5420_set_clkdiv(unsigned int div_index)
@@ -244,7 +258,6 @@ static void exynos5420_set_apll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
-	clk_prepare_enable(fout_spll);
 	/* 1. MUX_CORE_SEL = MOUT_MSPLL; ARMCLK uses MOUT_MSPLL for lock time */
 	if (clk_set_parent(mout_cpu, mout_mspll_cpu)) {
 		pr_err(KERN_ERR "Unable to set parent %s of clock %s.\n",
@@ -274,8 +287,6 @@ static void exynos5420_set_apll(unsigned int new_index,
 		tmp = __raw_readl(EXYNOS5_CLKMUX_STATCPU);
 		tmp &= EXYNOS5_CLKMUX_STATCPU_MUXCORE_MASK;
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT));
-
-	clk_disable_unprepare(fout_spll);
 }
 
 static void exynos5420_set_kpll(unsigned int new_index,
@@ -284,7 +295,6 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
-	clk_prepare_enable(fout_spll);
 	/* 0. before change to MPLL, set div for MPLL output */
 	if ((new_index < L5) && (old_index < L5))
 		exynos5420_set_clkdiv_CA7(L5); /* pll_safe_index of CA7 */
@@ -317,8 +327,6 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	/* 4. restore original div value */
 	if ((new_index < L5) && (old_index < L5))
 		exynos5420_set_clkdiv_CA7(new_index);
-
-	clk_disable_unprepare(fout_spll);
 }
 
 static bool exynos5420_pms_change(unsigned int old_index,
@@ -372,6 +380,7 @@ static void __init set_volt_table(void)
 {
 	unsigned int i;
 	unsigned int asv_volt = 0;
+	unsigned int exynos5420_rev_num;
 
 	for (i = 0; i < CPUFREQ_NUM_LEVELS; i++) {
 #ifdef CONFIG_ARM_EXYNOS5420_ASV
@@ -385,13 +394,25 @@ static void __init set_volt_table(void)
 		pr_debug("CPUFREQ of CA15 L%d : %d uV\n", i,
 				exynos5420_volt_table[i]);
 	}
-	for (i = L0; i < L2; i++)
-		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
-	for (i = L14; i <= L18; i++)
+
+	if (soc_is_exynos5420()) {
+		exynos5420_rev_num = samsung_rev();
+
+		if (exynos5420_rev_num >= EXYNOS5420_EVT2_REV_NUM)
+			max_support_idx = L2;
+		else
+			max_support_idx = L3;
+		min_support_idx = L14;
+	} else {
+		max_support_idx = L3;
+		min_support_idx = L13;
+	}
+
+	for (i = L0; i < max_support_idx; i++)
 		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
 
-	max_support_idx = L2;
-	min_support_idx = L13;
+	for (i = (min_support_idx + 1); i < CPUFREQ_NUM_LEVELS; i++)
+		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
 }
 
 static void __init set_volt_table_CA7(void)
@@ -411,10 +432,18 @@ static void __init set_volt_table_CA7(void)
 		pr_debug("CPUFREQ of CA7  L%d : %d uV\n", i,
 				exynos5420_volt_table_CA7[i]);
 	}
-	for (i = L8; i <= L11; i++)
+
+	if (soc_is_exynos5420())
+		max_support_idx_CA7 = L2;
+	else
+		max_support_idx_CA7 = L0;
+	min_support_idx_CA7 = L9;
+
+	for (i = L0; i < max_support_idx_CA7; i++)
 		exynos5420_freq_table_CA7[i].frequency = CPUFREQ_ENTRY_INVALID;
-	max_support_idx_CA7 = L0;
-	min_support_idx_CA7 = L7;
+
+	for (i = (min_support_idx_CA7 + 1); i < CPUFREQ_NUM_LEVELS_CA7; i++)
+		exynos5420_freq_table_CA7[i].frequency = CPUFREQ_ENTRY_INVALID;
 }
 
 int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
@@ -422,31 +451,36 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 	int i;
 	unsigned int tmp;
 	unsigned long rate;
-	struct clk *sclk_spll;
+	unsigned int aclk_index;
+	struct clk *mout_mspll_kfc_p;
 
 	set_volt_table_CA7();
 
 	mout_kfc = clk_get(NULL, "mout_kfc");
-	if (IS_ERR(mout_cpu))
+	if (IS_ERR(mout_kfc))
 		goto err_mout_kfc;
 
 	mout_mspll_kfc = clk_get(NULL, "mout_mspll_kfc");
 	if (IS_ERR(mout_mspll_kfc))
 		goto err_mout_mspll_kfc;
-	sclk_spll = clk_get(NULL, "mout_spll");
-	if (IS_ERR(sclk_spll))
-	{
-		pr_err("Clock sclk_spll not found\n");
-		goto err_sclk_spll;
+
+	if (soc_is_exynos5422())
+		mout_mspll_kfc_p = clk_get(NULL, "mout_cpll");
+	else
+		mout_mspll_kfc_p = clk_get(NULL, "mout_spll");
+	if (IS_ERR(mout_mspll_kfc_p)) {
+		pr_err("Clock mout_mspll_kfc_p not found\n");
+		goto err_mout_mspll_kfc_p;
 	}
-	clk_set_parent(mout_mspll_kfc, sclk_spll);
-	clk_put(sclk_spll);
+
+	clk_set_parent(mout_mspll_kfc, mout_mspll_kfc_p);
+	clk_put(mout_mspll_kfc_p);
 
 	rate = clk_get_rate(mout_mspll_kfc) / 1000;
 
 	mout_kpll = clk_get(NULL, "mout_kpll");
 	if (IS_ERR(mout_kpll))
-		goto err_mout_kpll;
+		goto err_mout_mspll_kfc_p;
 
 	fout_kpll = clk_get(NULL, "fout_kpll");
 	if (IS_ERR(fout_kpll))
@@ -463,15 +497,19 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 			EXYNOS5_CLKDIV_KFC0_PCLK_MASK |
 			EXYNOS5_CLKDIV_KFC0_KPLL_MASK);
 
+		if (soc_is_exynos5420())
+			aclk_index = 1;
+		else
+			aclk_index = 2;
 		tmp |= ((clkdiv_cpu0_5420_CA7[i][0] <<
 				EXYNOS5_CLKDIV_KFC0_CORE_SHIFT) |
-			(clkdiv_cpu0_5420_CA7[i][1] <<
+			(clkdiv_cpu0_5420_CA7[i][aclk_index] <<
 				EXYNOS5_CLKDIV_KFC0_ACLK_SHIFT) |
-			(clkdiv_cpu0_5420_CA7[i][2] <<
-				EXYNOS5_CLKDIV_KFC0_HPM_SHIFT) |
 			(clkdiv_cpu0_5420_CA7[i][3] <<
-				EXYNOS5_CLKDIV_KFC0_PCLK_SHIFT)|
+				EXYNOS5_CLKDIV_KFC0_HPM_SHIFT) |
 			(clkdiv_cpu0_5420_CA7[i][4] <<
+				EXYNOS5_CLKDIV_KFC0_PCLK_SHIFT) |
+			(clkdiv_cpu0_5420_CA7[i][5] <<
 				EXYNOS5_CLKDIV_KFC0_KPLL_SHIFT));
 
 		exynos5420_clkdiv_table_CA7[i].clkdiv = tmp;
@@ -493,9 +531,7 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 
 err_fout_kpll:
 	clk_put(mout_kpll);
-err_mout_kpll:
-	clk_put(sclk_spll);
-err_sclk_spll:
+err_mout_mspll_kfc_p:
 	clk_put(mout_mspll_kfc);
 err_mout_mspll_kfc:
 	clk_put(mout_kfc);
@@ -510,38 +546,36 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 	int i;
 	unsigned int tmp;
 	unsigned long rate;
-	struct clk *sclk_spll;
+	unsigned int cpud_index;
+	struct clk *mout_mspll_cpu_p;
 
 	set_volt_table();
 
 	mout_cpu = clk_get(NULL, "mout_cpu");
 	if (IS_ERR(mout_cpu))
-		return PTR_ERR(mout_cpu);
+		goto err_mout_cpu;
 
 	mout_mspll_cpu = clk_get(NULL, "mout_mspll_cpu");
 	if (IS_ERR(mout_mspll_cpu))
 		goto err_mout_mspll_cpu;
-	sclk_spll = clk_get(NULL, "mout_spll");
-	if (IS_ERR(sclk_spll))
-	{
-		pr_err("Clock sclk_spll not found\n");
-		goto err_sclk_spll;
-	}
-	clk_set_parent(mout_mspll_cpu, sclk_spll);
-	clk_put(sclk_spll);
 
-	fout_spll = clk_get(NULL, "fout_spll");
-	if (IS_ERR(fout_spll))
-	{
-		pr_err("Clock fout_spll not found\n");
-		goto err_fout_spll;
+	if (soc_is_exynos5422())
+		mout_mspll_cpu_p = clk_get(NULL, "mout_mpll");
+	else
+		mout_mspll_cpu_p = clk_get(NULL, "mout_spll");
+	if (IS_ERR(mout_mspll_cpu_p)) {
+		pr_err("Clock mout_mspll_cpu_p not found\n");
+		goto err_mout_mspll_cpu_p;
 	}
+
+	clk_set_parent(mout_mspll_cpu, mout_mspll_cpu_p);
+	clk_put(mout_mspll_cpu_p);
 
 	rate = clk_get_rate(mout_mspll_cpu) / 1000;
 
 	mout_apll = clk_get(NULL, "mout_apll");
 	if (IS_ERR(mout_apll))
-		goto err_mout_apll;
+		goto err_mout_mspll_cpu_p;
 
 	fout_apll = clk_get(NULL, "fout_apll");
 	if (IS_ERR(fout_apll))
@@ -556,16 +590,21 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 			EXYNOS5_CLKDIV_CPU0_PCLKDBG_MASK |
 			EXYNOS5_CLKDIV_CPU0_APLL_MASK |
 			EXYNOS5_CLKDIV_CPU0_CORE2_MASK);
-		tmp |= ((clkdiv_cpu0_5420[i][0] <<
-				EXYNOS5_CLKDIV_CPU0_CPUD_SHIFT) |
-			(clkdiv_cpu0_5420[i][1] <<
-				EXYNOS5_CLKDIV_CPU0_ATB_SHIFT) |
+
+		if (soc_is_exynos5420())
+			cpud_index = 0;
+		else
+			cpud_index = 1;
+		tmp |= ((clkdiv_cpu0_5420[i][cpud_index] <<
+			EXYNOS5_CLKDIV_CPU0_CPUD_SHIFT) |
 			(clkdiv_cpu0_5420[i][2] <<
-				EXYNOS5_CLKDIV_CPU0_PCLKDBG_SHIFT) |
+			EXYNOS5_CLKDIV_CPU0_ATB_SHIFT) |
 			(clkdiv_cpu0_5420[i][3] <<
-				EXYNOS5_CLKDIV_CPU0_APLL_SHIFT) |
+			EXYNOS5_CLKDIV_CPU0_PCLKDBG_SHIFT) |
 			(clkdiv_cpu0_5420[i][4] <<
-				EXYNOS5_CLKDIV_CPU0_CORE2_SHIFT));
+			EXYNOS5_CLKDIV_CPU0_APLL_SHIFT) |
+			(clkdiv_cpu0_5420[i][5] <<
+			EXYNOS5_CLKDIV_CPU0_CORE2_SHIFT));
 
 		exynos5420_clkdiv_table[i].clkdiv = tmp;
 
@@ -600,15 +639,12 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 	return 0;
 
 err_fout_apll:
-	clk_put(fout_apll);
-err_mout_apll:
 	clk_put(mout_apll);
-err_fout_spll:
-	clk_put(fout_spll);
-err_sclk_spll:
-	clk_put(sclk_spll);
-err_mout_mspll_cpu:
+err_mout_mspll_cpu_p:
 	clk_put(mout_mspll_cpu);
+err_mout_mspll_cpu:
+	clk_put(mout_cpu);
+err_mout_cpu:
 
 	pr_err("%s: failed initialization\n", __func__);
 	return -EINVAL;

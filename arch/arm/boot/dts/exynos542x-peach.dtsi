@@ -160,16 +160,16 @@
 	pinctrl@13410000 {
 		/* Adjust WiFi drive strengths lower for EMI */
 		sd1_clk: sd1-clk {
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 		sd1_cmd: sd1-cmd {
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 		sd1_bus4: sd1-bus-width4 {
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 		sd1_bus8: sd1-bus-width8 {
-			samsung,pin-drv = <0>;
+			samsung,pin-drv = <2>;
 		};
 	};
 
@@ -301,6 +301,7 @@
 		bypass-smu;
 		supports-highspeed;
 		non-removable;
+		caps2-mmc-hs200-1_8v;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		clock-frequency = <400000000>;
@@ -327,6 +328,7 @@
 		num-slots = <1>;
 		supports-highspeed;
 		supports-sdr50-mode;
+		supports-sdr104-mode;
 		keep-power-in-suspend;
 		/* non-removable NOT set so mwifiex driver can use reset trick */
 		edge-triggered-interrupts;
@@ -334,7 +336,7 @@
 		bypass-smu;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
-		clock-frequency = <400000000>;
+		clock-frequency = <800000000>;
 		samsung,dw-mshc-ciu-div = <3>;
 		samsung,dw-mshc-sdr-timing = <4 4>;
 		samsung,dw-mshc-ddr-timing = <0 2>;
@@ -469,6 +471,7 @@
 						fet5 {
 							regulator-name = "camout";
 							regulator-always-on;
+							regulator-suspend-mem-disabled;
 						};
 						fet6 {
 							regulator-name = "lcd_vdd";
@@ -885,7 +888,7 @@
 		clock-frequency = <400000>;
 
 		max98090: codec@10 {
-			compatible = "maxim,max98090";
+			/* compatible string defined in variant-boards */
 			reg = <0x10>;
 			interrupts = <2 0>;
 			interrupt-parent = <&gpx0>;
@@ -948,7 +951,7 @@
 	};
 
 	sound {
-		compatible = "google,daisy-audio-max98090";
+		/* compatible string defined in variant-boards */
 		samsung,i2s-controller = <&i2s_0>;
 		samsung,audio-codec = <&max98090>;
 		samsung,mic-det-gpios = <&gpx1 7 1>;
@@ -967,8 +970,6 @@
 		samsung,fimd-inv-vclk;
 		samsung,default-window = <0>;
 		samsung,fimd-win-bpp = <32>;
-		samsung,use-fimd-dithering;
-		samsung-rgb-dithpos = <6 6 6>;
 	};
 
 	display-port-controller {

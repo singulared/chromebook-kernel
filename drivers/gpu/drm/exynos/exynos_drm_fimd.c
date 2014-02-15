@@ -120,12 +120,16 @@ struct fimd_context {
 	u32				vidcon1;
 	bool				suspended;
 	int				pipe;
+	wait_queue_head_t		wait_vsync_queue;
+	atomic_t			wait_vsync_event;
 	enum dither_mode		dither_mode;
 	u32				dither_rgb_bpc[3];
 	unsigned int			irq;
 };
 
 static struct device *dp_dev;
+
+static void fimd_wait_for_vblank(struct fimd_context *ctx);
 
 void exynos_fimd_dp_attach(struct device *dev)
 {
@@ -475,7 +479,11 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 	win_data->enabled = true;
 }
 
-static void fimd_win_disable(void *in_ctx, int zpos)
+/*
+ * Schedule a window (hardware overlay) to be disabled at the next vblank.
+ * This is useful when disabling multiple windows, for example during suspend.
+ */
+static void fimd_win_disable_nowait(void *in_ctx, int zpos)
 {
 	struct fimd_context *ctx = in_ctx;
 	struct fimd_win_data *win_data;
@@ -515,6 +523,21 @@ static void fimd_win_disable(void *in_ctx, int zpos)
 	writel(val, ctx->regs + SHADOWCON);
 
 	win_data->enabled = false;
+}
+
+/*
+ * Schedule a window (hardware overlay) to be disabled at the next vblank, and
+ * synchronously wait for that vblank.
+ * This is called when disabling a single plane.
+ */
+static void fimd_win_disable(void *in_ctx, int zpos)
+{
+	struct fimd_context *ctx = in_ctx;
+
+	fimd_win_disable_nowait(in_ctx, zpos);
+
+	/* Synchronously wait for window to be disabled */
+	fimd_wait_for_vblank(ctx);
 }
 
 static int fimd_mgr_initialize(void *in_ctx, struct drm_device *drm_dev,
@@ -701,19 +724,53 @@ static void fimd_disable_vblank(void *in_ctx)
 	disable_irq(ctx->irq);
 }
 
+static void fimd_wait_for_vblank(struct fimd_context *ctx)
+{
+	u32 val;
+
+	if (ctx->suspended)
+		return;
+
+	DRM_DEBUG_KMS("\n");
+
+	val = readl(ctx->regs + VIDINTCON0);
+
+	drm_vblank_get(ctx->drm_dev, ctx->pipe);
+
+	atomic_set(&ctx->wait_vsync_event, 1);
+
+	/*
+	 * wait for FIMD to signal VSYNC interrupt or return after
+	 * timeout which is set to 50ms (refresh rate of 20).
+	 */
+	if (!wait_event_timeout(ctx->wait_vsync_queue,
+				!atomic_read(&ctx->wait_vsync_event),
+				DRM_HZ/20))
+		DRM_ERROR("vblank wait timed out.\n");
+
+	drm_vblank_put(ctx->drm_dev, ctx->pipe);
+}
+
 static void fimd_window_suspend(struct fimd_context *ctx)
 {
 	struct fimd_win_data *win_data;
 	int i;
+	int count = 0;
 
 	DRM_DEBUG_KMS("\n");
 
+	/* Disable enabled windows and save state to restore them in resume. */
 	for (i = 0; i < FIMD_WIN_NR; i++) {
 		win_data = &ctx->win_data[i];
 		win_data->resume = win_data->enabled;
-		if (win_data->enabled)
-			fimd_win_disable(ctx, i);
+		if (win_data->enabled) {
+			fimd_win_disable_nowait(ctx, i);
+			count += 1;
+		}
 	}
+	/* Synchronously wait for any window disables to complete */
+	if (count)
+		fimd_wait_for_vblank(ctx);
 }
 
 static void fimd_window_resume(struct fimd_context *ctx)
@@ -807,6 +864,8 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	 */
 	fimd_window_suspend(ctx);
 
+	fimd_disable_vblank(ctx);
+
 	writel(0, ctx->regs + DPCLKCON);
 
 	clk_disable_unprepare(ctx->lcd_clk);
@@ -877,6 +936,11 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 	drm_handle_vblank(ctx->drm_dev, ctx->pipe);
 	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
+	/* set wait vsync event to zero and wake up queue. */
+	if (atomic_read(&ctx->wait_vsync_event)) {
+		atomic_set(&ctx->wait_vsync_event, 0);
+		DRM_WAKEUP(&ctx->wait_vsync_queue);
+	}
 out:
 	return IRQ_HANDLED;
 }
@@ -1061,6 +1125,8 @@ static int fimd_probe(struct platform_device *pdev)
 			exynos_drm_fimd_dithering_name(ctx->dither_mode));
 
 	ctx->suspended = true;
+	DRM_INIT_WAITQUEUE(&ctx->wait_vsync_queue);
+	atomic_set(&ctx->wait_vsync_event, 0);
 
 	platform_set_drvdata(pdev, ctx);
 

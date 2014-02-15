@@ -207,6 +207,8 @@ static struct regulator_ops tps65090_fet_control_ops = {
 	.enable		= tps65090_fet_enable,
 	.disable	= regulator_disable_regmap,
 	.is_enabled	= tps65090_fet_is_enabled,
+	.set_suspend_enable	= tps65090_fet_enable,
+	.set_suspend_disable	= regulator_disable_regmap,
 };
 
 static struct regulator_ops tps65090_ldo_ops = {
@@ -514,10 +516,53 @@ static int tps65090_regulator_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int tps65090_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct tps65090_regulator *pmic = platform_get_drvdata(pdev);
+	int num;
+
+	for (num = 0; num < TPS65090_REGULATOR_MAX; num++) {
+		struct tps65090_regulator *ri = &pmic[num];
+		struct regulator_dev *rdev = ri->rdev;
+		struct regulator_state *rstate =
+			&rdev->constraints->state_mem;
+		struct regulator_ops *ops = rdev->desc->ops;
+		if (rstate->disabled)
+			ops->set_suspend_disable(rdev);
+	}
+	return 0;
+}
+
+static int tps65090_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct tps65090_regulator *pmic = platform_get_drvdata(pdev);
+	int num;
+
+	for (num = 0; num < TPS65090_REGULATOR_MAX; num++) {
+		struct tps65090_regulator *ri = &pmic[num];
+		struct regulator_dev *rdev = ri->rdev;
+		struct regulator_state *rstate =
+			&rdev->constraints->state_mem;
+		struct regulator_ops *ops = rdev->desc->ops;
+		if (rstate->disabled && (rdev->use_count > 0 ||
+					 rdev->constraints->always_on))
+			ops->enable(rdev);
+	}
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(tps65090_pm_ops, tps65090_suspend,
+			 tps65090_resume);
+
 static struct platform_driver tps65090_regulator_driver = {
 	.driver	= {
 		.name	= "tps65090-pmic",
 		.owner	= THIS_MODULE,
+		.pm	= &tps65090_pm_ops,
 	},
 	.probe		= tps65090_regulator_probe,
 	.remove		= tps65090_regulator_remove,

@@ -33,6 +33,7 @@
 #define ATMEL_TS_I2C_ADDR	0x4a
 #define ATMEL_TS_I2C_BL_ADDR	0x26
 #define CYAPA_TP_I2C_ADDR	0x67
+#define ELAN_TP_I2C_ADDR	0x15
 #define ISL_ALS_I2C_ADDR	0x44
 #define TAOS_ALS_I2C_ADDR	0x29
 #define PN544_HCI_I2C_ADDR	0x28
@@ -74,7 +75,7 @@ struct i2c_peripheral {
 	int tries;
 };
 
-#define MAX_I2C_PERIPHERALS 3
+#define MAX_I2C_PERIPHERALS 4
 
 struct chromeos_laptop {
 	struct i2c_peripheral i2c_peripherals[MAX_I2C_PERIPHERALS];
@@ -85,6 +86,11 @@ static struct chromeos_laptop *cros_laptop;
 
 static struct i2c_board_info cyapa_device = {
 	I2C_BOARD_INFO("cyapa", CYAPA_TP_I2C_ADDR),
+	.flags		= I2C_CLIENT_WAKE,
+};
+
+static struct i2c_board_info elantech_device = {
+	I2C_BOARD_INFO("elan_i2c", ELAN_TP_I2C_ADDR),
 	.flags		= I2C_CLIENT_WAKE,
 };
 
@@ -346,6 +352,16 @@ static int setup_atmel_224s_tp(enum i2c_adapter_type type)
 	return (!tp) ? -EAGAIN : 0;
 }
 
+static int setup_elantech_tp(enum i2c_adapter_type type)
+{
+	if (tp)
+		return 0;
+
+	/* add elantech touchpad */
+	tp = add_i2c_device("trackpad", type, &elantech_device);
+	return (!tp) ? -EAGAIN : 0;
+}
+
 static int setup_atmel_1664s_ts(enum i2c_adapter_type type)
 {
 	const unsigned short addr_list[] = { ATMEL_TS_I2C_BL_ADDR,
@@ -549,6 +565,8 @@ static struct chromeos_laptop peppy = {
 		{ .add = setup_isl29018_als, I2C_ADAPTER_I2C1 },
 		/* Touchpad. */
 		{ .add = setup_cyapa_tp, I2C_ADAPTER_I2C0 },
+		/* Elan Touchpad option. */
+		{ .add = setup_elantech_tp, I2C_ADAPTER_I2C0 },
 	},
 };
 

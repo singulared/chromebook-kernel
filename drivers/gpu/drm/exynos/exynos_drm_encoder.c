@@ -69,8 +69,8 @@ exynos_drm_encoder_mode_fixup(struct drm_encoder *encoder,
 			continue;
 
 		if (display->ops->mode_fixup)
-			display->ops->mode_fixup(display->ctx, connector, mode,
-					adjusted_mode);
+			return display->ops->mode_fixup(display->ctx, connector,
+					mode, adjusted_mode);
 	}
 
 	return true;

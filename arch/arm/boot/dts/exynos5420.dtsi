@@ -17,4 +17,8 @@
 	clock: clock-controller@0x10010000 {
 		compatible = "samsung,exynos5420-clock";
 	};
+
+	mfc: codec@11000000 {
+		compatible = "samsung,mfc-v7";
+	};
 };

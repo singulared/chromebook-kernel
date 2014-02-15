@@ -1260,8 +1260,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * If cache size is higher than 0, this indicates
 	 * the existence of cache and it can be turned on.
 	 */
-	if ((host->caps2 & MMC_CAP2_CACHE_CTRL) &&
-			card->ext_csd.cache_size > 0) {
+	if (card->ext_csd.cache_size > 0) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				EXT_CSD_CACHE_CTRL, 1,
 				card->ext_csd.generic_cmd6_time);
@@ -1386,6 +1385,11 @@ static int mmc_suspend(struct mmc_host *host)
 	BUG_ON(!host->card);
 
 	mmc_claim_host(host);
+
+	err = mmc_flush_cache(host->card);
+	if (err)
+		goto out;
+
 	if (mmc_can_poweroff_notify(host->card))
 		err = mmc_poweroff_notify(host->card, EXT_CSD_POWER_OFF_SHORT);
 	else if (mmc_card_can_sleep(host))
@@ -1393,8 +1397,9 @@ static int mmc_suspend(struct mmc_host *host)
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
-	mmc_release_host(host);
 
+out:
+	mmc_release_host(host);
 	return err;
 }
 

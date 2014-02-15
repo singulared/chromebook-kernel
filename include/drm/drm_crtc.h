@@ -392,6 +392,15 @@ struct drm_crtc {
 	struct drm_device *dev;
 	struct list_head head;
 
+	/**
+	 * crtc mutex
+	 *
+	 * This provides a read lock for the overall crtc state (mode, dpms
+	 * state, ...) and a write lock for everything which can be update
+	 * without a full modeset (fb, cursor data, ...)
+	 */
+	struct mutex mutex;
+
 	struct drm_mode_object base;
 
 	/* framebuffer the connector is currently bound to */
@@ -899,6 +908,9 @@ struct drm_prop_enum_list {
 	char *name;
 };
 
+extern void drm_modeset_lock_all(struct drm_device *dev);
+extern void drm_modeset_unlock_all(struct drm_device *dev);
+
 extern int drm_crtc_init(struct drm_device *dev,
 			 struct drm_crtc *crtc,
 			 const struct drm_crtc_funcs *funcs);
@@ -1048,6 +1060,7 @@ extern int drm_mode_getcrtc(struct drm_device *dev,
 			    void *data, struct drm_file *file_priv);
 extern int drm_mode_getconnector(struct drm_device *dev,
 			      void *data, struct drm_file *file_priv);
+extern int drm_mode_set_config_internal(struct drm_mode_set *set);
 extern int drm_mode_setcrtc(struct drm_device *dev,
 			    void *data, struct drm_file *file_priv);
 extern int drm_mode_getplane(struct drm_device *dev,

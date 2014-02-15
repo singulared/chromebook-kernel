@@ -120,7 +120,7 @@ extern unsigned int get_match_abb(enum asv_type_id target_type,
 extern unsigned int set_match_abb(enum asv_type_id target_type,
 					unsigned int target_abb);
 /* define function for initialize of SoC */
-extern int exynos5420_init_asv(struct asv_common *asv_info);
+extern int exynos542x_init_asv(struct asv_common *asv_info);
 
 extern bool exynos5420_is_g3d_mp6(void);
 

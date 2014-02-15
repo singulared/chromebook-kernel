@@ -2605,8 +2605,6 @@ static void alc283_init(struct hda_codec *codec)
 
 	if (hp_pin_sense)
 		msleep(75);
-	val = alc_read_coef_idx(codec, 0x06);
-	alc_write_coef_idx(codec, 0x06, val & ~0x000c);
 
 	val = alc_read_coef_idx(codec, 0x46);
 	alc_write_coef_idx(codec, 0x46, val & ~(3 << 12));
@@ -2864,6 +2862,41 @@ static void alc283_fixup_dac_wcaps(struct hda_codec *codec,
 	}
 }
 
+static void alc283_hp_automute_hook(struct hda_codec *codec,
+				    struct hda_jack_tbl *jack)
+{
+	struct alc_spec *spec = codec->spec;
+	int vref;
+
+	msleep(200);
+	snd_hda_gen_hp_automute(codec, jack);
+
+	vref = spec->gen.hp_jack_present ? PIN_VREF80 : 0;
+
+	msleep(600);
+	snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL,
+			    vref);
+}
+
+static void alc283_fixup_sense_combo_jack(struct hda_codec *codec,
+				    const struct hda_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+	int val;
+
+	switch (action) {
+	case HDA_FIXUP_ACT_PRE_PROBE:
+		spec->gen.hp_automute_hook = alc283_hp_automute_hook;
+		break;
+	case HDA_FIXUP_ACT_INIT:
+		/* MIC2-VREF control */
+		/* Set to manual mode */
+		val = alc_read_coef_idx(codec, 0x06);
+		alc_write_coef_idx(codec, 0x06, val & ~0x000c);
+		break;
+	}
+}
+
 enum {
 	ALC269_FIXUP_SONY_VAIO,
 	ALC275_FIXUP_SONY_VAIO_GPIO2,
@@ -2891,6 +2924,7 @@ enum {
 	ALC271_FIXUP_HP_GATE_MIC_JACK,
 	ALC269_FIXUP_ACER_AC700,
 	ALC283_FIXUP_DAC_WCAPS,
+	ALC283_FIXUP_SENSE_COMBO_JACK,
 };
 
 static const struct hda_fixup alc269_fixups[] = {
@@ -3077,6 +3111,12 @@ static const struct hda_fixup alc269_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc283_fixup_dac_wcaps,
 	},
+	[ALC283_FIXUP_SENSE_COMBO_JACK] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc283_fixup_sense_combo_jack,
+		.chained = true,
+		.chain_id = ALC283_FIXUP_DAC_WCAPS,
+	},
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
@@ -3177,6 +3217,7 @@ static const struct hda_model_fixup alc269_fixup_models[] = {
 	{.id = ALC269_FIXUP_INV_DMIC, .name = "inv-dmic"},
 	{.id = ALC269_FIXUP_LENOVO_DOCK, .name = "lenovo-dock"},
 	{.id = ALC283_FIXUP_DAC_WCAPS, .name = "alc283-dac-wcaps"},
+	{.id = ALC283_FIXUP_SENSE_COMBO_JACK, .name = "alc283-sense-combo"},
 	{}
 };
 

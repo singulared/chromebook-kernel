@@ -457,7 +457,6 @@ static void udl_user_framebuffer_destroy(struct drm_framebuffer *fb)
 static const struct drm_framebuffer_funcs udlfb_funcs = {
 	.destroy = udl_user_framebuffer_destroy,
 	.dirty = udl_user_framebuffer_dirty,
-	.create_handle = NULL,
 };
 
 
@@ -471,8 +470,8 @@ udl_framebuffer_init(struct drm_device *dev,
 
 	spin_lock_init(&ufb->dirty_lock);
 	ufb->obj = obj;
-	ret = drm_framebuffer_init(dev, &ufb->base, &udlfb_funcs);
 	drm_helper_mode_fill_fb_struct(&ufb->base, mode_cmd);
+	ret = drm_framebuffer_init(dev, &ufb->base, &udlfb_funcs);
 	return ret;
 }
 

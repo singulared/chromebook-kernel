@@ -56,6 +56,8 @@
 #define DW_MCI_FREQ_MAX	200000000	/* unit: HZ */
 #define DW_MCI_FREQ_MIN	400000		/* unit: HZ */
 
+#define DW_MCI_DEFAULT_CAPS (MMC_CAP_ERASE)
+
 #ifdef CONFIG_MMC_DW_IDMAC
 #define IDMAC_INT_CLR		(SDMMC_IDMAC_INT_AI | SDMMC_IDMAC_INT_NI | \
 				 SDMMC_IDMAC_INT_CES | SDMMC_IDMAC_INT_DU | \
@@ -2487,10 +2489,54 @@ static inline bool dw_mci_fifo_reset(struct dw_mci *host)
 		sg_miter_stop(&host->sg_miter);
 		host->sg = NULL;
 	}
+
+	/*
+	 * The recommended method for resetting is to always reset the
+	 * controller and the fifo, but differs slightly depending on the mode.
+	 * Note that this doesn't handle the "generic DMA" (not IDMAC) case.
+	 */
+	if (dw_mci_ctrl_reset(host, SDMMC_CTRL_RESET | SDMMC_CTRL_FIFO_RESET)) {
+		unsigned long timeout = jiffies + msecs_to_jiffies(500);
+		u32 status, rint;
+
+		/* if using dma we wait for dma_req to clear */
+		if (host->using_dma) {
+			do {
+				status = mci_readl(host, STATUS);
+				if (!(status & SDMMC_STATUS_DMA_REQ))
+					break;
+				cpu_relax();
+			} while (time_before(jiffies, timeout));
+
+			if (status & SDMMC_STATUS_DMA_REQ)
+				dev_err(host->dev,
+					"%s: Timeout waiting for dma_req to "
+					"clear during reset", __func__);
+
+			/* when using DMA next we reset the fifo again */
+			dw_mci_ctrl_reset(host, SDMMC_CTRL_FIFO_RESET);
+		}
+		/*
+		 * In all cases we clear the RAWINTS register to clear any
+		 * interrupts.
+		 */
+		rint = mci_readl(host, RINTSTS);
+		rint = rint & (~mci_readl(host, MINTSTS));
+		if (rint)
+			mci_writel(host, RINTSTS, rint);
+
+	} else
+		dev_err(host->dev, "%s: Reset bits didn't clear", __func__);
+
 #ifdef CONFIG_MMC_DW_IDMAC
+	/* It is also recommended that we reset and reprogram idmac */
 	dw_mci_idmac_reset(host);
 #endif
-	return dw_mci_ctrl_reset(host, SDMMC_CTRL_FIFO_RESET);
+
+	/* After a CTRL reset we need to have CIU set clock registers  */
+	mci_send_cmd(host->cur_slot, SDMMC_CMD_UPD_CLK, 0);
+
+	return true;
 }
 
 static inline bool dw_mci_ctrl_all_reset(struct dw_mci *host)
@@ -2529,6 +2575,8 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 		dev_err(dev, "could not allocate memory for pdata\n");
 		return ERR_PTR(-ENOMEM);
 	}
+
+	pdata->caps |= DW_MCI_DEFAULT_CAPS;
 
 	/* find out number of slots supported */
 	if (of_property_read_u32(dev->of_node, "num-slots",

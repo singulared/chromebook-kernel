@@ -90,6 +90,12 @@
 #define HDCP_I2C_MASK_BSTATUS_0_MAX_DEVS        (1 << 7)
 #define HDCP_I2C_MASK_BSTATUS_1_MAX_CASCADE     (1 << 3)
 
+enum hdmi_version {
+	HDMI_VER_EXYNOS4210,
+	HDMI_VER_EXYNOS4212,
+	HDMI_VER_EXYNOS5420,
+};
+
 enum exynos_hdcp_state {
 	HDCP_STATE_OFF,
 	HDCP_STATE_WAIT_ACTIVE_RX,
@@ -1142,13 +1148,6 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 	struct hdmi_context *hdata = ctx;
 	int ret;
 
-	/* We're only dependent on mixer in 4212 & 5420 hdmi */
-	if (hdata->version != HDMI_VER_EXYNOS4210) {
-		ret = mixer_check_mode(mode, mixer_get_version(hdata->version));
-		if (ret)
-			return ret;
-	}
-
 	ret = hdmi_find_phy_conf(hdata, mode->clock * 1000);
 	if (ret < 0)
 		return ret;
@@ -1162,12 +1161,11 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 	return 0;
 }
 
-static void hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
+static bool hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 				const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode)
 {
 	struct drm_display_mode *m;
-	int mode_ok;
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n", DRM_BASE_ID(connector),
 			drm_get_connector_name(connector), mode->name);
@@ -1180,28 +1178,25 @@ static void hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
 	list_for_each_entry(m, &connector->modes, head) {
 		if (mode->hdisplay == m->hdisplay &&
 		    mode->vdisplay == m->vdisplay &&
-		    mode->clock == m->clock) {
+		    mode->clock == m->clock &&
+		    hdmi_check_mode(in_ctx, m) >= 0) {
 			drm_mode_copy(adjusted_mode, m);
-			return;
+			return true;
 		}
 	}
 
-	/*
-	 * otherwise, find the most suitable mode among modes and change it
-	 * to adjusted_mode.
-	 */
 	list_for_each_entry(m, &connector->modes, head) {
-		mode_ok = hdmi_check_mode(in_ctx, m);
-
-		if (mode_ok == 0) {
-			DRM_INFO("HDMI: desired [MODE:%s] does not exist. Using [%dx%d @ %d Hz]\n",
-					mode->name, m->hdisplay, m->vdisplay,
-					m->vrefresh);
-
+		if (mode->hdisplay == m->hdisplay &&
+		    mode->vdisplay == m->vdisplay &&
+		    hdmi_check_mode(in_ctx, m) >= 0) {
 			drm_mode_copy(adjusted_mode, m);
-			break;
+			return true;
 		}
 	}
+
+	DRM_INFO("Mode %dx%d unsupported in hdmi driver, failing modeset\n",
+			mode->hdisplay, mode->vdisplay);
+	return false;
 }
 
 static int hdcp_exchange_ksvs(struct hdmi_context *hdata)
