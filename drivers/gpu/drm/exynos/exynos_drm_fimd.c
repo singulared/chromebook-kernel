@@ -616,21 +616,18 @@ static void fimd_mode_set(void *in_ctx, const struct drm_display_mode *in_mode)
 {
 	struct fimd_context *ctx = in_ctx;
 	struct fimd_mode_data *mode = &ctx->mode;
-	int hblank, vblank;
 
-	vblank = in_mode->crtc_vblank_end - in_mode->crtc_vblank_start;
 	mode->vtotal = in_mode->crtc_vtotal;
 	mode->vdisplay = in_mode->crtc_vdisplay;
 	mode->vsync_len = in_mode->crtc_vsync_end - in_mode->crtc_vsync_start;
-	mode->vbpd = (vblank - mode->vsync_len) / 2;
-	mode->vfpd = vblank - mode->vsync_len - mode->vbpd;
+	mode->vbpd = in_mode->crtc_vtotal - in_mode->crtc_vsync_end;
+	mode->vfpd = in_mode->crtc_vsync_start - in_mode->crtc_vdisplay;
 
-	hblank = in_mode->crtc_hblank_end - in_mode->crtc_hblank_start;
 	mode->htotal = in_mode->crtc_htotal;
 	mode->hdisplay = in_mode->crtc_hdisplay;
 	mode->hsync_len = in_mode->crtc_hsync_end - in_mode->crtc_hsync_start;
-	mode->hbpd = (hblank - mode->hsync_len) / 2;
-	mode->hfpd = hblank - mode->hsync_len - mode->hbpd;
+	mode->hbpd = in_mode->crtc_htotal - in_mode->crtc_hsync_end;
+	mode->hfpd = in_mode->crtc_hsync_start - in_mode->crtc_hdisplay;
 
 	mode->clkdiv = fimd_calc_clkdiv(ctx, in_mode);
 }
