@@ -726,14 +726,10 @@ static void fimd_disable_vblank(void *in_ctx)
 
 static void fimd_wait_for_vblank(struct fimd_context *ctx)
 {
-	u32 val;
-
 	if (ctx->suspended)
 		return;
 
 	DRM_DEBUG_KMS("\n");
-
-	val = readl(ctx->regs + VIDINTCON0);
 
 	drm_vblank_get(ctx->drm_dev, ctx->pipe);
 
