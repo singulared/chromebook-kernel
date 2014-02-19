@@ -471,7 +471,6 @@
 						fet5 {
 							regulator-name = "camout";
 							regulator-always-on;
-							regulator-suspend-mem-disabled;
 						};
 						fet6 {
 							regulator-name = "lcd_vdd";
