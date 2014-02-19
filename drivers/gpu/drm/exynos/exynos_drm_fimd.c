@@ -854,9 +854,6 @@ static int fimd_poweroff(struct fimd_context *ctx)
 
 	DRM_DEBUG_KMS("\n");
 
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-		fimd_disable_vblank(ctx);
-
 	/*
 	 * We need to make sure that all windows are disabled before we
 	 * suspend that connector. Otherwise we might try to scan from
@@ -864,7 +861,18 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	 */
 	fimd_window_suspend(ctx);
 
-	fimd_disable_vblank(ctx);
+	/*
+	 * There is tiny race here if a FIMD irq vblank irq arrives
+	 * between fimd_window_suspend() and fimd_disable_vblank().
+	 * However, since we've just synchronized to vblank in
+	 * fimd_window_suspend(), it is very very unlikely that we would
+	 * immediately get another vblank irq (we'd need to be processing a
+	 * backlog of vblank irqs that were ~16.7 ms delayed).
+	*/
+
+	/* Disable vblank irq, but only if currently enabled */
+	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
+		fimd_disable_vblank(ctx);
 
 	writel(0, ctx->regs + DPCLKCON);
 
