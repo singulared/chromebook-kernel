@@ -242,7 +242,7 @@ static int exynos_plane_set_property(struct drm_plane *plane,
 	return -EINVAL;
 }
 
-static struct drm_plane_funcs exynos_plane_funcs = {
+static const struct drm_plane_funcs exynos_plane_funcs = {
 	.update_plane	= exynos_update_plane,
 	.disable_plane	= exynos_disable_plane,
 	.destroy	= exynos_plane_destroy,

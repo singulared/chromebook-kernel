@@ -405,7 +405,7 @@ static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 	}
 }
 
-static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
+static const struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.dpms		= exynos_drm_crtc_dpms,
 	.prepare	= exynos_drm_crtc_prepare,
 	.commit		= exynos_drm_crtc_commit,
@@ -608,7 +608,7 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 	return -EINVAL;
 }
 
-static struct drm_crtc_funcs exynos_crtc_funcs = {
+static const struct drm_crtc_funcs exynos_crtc_funcs = {
 	.set_config	= drm_crtc_helper_set_config,
 	.page_flip	= exynos_drm_crtc_page_flip,
 	.destroy	= exynos_drm_crtc_destroy,
