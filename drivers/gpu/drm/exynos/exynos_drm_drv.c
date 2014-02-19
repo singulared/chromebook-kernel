@@ -250,6 +250,7 @@ static int exynos_drm_resume(struct drm_device *dev)
 			status = connector->funcs->detect(connector, true);
 			if (status == connector_status_disconnected) {
 				connector->encoder = NULL;
+				connector->status = status;
 				changed = true;
 				continue;
 			}
