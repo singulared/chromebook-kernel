@@ -111,9 +111,7 @@ struct anx7808_data {
 	bool recv_cts;
 	bool hdcp_desired;
 	int hdcp_tries;
-	struct mutex aux_mutex;
-	struct mutex power_mutex;
-	struct mutex powerdown_reg_mutex;
+	struct mutex big_lock;
 	struct i2c_algorithm i2c_algorithm;
 	struct i2c_adapter ddc_adapter;
 };
@@ -145,6 +143,10 @@ static int anx7808_read_reg(struct anx7808_data *anx7808, uint16_t addr,
 	int ret = 0;
 	struct i2c_client *client = anx7808_addr_to_client(anx7808, addr);
 
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
+	if (!anx7808->powered)
+		return -ENODEV;
+
 	if (client == NULL) {
 		*value = 0;
 		return -EINVAL;
@@ -165,6 +167,10 @@ static int anx7808_write_reg(struct anx7808_data *anx7808, uint16_t addr,
 {
 	int ret = 0;
 	struct i2c_client *client = anx7808_addr_to_client(anx7808, addr);
+
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
+	if (!anx7808->powered)
+		return -ENODEV;
 
 	if (client == NULL)
 		return -EINVAL;
@@ -346,11 +352,12 @@ static void anx7808_init_pipeline(struct anx7808_data *anx7808)
 
 static int anx7808_power_on(struct anx7808_data *anx7808)
 {
-	int ret = 0;
+	int ret;
 
-	mutex_lock(&anx7808->power_mutex);
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
+
 	if (anx7808->powered)
-		goto out;
+		return 0;
 
 	DRM_INFO("Powering on ANX7808.\n");
 
@@ -361,7 +368,7 @@ static int anx7808_power_on(struct anx7808_data *anx7808)
 	ret = regulator_enable(anx7808->vdd_mydp);
 	if (ret < 0) {
 		DRM_ERROR("Failed to power on ANX7808: %d", ret);
-		goto out;
+		return ret;
 	}
 	msleep(20);
 
@@ -369,10 +376,8 @@ static int anx7808_power_on(struct anx7808_data *anx7808)
 
 	gpio_set_value(anx7808->reset_gpio, 1);
 
-	mutex_lock(&anx7808->powerdown_reg_mutex);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, REGISTER_PD);
 	anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, TOTAL_PD);
-	mutex_unlock(&anx7808->powerdown_reg_mutex);
 
 	anx7808_init_pipeline(anx7808);
 
@@ -382,22 +387,22 @@ static int anx7808_power_on(struct anx7808_data *anx7808)
 	 */
 	usleep_range(10000, 15000);
 
-out:
-	mutex_unlock(&anx7808->power_mutex);
 	return ret;
 }
 
 static int anx7808_power_off(struct anx7808_data *anx7808, bool cancel_intp,
 		bool reset_oneshot)
 {
-	int ret = 0;
+	int ret;
 
-	mutex_lock(&anx7808->power_mutex);
-	if (cancel_intp)
-		disable_irq(anx7808->intp_irq);
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
 
 	if (!anx7808->powered)
-		goto out;
+		return 0;
+
+	/* Must be nosync since the intp handler might be blocked on big_lock */
+	if (cancel_intp)
+		disable_irq_nosync(anx7808->intp_irq);
 
 	DRM_INFO("Powering off ANX7808.\n");
 
@@ -421,7 +426,6 @@ out:
 	if (cancel_intp)
 		enable_irq(anx7808->intp_irq);
 
-	mutex_unlock(&anx7808->power_mutex);
 	return ret;
 }
 
@@ -529,7 +533,7 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 	int ret = 0;
 	int offset, blocksize;
 
-	mutex_lock(&anx7808->aux_mutex);
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
 	for (offset = 0; offset < count; offset += AUX_BUFFER_SIZE) {
 		blocksize = (count - offset > AUX_BUFFER_SIZE) ?
 			     AUX_BUFFER_SIZE : count - offset;
@@ -538,7 +542,6 @@ static int anx7808_aux_read(struct anx7808_data *anx7808, uint32_t addr,
 		if (ret)
 			break;
 	}
-	mutex_unlock(&anx7808->aux_mutex);
 	return ret;
 }
 
@@ -548,7 +551,7 @@ static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
 	int ret = 0;
 	int offset, blocksize;
 
-	mutex_lock(&anx7808->aux_mutex);
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
 	for (offset = 0; offset < count; offset += AUX_BUFFER_SIZE) {
 		blocksize = (count - offset > AUX_BUFFER_SIZE) ?
 			     AUX_BUFFER_SIZE : count - offset;
@@ -557,7 +560,6 @@ static int anx7808_aux_write(struct anx7808_data *anx7808, uint32_t addr,
 		if (ret)
 			break;
 	}
-	mutex_unlock(&anx7808->aux_mutex);
 	return ret;
 }
 
@@ -799,10 +801,8 @@ static int anx7808_power_on_hdcp(struct anx7808_data *anx7808)
 {
 	int ret = 0;
 
-	mutex_lock(&anx7808->powerdown_reg_mutex);
 	ret |= anx7808_clear_bits(anx7808, SP_POWERD_CTRL_REG, HDCP_PD);
 	ret |= anx7808_set_bits(anx7808, SP_COMMON_INT_MASK2, HDCP_AUTH_DONE);
-	mutex_unlock(&anx7808->powerdown_reg_mutex);
 
 	msleep(50);
 	return ret;
@@ -812,10 +812,8 @@ static int anx7808_power_off_hdcp(struct anx7808_data *anx7808)
 {
 	int ret = 0;
 
-	mutex_lock(&anx7808->powerdown_reg_mutex);
 	ret |= anx7808_clear_bits(anx7808, SP_COMMON_INT_MASK2, HDCP_AUTH_DONE);
 	ret |= anx7808_set_bits(anx7808, SP_POWERD_CTRL_REG, HDCP_PD);
-	mutex_unlock(&anx7808->powerdown_reg_mutex);
 
 	return ret;
 }
@@ -827,6 +825,7 @@ static int anx7808_start_hdcp(struct anx7808_data *anx7808)
 	uint8_t reg_value;
 
 	DRM_DEBUG("Starting HDCP for ANX7808\n");
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
 
 	/* Sink HDCP capability check */
 	ret = anx7808_aux_dpcd_read(anx7808, BCAPS, 1, &reg_value);
@@ -905,7 +904,10 @@ out:
 static int anx7808_stop_hdcp(struct anx7808_data *anx7808)
 {
 	int ret = 0;
+
 	DRM_DEBUG("Stopping HDCP for ANX7808\n");
+	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
+
 	anx7808_update_hdcp_property(anx7808, false);
 
 	if (!anx7808->powered)
@@ -1040,33 +1042,39 @@ static void anx7808_handle_hdmi_int_6(struct anx7808_data *anx7808, uint8_t irq)
 		anx7808_update_audio_infoframe(anx7808);
 }
 
-static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
+static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq[2];
 	int ret;
-	bool status;
+	bool status, irq_event = false;
 
 	ret = anx7808_aux_dpcd_read(anx7808, SPECIFIC_INTERRUPT_1, 2, irq);
 	if (ret) {
 		DRM_ERROR("Failed to read DPCD specific interrupt %d\n", ret);
-		return;
+		return false;
 	}
 	ret = anx7808_aux_dpcd_write(anx7808, SPECIFIC_INTERRUPT_1, 2, irq);
 	if (ret) {
 		DRM_ERROR("Failed to write DPCD specific interrupt %d\n", ret);
-		return;
+		return false;
 	}
 
-	if (irq[0] & DWN_STREAM_CONNECTED)
-		drm_helper_hpd_irq_event(anx7808->dev);
+	if (irq[0] & DWN_STREAM_CONNECTED) {
+		ret = anx7808_get_downstream_info(anx7808);
+		if (ret) {
+			DRM_ERROR("Failed to get downstream info: %d\n", ret);
+			return false;
+		}
+		irq_event = true;
+	}
 
 	if (irq[0] & DWN_STREAM_DISCONNECTED) {
 		anx7808_set_hpd(anx7808, 0);
-		drm_helper_hpd_irq_event(anx7808->dev);
+		return true;
 	}
 
 	if (anx7808->ds_type != DOWNSTREAM_HDMI)
-		return;
+		return irq_event;
 
 	/* ANX7730 specific interrupts */
 	if (irq[0] & DWN_STREAM_HDCP_DONE) {
@@ -1084,9 +1092,11 @@ static void anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 			DRM_ERROR("ANX7730 downstream HDCP sync lost\n");
 		anx7808_reset_hdcp(anx7808);
 	}
+
+	return irq_event;
 }
 
-static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
+static bool anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq;
 	int ret;
@@ -1096,13 +1106,13 @@ static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 			&irq);
 	if (ret) {
 		DRM_ERROR("Failed to read DPCD irq %d\n", ret);
-		return;
+		return false;
 	}
 	ret = anx7808_aux_dpcd_write(anx7808, DEVICE_SERVICE_IRQ_VECTOR, 1,
 			&irq);
 	if (ret) {
 		DRM_ERROR("Failed to write DPCD irq %d\n", ret);
-		return;
+		return false;
 	}
 
 	if (irq & CP_IRQ) {
@@ -1117,28 +1127,31 @@ static void anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 	}
 
 	if (irq & SINK_SPECIFIC_IRQ)
-		anx7808_handle_sink_specific_int(anx7808);
+		return anx7808_handle_sink_specific_int(anx7808);
+
+	return false;
 }
 
-static void anx7808_handle_tx_int(struct anx7808_data *anx7808, uint8_t irq)
+static bool anx7808_handle_tx_int(struct anx7808_data *anx7808, uint8_t irq)
 {
 	int ret;
 
 	ret = anx7808_write_reg(anx7808, SP_TX_INT_STATUS1, irq);
 	if (ret) {
 		DRM_ERROR("Write slim int failed %d\n", ret);
-		return;
+		return false;
 	}
 
 	/* Cable has been disconnected, power off and wait for cable_det */
 	if (irq & POLLING_ERR) {
 		anx7808_power_off(anx7808, false, true);
-		drm_helper_hpd_irq_event(anx7808->dev);
-		return;
+		return true;
 	}
 
 	if (irq & DPCD_IRQ_REQUEST)
-		anx7808_handle_dpcd_int(anx7808);
+		return anx7808_handle_dpcd_int(anx7808);
+
+	return false;
 }
 
 static irqreturn_t anx7808_intp_threaded_handler(int unused, void *data)
@@ -1146,12 +1159,19 @@ static irqreturn_t anx7808_intp_threaded_handler(int unused, void *data)
 	struct anx7808_data *anx7808 = data;
 	int ret;
 	uint8_t irq;
+	bool irq_event = false;
+
+	mutex_lock(&anx7808->big_lock);
+
+	/* Make sure we are still powered on after waiting for the big lock */
+	if (!anx7808->powered)
+		goto out;
 
 	ret = anx7808_read_reg(anx7808, SP_TX_INT_STATUS1, &irq);
 	if (ret)
 		DRM_ERROR("Failed to read TX_INT_STATUS %d\n", ret);
 	else if (irq)
-		anx7808_handle_tx_int(anx7808, irq);
+		irq_event = anx7808_handle_tx_int(anx7808, irq);
 
 	/*
 	 * It's possible we'll be turned off if there's a polling error, in that
@@ -1159,7 +1179,7 @@ static irqreturn_t anx7808_intp_threaded_handler(int unused, void *data)
 	 * statuses
 	 */
 	if (!anx7808->powered)
-		return IRQ_HANDLED;
+		goto out;
 
 	ret = anx7808_read_reg(anx7808, SP_COMMON_INT_STATUS2, &irq);
 	if (ret)
@@ -1185,6 +1205,12 @@ static irqreturn_t anx7808_intp_threaded_handler(int unused, void *data)
 	else if (irq)
 		anx7808_handle_hdmi_int_5(anx7808, irq);
 
+out:
+	mutex_unlock(&anx7808->big_lock);
+
+	if (irq_event)
+		drm_helper_hpd_irq_event(anx7808->dev);
+
 	return IRQ_HANDLED;
 }
 
@@ -1195,19 +1221,27 @@ static void anx7808_cable_det_work(struct work_struct *work)
 
 	anx7808 = container_of(work, struct anx7808_data, cable_det_work.work);
 
+	mutex_lock(&anx7808->big_lock);
+
 	if (!gpio_get_value(anx7808->cable_det_gpio))
-		return;
+		goto out;
 
 	if (!atomic_dec_and_test(&anx7808->cable_det_oneshot))
-		return;
+		goto out;
 
 	ret = anx7808_power_on(anx7808);
 	if (ret) {
 		DRM_ERROR("power_on failed [%d]\n", ret);
-		return;
+		goto out;
 	}
 
+	mutex_unlock(&anx7808->big_lock);
+
 	drm_helper_hpd_irq_event(anx7808->dev);
+	return;
+
+out:
+	mutex_unlock(&anx7808->big_lock);
 }
 
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
@@ -1341,13 +1375,19 @@ void anx7808_post_disable(struct drm_bridge *bridge)
 	struct device *dev = bridge->dev->dev;
 	bool entering_suspend = dev->power.power_state.event & PM_EVENT_SLEEP;
 
+	mutex_lock(&anx7808->big_lock);
+
 	anx7808_power_off(anx7808, true, !entering_suspend);
+
+	mutex_unlock(&anx7808->big_lock);
 }
 
 void anx7808_pre_enable(struct drm_bridge *bridge)
 {
 	struct anx7808_data *anx7808 = bridge->driver_private;
 	int ret;
+
+	mutex_lock(&anx7808->big_lock);
 
 	ret = anx7808_power_on(anx7808);
 	if (ret) {
@@ -1356,12 +1396,19 @@ void anx7808_pre_enable(struct drm_bridge *bridge)
 	}
 
 	anx7808_set_hpd(anx7808, 1);
+
+	mutex_unlock(&anx7808->big_lock);
 }
 
 void anx7808_enable(struct drm_bridge *bridge)
 {
 	struct anx7808_data *anx7808 = bridge->driver_private;
 	int ret;
+
+	mutex_lock(&anx7808->big_lock);
+
+	if (!anx7808->powered)
+		goto out;
 
 	ret = wait_for(!anx7808_detect_hdmi_input(anx7808),
 			HDMI_DETECT_TIMEOUT_MS, HDMI_DETECT_INTERVAL_MS);
@@ -1382,9 +1429,13 @@ void anx7808_enable(struct drm_bridge *bridge)
 	anx7808_update_audio_infoframe(anx7808);
 	anx7808_update_audio(anx7808);
 
-	return;
+	goto out;
+
 err:
 	anx7808_power_off(anx7808, true, false);
+
+out:
+	mutex_unlock(&anx7808->big_lock);
 }
 
 void anx7808_bridge_destroy(struct drm_bridge *bridge)
@@ -1420,6 +1471,8 @@ int anx7808_get_modes(struct drm_connector *connector)
 	bool power_cycle;
 
 	anx7808 = container_of(connector, struct anx7808_data, connector);
+
+	mutex_lock(&anx7808->big_lock);
 
 	power_cycle = !anx7808->powered;
 
@@ -1464,6 +1517,8 @@ out:
 			DRM_ERROR("Failed to power off anx7808, ret=%d\n", ret);
 	}
 
+	mutex_unlock(&anx7808->big_lock);
+
 	return num_modes;
 }
 
@@ -1493,13 +1548,17 @@ enum drm_connector_status anx7808_detect(struct drm_connector *connector,
 {
 	struct anx7808_data *anx7808;
 	int ret;
-	bool power_cycle;
+	bool power_cycle = false;
 	enum drm_connector_status status;
 
 	anx7808 = container_of(connector, struct anx7808_data, connector);
 
-	if (atomic_read(&anx7808->cable_det_oneshot))
-		return connector_status_disconnected;
+	mutex_lock(&anx7808->big_lock);
+
+	if (!gpio_get_value(anx7808->cable_det_gpio)) {
+		status = connector_status_disconnected;
+		goto out;
+	}
 
 	power_cycle = !anx7808->powered;
 
@@ -1528,6 +1587,8 @@ out:
 		if (ret)
 			DRM_ERROR("Failed to power off anx7808, ret=%d\n", ret);
 	}
+
+	mutex_unlock(&anx7808->big_lock);
 
 	return status;
 }
@@ -1561,8 +1622,11 @@ int anx7808_set_property(struct drm_connector *connector,
 	 * During HDCP disable:
 	 * HDCP is disabled in the upstream HDMI driver then here
 	 */
-	if (!val)
+	if (!val) {
+		mutex_lock(&anx7808->big_lock);
 		ret |= anx7808_stop_hdcp(anx7808);
+		mutex_unlock(&anx7808->big_lock);
+	}
 
 	return ret;
 }
@@ -1763,9 +1827,7 @@ int anx7808_init(struct drm_encoder *encoder)
 		}
 	}
 
-	mutex_init(&anx7808->aux_mutex);
-	mutex_init(&anx7808->power_mutex);
-	mutex_init(&anx7808->powerdown_reg_mutex);
+	mutex_init(&anx7808->big_lock);
 
 	if (anx7808_init_ddc_adapter(anx7808, dev->dev))
 		goto err_sysfs;
