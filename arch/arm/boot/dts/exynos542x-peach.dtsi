@@ -336,9 +336,9 @@
 		bypass-smu;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
-		clock-frequency = <800000000>;
-		samsung,dw-mshc-ciu-div = <3>;
-		samsung,dw-mshc-sdr-timing = <4 4>;
+		clock-frequency = <400000000>;
+		samsung,dw-mshc-ciu-div = <1>;
+		samsung,dw-mshc-sdr-timing = <0 1>;
 		samsung,dw-mshc-ddr-timing = <0 2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_int &sd1_bus4 &sd1_bus8>;
