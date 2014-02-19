@@ -30,6 +30,7 @@
 #include <linux/slab.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/regulator/consumer.h>
 
 #define CONVERSION_TIME_MS		200
 
@@ -97,6 +98,7 @@ struct isl29018_chip {
 	int			default_opmode;
 	bool			suspended;
 	u8			reg_cache[ISL29018_MAX_REGS];
+	struct regulator	*vcc;
 };
 
 static int isl29018_write_data(struct i2c_client *client, u8 reg,
@@ -849,6 +851,7 @@ static int isl29018_probe(struct i2c_client *client,
 {
 	struct isl29018_chip *chip;
 	struct iio_dev *indio_dev;
+	struct regulator *vcc;
 	int err;
 
 	indio_dev = iio_device_alloc(sizeof(*chip));
@@ -858,6 +861,17 @@ static int isl29018_probe(struct i2c_client *client,
 		goto exit;
 	}
 	chip = iio_priv(indio_dev);
+
+	vcc = devm_regulator_get(&client->dev, "vcc");
+	if (IS_ERR(vcc)) {
+		if (PTR_ERR(vcc) == -EPROBE_DEFER) {
+			err = -EPROBE_DEFER;
+			goto exit_iio_free;
+		}
+	} else {
+		chip->vcc = vcc;
+		regulator_enable(vcc);
+	}
 
 	i2c_set_clientdata(client, indio_dev);
 	chip->client = client;
@@ -900,9 +914,12 @@ exit:
 static int isl29018_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	struct isl29018_chip *chip = iio_priv(indio_dev);
 
 	dev_dbg(&client->dev, "%s()\n", __func__);
 	iio_device_unregister(indio_dev);
+	if (chip->vcc)
+		regulator_disable(chip->vcc);
 	iio_device_free(indio_dev);
 
 	return 0;
@@ -920,6 +937,8 @@ static int isl29018_suspend(struct device *dev)
 		status = isl29018_set_opmode(chip->client,
 				COMMMAND1_OPMODE_POWER_DOWN);
 
+	if (!status && chip->vcc)
+		status = regulator_disable(chip->vcc);
 	if (!status)
 		chip->suspended = true;
 
@@ -931,11 +950,15 @@ static int isl29018_resume(struct device *dev)
 {
 	struct isl29018_chip *chip = iio_priv(dev_get_drvdata(dev));
 	struct i2c_client *client = chip->client;
-	int err;
+	int err = 0;
 
 	mutex_lock(&chip->lock);
 
-	err = isl29018_chip_init(client);
+	if (chip->vcc)
+		err = regulator_enable(chip->vcc);
+
+	if (!err)
+		err = isl29018_chip_init(client);
 	if (!err)
 		err = isl29018_restore_default_opmode(client);
 
