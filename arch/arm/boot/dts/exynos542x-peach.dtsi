@@ -468,9 +468,8 @@
 							regulator-name = "sdcard";
 							regulator-always-on;
 						};
-						fet5 {
+						tps65090_fet5: fet5 {
 							regulator-name = "camout";
-							regulator-always-on;
 						};
 						fet6 {
 							regulator-name = "lcd_vdd";
@@ -898,6 +897,7 @@
 		light-sensor@44 {
 			compatible = "isil,isl29018";
 			reg = <0x44>;
+			vcc-supply = <&tps65090_fet5>;
 		};
 	};
 
