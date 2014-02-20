@@ -1218,13 +1218,16 @@ static void anx7808_cable_det_work(struct work_struct *work)
 {
 	struct anx7808_data *anx7808;
 	int ret;
+	bool irq_event = false;
 
 	anx7808 = container_of(work, struct anx7808_data, cable_det_work.work);
 
 	mutex_lock(&anx7808->big_lock);
 
-	if (!gpio_get_value(anx7808->cable_det_gpio))
+	if (!gpio_get_value(anx7808->cable_det_gpio)) {
+		irq_event = true;
 		goto out;
+	}
 
 	if (!atomic_dec_and_test(&anx7808->cable_det_oneshot))
 		goto out;
@@ -1235,13 +1238,13 @@ static void anx7808_cable_det_work(struct work_struct *work)
 		goto out;
 	}
 
-	mutex_unlock(&anx7808->big_lock);
-
-	drm_helper_hpd_irq_event(anx7808->dev);
-	return;
+	irq_event = true;
 
 out:
 	mutex_unlock(&anx7808->big_lock);
+
+	if (irq_event)
+		drm_helper_hpd_irq_event(anx7808->dev);
 }
 
 static irqreturn_t anx7808_cable_det_isr(int irq, void *data)
