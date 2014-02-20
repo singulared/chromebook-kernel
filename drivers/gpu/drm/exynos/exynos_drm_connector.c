@@ -131,7 +131,7 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 			drm_get_connector_name(connector), mode->name);
 
 	if (manager && manager->ops->adjust_mode)
-		manager->ops->adjust_mode(display->ctx, connector, mode);
+		manager->ops->adjust_mode(manager->ctx, connector, mode);
 
 	if (display->ops->check_mode)
 		if (!display->ops->check_mode(display->ctx, mode))
