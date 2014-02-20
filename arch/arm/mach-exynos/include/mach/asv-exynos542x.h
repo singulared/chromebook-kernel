@@ -631,9 +631,9 @@ static const unsigned int exynos5422_int_asv_volt_info
 static const unsigned int exynos5422_mif_asv_volt_info
 [][EXYNOS542X_MAX_ASV_GRP_NR + 1] = {
 	{ 0,
-		1000000,  987500,  975000,  962500,  950000,
-		 937500,  925000,  912500,  900000,  887500,
-		 875000,  862500,  850000,  837500 },
+		1000000, 1000000,  987500,  987500,  975000,
+		 975000,  962500,  962500,  962500,  950000,
+		 950000,  937500,  937500,  925000 },
 };
 
 static const unsigned int exynos5422_g3d_asv_volt_info
@@ -671,9 +671,9 @@ static const unsigned int exynos5422_g3d_asv_volt_info
 static const unsigned int
 exynos5422_mif_sram_asv_volt_info[][EXYNOS542X_MAX_ASV_GRP_NR + 1] = {
 	{ 0,
-		 1000000, 1000000,  975000,  975000,  950000,
-		  950000,  925000,  925000,  900000,  900000,
-		  900000,  900000,  900000,  900000 },
+		 1000000, 1000000, 1000000, 1000000,  975000,
+		  975000,  975000,  975000,  975000,  950000,
+		  950000,  950000,  950000,  925000 },
 };
 
 static const unsigned int
