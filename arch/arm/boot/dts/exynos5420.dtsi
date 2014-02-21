@@ -21,4 +21,25 @@
 	mfc: codec@11000000 {
 		compatible = "samsung,mfc-v7";
 	};
+
+	/* TEMPORARILY MOVED FROM exynos542x.dtsi */
+	mfc_pd: pd@10044060 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044060 0x20>;
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
+		clock-names = "oscclk", "pclk0", "clk0";
+	};
+
+	mfc: codec@11000000 {
+		samsung,power-domain = <&mfc_pd>;
+	};
+
+	sysmmu-mfc-l {
+		samsung,power-domain = <&mfc_pd>;
+	};
+
+	sysmmu-mfc-r {
+		samsung,power-domain = <&mfc_pd>;
+	};
+	/* END TEMPORARY MOVE */
 };
