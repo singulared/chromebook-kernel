@@ -468,6 +468,13 @@
 		reg = <0x10044020 0x20>;
 	};
 
+	mfc_pd: pd@10044060 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044060 0x20>;
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
+		clock-names = "oscclk", "pclk0", "clk0";
+	};
+
 	g2d_pd: pd@10044100 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044100 0x20>;
@@ -855,6 +862,7 @@
 		interrupts = <0 96 0>;
 		clocks = <&clock 401>;
 		clock-names = "mfc";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-l {
@@ -866,6 +874,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 402>, <&clock 401>;
 		clock-names = "sysmmu", "master";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-r {
@@ -877,6 +886,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 403>, <&clock 401>;
 		clock-names = "sysmmu", "master";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-fimd1m0 {
