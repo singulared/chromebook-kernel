@@ -401,6 +401,10 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		if (IS_MFCV6(dev) && (fmt->fourcc == V4L2_PIX_FMT_NV12MT)) {
 			mfc_err("Not supported format.\n");
 			return -EINVAL;
+		} else if (IS_MFCV8(dev) &&
+				(fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16)) {
+			mfc_err("Not supported format.\n");
+			return -EINVAL;
 		} else if (!IS_MFCV6(dev) &&
 				(fmt->fourcc != V4L2_PIX_FMT_NV12MT)) {
 			mfc_err("Not supported format.\n");
@@ -925,6 +929,12 @@ static int s5p_mfc_queue_setup(struct vb2_queue *vq,
 	    vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		psize[0] = ctx->luma_size;
 		psize[1] = ctx->chroma_size;
+
+		if (IS_MFCV8(dev)) {
+			/* MFCv8 needs additional 64 bytes for luma,chroma dpb*/
+			psize[0] += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
+			psize[1] += S5P_FIMV_D_ALIGN_PLANE_SIZE_V8;
+		}
 
 		if (IS_MFCV6(dev))
 			allocators[0] =

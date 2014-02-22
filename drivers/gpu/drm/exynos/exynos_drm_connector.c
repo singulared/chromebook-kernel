@@ -131,7 +131,7 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 			drm_get_connector_name(connector), mode->name);
 
 	if (manager && manager->ops->adjust_mode)
-		manager->ops->adjust_mode(display->ctx, connector, mode);
+		manager->ops->adjust_mode(manager->ctx, connector, mode);
 
 	if (display->ops->check_mode)
 		if (!display->ops->check_mode(display->ctx, mode))
@@ -170,7 +170,7 @@ static struct drm_encoder *exynos_drm_best_encoder(
 	return encoder;
 }
 
-static struct drm_connector_helper_funcs exynos_connector_helper_funcs = {
+static const struct drm_connector_helper_funcs exynos_connector_helper_funcs = {
 	.get_modes	= exynos_drm_connector_get_modes,
 	.mode_valid	= exynos_drm_connector_mode_valid,
 	.best_encoder	= exynos_drm_best_encoder,
@@ -263,7 +263,7 @@ static void exynos_drm_connector_destroy(struct drm_connector *connector)
 	kfree(exynos_connector);
 }
 
-static struct drm_connector_funcs exynos_connector_funcs = {
+static const struct drm_connector_funcs exynos_connector_funcs = {
 	.dpms		= drm_helper_connector_dpms,
 	.fill_modes	= exynos_drm_connector_fill_modes,
 	.detect		= exynos_drm_connector_detect,

@@ -722,7 +722,13 @@ int drm_calc_vbltimestamp_from_scanoutpos(struct drm_device *dev, int crtc,
 }
 EXPORT_SYMBOL(drm_calc_vbltimestamp_from_scanoutpos);
 
-static struct timeval get_drm_timestamp(void)
+/**
+ * drm_get_timestamp - retrieve drm's view of the "now" timestamp.
+ *
+ * Fetches the system timestamp corresponding to "now", adjusting for
+ * drm_timestamp_monotonic if necessary.
+ */
+struct timeval drm_get_timestamp(void)
 {
 	ktime_t now;
 
@@ -732,6 +738,7 @@ static struct timeval get_drm_timestamp(void)
 
 	return ktime_to_timeval(now);
 }
+EXPORT_SYMBOL(drm_get_timestamp);
 
 /**
  * drm_get_last_vbltimestamp - retrieve raw timestamp for the most recent
@@ -772,7 +779,7 @@ u32 drm_get_last_vbltimestamp(struct drm_device *dev, int crtc,
 	/* GPU high precision timestamp query unsupported or failed.
 	 * Return current monotonic/gettimeofday timestamp as best estimate.
 	 */
-	*tvblank = get_drm_timestamp();
+	*tvblank = drm_get_timestamp();
 
 	return 0;
 }
@@ -862,7 +869,7 @@ void drm_send_vblank_event(struct drm_device *dev, int crtc,
 	} else {
 		seq = 0;
 
-		now = get_drm_timestamp();
+		now = drm_get_timestamp();
 	}
 	send_vblank_event(dev, e, seq, &now);
 }

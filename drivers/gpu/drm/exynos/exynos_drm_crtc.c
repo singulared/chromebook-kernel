@@ -289,7 +289,8 @@ static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
 
 static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 				     struct drm_framebuffer *fb,
-				     struct drm_pending_vblank_event *event);
+				     struct drm_pending_vblank_event *event,
+				     uint32_t page_flip_flags);
 
 
 static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
@@ -299,7 +300,7 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 
 	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
-	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
+	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL, 0);
 
 	if (manager->ops->commit)
 		manager->ops->commit(manager->ctx);
@@ -376,7 +377,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	if (!ret)
 		DRM_ERROR("Timed out waiting for flips to complete\n");
 
-	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL);
+	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL, 0);
 
 	exynos_drm_fb_put(exynos_fb);
 	return 0;
@@ -405,7 +406,7 @@ static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 	}
 }
 
-static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
+static const struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.dpms		= exynos_drm_crtc_dpms,
 	.prepare	= exynos_drm_crtc_prepare,
 	.commit		= exynos_drm_crtc_commit,
@@ -443,8 +444,9 @@ void exynos_drm_kds_callback(void *callback_parameter,
 #endif
 
 static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
-				      struct drm_framebuffer *fb,
-				      struct drm_pending_vblank_event *event)
+				     struct drm_framebuffer *fb,
+				     struct drm_pending_vblank_event *event,
+				     uint32_t page_flip_flags)
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
@@ -608,7 +610,7 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 	return -EINVAL;
 }
 
-static struct drm_crtc_funcs exynos_crtc_funcs = {
+static const struct drm_crtc_funcs exynos_crtc_funcs = {
 	.set_config	= drm_crtc_helper_set_config,
 	.page_flip	= exynos_drm_crtc_page_flip,
 	.destroy	= exynos_drm_crtc_destroy,

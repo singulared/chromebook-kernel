@@ -78,11 +78,29 @@ Optional properties for dp-controller:
 	-hsync-active-high:
 		HSYNC polarity configuration.
 			High if defined, Low if not defined
+	-edp-need-regulator:
+		Use regulator control for eDP panel.
+			Use regulator controls if defined.
+	-samsung,power-up-delay:
+		eDP panel powerup delay value in ms.
+			Delay in ms needed for the eDP panel to properly
+			powerup after giving powerup signals to the panel.
+	-samsung,power-down-delay:
+		eDP panel powerdown delay value in ms.
+			Delay in ms needed for the eDP panel to properly
+			powerdown after giving powerdown signals to the panel.
 	-samsung,hpd-gpio:
 		Hotplug detect GPIO.
 			Indicates which GPIO should be used for hotplug
 			detection
-
+	-samsung,lcd-en-gpio:
+		eDP panel LCD poweron GPIO.
+			Indicates which GPIO needs to be powered up as output
+			to powerup the LCD panel.
+	-samsung,led-en-gpio:
+		eDP panel LED enable GPIO.
+			Indicates which GPIO needs to be powered up as output
+			to enable the backlight.
 	-samsung,skip-edid-read:
 		If present we'll skip reading the EDID.
 

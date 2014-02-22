@@ -186,7 +186,7 @@ struct exynos_drm_display {
 	struct list_head list;
 	enum exynos_drm_output_type type;
 	struct drm_encoder *encoder;
-	struct exynos_drm_display_ops *ops;
+	const struct exynos_drm_display_ops *ops;
 	void *ctx;
 };
 
@@ -240,7 +240,7 @@ struct exynos_drm_manager {
 	enum exynos_drm_output_type type;
 	struct drm_device *drm_dev;
 	int pipe;
-	struct exynos_drm_manager_ops *ops;
+	const struct exynos_drm_manager_ops *ops;
 	void *ctx;
 };
 

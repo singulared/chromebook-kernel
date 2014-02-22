@@ -119,23 +119,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		goto err_display_cleanup;
 
 	/*
-	 * with vblank_disable_allowed = 1, vblank interrupt will be disabled
-	 * by drm timer once a current process gives up ownership of
-	 * vblank event (after drm_vblank_put function is called).
-	 */
-	/*
-	 * crbug.com/328953: exynos drm does not update crtc vblank counters
-	 * when crtc vblank irqs are disabled.
-	 * EGL does not (yet) provide a "GetMscRate", so EGL applications
-	 * compute MSC rate using MSC and UCT (ie, the vblank_count and its
-	 * corresponding timestamp) values returned from by
-	 * DRM_IOCTL_WAIT_VBLANK.  Since vblanks aren't counted during idle
-	 * periods, this computed MSC rate is wrong.
-	 * Disallow vblank_disable until this is fixed.
-	 */
-	dev->vblank_disable_allowed = 0;
-
-	/*
 	 * probe sub drivers such as display controller and hdmi driver,
 	 * that were registered at probe() of platform driver
 	 * to the sub driver and create encoder and connector for them.
@@ -250,6 +233,7 @@ static int exynos_drm_resume(struct drm_device *dev)
 			status = connector->funcs->detect(connector, true);
 			if (status == connector_status_disconnected) {
 				connector->encoder = NULL;
+				connector->status = status;
 				changed = true;
 				continue;
 			}
@@ -327,6 +311,25 @@ static void exynos_drm_lastclose(struct drm_device *dev)
 	exynos_drm_fbdev_restore_mode(dev);
 }
 
+static u32 exynos_drm_get_vblank_counter(struct drm_device *dev, int pipe)
+{
+	struct exynos_drm_private *private = dev->dev_private;
+	struct drm_crtc *crtc = private->crtc[pipe];
+	u32 cur_vblank;
+	struct timeval last_timestamp;
+
+	cur_vblank = drm_vblank_count_and_time(dev, pipe, &last_timestamp);
+	if (crtc->enabled && !dev->vblank_enabled[pipe]) {
+		struct timeval cur_timestamp = drm_get_timestamp();
+		u64 num = timeval_to_ns(&cur_timestamp) -
+				timeval_to_ns(&last_timestamp);
+		do_div(num, crtc->framedur_ns);
+		cur_vblank += num;
+	}
+
+	return cur_vblank;
+}
+
 static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
 	.fault = exynos_drm_gem_fault,
 	.open = drm_gem_vm_open,
@@ -391,7 +394,7 @@ static struct drm_driver exynos_drm_driver = {
 	.preclose		= exynos_drm_preclose,
 	.lastclose		= exynos_drm_lastclose,
 	.postclose		= exynos_drm_postclose,
-	.get_vblank_counter	= drm_vblank_count,
+	.get_vblank_counter	= exynos_drm_get_vblank_counter,
 	.enable_vblank		= exynos_drm_crtc_enable_vblank,
 	.disable_vblank		= exynos_drm_crtc_disable_vblank,
 #if defined(CONFIG_DEBUG_FS)

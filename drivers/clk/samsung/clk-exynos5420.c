@@ -183,7 +183,8 @@ enum exynos542x_clks {
 	mout_fimd1 = 1024, mout_maudio0, mout_hdmi, mout_spi0, mout_spi1,
 	mout_spi2, mout_sw_aclk333, mout_user_aclk333, mout_sw_aclk300_gscl,
 	mout_user_aclk300_gscl, mout_sw_aclk333_432_gscl,
-	mout_user_aclk333_432_gscl, mout_g3d, mout_epll2,
+	mout_user_aclk333_432_gscl, mout_g3d, mout_epll2, mout_sw_aclk266_g2d,
+	mout_user_aclk266_g2d, mout_sw_aclk333_g2d, mout_user_aclk333_g2d,
 
 	/* divider clocks */
 	dout_pixel = 2048,
@@ -704,13 +705,15 @@ struct samsung_mux_clock exynos542x_mux_clks[] __initdata = {
 	MUX(none, "mout_sw_aclk_g3d", mout_sw_aclk_g3d_p, SRC_TOP12, 16, 1),
 	MUX(mout_g3d, "mout_user_aclk_g3d", mout_user_aclk_g3d_p,
 							SRC_TOP5, 16, 1),
-	MUX(none, "mout_sw_aclk266_g2d", mout_sw_aclk266_g2d_p,
+	MUX(mout_sw_aclk266_g2d, "mout_sw_aclk266_g2d", mout_sw_aclk266_g2d_p,
 							SRC_TOP12, 12, 1),
-	MUX(none, "mout_user_aclk266_g2d", mout_user_aclk266_g2d_p,
+	MUX(mout_user_aclk266_g2d, "mout_user_aclk266_g2d",
+							mout_user_aclk266_g2d_p,
 							SRC_TOP5, 12, 1),
-	MUX(none, "mout_sw_aclk333_g2d", mout_sw_aclk333_g2d_p,
+	MUX(mout_sw_aclk333_g2d, "mout_sw_aclk333_g2d", mout_sw_aclk333_g2d_p,
 							SRC_TOP12, 8, 1),
-	MUX(none, "mout_user_aclk333_g2d", mout_user_aclk333_g2d_p,
+	MUX(mout_user_aclk333_g2d, "mout_user_aclk333_g2d",
+							mout_user_aclk333_g2d_p,
 							SRC_TOP5, 8, 1),
 	/* PERIC Blk */
 	MUX(none, "mout_uart0", mout_group2_p, SRC_PERIC0, 4, 3),
@@ -1237,16 +1240,16 @@ static const struct samsung_pll_rate_table apll_24mhz_tbl[] = {
 	PLL_35XX_RATE(1500000000, 250, 4, 0),
 	PLL_35XX_RATE(1400000000, 175, 3, 0),
 	PLL_35XX_RATE(1300000000, 325, 6, 0),
-	PLL_35XX_RATE(1200000000, 100, 2, 0),
+	PLL_35XX_RATE(1200000000, 200, 2, 1),
 	PLL_35XX_RATE(1100000000, 275, 3, 1),
 	PLL_35XX_RATE(1000000000, 250, 3, 1),
 	PLL_35XX_RATE(900000000, 150, 2, 1),
 	PLL_35XX_RATE(800000000, 200, 3, 1),
 	PLL_35XX_RATE(700000000, 175, 3, 1),
-	PLL_35XX_RATE(600000000, 100, 2, 1),
+	PLL_35XX_RATE(600000000, 200, 2, 2),
 	PLL_35XX_RATE(500000000, 250, 3, 2),
 	PLL_35XX_RATE(400000000, 200, 3, 2),
-	PLL_35XX_RATE(300000000, 100, 2, 2),
+	PLL_35XX_RATE(300000000, 200, 2, 3),
 	PLL_35XX_RATE(200000000, 200, 3, 3),
 };
 
@@ -1256,16 +1259,16 @@ static const struct samsung_pll_rate_table kpll_24mhz_tbl[] = {
 	PLL_35XX_RATE(1500000000, 250, 4, 0),
 	PLL_35XX_RATE(1400000000, 175, 3, 0),
 	PLL_35XX_RATE(1300000000, 325, 6, 0),
-	PLL_35XX_RATE(1200000000, 100, 2, 0),
+	PLL_35XX_RATE(1200000000, 200, 2, 1),
 	PLL_35XX_RATE(1100000000, 275, 3, 1),
 	PLL_35XX_RATE(1000000000, 250, 3, 1),
 	PLL_35XX_RATE(900000000, 150, 2, 1),
 	PLL_35XX_RATE(800000000, 200, 3, 1),
 	PLL_35XX_RATE(700000000, 175, 3, 1),
-	PLL_35XX_RATE(600000000, 100, 2, 1),
+	PLL_35XX_RATE(600000000, 200, 2, 2),
 	PLL_35XX_RATE(500000000, 250, 3, 2),
 	PLL_35XX_RATE(400000000, 200, 3, 2),
-	PLL_35XX_RATE(300000000, 100, 2, 2),
+	PLL_35XX_RATE(300000000, 200, 2, 3),
 	PLL_35XX_RATE(200000000, 200, 3, 3),
 };
 
@@ -1285,7 +1288,7 @@ static const struct samsung_pll_rate_table epll_24mhz_tbl[] = {
 static struct samsung_pll_rate_table vpll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_35XX_RATE(rate, m, p, s) */
-	PLL_35XX_RATE(600000000, 100, 2, 1),
+	PLL_35XX_RATE(600000000, 200, 2, 2),
 	PLL_35XX_RATE(543000000, 181, 2, 2),
 	PLL_35XX_RATE(533000000, 266, 3, 2),
 	PLL_35XX_RATE(480000000, 320, 4, 2),

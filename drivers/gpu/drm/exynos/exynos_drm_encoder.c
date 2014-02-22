@@ -131,7 +131,7 @@ static void exynos_drm_encoder_disable(struct drm_encoder *encoder)
 	}
 }
 
-static struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
+static const struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
 	.dpms		= exynos_drm_encoder_dpms,
 	.mode_fixup	= exynos_drm_encoder_mode_fixup,
 	.mode_set	= exynos_drm_encoder_mode_set,
@@ -167,7 +167,7 @@ static void exynos_drm_encoder_destroy(struct drm_encoder *encoder)
 	kfree(exynos_encoder);
 }
 
-static struct drm_encoder_funcs exynos_encoder_funcs = {
+static const struct drm_encoder_funcs exynos_encoder_funcs = {
 	.set_property = exynos_drm_encoder_set_property,
 	.destroy = exynos_drm_encoder_destroy,
 };

@@ -63,7 +63,8 @@ int  nouveau_vblank_enable(struct drm_device *dev, int crtc);
 void nouveau_vblank_disable(struct drm_device *dev, int crtc);
 
 int  nouveau_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
-			    struct drm_pending_vblank_event *event);
+			    struct drm_pending_vblank_event *event,
+			    uint32_t page_flip_flags);
 int  nouveau_finish_page_flip(struct nouveau_channel *,
 			      struct nouveau_page_flip_state *);
 
