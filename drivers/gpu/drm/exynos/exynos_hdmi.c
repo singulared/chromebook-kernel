@@ -1187,12 +1187,7 @@ static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
 }
 
 static int hdmi_mode_valid(struct drm_connector *connector,
-				struct drm_display_mode *mode)
-{
-	struct hdmi_context *hdata = ctx_from_connector(connector);
-
-	return !hdmi_check_mode(hdata, mode) ? MODE_OK : MODE_BAD;
-}
+				struct drm_display_mode *mode);
 
 static struct drm_encoder *hdmi_best_encoder(struct drm_connector *connector)
 {
@@ -2808,6 +2803,19 @@ static struct exynos_drm_display hdmi_display = {
 	.type = EXYNOS_DISPLAY_TYPE_HDMI,
 	.ops = &hdmi_display_ops,
 };
+
+static int hdmi_mode_valid(struct drm_connector *connector,
+				struct drm_display_mode *mode)
+{
+	struct hdmi_context *hdata = ctx_from_connector(connector);
+	struct exynos_drm_manager *manager =
+				exynos_drm_manager_from_display(&hdmi_display);
+
+	if (manager && manager->ops->adjust_mode)
+		manager->ops->adjust_mode(manager->ctx, connector, mode);
+
+	return !hdmi_check_mode(hdata, mode) ? MODE_OK : MODE_BAD;
+}
 
 static void hdmi_hotplug_work_func(struct work_struct *work)
 {

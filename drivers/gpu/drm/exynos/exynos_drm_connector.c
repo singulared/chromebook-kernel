@@ -122,16 +122,12 @@ static int exynos_drm_connector_mode_valid(struct drm_connector *connector,
 	struct exynos_drm_connector *exynos_connector =
 					to_exynos_connector(connector);
 	struct exynos_drm_display *display = exynos_connector->display;
-	struct exynos_drm_manager *manager =
-					exynos_drm_manager_from_display(display);
+
 	int ret = MODE_BAD;
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n",
 			DRM_BASE_ID(connector),
 			drm_get_connector_name(connector), mode->name);
-
-	if (manager && manager->ops->adjust_mode)
-		manager->ops->adjust_mode(manager->ctx, connector, mode);
 
 	if (display->ops->check_mode)
 		if (!display->ops->check_mode(display->ctx, mode))
