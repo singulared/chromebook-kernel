@@ -248,6 +248,8 @@ mwifiex_11n_create_rx_reorder_tbl(struct mwifiex_private *priv, u8 *ta,
 	new_node->tid = tid;
 	memcpy(new_node->ta, ta, ETH_ALEN);
 	new_node->start_win = seq_num;
+	new_node->init_win = seq_num;
+	new_node->flags = 0;
 	if (mwifiex_queuing_ra_based(priv))
 		/* TODO for adhoc */
 		dev_dbg(priv->adapter->dev,
@@ -257,8 +259,10 @@ mwifiex_11n_create_rx_reorder_tbl(struct mwifiex_private *priv, u8 *ta,
 		last_seq = priv->rx_seq[tid];
 
 	if (last_seq != MWIFIEX_DEF_11N_RX_SEQ_NUM &&
-	    last_seq >= new_node->start_win)
+	    last_seq >= new_node->start_win) {
 		new_node->start_win = last_seq + 1;
+		new_node->flags |= RXREOR_INIT_WINDOW_SHIFT;
+	}
 
 	new_node->win_size = win_size;
 
@@ -398,6 +402,7 @@ int mwifiex_11n_rx_reorder_pkt(struct mwifiex_private *priv,
 	struct mwifiex_rx_reorder_tbl *tbl;
 	int start_win, end_win, win_size;
 	u16 pkt_index;
+	bool init_window_shift = false;
 
 	tbl = mwifiex_11n_get_rx_reorder_tbl((struct mwifiex_private *) priv,
 					     tid, ta);
@@ -409,6 +414,10 @@ int mwifiex_11n_rx_reorder_pkt(struct mwifiex_private *priv,
 	start_win = tbl->start_win;
 	win_size = tbl->win_size;
 	end_win = ((start_win + win_size) - 1) & (MAX_TID_VALUE - 1);
+	if (tbl->flags & RXREOR_INIT_WINDOW_SHIFT) {
+		init_window_shift = true;
+		tbl->flags &= ~RXREOR_INIT_WINDOW_SHIFT;
+	}
 	del_timer(&tbl->timer_context.timer);
 	mod_timer(&tbl->timer_context.timer,
 		  jiffies + (MIN_FLUSH_TIMER_MS * win_size * HZ) / 1000);
@@ -417,7 +426,14 @@ int mwifiex_11n_rx_reorder_pkt(struct mwifiex_private *priv,
 	 * If seq_num is less then starting win then ignore and drop the
 	 * packet
 	 */
-	if ((start_win + TWOPOW11) > (MAX_TID_VALUE - 1)) {/* Wrap */
+	if (init_window_shift && seq_num < start_win &&
+	    seq_num >= tbl->init_win) {
+		dev_dbg(priv->adapter->dev,
+			"Sender TID sequence number reset %d->%d SSID %d\n",
+			start_win, seq_num, tbl->init_win);
+		tbl->start_win = start_win = seq_num;
+		end_win = ((start_win + win_size) - 1) & (MAX_TID_VALUE - 1);
+	} else if ((start_win + TWOPOW11) > (MAX_TID_VALUE - 1)) {/* Wrap */
 		if (seq_num >= ((start_win + TWOPOW11) &
 				(MAX_TID_VALUE - 1)) && (seq_num < start_win))
 			return -1;

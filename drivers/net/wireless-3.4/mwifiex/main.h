@@ -511,10 +511,12 @@ struct mwifiex_rx_reorder_tbl {
 	struct list_head list;
 	int tid;
 	u8 ta[ETH_ALEN];
+	int init_win;
 	int start_win;
 	int win_size;
 	void **rx_reorder_ptr;
 	struct reorder_tmr_cnxt timer_context;
+	unsigned long flags;
 };
 
 struct mwifiex_bss_prio_node {
