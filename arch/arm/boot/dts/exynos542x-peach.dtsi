@@ -301,7 +301,6 @@
 		bypass-smu;
 		supports-highspeed;
 		non-removable;
-		caps2-mmc-hs200-1_8v;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		clock-frequency = <400000000>;
