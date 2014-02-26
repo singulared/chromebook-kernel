@@ -59,6 +59,8 @@ void __weak panic_smp_self_stop(void)
 		cpu_relax();
 }
 
+extern struct atomic_notifier_head task_migration_notifier;
+
 /**
  *	panic - halt the system
  *	@fmt: The text string to print
@@ -123,6 +125,13 @@ void panic(const char *fmt, ...)
 	 * situation.
 	 */
 	smp_send_stop();
+
+	/* Temporary: Debug for crbug.com/345917 */
+	pr_info("task_migration_notifier = %p\n", &task_migration_notifier);
+	print_hex_dump(KERN_INFO, "page containing tmn: ",
+		       DUMP_PREFIX_ADDRESS, 16, 4,
+		       (void *)((unsigned long)&task_migration_notifier - 0x20),
+		       sizeof(task_migration_notifier) + 0x40 , false);
 
 	/*
 	 * Run any panic handlers, including those that might need to
