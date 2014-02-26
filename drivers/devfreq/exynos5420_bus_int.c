@@ -745,13 +745,21 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	}
 
 	opp_disable(data->dev, 600000);
-	opp_disable(data->dev, 500000);
-	if (soc_is_exynos5420())
+	if (soc_is_exynos5420()) {
+		opp_disable(data->dev, 500000);
 		opp_disable(data->dev, 400000);
-	else
-		opp_disable(data->dev, 222000);
 
-	if (get_vtiming(data->dev) >= 1080) {
+		/* HACK: If we have a 5420 w/ high res we may need this */
+		if (get_vtiming(data->dev) >= 1080) {
+			opp_disable(data->dev, 111000);
+			opp_disable(data->dev, 83000);
+		}
+	} else {
+		/* Only 500Mhz is available so we can run at 2.1GHz */
+		exynos5_int_devfreq_profile.initial_freq = 500000;
+		opp_disable(data->dev, 400000);
+		opp_disable(data->dev, 333000);
+		opp_disable(data->dev, 222000);
 		opp_disable(data->dev, 111000);
 		opp_disable(data->dev, 83000);
 	}
