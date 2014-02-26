@@ -12,10 +12,19 @@ Required Properties:
   devices in this power domain are set to oscclk before power gating and
   restored back after powering on a domain. This is required for all domains
   which are powered on and off and not required for unused domains.
+  Some devices also have a divider block (CLKDIV2) which provides a second input
+  clock. This divider register is a mirror register of the actual register
+  inside the ip's domain which gets reset when the power domain is turned off.
+  So the CLKDIV2 register needs to be reconfigured upon power on so that the
+  internal regisger gets updated correctly. This is done by first setting the
+  clock rate to its parent's clock rate and then setting back the original
+  clock rate.
   The following clocks can be specified:
   - oscclk: oscillator clock.
   - clk(n): input clock to the devices in this power domain
   - pclk(n): parent clock of input clock to the devices in this power domain
+  - dclk(n): second input clock to the devices which is divided by CLKDIV2
+	     block.
 - enable: enable value of this register which is used to turn on the power
     domain. If no enable is specificed, default value of 0x7 is used.
 
@@ -32,8 +41,9 @@ Example:
 	mfc_pd: pd@10044060 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044060 0x20>;
-		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>;
-		clock-names = "oscclk", "pclk0", "clk0";
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>,
+			 <&clock 2049>;
+		clock-names = "oscclk", "pclk0", "clk0" , "dclk0";
 	};
 
 	isparm_pd: pd@10042480 {

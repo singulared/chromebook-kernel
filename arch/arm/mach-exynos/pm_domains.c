@@ -42,6 +42,7 @@ struct exynos_pm_domain {
 	struct clk *oscclk;
 	struct clk *clk[MAX_CLK_PER_DOMAIN];
 	struct clk *pclk[MAX_CLK_PER_DOMAIN];
+	struct clk *dclk[MAX_CLK_PER_DOMAIN];
 	u32 enable;
 };
 
@@ -94,6 +95,31 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	/* Restore clocks after powering on a domain*/
 	if (power_on) {
 		int i;
+		for (i = 0; i < MAX_CLK_PER_DOMAIN && pd->dclk[i]; i++) {
+			unsigned long clk_rate_div, clk_rate_parent;
+
+			/*
+			 * Reconfigure the divider during power on. The divder
+			 * register is a mirror register of an internal register
+			 * which gets reset during pd power off. The divider
+			 * register needs to be reset first and then set again
+			 * to ensure that the internal register gets updated.
+			 * So we first set the dclk rate to its parent clock
+			 * rate which resets the divider register and then set
+			 * back the original dclk rate.
+			 * We don't have to worry about over clocking since
+			 * the parent clock is still the oscillator clock now.
+			 */
+			clk_rate_parent = clk_get_rate(clk_get_parent(pd->dclk[i]));
+			clk_rate_div = clk_get_rate(pd->dclk[i]);
+			if (clk_set_rate(pd->dclk[i], clk_rate_parent))
+				pr_err("%s: error setting div %d to %lu\n",
+					pd->name, i, clk_rate_parent);
+			if (clk_set_rate(pd->dclk[i], clk_rate_div))
+				pr_err("%s: error setting div %d to %lu\n",
+					pd->name, i, clk_rate_div);
+		}
+
 		for (i = 0; i < MAX_CLK_PER_DOMAIN; i++) {
 			if (!pd->clk[i])
 				break;
@@ -249,6 +275,17 @@ static __init int exynos_pm_dt_parse_domains(void)
 				break;
 			pd->clk[i] = tmp;
 			pd->pclk[i] = tmp_parent;
+		}
+
+		for (i = 0; i < MAX_CLK_PER_DOMAIN; i++) {
+			struct clk *tmp_div;
+			char clk_name[8];
+
+			snprintf(clk_name, sizeof(clk_name), "dclk%d", i);
+			tmp_div = devm_clk_get(dev, clk_name);
+			if (IS_ERR(tmp_div))
+				break;
+			pd->dclk[i] = tmp_div;
 		}
 
 no_clk:
