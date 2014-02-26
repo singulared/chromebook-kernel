@@ -26,10 +26,14 @@
 #include <video/exynos_dp.h>
 
 #include <drm/drmP.h>
+#include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
+
+#define ctx_from_connector(c)	container_of(c, struct exynos_dp_device, \
+					connector)
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
@@ -928,21 +932,100 @@ static int exynos_dp_initialize(void *in_ctx, struct drm_device *drm_dev)
 	return 0;
 }
 
-static bool exynos_dp_display_is_connected(void *in_ctx)
+static enum drm_connector_status exynos_dp_detect(
+				struct drm_connector *connector, bool force)
 {
-	return true;
+	return connector_status_connected;
 }
 
-static void *exynos_dp_get_panel(void *in_ctx)
+static void exynos_dp_connector_destroy(struct drm_connector *connector)
 {
-	struct exynos_dp_device *dp = in_ctx;
-
-	return &dp->panel;
+	drm_sysfs_connector_remove(connector);
+	drm_connector_cleanup(connector);
 }
 
-static int exynos_dp_check_mode(void *in_ctx, struct drm_display_mode *mode)
+static struct drm_connector_funcs exynos_dp_connector_funcs = {
+	.dpms = drm_helper_connector_dpms,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.detect = exynos_dp_detect,
+	.destroy = exynos_dp_connector_destroy,
+};
+
+static int exynos_dp_get_modes(struct drm_connector *connector)
 {
+	struct exynos_dp_device *dp = ctx_from_connector(connector);
+	struct drm_display_mode *mode;
+
+	mode = drm_mode_duplicate(connector->dev, &dp->display_mode);
+	if (!mode) {
+		DRM_ERROR("failed to create a new display mode.\n");
+		return 0;
+	}
+
+	connector->display_info.width_mm = mode->width_mm;
+	connector->display_info.height_mm = mode->height_mm;
+
+	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+	drm_mode_set_name(mode);
+	drm_mode_probed_add(connector, mode);
+
+	return 1;
+}
+
+static int exynos_dp_mode_valid(struct drm_connector *connector,
+			struct drm_display_mode *mode)
+{
+	return MODE_OK;
+}
+
+static struct drm_encoder *exynos_dp_best_encoder(
+			struct drm_connector *connector)
+{
+	struct exynos_dp_device *dp = ctx_from_connector(connector);
+
+	return dp->encoder;
+}
+
+static struct drm_connector_helper_funcs exynos_dp_connector_helper_funcs = {
+	.get_modes = exynos_dp_get_modes,
+	.mode_valid = exynos_dp_mode_valid,
+	.best_encoder = exynos_dp_best_encoder,
+};
+
+static int exynos_dp_create_connector(void *ctx, struct drm_encoder *encoder)
+{
+	struct exynos_dp_device *dp = ctx;
+	struct drm_connector *connector = &dp->connector;
+	int ret;
+
+	dp->encoder = encoder;
+	connector->polled = DRM_CONNECTOR_POLL_HPD;
+
+	ret = drm_connector_init(dp->drm_dev, connector,
+			&exynos_dp_connector_funcs, DRM_MODE_CONNECTOR_eDP);
+	if (ret) {
+		DRM_ERROR("Failed to initialize connector with drm\n");
+		return ret;
+	}
+
+	drm_connector_helper_add(connector, &exynos_dp_connector_helper_funcs);
+	ret = drm_sysfs_connector_add(connector);
+	if (ret)
+		goto err_connector;
+
+	ret = drm_mode_connector_attach_encoder(connector, encoder);
+	if (ret) {
+		DRM_ERROR("failed to attach a connector to an encoder\n");
+		goto err_sysfs;
+	}
+
 	return 0;
+
+err_sysfs:
+	drm_sysfs_connector_remove(connector);
+err_connector:
+	drm_connector_cleanup(connector);
+	return ret;
 }
 
 static void exynos_dp_phy_init(struct exynos_dp_device *dp)
@@ -1093,9 +1176,7 @@ static void exynos_dp_dpms(void *in_ctx, int mode)
 
 static const struct exynos_drm_display_ops exynos_dp_display_ops = {
 	.initialize = exynos_dp_initialize,
-	.is_connected = exynos_dp_display_is_connected,
-	.get_panel = exynos_dp_get_panel,
-	.check_mode = exynos_dp_check_mode,
+	.create_connector = exynos_dp_create_connector,
 	.dpms = exynos_dp_dpms,
 	.commit = exynos_dp_commit,
 };
@@ -1239,11 +1320,12 @@ err:
 	return ret;
 }
 
-static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
+static int exynos_dp_dt_parse_display_mode(struct exynos_dp_device *dp)
 {
 	struct device_node *np = of_node_get(dp->dev->of_node);
 	struct device_node *disp_np;
 	u32 data[4];
+	struct drm_display_mode *mode = &dp->display_mode;
 
 	disp_np = of_parse_phandle(np, "samsung,dp-display", 0);
 	if (!disp_np) {
@@ -1255,40 +1337,33 @@ static int exynos_dp_dt_parse_panel(struct exynos_dp_device *dp)
 		dev_err(dp->dev, "invalid horizontal timing\n");
 		return -EINVAL;
 	}
-	dp->panel.timing.left_margin = data[0];
-	dp->panel.timing.right_margin = data[1];
-	dp->panel.timing.hsync_len = data[2];
-	dp->panel.timing.xres = data[3];
+	mode->hdisplay = data[3];
+	mode->hsync_start = mode->hdisplay + data[1];
+	mode->hsync_end = mode->hsync_start + data[2];
+	mode->htotal = mode->hsync_end + data[0];
 
 	if (of_property_read_u32_array(disp_np, "lcd-vtiming", data, 4)) {
 		dev_err(dp->dev, "invalid vertical timing\n");
 		return -EINVAL;
 	}
-	dp->panel.timing.upper_margin = data[0];
-	dp->panel.timing.lower_margin = data[1];
-	dp->panel.timing.vsync_len = data[2];
-	dp->panel.timing.yres = data[3];
+	mode->vdisplay = data[3];
+	mode->vsync_start = mode->vdisplay + data[1];
+	mode->vsync_end = mode->vsync_start + data[2];
+	mode->vtotal = mode->vsync_end + data[0];
 
-	of_property_read_u32(np, "samsung,dp-frame-rate",
-				&dp->panel.timing.refresh);
+	of_property_read_u32(np, "samsung,dp-frame-rate", data);
+	mode->vrefresh = data[0];
 
-	dp->panel.timing.pixclock = (dp->panel.timing.left_margin +
-			dp->panel.timing.right_margin +
-			dp->panel.timing.hsync_len + dp->panel.timing.xres) *
-			(dp->panel.timing.upper_margin +
-			dp->panel.timing.lower_margin +
-			dp->panel.timing.vsync_len + dp->panel.timing.yres) *
-			dp->panel.timing.refresh;
+	mode->clock = mode->htotal * mode->vtotal * mode->vrefresh / 1000;
 
-	DRM_DEBUG_KMS("DP Panel pixel clock: %u Hz\n",
-			dp->panel.timing.pixclock);
+	DRM_DEBUG_KMS("DP Panel pixel clock: %u kHz\n", mode->clock);
 
 	if (of_property_read_u32_array(disp_np, "lcd-dimensions", data, 2)) {
 		dev_err(dp->dev, "invalid lcd physical dimesions\n");
 		return -EINVAL;
 	}
-	dp->panel.width_mm = data[0];
-	dp->panel.height_mm = data[1];
+	mode->width_mm = data[0];
+	mode->height_mm = data[1];
 
 	return 0;
 }
@@ -1322,7 +1397,7 @@ static int exynos_dp_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 
-		ret = exynos_dp_dt_parse_panel(dp);
+		ret = exynos_dp_dt_parse_display_mode(dp);
 		if (ret)
 			return ret;
 	} else {

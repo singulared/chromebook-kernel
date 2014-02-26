@@ -13,6 +13,8 @@
 #ifndef _EXYNOS_DP_CORE_H
 #define _EXYNOS_DP_CORE_H
 
+#include <drm/drmP.h>
+#include <drm/drm_crtc.h>
 #include <drm/exynos_drm.h>
 #include <video/exynos_dp.h>
 
@@ -37,6 +39,8 @@ struct link_train {
 struct exynos_dp_device {
 	struct device		*dev;
 	struct drm_device	*drm_dev;
+	struct drm_connector	connector;
+	struct drm_encoder	*encoder;
 	struct clk		*clock;
 	unsigned int		irq;
 	unsigned int		irq_flags;
@@ -68,7 +72,7 @@ struct exynos_dp_device {
 	struct work_struct	hotplug_work;
 	int			dpms_mode;
 
-	struct exynos_drm_panel_info panel;
+	struct drm_display_mode display_mode;
 
 	u32 quirks;
 };
