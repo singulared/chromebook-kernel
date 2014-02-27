@@ -613,6 +613,7 @@ static int exynos5_int_busfreq_target(struct device *dev,
 	unsigned long freq;
 	unsigned long old_freq;
 	unsigned long target_volt;
+	static bool did_run_once;
 
 	mutex_lock(&data->lock);
 
@@ -637,14 +638,19 @@ static int exynos5_int_busfreq_target(struct device *dev,
 
 	exynos5_int_update_state(old_freq);
 
-	if (old_freq == freq)
+	/*
+	 * Skip if no change, except on the first run where we need to deal
+	 * with the fact that the BIOS may have left us in a strange state.
+	 */
+	if (old_freq == freq && did_run_once)
 		goto out;
+	did_run_once = true;
 
 	/*
 	 * If target frequency is higher than old frequency
 	 * change the voltage before setting freq ratio
 	 */
-	if (old_freq < freq) {
+	if (old_freq <= freq) {
 		regulator_set_voltage(data->vdd_int,
 				target_volt, target_volt + INT_VOLT_STEP_UV);
 
