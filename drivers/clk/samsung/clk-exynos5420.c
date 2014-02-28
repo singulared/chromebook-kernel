@@ -608,7 +608,7 @@ struct samsung_mux_clock exynos542x_mux_clks[] __initdata = {
 						CLK_SET_RATE_PARENT, 0),
 	MUX_F(sclk_rpll, "sclk_rpll", mout_rpll_p, SRC_TOP6, 16, 1,
 						CLK_SET_RATE_PARENT, 0),
-	MUX(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1),
+	MUX_A(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1, "mout_ipll"),
 	MUX_A(none, "sclk_spll", mout_spll_p, SRC_TOP6, 8, 1, "mout_spll"),
 	MUX_F(sclk_vpll, "sclk_vpll", mout_vpll_p, SRC_TOP6, 4, 1,
 						CLK_SET_RATE_PARENT, 0),
