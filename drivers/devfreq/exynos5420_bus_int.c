@@ -103,6 +103,7 @@ struct busfreq_data_int {
 	struct clk *mout_dpll;
 	struct clk *mout_cpll;
 	struct clk *mout_spll;
+	struct clk *mout_ipll;
 	struct regulator *vdd_int;
 	struct exynos5420_ppmu_handle *ppmu;
 	int busy;
@@ -498,6 +499,10 @@ static struct clk *exynos5_find_pll(struct busfreq_data_int *data,
 		break;
 	case D_PLL:
 		target_src_clk = data->mout_dpll;
+		break;
+	case I_PLL:
+		target_src_clk = data->mout_ipll;
+		break;
 	default:
 		break;
 	}
@@ -883,6 +888,13 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 		dev_err(dev, "Cannot get the regulator \"vdd_int\"\n");
 		err = PTR_ERR(data->vdd_int);
 		goto err_regulator;
+	}
+
+	data->mout_ipll = devm_clk_get(dev, "mout_ipll");
+	if (IS_ERR(data->mout_ipll)) {
+		dev_err(dev, "Cannot get clock \"mout_ipll\"\n");
+		err = PTR_ERR(data->mout_ipll);
+		goto err_mout_mpll;
 	}
 
 	data->mout_mpll = clk_get(dev, "mout_mpll");
