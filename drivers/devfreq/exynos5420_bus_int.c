@@ -534,9 +534,11 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 	list_for_each_entry(int_clk, &data->list, node) {
 		tar_rate = int_clk->clk_info[target_idx].target_freq * 1000;
 
-		if (int_clk->clk_info[pre_idx].src_pll ==
-			int_clk->clk_info[target_idx].src_pll) {
+		old_src_pll = clk_get_parent(int_clk->mux_clk);
+		new_src_pll = exynos5_find_pll(data,
+				int_clk->clk_info[target_idx].src_pll);
 
+		if (old_src_pll == new_src_pll) {
 			/* No need to change pll */
 			clk_set_rate(int_clk->div_clk, tar_rate);
 			pr_debug("%s: %s now %lu (%lu)\n", __func__,
@@ -545,11 +547,7 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 			continue;
 		}
 
-		old_src_pll = exynos5_find_pll(data,
-				int_clk->clk_info[pre_idx].src_pll);
 		old_src_rate = clk_get_rate(old_src_pll);
-		new_src_pll = exynos5_find_pll(data,
-				int_clk->clk_info[target_idx].src_pll);
 		new_src_rate = clk_get_rate(new_src_pll);
 		rate1 = clk_get_rate(int_clk->div_clk);
 
