@@ -85,7 +85,8 @@ struct drm_crtc_helper_funcs {
 
 /**
  * drm_encoder_helper_funcs - helper operations for encoders
- * @mode_fixup: try to fixup proposed mode for this connector
+ * @mode_valid: is this mode valid for the given encoder?
+ * @mode_fixup: try to fixup proposed mode for this encoder
  * @mode_set: set this mode
  *
  * The helper operations are called by the mid-layer CRTC helper.
@@ -95,6 +96,8 @@ struct drm_encoder_helper_funcs {
 	void (*save)(struct drm_encoder *encoder);
 	void (*restore)(struct drm_encoder *encoder);
 
+	int (*mode_valid)(struct drm_encoder *encoder,
+			  const struct drm_display_mode *mode);
 	bool (*mode_fixup)(struct drm_encoder *encoder,
 			   const struct drm_display_mode *mode,
 			   struct drm_display_mode *adjusted_mode);
