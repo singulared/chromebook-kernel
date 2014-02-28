@@ -159,7 +159,7 @@ struct exynos_drm_display_ops {
 				const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
-	int (*check_mode)(void *ctx, struct drm_display_mode *mode);
+	int (*check_mode)(void *ctx, const struct drm_display_mode *mode);
 	void (*dpms)(void *ctx, int mode);
 	void (*commit)(void *ctx);
 	int (*set_property)(void *ctx, struct drm_property *property,

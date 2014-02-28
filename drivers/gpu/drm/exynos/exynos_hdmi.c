@@ -1168,7 +1168,7 @@ static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
 	return -EINVAL;
 }
 
-static int hdmi_check_mode(void *ctx, struct drm_display_mode *mode)
+static int hdmi_check_mode(void *ctx, const struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx;
 	int ret;
@@ -2794,6 +2794,7 @@ static const struct exynos_drm_display_ops hdmi_display_ops = {
 	.create_connector = hdmi_create_connector,
 	.mode_fixup	= hdmi_mode_fixup,
 	.mode_set	= hdmi_mode_set,
+	.check_mode	= hdmi_check_mode,
 	.dpms		= hdmi_dpms,
 	.commit		= hdmi_commit,
 	.set_property	= hdmi_set_property,
