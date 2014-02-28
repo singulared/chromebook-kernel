@@ -1528,6 +1528,15 @@ out:
 int anx7808_mode_valid(struct drm_connector *connector,
 		struct drm_display_mode *mode)
 {
+	struct anx7808_data *anx7808 = container_of(connector,
+				struct anx7808_data, connector);
+	struct drm_encoder *encoder = anx7808->encoder;
+	struct drm_encoder_helper_funcs *encoder_funcs =
+				encoder->helper_private;
+
+	if (encoder_funcs && encoder_funcs->mode_valid)
+		return encoder_funcs->mode_valid(encoder, mode);
+
 	return MODE_OK;
 }
 
