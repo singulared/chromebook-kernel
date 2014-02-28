@@ -995,24 +995,6 @@
 		clock-names = "adc";
 	};
 
-	pmu@0 {
-		compatible = "arm,cortex-a15-pmu";
-		interrupt-parent = <&combiner>;
-		interrupts = <1 2>,
-			     <7 0>,
-			     <16 6>,
-			     <19 2>;
-	};
-
-	pmu@1 {
-		compatible = "arm,cortex-a7-pmu";
-		interrupt-parent = <&gic>;
-		interrupts = <0 192 4>,
-			     <0 193 4>,
-			     <0 194 4>,
-			     <0 195 4>;
-	};
-
 	pmu_syscon: syscon@10040000 {
 		compatible = "samsung,exynos5420-pmu", "syscon";
 		reg = <0x10040000 0x5000>;
