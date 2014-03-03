@@ -121,15 +121,19 @@ struct int_clk_info aclk_200_fsys[] = {
 	{LV_6, 100000, D_PLL},
 };
 
+/*
+ * Keep aclk_333 from L3 thru L6 at 222MHz
+ * to avoid locking for video playback
+ */
 struct int_clk_info aclk_333_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 400000, M_PLL},
 	{LV_1, 400000, M_PLL},
 	{LV_2, 333000, C_PLL},
 	{LV_3, 222000, C_PLL},
-	{LV_4, 167000, C_PLL},
-	{LV_5, 111000, C_PLL},
-	{LV_6,  96000, C_PLL},
+	{LV_4, 222000, C_PLL},
+	{LV_5, 222000, C_PLL},
+	{LV_6, 222000, C_PLL},
 };
 
 struct int_clk_info aclk_300_gscl_5422[] = {
@@ -176,15 +180,20 @@ struct int_clk_info aclk_100_noc[] = {
 	{LV_6,  75000, D_PLL},
 };
 
+/*
+ * Keep aclk_100_noc from L3 thru L6 at 86MHz
+ * to keep the NoC bus at a reasonably high level
+ * for MMC
+ */
 struct int_clk_info aclk_100_noc_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 100000, D_PLL},
 	{LV_1, 100000, D_PLL},
 	{LV_2, 100000, D_PLL},
 	{LV_3,  86000, D_PLL},
-	{LV_4,  75000, D_PLL},
-	{LV_5,  60000, D_PLL},
-	{LV_6,  60000, D_PLL},
+	{LV_4,  86000, D_PLL},
+	{LV_5,  86000, D_PLL},
+	{LV_6,  86000, D_PLL},
 };
 
 struct int_clk_info aclk_400_wcore[] = {
@@ -198,6 +207,11 @@ struct int_clk_info aclk_400_wcore[] = {
 	{LV_6, 333000, C_PLL},
 };
 
+/*
+ * Keep aclk_400_wcore from L4 thru L6 at 222MHz
+ * to keep the bus at a reasonably high level
+ * for MMC and video playback
+ */
 struct int_clk_info aclk_400_wcore_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 400000, M_PLL},
@@ -205,8 +219,8 @@ struct int_clk_info aclk_400_wcore_5422[] = {
 	{LV_2, 400000, M_PLL},
 	{LV_3, 333000, C_PLL},
 	{LV_4, 222000, C_PLL},
-	{LV_5, 111000, C_PLL},
-	{LV_6,  84000, C_PLL},
+	{LV_5, 222000, C_PLL},
+	{LV_6, 222000, C_PLL},
 };
 
 struct int_clk_info aclk_200_fsys2[] = {
@@ -220,6 +234,10 @@ struct int_clk_info aclk_200_fsys2[] = {
 	{LV_6, 100000, D_PLL},
 };
 
+/*
+ * Keep aclk_200_fsys2 from L5 thru L6 at 120MHz
+ * to meet the MMC locking requirement
+ */
 struct int_clk_info aclk_200_fsys2_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 120000, D_PLL},
@@ -227,8 +245,8 @@ struct int_clk_info aclk_200_fsys2_5422[] = {
 	{LV_2, 120000, D_PLL},
 	{LV_3, 120000, D_PLL},
 	{LV_4, 120000, D_PLL},
-	{LV_5, 100000, D_PLL},
-	{LV_6,  75000, D_PLL},
+	{LV_5, 120000, D_PLL},
+	{LV_6, 120000, D_PLL},
 };
 
 struct int_clk_info aclk_200_disp1[] = {
@@ -242,15 +260,19 @@ struct int_clk_info aclk_200_disp1[] = {
 	{LV_6, 100000, D_PLL},
 };
 
+/*
+ * Keep aclk_200_disp1 from L1 thru L6 at 200MHz
+ * to meet the HDMI locking requirement
+ */
 struct int_clk_info aclk_200_disp1_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 200000, D_PLL},
 	{LV_1, 200000, D_PLL},
 	{LV_2, 200000, D_PLL},
-	{LV_3, 150000, D_PLL},
-	{LV_4, 150000, D_PLL},
-	{LV_5, 100000, D_PLL},
-	{LV_6, 100000, D_PLL},
+	{LV_3, 200000, D_PLL},
+	{LV_4, 200000, D_PLL},
+	{LV_5, 200000, D_PLL},
+	{LV_6, 200000, D_PLL},
 };
 
 struct int_clk_info aclk_400_mscl[] = {
@@ -331,10 +353,14 @@ struct int_clk_info aclk_66[] = {
 	{LV_6,  67000, C_PLL},
 };
 
+/*
+ * We dont use aclk_333_432_isp and aclk_333_432_gscl
+ * So keep them at the lowest frequency possible.
+ */
 struct int_clk_info aclk_333_432_isp[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 432000, I_PLL},
-	{LV_1, 144000, I_PLL},
+	{LV_0,   3000, I_PLL},
+	{LV_1,   3000, I_PLL},
 	{LV_2,   3000, I_PLL},
 	{LV_3,   3000, I_PLL},
 	{LV_4,   3000, I_PLL},
@@ -344,8 +370,8 @@ struct int_clk_info aclk_333_432_isp[] = {
 
 struct int_clk_info aclk_333_432_gscl[] = {
 	/* Level, Freq, Parent_Pll */
-	{LV_0, 432000, I_PLL},
-	{LV_1, 432000, I_PLL},
+	{LV_0,   3000, I_PLL},
+	{LV_1,   3000, I_PLL},
 	{LV_2,   3000, I_PLL},
 	{LV_3,   3000, I_PLL},
 	{LV_4,   3000, I_PLL},
@@ -363,6 +389,21 @@ struct int_clk_info aclk_300_disp1[] = {
 	{LV_4, 200000, D_PLL},
 	{LV_5, 200000, D_PLL},
 	{LV_6, 120000, D_PLL},
+};
+
+/*
+ * Keep aclk_300_disp1 at constant frequency
+ * for the 1080p display
+ */
+struct int_clk_info aclk_300_disp1_5422[] = {
+	/* Level, Freq, Parent_Pll */
+	{LV_0, 200000, D_PLL},
+	{LV_1, 200000, D_PLL},
+	{LV_2, 200000, D_PLL},
+	{LV_3, 200000, D_PLL},
+	{LV_4, 200000, D_PLL},
+	{LV_5, 200000, D_PLL},
+	{LV_6, 200000, D_PLL},
 };
 
 struct int_clk_info aclk_400_disp1[] = {
@@ -462,6 +503,8 @@ EXYNOS5_INT_PM_CLK(aclk_266_5422, "aclk266",
 			"aclk266_d", aclk_266_5422);
 EXYNOS5_INT_PM_CLK(aclk_400_wcore_5422, "aclk400_wcore",
 			"aclk400_wcore_d", aclk_400_wcore_5422);
+EXYNOS5_INT_PM_CLK(aclk_300_disp1_5422, "aclk300_disp1",
+			"aclk300_disp1_d", aclk_300_disp1_5422);
 
 static struct int_pm_clks *exynos5422_int_pm_clks[] = {
 	&int_pm_clks_aclk_200_fsys,
@@ -473,7 +516,7 @@ static struct int_pm_clks *exynos5422_int_pm_clks[] = {
 	&int_pm_clks_aclk_166,
 	&int_pm_clks_aclk_266_5422,
 	&int_pm_clks_aclk_66,
-	&int_pm_clks_aclk_300_disp1,
+	&int_pm_clks_aclk_300_disp1_5422,
 	&int_pm_clks_aclk_300_jpeg,
 	&int_pm_clks_aclk_400_disp1,
 	&int_pm_clks_aclk_200_disp1_5422,
@@ -744,6 +787,9 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 			/* Lock INT to at least 400MHz levels */
 			asv_volt = get_match_volt(ID_INT,
 					int_bus_opp_list[2].freq);
+		} else if (soc_is_exynos5422() && i > 1) {
+			asv_volt = get_match_volt(ID_INT,
+					int_bus_opp_list[1].freq);
 		} else {
 			asv_volt = get_match_volt(ID_INT,
 					int_bus_opp_list[i].freq);
@@ -771,13 +817,7 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 			opp_disable(data->dev, 83000);
 		}
 	} else {
-		/* Only 500Mhz is available so we can run at 2.1GHz */
 		exynos5_int_devfreq_profile.initial_freq = 500000;
-		opp_disable(data->dev, 400000);
-		opp_disable(data->dev, 333000);
-		opp_disable(data->dev, 222000);
-		opp_disable(data->dev, 111000);
-		opp_disable(data->dev, 83000);
 	}
 
 	return 0;
