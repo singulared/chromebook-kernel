@@ -320,7 +320,7 @@ static u32 exynos_drm_get_vblank_counter(struct drm_device *dev, int pipe)
 	struct timeval last_timestamp;
 
 	cur_vblank = drm_vblank_count_and_time(dev, pipe, &last_timestamp);
-	if (crtc->enabled && !dev->vblank_enabled[pipe]) {
+	if (crtc->enabled && !dev->vblank_enabled[pipe] && crtc->framedur_ns) {
 		struct timeval cur_timestamp = drm_get_timestamp();
 		u64 num = timeval_to_ns(&cur_timestamp) -
 				timeval_to_ns(&last_timestamp);
