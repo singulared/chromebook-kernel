@@ -314,7 +314,6 @@ static int kbase_platform_asv_set(int enable);
 int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control);
 void kbase_platform_remove_sysfs_file(struct device *dev);
 mali_error kbase_platform_init(struct kbase_device *kbdev);
-static int kbase_platform_is_power_on(void);
 void kbase_platform_term(struct kbase_device *kbdev);
 static void kbase_platform_dvfs_set_max(kbase_device *kbdev);
 
@@ -535,6 +534,7 @@ static int kbase_platform_power_clock_init(kbase_device *kbdev)
 	struct device *dev =  kbdev->osdev.dev;
 	int timeout;
 	struct exynos_context *platform;
+	void *g3d_status_reg;
 
 	platform = (struct exynos_context *) kbdev->platform_context;
 	if(NULL == platform)
@@ -543,11 +543,18 @@ static int kbase_platform_power_clock_init(kbase_device *kbdev)
 	}
 
 	/* Turn on G3D power */
-	__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
+	if (soc_is_exynos5250()) {
+		g3d_status_reg = EXYNOS5_G3D_STATUS;
+		__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
+	}
+	else if (soc_is_exynos542x()) {
+		g3d_status_reg = EXYNOS5420_G3D_STATUS;
+		__raw_writel(0x7, EXYNOS5420_G3D_CONFIGURATION);
+	}
 
 	/* Wait for G3D power stability for 1ms */
 	timeout = 10;
-	while((__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) != 0x7) {
+	while((__raw_readl(g3d_status_reg) & 0x7) != 0x7) {
 		if(timeout == 0) {
 			/* need to call panic  */
 			panic("failed to turn on g3d power\n");
@@ -666,27 +673,26 @@ static int kbase_platform_clock_off(struct kbase_device *kbdev)
 }
 
 /**
- * Report GPU power status
- */
-static inline int kbase_platform_is_power_on(void)
-{
-	return ((__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) == 0x7) ? 1 : 0;
-}
-
-/**
  * Enable GPU power
  */
 static int kbase_platform_power_on(void)
 {
 	int timeout;
+	void *g3d_status_reg;
 
-	/* Turn on G3D  */
-	__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
+	/* Turn on G3D power */
+	if (soc_is_exynos5250()) {
+		g3d_status_reg = EXYNOS5_G3D_STATUS;
+		__raw_writel(0x7, EXYNOS5_G3D_CONFIGURATION);
+	}
+	else if (soc_is_exynos542x()) {
+		g3d_status_reg = EXYNOS5420_G3D_STATUS;
+		__raw_writel(0x7, EXYNOS5420_G3D_CONFIGURATION);
+	}
 
 	/* Wait for G3D power stability */
 	timeout = 1000;
-
-	while((__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) != 0x7) {
+	while((__raw_readl(g3d_status_reg) & 0x7) != 0x7) {
 		if(timeout == 0) {
 			/* need to call panic  */
 			panic("failed to turn on g3d via g3d_configuration\n");
@@ -705,14 +711,21 @@ static int kbase_platform_power_on(void)
 static int kbase_platform_power_off(void)
 {
 	int timeout;
+	void *g3d_status_reg;
 
 	/* Turn off G3D  */
-	__raw_writel(0x0, EXYNOS5_G3D_CONFIGURATION);
+	if (soc_is_exynos5250()) {
+		g3d_status_reg = EXYNOS5_G3D_STATUS;
+		__raw_writel(0x0, EXYNOS5_G3D_CONFIGURATION);
+	}
+	else if (soc_is_exynos542x()) {
+		g3d_status_reg = EXYNOS5420_G3D_STATUS;
+		__raw_writel(0x0, EXYNOS5420_G3D_CONFIGURATION);
+	}
 
 	/* Wait for G3D power stability */
 	timeout = 1000;
-
-	while(__raw_readl(EXYNOS5_G3D_STATUS) & 0x7) {
+	while(__raw_readl(g3d_status_reg) & 0x7) {
 		if(timeout == 0) {
 			/* need to call panic */
 			panic( "failed to turn off g3d via g3d_configuration\n");
