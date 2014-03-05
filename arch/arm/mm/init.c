@@ -22,6 +22,7 @@
 #include <linux/memblock.h>
 #include <linux/dma-contiguous.h>
 #include <linux/sizes.h>
+#include <linux/bitops.h>
 
 #include <asm/mach-types.h>
 #include <asm/memblock.h>
@@ -536,6 +537,30 @@ static void __init free_unused_memmap(struct meminfo *mi)
 #endif
 }
 
+static inline unsigned long __free_area_highpages(unsigned long pfn,
+						unsigned long end)
+{
+	unsigned long pages = 0;
+
+	while (pfn < end) {
+		struct page *page = pfn_to_page(pfn);
+		unsigned long order = min(__ffs(pfn), MAX_ORDER - 1);
+		unsigned long nr_pages = 1 << order;
+		unsigned long rem = end - pfn;
+
+		if (nr_pages > rem) {
+			order = __fls(rem);
+			nr_pages = 1 << order;
+		}
+
+		__free_pages_bootmem(page, order);
+		pages += nr_pages;
+		pfn += nr_pages;
+	}
+
+	return pages;
+}
+
 static void __init free_highpages(void)
 {
 #ifdef CONFIG_HIGHMEM
@@ -570,9 +595,10 @@ static void __init free_highpages(void)
 				res_start = end;
 			if (res_end > end)
 				res_end = end;
-			if (res_start != start)
-				totalhigh_pages += free_area(start, res_start,
-							     NULL);
+			if (res_start != start) {
+				totalhigh_pages +=
+					__free_area_highpages(start, res_start);
+			}
 			start = res_end;
 			if (start == end)
 				break;
@@ -580,7 +606,7 @@ static void __init free_highpages(void)
 
 		/* And now free anything which remains */
 		if (start < end)
-			totalhigh_pages += free_area(start, end, NULL);
+			totalhigh_pages += __free_area_highpages(start, end);
 	}
 	totalram_pages += totalhigh_pages;
 #endif
