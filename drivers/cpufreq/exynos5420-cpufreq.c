@@ -102,14 +102,14 @@ static unsigned int clkdiv_cpu0_5420[CPUFREQ_NUM_LEVELS][6] = {
 	 *  Clock divider values for
 	 *  {CPUD_5420, CPUD_5422, ATB, PCLK_DBG, APLL, ARM2}
 	 */
-	{ 2, 4, 7, 7, 3, 0 }, /* ARM L0:  2.1GHz */
-	{ 2, 4, 7, 7, 3, 0 }, /* ARM L1:  2.0GHz */
-	{ 2, 4, 7, 7, 3, 0 }, /* ARM L2:  1.9GHz */
-	{ 2, 4, 7, 7, 3, 0 }, /* ARM L3:  1.8GHz */
-	{ 2, 3, 7, 7, 3, 0 }, /* ARM L4:  1.7GHz */
-	{ 2, 3, 7, 7, 3, 0 }, /* ARM L5:  1.6GHz */
-	{ 2, 3, 7, 7, 3, 0 }, /* ARM L6:  1.5GHz */
-	{ 2, 3, 7, 7, 3, 0 }, /* ARM L7:  1.4GHz */
+	{ 4, 4, 7, 7, 3, 0 }, /* ARM L0:  2.1GHz */
+	{ 4, 4, 7, 7, 3, 0 }, /* ARM L1:  2.0GHz */
+	{ 4, 4, 7, 7, 3, 0 }, /* ARM L2:  1.9GHz */
+	{ 4, 4, 7, 7, 3, 0 }, /* ARM L3:  1.8GHz */
+	{ 3, 3, 7, 7, 3, 0 }, /* ARM L4:  1.7GHz */
+	{ 3, 3, 7, 7, 3, 0 }, /* ARM L5:  1.6GHz */
+	{ 3, 3, 7, 7, 3, 0 }, /* ARM L6:  1.5GHz */
+	{ 3, 3, 7, 7, 3, 0 }, /* ARM L7:  1.4GHz */
 	{ 2, 2, 7, 7, 3, 0 }, /* ARM L8:  1.3GHz */
 	{ 2, 2, 7, 7, 3, 0 }, /* ARM L9:  1.2GHz */
 	{ 2, 2, 7, 7, 3, 0 }, /* ARM L10: 1.1GHz */
