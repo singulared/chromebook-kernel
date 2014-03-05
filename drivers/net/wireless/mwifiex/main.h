@@ -193,6 +193,8 @@ struct mwifiex_add_ba_param {
 	u32 tx_win_size;
 	u32 rx_win_size;
 	u32 timeout;
+	u8 tx_amsdu;
+	u8 rx_amsdu;
 };
 
 struct mwifiex_tx_aggr {
@@ -530,6 +532,7 @@ struct mwifiex_tx_ba_stream_tbl {
 	int tid;
 	u8 ra[ETH_ALEN];
 	enum mwifiex_ba_status ba_status;
+	u8 amsdu;
 };
 
 struct mwifiex_rx_reorder_tbl;
@@ -549,6 +552,7 @@ struct mwifiex_rx_reorder_tbl {
 	int win_size;
 	void **rx_reorder_ptr;
 	struct reorder_tmr_cnxt timer_context;
+	u8 amsdu;
 	u8 flags;
 };
 
