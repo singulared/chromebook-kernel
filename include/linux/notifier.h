@@ -53,9 +53,14 @@ struct notifier_block {
 	int priority;
 };
 
+#define NOTIFIER_POISON1 0x20202020
+#define NOTIFIER_POISON2 0xbeab7861
+
 struct atomic_notifier_head {
 	spinlock_t lock;
+	u32 poison1;
 	struct notifier_block __rcu *head;
+	u32 poison2;
 };
 
 struct blocking_notifier_head {
@@ -75,6 +80,8 @@ struct srcu_notifier_head {
 
 #define ATOMIC_INIT_NOTIFIER_HEAD(name) do {	\
 		spin_lock_init(&(name)->lock);	\
+		(name)->poison1 = NOTIFIER_POISON1; \
+		(name)->poison2 = NOTIFIER_POISON2; \
 		(name)->head = NULL;		\
 	} while (0)
 #define BLOCKING_INIT_NOTIFIER_HEAD(name) do {	\
@@ -92,6 +99,8 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 
 #define ATOMIC_NOTIFIER_INIT(name) {				\
 		.lock = __SPIN_LOCK_UNLOCKED(name.lock),	\
+		.poison1 = NOTIFIER_POISON1,			\
+		.poison2 = NOTIFIER_POISON2,			\
 		.head = NULL }
 #define BLOCKING_NOTIFIER_INIT(name) {				\
 		.rwsem = __RWSEM_INITIALIZER((name).rwsem),	\
