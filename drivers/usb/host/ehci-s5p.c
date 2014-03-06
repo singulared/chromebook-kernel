@@ -37,6 +37,7 @@ struct s5p_ehci_hcd {
 	struct usb_phy *phy;
 	struct usb_otg *otg;
 	struct s5p_ehci_platdata *pdata;
+	bool do_hsicphy_rst;
 };
 
 static int s5p_hub_control(
@@ -48,35 +49,39 @@ static int s5p_hub_control(
 	u16		wLength
 )
 {
-#ifdef CONFIG_USB_EHCI_S5P_HSIC_RESET
-	u32 phyhsic;
+	struct s5p_ehci_hcd *s5p_ehci = dev_get_drvdata(hcd->self.controller);
 
-	/* Note, below qualified with wIndex == 2 as this port (HSIC0) is
+	/*
+	 * Note, below qualified with wIndex == 2 as this port (HSIC0) is
 	 * the one which root hub sees disconnected and requires additional
 	 * reset of phy to resume operation successfully.
 	 */
-	if (typeReq == SetPortFeature && wValue == USB_PORT_FEAT_RESET &&
-	    wIndex == 2) {
-		struct samsung_usbphy *sphy;
-		void __iomem *regs;
+	if (s5p_ehci->do_hsicphy_rst) {
+		if (typeReq == SetPortFeature &&
+		    wValue == USB_PORT_FEAT_RESET &&
+		    wIndex == 2) {
+			struct samsung_usbphy *sphy;
+			void __iomem *regs;
+			u32 phyhsic;
 
-		sphy = phy_to_sphy(hcd->phy);
-		regs = sphy->regs;
-		phyhsic = readl(regs + EXYNOS5_PHY_HSIC_CTRL1);
-		phyhsic |= HSIC_CTRL_PHYSWRST;
-		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
-		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
-		udelay(10);
-		phyhsic &= ~(HSIC_CTRL_PHYSWRST);
-		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
-		writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
-		udelay(200);
-		dev_info(hcd->self.controller,
-			 "%s:%d resetting HSIC port phys DONE\n",
-			 __func__, __LINE__);
+			sphy = phy_to_sphy(hcd->phy);
+			regs = sphy->regs;
+
+			phyhsic = readl(regs + EXYNOS5_PHY_HSIC_CTRL1);
+			phyhsic |= HSIC_CTRL_PHYSWRST;
+			writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
+			writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
+			udelay(10);
+			phyhsic &= ~(HSIC_CTRL_PHYSWRST);
+			writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL1);
+			writel(phyhsic, regs + EXYNOS5_PHY_HSIC_CTRL2);
+			udelay(200);
+			dev_info(hcd->self.controller,
+				 "%s:%d resetting HSIC port phys DONE\n",
+				 __func__, __LINE__);
+		}
 	}
 
-#endif
 	return ehci_hub_control(hcd, typeReq, wValue, wIndex, buf, wLength);
 }
 
@@ -194,6 +199,12 @@ static int s5p_ehci_probe(struct platform_device *pdev)
 	}
 
 	s5p_ehci->dev = &pdev->dev;
+
+	if (pdev->dev.of_node) {
+		if (of_find_property(pdev->dev.of_node,
+				     "supports-hsicphy-reset", NULL))
+			s5p_ehci->do_hsicphy_rst = true;
+	}
 
 	hcd = usb_create_hcd(&s5p_ehci_hc_driver, &pdev->dev,
 					dev_name(&pdev->dev));
