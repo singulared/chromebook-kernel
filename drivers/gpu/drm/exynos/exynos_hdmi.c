@@ -1779,6 +1779,7 @@ static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
 {
 	struct hdmi_context *hdata = ctx;
 	struct drm_connector *connector = &hdata->connector;
+	char name[48];
 	int ret;
 
 	hdata->encoder = encoder;
@@ -1812,6 +1813,14 @@ static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
 		DRM_ERROR("failed to attach a connector to an encoder\n");
 		goto err_sysfs;
 	}
+
+	snprintf(name, sizeof(name), "i2c-%d", hdata->ddc_port->adapter->nr);
+
+	ret = sysfs_create_link(&connector->kdev.kobj,
+			&hdata->ddc_port->adapter->dev.kobj, name);
+
+	if (ret)
+		DRM_ERROR("Cannot create sysfs symlink (%d)\n", ret);
 
 	return 0;
 
