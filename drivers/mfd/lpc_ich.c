@@ -285,6 +285,7 @@ struct lpc_ich_info lpc_chipset_info[] = {
 	[LPC_NM10] = {
 		.name = "NM10",
 		.iTCO_version = 2,
+		.gpio_version = ICH_V7_GPIO,
 	},
 	[LPC_ICH8] = {
 		.name = "ICH8 or ICH8R",
