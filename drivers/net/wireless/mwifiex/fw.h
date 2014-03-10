@@ -185,6 +185,8 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 				 (1 << IEEE80211_HT_CAP_RX_STBC_SHIFT) | \
 				 IEEE80211_HT_CAP_SM_PS)
 
+#define MWIFIEX_DEF_11N_TX_BF_CAP	0x09E1E008
+
 #define MWIFIEX_DEF_AMPDU	IEEE80211_HT_AMPDU_PARM_FACTOR
 
 /* dev_cap bitmap
@@ -208,6 +210,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define ISSUPP_GREENFIELD(Dot11nDevCap) (Dot11nDevCap & BIT(29))
 #define ISENABLED_40MHZ_INTOLERANT(Dot11nDevCap) (Dot11nDevCap & BIT(8))
 #define ISSUPP_RXLDPC(Dot11nDevCap) (Dot11nDevCap & BIT(22))
+#define ISSUPP_BEAMFORMING(Dot11nDevCap) (Dot11nDevCap & BIT(30))
 
 /* httxcfg bitmap
  * 0		reserved
@@ -238,6 +241,15 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 					      (2 * (nss - 1)))
 #define GET_DEVTXMCSMAP(dev_mcs_map)      (dev_mcs_map >> 16)
 #define GET_DEVRXMCSMAP(dev_mcs_map)      (dev_mcs_map & 0xFFFF)
+
+/* Clear SU Beanformer, MU beanformer, MU beanformee and
+ * sounding dimensions bits
+ */
+#define MWIFIEX_DEF_11AC_CAP_BF_RESET_MASK \
+			(IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE | \
+			 IEEE80211_VHT_CAP_MU_BEAMFORMER_CAPABLE | \
+			 IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE | \
+			 IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_MASK)
 
 #define MOD_CLASS_HR_DSSS       0x03
 #define MOD_CLASS_OFDM          0x07
@@ -445,6 +457,8 @@ enum P2P_MODES {
 
 #define EVENT_GET_BSS_TYPE(event_cause)         \
 	(((event_cause) >> 24) & 0x00ff)
+
+#define MWIFIEX_FW_V15		   15
 
 struct mwifiex_ie_types_header {
 	__le16 type;
@@ -971,6 +985,7 @@ struct mwifiex_rate_scope {
 	__le16 hr_dsss_rate_bitmap;
 	__le16 ofdm_rate_bitmap;
 	__le16 ht_mcs_rate_bitmap[8];
+	__le16 vht_mcs_rate_bitmap[8];
 } __packed;
 
 struct mwifiex_rate_drop_pattern {

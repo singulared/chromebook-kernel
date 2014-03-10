@@ -647,8 +647,10 @@ static int intel_crt_get_modes(struct drm_connector *connector)
 }
 
 static int intel_crt_set_property(struct drm_connector *connector,
+				  void *state,
 				  struct drm_property *property,
-				  uint64_t value)
+				  uint64_t value,
+				  void *blob_data)
 {
 	return 0;
 }
@@ -784,6 +786,8 @@ void intel_crt_init(struct drm_device *dev)
 	drm_connector_helper_add(connector, &intel_crt_connector_helper_funcs);
 
 	drm_sysfs_connector_add(connector);
+
+	intel_i2c_register(dev, connector, dev_priv->crt_ddc_pin);
 
 	if (I915_HAS_HOTPLUG(dev))
 		connector->polled = DRM_CONNECTOR_POLL_HPD;

@@ -932,7 +932,7 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 		rq->skip_clock_update = 1;
 }
 
-static ATOMIC_NOTIFIER_HEAD(task_migration_notifier);
+ATOMIC_NOTIFIER_HEAD(task_migration_notifier);
 
 void register_task_migration_notifier(struct notifier_block *n)
 {

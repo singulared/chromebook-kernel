@@ -278,6 +278,9 @@ clock which they consume.
   ----------------------------
 
   dout_pixel		2048
+  dout_mfc_blk		2049
+  dout_gsc_blk_300	2050
+  dout_gsc_blk_333	2051
 
 Example 1: An example of a clock controller node is listed below.
 

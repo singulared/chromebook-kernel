@@ -15,6 +15,7 @@
  */
 
 #include <drm/drmP.h>
+#include <drm/drm_crtc_helper.h>
 
 #include "regs-mixer.h"
 #include "regs-vp.h"
@@ -298,9 +299,8 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 				 struct drm_display_mode *mode_to_adjust)
 {
 	struct mixer_context *mctx = ctx;
-	struct exynos_drm_connector *exynos_connector =
-					to_exynos_connector(connector);
-	struct exynos_drm_display *display = exynos_connector->display;
+	struct drm_connector_helper_funcs *connector_funcs =
+		connector->helper_private;
 	int i;
 
 	if (mctx->mxr_ver == MXR_VER_128_0_0_184)
@@ -323,9 +323,10 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 				    adj->new_res[1] == mode->vdisplay &&
 				    !(mode->private_flags & EXYNOS_MODE_ADJUSTED)) {
 					/* do not compare with invalid modes */
-					if (display->ops->check_mode)
-						if (display->ops->check_mode(display->ctx,
-										mode))
+					if (connector_funcs->mode_valid &&
+						connector_funcs->mode_valid(
+							connector,
+							mode) != MODE_OK)
 							continue;
 					return;
 				}

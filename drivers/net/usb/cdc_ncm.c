@@ -101,7 +101,7 @@ static u8 cdc_ncm_setup(struct cdc_ncm_ctx *ctx)
 			      sizeof(ctx->ncm_parm));
 	if (err < 0) {
 		pr_debug("failed GET_NTB_PARAMETERS\n");
-		return 1;
+		return err; /* GET_NTB_PARAMETERS is required */
 	}
 
 	/* read correct set of parameters according to device mode */
@@ -271,6 +271,7 @@ static u8 cdc_ncm_setup(struct cdc_ncm_ctx *ctx)
 			/* if value changed, update device */
 			if (ctx->max_datagram_size !=
 					le16_to_cpu(max_datagram_size)) {
+				max_datagram_size = cpu_to_le16(ctx->max_datagram_size);
 				err = usbnet_write_cmd(dev,
 						USB_CDC_SET_MAX_DATAGRAM_SIZE,
 						USB_TYPE_CLASS | USB_DIR_OUT
@@ -362,8 +363,8 @@ int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_
 	u8 iface_no;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-	if (ctx == NULL)
-		return -ENODEV;
+	if (!ctx)
+		return -ENOMEM;
 
 	hrtimer_init(&ctx->tx_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	ctx->tx_timer.function = &cdc_ncm_tx_timer_cb;
@@ -505,6 +506,15 @@ advance:
 		ctx->out_ep->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 	dev->status = ctx->status_ep;
 	dev->rx_urb_size = ctx->rx_max;
+
+	/* cdc_ncm_setup will override dwNtbOutMaxSize if it is
+	 * outside the sane range. Adding a pad byte here if necessary
+	 * simplifies the handling in cdc_ncm_fill_tx_frame, making
+	 * tx_max always represent the real skb max size.
+	 */
+	if (ctx->tx_max != le32_to_cpu(ctx->ncm_parm.dwNtbOutMaxSize) &&
+	    ctx->tx_max % usb_maxpacket(dev->udev, dev->out, 1) == 0)
+		ctx->tx_max++;
 
 	ctx->tx_speed = ctx->rx_speed = 0;
 	return 0;
@@ -664,6 +674,7 @@ static struct usb_cdc_ncm_ndp16 *cdc_ncm_ndp(struct cdc_ncm_ctx *ctx, struct sk_
 struct sk_buff *
 cdc_ncm_fill_tx_frame(struct cdc_ncm_ctx *ctx, struct sk_buff *skb, __le32 sign)
 {
+	struct usbnet *dev = netdev_priv(ctx->netdev);
 	struct usb_cdc_ncm_nth16 *nth16;
 	struct usb_cdc_ncm_ndp16 *ndp16;
 	struct sk_buff *skb_out;
@@ -683,7 +694,7 @@ cdc_ncm_fill_tx_frame(struct cdc_ncm_ctx *ctx, struct sk_buff *skb, __le32 sign)
 
 	/* allocate a new OUT skb */
 	if (!skb_out) {
-		skb_out = alloc_skb((ctx->tx_max + 1), GFP_ATOMIC);
+		skb_out = alloc_skb(ctx->tx_max, GFP_ATOMIC);
 		if (skb_out == NULL) {
 			if (skb != NULL) {
 				dev_kfree_skb_any(skb);
@@ -788,19 +799,16 @@ cdc_ncm_fill_tx_frame(struct cdc_ncm_ctx *ctx, struct sk_buff *skb, __le32 sign)
 		/* variables will be reset at next call */
 	}
 
-	/*
-	 * If collected data size is less or equal CDC_NCM_MIN_TX_PKT bytes,
-	 * we send buffers as it is. If we get more data, it would be more
-	 * efficient for USB HS mobile device with DMA engine to receive a full
-	 * size NTB, than canceling DMA transfer and receiving a short packet.
+	/* If collected data size is less or equal CDC_NCM_MIN_TX_PKT
+	 * bytes, we send buffers as it is. If we get more data, it
+	 * would be more efficient for USB HS mobile device with DMA
+	 * engine to receive a full size NTB, than canceling DMA
+	 * transfer and receiving a short packet.
 	 */
 	if (skb_out->len > CDC_NCM_MIN_TX_PKT)
-		/* final zero padding */
-		memset(skb_put(skb_out, ctx->tx_max - skb_out->len), 0, ctx->tx_max - skb_out->len);
-
-	/* do we need to prevent a ZLP? */
-	if (((skb_out->len % le16_to_cpu(ctx->out_ep->desc.wMaxPacketSize)) == 0) &&
-	    (skb_out->len < le32_to_cpu(ctx->ncm_parm.dwNtbOutMaxSize)) && skb_tailroom(skb_out))
+		memset(skb_put(skb_out, ctx->tx_max - skb_out->len), 0,
+		       ctx->tx_max - skb_out->len);
+	else if ((skb_out->len % dev->maxpacket) == 0)
 		*skb_put(skb_out, 1) = 0;	/* force short packet */
 
 	/* set final frame length */
@@ -904,7 +912,7 @@ int cdc_ncm_rx_verify_nth16(struct cdc_ncm_ctx *ctx, struct sk_buff *skb_in)
 
 	nth16 = (struct usb_cdc_ncm_nth16 *)skb_in->data;
 
-	if (le32_to_cpu(nth16->dwSignature) != USB_CDC_NCM_NTH16_SIGN) {
+	if (nth16->dwSignature != cpu_to_le32(USB_CDC_NCM_NTH16_SIGN)) {
 		pr_debug("invalid NTH16 signature <%u>\n",
 					le32_to_cpu(nth16->dwSignature));
 		goto error;
@@ -989,7 +997,7 @@ next_ndp:
 
 	ndp16 = (struct usb_cdc_ncm_ndp16 *)(skb_in->data + ndpoffset);
 
-	if (le32_to_cpu(ndp16->dwSignature) != USB_CDC_NCM_NDP16_NOCRC_SIGN) {
+	if (ndp16->dwSignature != cpu_to_le32(USB_CDC_NCM_NDP16_NOCRC_SIGN)) {
 		pr_debug("invalid DPT16 signature <%u>\n",
 			 le32_to_cpu(ndp16->dwSignature));
 		goto err_ndp;

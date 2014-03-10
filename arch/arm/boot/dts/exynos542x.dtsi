@@ -459,13 +459,24 @@
 	gsc_pd: pd@10044000 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044000 0x20>;
-		clocks = <&clock 1>, <&clock 1032>, <&clock 1033>,  <&clock 1034>, <&clock 1035>;
-		clock-names = "oscclk", "pclk0", "clk0", "pclk1", "clk1";
+		clocks = <&clock 1>, <&clock 1032>, <&clock 1033>,
+			 <&clock 2050>, <&clock 1034>, <&clock 1035>,
+			 <&clock 2051>;
+		clock-names = "oscclk", "pclk0", "clk0", "dclk0",
+			      "pclk1", "clk1", "dclk1";
 	};
 
 	isp_pd: pd@10044020 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044020 0x20>;
+	};
+
+	mfc_pd: pd@10044060 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044060 0x20>;
+		clocks = <&clock 1>, <&clock 1030>, <&clock 1031>,
+			 <&clock 2049>;
+		clock-names = "oscclk", "pclk0", "clk0" , "dclk0";
 	};
 
 	g2d_pd: pd@10044100 {
@@ -855,6 +866,7 @@
 		interrupts = <0 96 0>;
 		clocks = <&clock 401>;
 		clock-names = "mfc";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-l {
@@ -866,6 +878,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 402>, <&clock 401>;
 		clock-names = "sysmmu", "master";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-mfc-r {
@@ -877,6 +890,7 @@
 		mmu-master = <&mfc>;
 		clocks = <&clock 403>, <&clock 401>;
 		clock-names = "sysmmu", "master";
+		samsung,power-domain = <&mfc_pd>;
 	};
 
 	sysmmu-fimd1m0 {
@@ -929,9 +943,10 @@
 	};
 
 	mali {
-		compatible = "arm,mali";
+		compatible = "arm,mali-midgard";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 219 0>, <0 74 0>, <0 117 0>;
+		interrupt-names = "JOB", "MMU", "GPU";
 		clocks = <&clock 500>, <&clock 1036>, <&clock 6>, <&clock 1>,
 			<&clock 7>;
 		clock-names = "g3d", "aclk_g3d", "mout_vpll", "ext_xtal",
@@ -978,24 +993,6 @@
 		io-channel-ranges;
 		clocks = <&clock 270>;
 		clock-names = "adc";
-	};
-
-	pmu@0 {
-		compatible = "arm,cortex-a15-pmu";
-		interrupt-parent = <&combiner>;
-		interrupts = <1 2>,
-			     <7 0>,
-			     <16 6>,
-			     <19 2>;
-	};
-
-	pmu@1 {
-		compatible = "arm,cortex-a7-pmu";
-		interrupt-parent = <&gic>;
-		interrupts = <0 192 4>,
-			     <0 193 4>,
-			     <0 194 4>,
-			     <0 195 4>;
 	};
 
 	pmu_syscon: syscon@10040000 {

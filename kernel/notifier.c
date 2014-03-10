@@ -178,6 +178,10 @@ int __kprobes __atomic_notifier_call_chain(struct atomic_notifier_head *nh,
 {
 	int ret;
 
+	/* debug for crbug.com/345917 */
+	BUG_ON(nh->poison1 != NOTIFIER_POISON1 ||
+	       nh->poison2 != NOTIFIER_POISON2);
+
 	rcu_read_lock();
 	ret = notifier_call_chain(&nh->head, val, v, nr_to_call, nr_calls);
 	rcu_read_unlock();

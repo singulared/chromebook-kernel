@@ -1011,9 +1011,6 @@ static void s3c24xx_serial_resetport(struct uart_port *port,
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon | S3C2410_UFCON_RESETBOTH);
 	wr_regl(port, S3C2410_UFCON, cfg->ufcon);
 
-	wr_regl(port, S3C64XX_UINTM, 0xf);
-	wr_regl(port, S3C64XX_UINTP, 0xf);
-
 	/* some delay is required after fifo reset */
 	udelay(1);
 }
@@ -1283,13 +1280,11 @@ static int s3c24xx_serial_remove(struct platform_device *dev)
 }
 
 /* UART power management code */
-unsigned int s3c24xx_serial_mask_save[CONFIG_SERIAL_SAMSUNG_UARTS];
 #ifdef CONFIG_PM_SLEEP
 static int s3c24xx_serial_suspend(struct device *dev)
 {
 	struct uart_port *port = s3c24xx_dev_to_port(dev);
 
-	s3c24xx_serial_mask_save[port->line] = rd_regl(port, S3C64XX_UINTM);
 	if (port)
 		uart_suspend_port(&s3c24xx_uart_drv, port);
 
@@ -1303,7 +1298,6 @@ static int s3c24xx_serial_resume(struct device *dev)
 
 	if (port) {
 		clk_prepare_enable(ourport->clk);
-		wr_regl(port, S3C64XX_UINTM, s3c24xx_serial_mask_save[port->line]);
 		s3c24xx_serial_resetport(port, s3c24xx_port_to_cfg(port));
 		clk_disable_unprepare(ourport->clk);
 
@@ -1320,12 +1314,16 @@ static int s3c24xx_serial_resume_noirq(struct device *dev)
 	if (port) {
 		/* restore IRQ mask */
 		if (s3c24xx_serial_has_interrupt_mask(port)) {
+			struct s3c24xx_uart_port *ourport = to_ourport(port);
 			unsigned int uintm = 0xf;
+
 			if (tx_enabled(port))
 				uintm &= ~S3C64XX_UINTM_TXD_MSK;
 			if (rx_enabled(port))
 				uintm &= ~S3C64XX_UINTM_RXD_MSK;
+			clk_prepare_enable(ourport->clk);
 			wr_regl(port, S3C64XX_UINTM, uintm);
+			clk_disable_unprepare(ourport->clk);
 		}
 	}
 

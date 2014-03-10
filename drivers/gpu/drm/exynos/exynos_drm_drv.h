@@ -156,6 +156,8 @@ struct exynos_drm_overlay {
  */
 struct exynos_drm_display_ops {
 	int (*initialize)(void *ctx, struct drm_device *drm_dev);
+	int (*create_connector)(void *ctx,
+				struct drm_encoder *encoder);
 	void (*remove)(void *ctx);
 	bool (*is_connected)(void *ctx);
 	void (*get_max_resol)(void *ctx, unsigned int *width,

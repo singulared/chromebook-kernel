@@ -103,6 +103,7 @@ struct busfreq_data_int {
 	struct clk *mout_dpll;
 	struct clk *mout_cpll;
 	struct clk *mout_spll;
+	struct clk *mout_ipll;
 	struct regulator *vdd_int;
 	struct exynos5420_ppmu_handle *ppmu;
 	int busy;
@@ -498,6 +499,10 @@ static struct clk *exynos5_find_pll(struct busfreq_data_int *data,
 		break;
 	case D_PLL:
 		target_src_clk = data->mout_dpll;
+		break;
+	case I_PLL:
+		target_src_clk = data->mout_ipll;
+		break;
 	default:
 		break;
 	}
@@ -529,9 +534,11 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 	list_for_each_entry(int_clk, &data->list, node) {
 		tar_rate = int_clk->clk_info[target_idx].target_freq * 1000;
 
-		if (int_clk->clk_info[pre_idx].src_pll ==
-			int_clk->clk_info[target_idx].src_pll) {
+		old_src_pll = clk_get_parent(int_clk->mux_clk);
+		new_src_pll = exynos5_find_pll(data,
+				int_clk->clk_info[target_idx].src_pll);
 
+		if (old_src_pll == new_src_pll) {
 			/* No need to change pll */
 			clk_set_rate(int_clk->div_clk, tar_rate);
 			pr_debug("%s: %s now %lu (%lu)\n", __func__,
@@ -540,11 +547,7 @@ static void exynos5_int_set_freq(struct busfreq_data_int *data,
 			continue;
 		}
 
-		old_src_pll = exynos5_find_pll(data,
-				int_clk->clk_info[pre_idx].src_pll);
 		old_src_rate = clk_get_rate(old_src_pll);
-		new_src_pll = exynos5_find_pll(data,
-				int_clk->clk_info[target_idx].src_pll);
 		new_src_rate = clk_get_rate(new_src_pll);
 		rate1 = clk_get_rate(int_clk->div_clk);
 
@@ -613,6 +616,7 @@ static int exynos5_int_busfreq_target(struct device *dev,
 	unsigned long freq;
 	unsigned long old_freq;
 	unsigned long target_volt;
+	static bool did_run_once;
 
 	mutex_lock(&data->lock);
 
@@ -637,14 +641,19 @@ static int exynos5_int_busfreq_target(struct device *dev,
 
 	exynos5_int_update_state(old_freq);
 
-	if (old_freq == freq)
+	/*
+	 * Skip if no change, except on the first run where we need to deal
+	 * with the fact that the BIOS may have left us in a strange state.
+	 */
+	if (old_freq == freq && did_run_once)
 		goto out;
+	did_run_once = true;
 
 	/*
 	 * If target frequency is higher than old frequency
 	 * change the voltage before setting freq ratio
 	 */
-	if (old_freq < freq) {
+	if (old_freq <= freq) {
 		regulator_set_voltage(data->vdd_int,
 				target_volt, target_volt + INT_VOLT_STEP_UV);
 
@@ -745,13 +754,21 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	}
 
 	opp_disable(data->dev, 600000);
-	opp_disable(data->dev, 500000);
-	if (soc_is_exynos5420())
+	if (soc_is_exynos5420()) {
+		opp_disable(data->dev, 500000);
 		opp_disable(data->dev, 400000);
-	else
-		opp_disable(data->dev, 222000);
 
-	if (get_vtiming(data->dev) >= 1080) {
+		/* HACK: If we have a 5420 w/ high res we may need this */
+		if (get_vtiming(data->dev) >= 1080) {
+			opp_disable(data->dev, 111000);
+			opp_disable(data->dev, 83000);
+		}
+	} else {
+		/* Only 500Mhz is available so we can run at 2.1GHz */
+		exynos5_int_devfreq_profile.initial_freq = 500000;
+		opp_disable(data->dev, 400000);
+		opp_disable(data->dev, 333000);
+		opp_disable(data->dev, 222000);
 		opp_disable(data->dev, 111000);
 		opp_disable(data->dev, 83000);
 	}
@@ -869,6 +886,13 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 		dev_err(dev, "Cannot get the regulator \"vdd_int\"\n");
 		err = PTR_ERR(data->vdd_int);
 		goto err_regulator;
+	}
+
+	data->mout_ipll = devm_clk_get(dev, "mout_ipll");
+	if (IS_ERR(data->mout_ipll)) {
+		dev_err(dev, "Cannot get clock \"mout_ipll\"\n");
+		err = PTR_ERR(data->mout_ipll);
+		goto err_mout_mpll;
 	}
 
 	data->mout_mpll = clk_get(dev, "mout_mpll");
@@ -1068,7 +1092,7 @@ static int __init exynos5_busfreq_int_init(void)
 {
 	return platform_driver_register(&exynos5_busfreq_int_driver);
 }
-late_initcall(exynos5_busfreq_int_init);
+device_initcall(exynos5_busfreq_int_init);
 
 static void __exit exynos5_busfreq_int_exit(void)
 {

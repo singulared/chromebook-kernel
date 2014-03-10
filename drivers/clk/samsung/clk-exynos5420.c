@@ -187,7 +187,7 @@ enum exynos542x_clks {
 	mout_user_aclk266_g2d, mout_sw_aclk333_g2d, mout_user_aclk333_g2d,
 
 	/* divider clocks */
-	dout_pixel = 2048,
+	dout_pixel = 2048, dout_mfc_blk, dout_gscl_blk_300, dout_gscl_blk_333,
 
 	nr_clks,
 };
@@ -608,7 +608,7 @@ struct samsung_mux_clock exynos542x_mux_clks[] __initdata = {
 						CLK_SET_RATE_PARENT, 0),
 	MUX_F(sclk_rpll, "sclk_rpll", mout_rpll_p, SRC_TOP6, 16, 1,
 						CLK_SET_RATE_PARENT, 0),
-	MUX(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1),
+	MUX_A(none, "sclk_ipll", mout_ipll_p, SRC_TOP6, 12, 1, "mout_ipll"),
 	MUX_A(none, "sclk_spll", mout_spll_p, SRC_TOP6, 8, 1, "mout_spll"),
 	MUX_F(sclk_vpll, "sclk_vpll", mout_vpll_p, SRC_TOP6, 4, 1,
 						CLK_SET_RATE_PARENT, 0),
@@ -846,11 +846,13 @@ struct samsung_div_clock exynos542x_div_clks[] __initdata = {
 	DIV(none, "dout_maudio0", "mout_maudio0", DIV_MAU, 20, 4),
 	DIV(none, "dout_maupcm0", "dout_maudio0", DIV_MAU, 24, 8),
 	/* Mfc Blk */
-	DIV(none, "dout_mfc_blk", "mout_user_aclk333", DIV4_RATIO, 0, 2),
+	DIV(dout_mfc_blk, "dout_mfc_blk", "mout_user_aclk333",
+						DIV4_RATIO, 0, 2),
 	/* Gscl Blk */
-	DIV(none, "dout_gscl_blk_300", "mout_user_aclk300_gscl",
+	DIV(dout_gscl_blk_300, "dout_gscl_blk_300", "mout_user_aclk300_gscl",
 						DIV2_RATIO0, 4, 2),
-	DIV(none, "dout_gscl_blk_333", "aclk333_432_gscl", DIV2_RATIO0, 6, 2),
+	DIV(dout_gscl_blk_333, "dout_gscl_blk_333", "aclk333_432_gscl",
+						DIV2_RATIO0, 6, 2),
 	/* Mscl Blk */
 	DIV(none, "dout_mscl_blk", "aclk400_mscl", DIV2_RATIO0, 28, 2),
 	/* Psgen */

@@ -287,40 +287,74 @@ static inline void dw_mci_exynos_set_clksmpl(struct dw_mci *host, u8 sample)
 
 static inline u8 dw_mci_exynos_move_next_clksmpl(struct dw_mci *host)
 {
+	struct dw_mci_exynos_priv_data *priv = host->priv;
 	u32 clksel;
 	u8 sample;
+	int num_phases;
+
+	/*
+	 * We can make 2 * (ciu_div + 1) phases (max 8), except that ciu_div of
+	 * 0 is documented to only allow 1 phase.
+	 */
+	static const int ciu_div_to_phases[] = { 1, 4, 6, 8, 8, 8, 8, 8 };
 
 	clksel = mci_readl(host, CLKSEL);
-	sample = (clksel + 1) & 0x7;
+	num_phases = ciu_div_to_phases[priv->ciu_div];
+	sample = (clksel + 1) % num_phases;
 	clksel = (clksel & ~0x7) | sample;
 	mci_writel(host, CLKSEL, clksel);
 	return sample;
 }
 
-static s8 dw_mci_exynos_get_best_clksmpl(u8 candiates)
+static inline u8 ror_n(u8 word, unsigned int shift, int n)
 {
-	const u8 iter = 8;
+	return ((word >> shift) | (word << (n - shift))) & ((1 << n) - 1);
+}
+
+static s8 dw_mci_exynos_get_best_clksmpl(u8 candiates, int num_phases)
+{
 	u8 __c;
-	s8 i, loc = -1;
+	u8 ideal;
+	int i;
 
-	for (i = 0; i < iter; i++) {
-		__c = ror8(candiates, i);
-		if ((__c & 0xc7) == 0xc7) {
-			loc = i;
-			goto out;
+	/*
+	 * Index into these tables with num_phases to find best rotation for the
+	 * case where 5 bits are set in candidates or 3 bits set.  Note that
+	 * we never expect to see num_phases other than 1, 4, 6, or 8 but it
+	 * doesn't hurt to fill in the table (and it makes it easier to index).
+	 */
+	static const u8 best_ror_for_5[] = { 0xff, 0xff, 0xff, 0xff, 0xff,
+					     0x1f, 0x37, 0x67, 0xc7 };
+	static const u8 best_ror_for_3[] = { 0xff, 0xff, 0xff, 0x07, 0x0b,
+					     0x13, 0x23, 0x43, 0x83 };
+
+	/* Try to look for a rotation that "centers" the passing samples */
+	if (num_phases >= 5) {
+		ideal = best_ror_for_5[num_phases];
+		for (i = 0; i < num_phases; i++) {
+			__c = ror_n(candiates, i, num_phases);
+			if ((__c & ideal) == ideal)
+				return i;
 		}
 	}
 
-	for (i = 0; i < iter; i++) {
-		__c = ror8(candiates, i);
-		if ((__c & 0x83) == 0x83) {
-			loc = i;
-			goto out;
+	/* Try to look for a rotation that "centers" the passing samples */
+	if (num_phases >= 3) {
+		ideal = best_ror_for_3[num_phases];
+		for (i = 0; i < num_phases; i++) {
+			__c = ror_n(candiates, i, num_phases);
+			if ((__c & ideal) == ideal)
+				return i;
 		}
 	}
 
-out:
-	return loc;
+	/* With only 4 samples we can't expect 3 good ones */
+	if (candiates && (num_phases <= 4))
+		for (i = 0; i < num_phases; i++)
+			if (candiates & (1 << i))
+				return i;
+
+	return -1;
 }
 
 static int dw_mci_exynos_execute_tuning(struct dw_mci_slot *slot, u32 opcode,
@@ -334,6 +368,7 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci_slot *slot, u32 opcode,
 	u8 start_smpl, smpl, candiates = 0;
 	s8 found = -1;
 	int ret = 0;
+	int num_phases = 0;
 
 	blk_test = kmalloc(blksz, GFP_KERNEL);
 	if (!blk_test)
@@ -381,9 +416,10 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci_slot *slot, u32 opcode,
 				"Tuning error: cmd.error:%d, data.error:%d\n",
 				cmd.error, data.error);
 		}
+		num_phases++;
 	} while (start_smpl != smpl);
 
-	found = dw_mci_exynos_get_best_clksmpl(candiates);
+	found = dw_mci_exynos_get_best_clksmpl(candiates, num_phases);
 	if (found >= 0)
 		dw_mci_exynos_set_clksmpl(host, found);
 	else

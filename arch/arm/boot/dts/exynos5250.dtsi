@@ -982,9 +982,10 @@
 	};
 
 	mali {
-		compatible = "arm,mali";
+		compatible = "arm,mali-midgard";
 		reg = <0x11800000 0x5000>;
 		interrupts = <0 118 0>, <0 119 0>, <0 117 0>;
+		interrupt-names = "JOB", "MMU", "GPU";
 		clocks = <&clock 345>, <&clock 515>, <&clock 6>, <&clock 1>, <&clock 5>;
 		clock-names = "g3d", "aclk_g3d", "mout_gpll", "ext_xtal", "fout_gpll";
 	};

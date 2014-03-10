@@ -32,7 +32,7 @@ static inline mali_bool kbasep_am_i_root(void)
 	if (uid_eq(current_euid(), GLOBAL_ROOT_UID))
 		return MALI_TRUE;
 #else
-	if (from_kuid(&init_user_ns, current_euid()) == 0)
+	if (current_euid() == 0)
 		return MALI_TRUE;
 #endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)*/
 	return MALI_FALSE;

@@ -37,6 +37,9 @@
 /* Offset for TOS field in the IP header */
 #define IPTOS_OFFSET 5
 
+static bool disable_tx_amsdu;
+module_param(disable_tx_amsdu, bool, 0644);
+
 /* WMM information IE */
 static const u8 wmm_info_ie[] = { WLAN_EID_VENDOR_SPECIFIC, 0x07,
 	0x00, 0x50, 0xf2, 0x02,
@@ -421,7 +424,13 @@ mwifiex_wmm_init(struct mwifiex_adapter *adapter)
 			continue;
 
 		for (i = 0; i < MAX_NUM_TID; ++i) {
-			priv->aggr_prio_tbl[i].amsdu = tos_to_tid_inv[i];
+			if (!disable_tx_amsdu &&
+			    adapter->tx_buf_size > MWIFIEX_TX_DATA_BUF_SIZE_2K)
+				priv->aggr_prio_tbl[i].amsdu =
+							tos_to_tid_inv[i];
+			else
+				priv->aggr_prio_tbl[i].amsdu =
+							BA_STREAM_NOT_ALLOWED;
 			priv->aggr_prio_tbl[i].ampdu_ap = tos_to_tid_inv[i];
 			priv->aggr_prio_tbl[i].ampdu_user = tos_to_tid_inv[i];
 			priv->wmm.tid_tbl_ptr[i].ra_list_curr = NULL;
@@ -1270,13 +1279,22 @@ mwifiex_dequeue_tx_packet(struct mwifiex_adapter *adapter)
 
 	if (!ptr->is_11n_enabled ||
 	    mwifiex_is_ba_stream_setup(priv, ptr, tid) ||
-	    priv->wps.session_enable ||
-	    ((priv->sec_info.wpa_enabled ||
-	      priv->sec_info.wpa2_enabled) &&
-	     !priv->wpa_is_gtk_set)) {
-		mwifiex_send_single_packet(priv, ptr, ptr_index, flags);
-		/* ra_list_spinlock has been freed in
-		   mwifiex_send_single_packet() */
+	    priv->wps.session_enable) {
+		if (ptr->is_11n_enabled &&
+		    mwifiex_is_ba_stream_setup(priv, ptr, tid) &&
+		    mwifiex_is_amsdu_in_ampdu_allowed(priv, ptr, tid) &&
+		    mwifiex_is_amsdu_allowed(priv, tid) &&
+		    mwifiex_is_11n_aggragation_possible(priv, ptr,
+							adapter->tx_buf_size))
+			mwifiex_11n_aggregate_pkt(priv, ptr, ptr_index, flags);
+			/* ra_list_spinlock has been freed in
+			 * mwifiex_11n_aggregate_pkt()
+			 */
+		else
+			mwifiex_send_single_packet(priv, ptr, ptr_index, flags);
+			/* ra_list_spinlock has been freed in
+			 * mwifiex_send_single_packet()
+			 */
 	} else {
 		if (mwifiex_is_ampdu_allowed(priv, tid) &&
 		    ptr->pkt_count > ptr->ba_packet_thr) {
@@ -1294,8 +1312,7 @@ mwifiex_dequeue_tx_packet(struct mwifiex_adapter *adapter)
 		if (mwifiex_is_amsdu_allowed(priv, tid) &&
 		    mwifiex_is_11n_aggragation_possible(priv, ptr,
 							adapter->tx_buf_size))
-			mwifiex_11n_aggregate_pkt(priv, ptr, INTF_HEADER_LEN,
-						  ptr_index, flags);
+			mwifiex_11n_aggregate_pkt(priv, ptr, ptr_index, flags);
 			/* ra_list_spinlock has been freed in
 			   mwifiex_11n_aggregate_pkt() */
 		else

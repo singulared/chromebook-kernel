@@ -423,61 +423,32 @@ out:
 	return is_special_lot;
 }
 
-static int __init exynos542x_set_asv_volt_mif_sram(void)
+static int __init exynos542x_set_asv_volt_g3d_sram(void)
 {
-	unsigned int mif_volt;
-	unsigned int mif_sram_volt;
 	unsigned int g3d_sram_volt;
-	struct regulator *mif_regulator;
-	struct regulator *mif_sram_regulator;
 	struct regulator *g3d_sram_regulator;
 
 	if (!(soc_is_exynos542x()))
 		return 0;
 
-	mif_regulator = regulator_get(NULL, "vdd_mif");
-	mif_sram_regulator = regulator_get(NULL, "vdd_mifs");
 	g3d_sram_regulator = regulator_get(NULL, "vdd_g3ds");
 
 	/* Set the voltages based on the ASV group */
-	mif_volt = get_match_volt(ID_MIF, 0);
-	mif_sram_volt = get_match_volt(ID_MIF_SRAM, 0);
 	g3d_sram_volt = get_match_volt(ID_G3D_SRAM, 0);
 
-	pr_info("MIF, MIF_SRAM, G3D_SRAM ASV is %d, %d, %d\n",
-			mif_volt, mif_sram_volt, g3d_sram_volt);
-	if (!IS_ERR(mif_regulator))
-		regulator_set_voltage(mif_regulator, mif_volt, mif_volt);
-	else {
-		pr_err("Regulator get error : mif\n");
-		goto err_mif;
-	}
+	pr_info("G3D_SRAM ASV is %d\n", g3d_sram_volt);
 
-	if (!IS_ERR(mif_sram_regulator))
-		regulator_set_voltage(mif_sram_regulator, mif_sram_volt,
-							mif_sram_volt);
-	else {
-		pr_err("Regulator get error : mif_sram\n");
-		goto err_mif_sram;
-	}
-
-	if (!IS_ERR(g3d_sram_regulator))
+	if (!IS_ERR(g3d_sram_regulator)) {
 		regulator_set_voltage(g3d_sram_regulator, g3d_sram_volt,
 							g3d_sram_volt);
-	else {
+		regulator_put(g3d_sram_regulator);
+	} else {
 		pr_err("Regulator get error : g3d_sram\n");
-		goto err_g3d_sram;
 	}
 
-	regulator_put(g3d_sram_regulator);
-err_g3d_sram:
-	regulator_put(mif_sram_regulator);
-err_mif_sram:
-	regulator_put(mif_regulator);
-err_mif:
 	return 0;
 }
-late_initcall(exynos542x_set_asv_volt_mif_sram);
+late_initcall(exynos542x_set_asv_volt_g3d_sram);
 
 static void exynos542x_set_ema(void)
 {

@@ -2548,7 +2548,7 @@ static const struct dev_pm_ops kbase_pm_ops = {
 
 static const struct of_device_id mali_of_match[] = {
 	{
-		.compatible = "arm,mali",
+		.compatible = "arm,mali-midgard",
 	},
 	{},
 };

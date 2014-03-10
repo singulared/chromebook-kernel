@@ -39,6 +39,10 @@
 
 #define MWIFIEX_DEF_11N_RX_SEQ_NUM	0xffff
 
+enum mwifiex_rxreor_flags {
+	RXREOR_INIT_WINDOW_SHIFT =	1<<0,
+};
+
 static inline void mwifiex_reset_11n_rx_seq_num(struct mwifiex_private *priv)
 {
 	memset(priv->rx_seq, 0xff, sizeof(priv->rx_seq));

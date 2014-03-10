@@ -1881,8 +1881,10 @@ static bool intel_sdvo_detect_hdmi_audio(struct drm_connector *connector)
 
 static int
 intel_sdvo_set_property(struct drm_connector *connector,
+			void *state,
 			struct drm_property *property,
-			uint64_t val)
+			uint64_t val,
+			void *blob_data)
 {
 	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	struct intel_sdvo_connector *intel_sdvo_connector = to_intel_sdvo_connector(connector);
@@ -2212,6 +2214,9 @@ intel_sdvo_connector_init(struct intel_sdvo_connector *connector,
 
 	intel_connector_attach_encoder(&connector->base, &encoder->base);
 	drm_sysfs_connector_add(&connector->base.base);
+
+	intel_i2c_register(encoder->base.base.dev, &connector->base.base,
+			   encoder->ddc_bus);
 }
 
 static void
