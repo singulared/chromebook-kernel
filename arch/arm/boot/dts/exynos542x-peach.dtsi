@@ -8,6 +8,8 @@
  * published by the Free Software Foundation.
  */
 
+#include "marvell_txpwrlimit.dtsi"
+
 / {
 	aliases {
 		i2c20 = &i2c_20;
