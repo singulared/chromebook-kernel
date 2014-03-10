@@ -1595,6 +1595,7 @@ struct tpm_chip *tpm_register_hardware(struct device *dev,
 	 * nasty defensive timeouts at the next boot.
 	 */
 	chip->shutdown_nb.notifier_call = tpm_shutdown_notify;
+	dev_info(chip->dev, "registering reboot notifier [gentle shutdown]\n");
 	register_reboot_notifier(&chip->shutdown_nb);
 
 	return chip;
