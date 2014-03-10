@@ -1102,201 +1102,6 @@ static void hdmi_connector_destroy(struct drm_connector *connector)
 	drm_connector_cleanup(connector);
 }
 
-static struct drm_connector_funcs hdmi_connector_funcs = {
-	.dpms = drm_helper_connector_dpms,
-	.fill_modes = drm_helper_probe_single_connector_modes,
-	.detect = hdmi_detect,
-	.destroy = hdmi_connector_destroy,
-};
-
-static int hdmi_get_modes(struct drm_connector *connector)
-{
-	struct hdmi_context *hdata = ctx_from_connector(connector);
-	struct edid *edid;
-	int count;
-
-	if (!hdata->ddc_port)
-		return -ENODEV;
-
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
-			drm_get_connector_name(connector));
-
-	edid = drm_get_edid(connector, hdata->ddc_port->adapter);
-	if (!edid)
-		return -ENODEV;
-
-	hdata->dvi_mode = !drm_detect_hdmi_monitor(edid);
-	DRM_DEBUG_KMS("%s : width[%d] x height[%d]\n",
-		(hdata->dvi_mode ? "dvi monitor" : "hdmi monitor"),
-		edid->width_cm, edid->height_cm);
-
-	count = drm_add_edid_modes(connector, edid);
-	if (count < 0)
-		DRM_ERROR("Add edid modes failed %d\n", count);
-	else
-		drm_mode_connector_update_edid_property(connector, edid);
-
-	kfree(edid);
-	return count;
-}
-
-static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
-{
-	const struct hdmiphy_config *confs;
-	int count, i;
-
-	DRM_DEBUG_KMS("pixel_clock: %u\n", pixel_clock);
-
-	if (hdata->version == HDMI_VER_EXYNOS4210) {
-		confs = hdmiphy_4210_configs;
-		count = ARRAY_SIZE(hdmiphy_4210_configs);
-	} else if (hdata->version == HDMI_VER_EXYNOS4212) {
-		confs = hdmiphy_4212_configs;
-		count = ARRAY_SIZE(hdmiphy_4212_configs);
-	} else if (hdata->version == HDMI_VER_EXYNOS5420) {
-		confs = hdmiphy_5420_configs;
-		count = ARRAY_SIZE(hdmiphy_5420_configs);
-	} else
-		return -EINVAL;
-
-	for (i = 0; i < count; i++)
-		if (confs[i].pixel_clock == pixel_clock)
-			return i;
-
-	DRM_DEBUG_KMS("Could not find phy config for pixel_clock: %u\n",
-			pixel_clock);
-	return -EINVAL;
-}
-
-static int hdmi_check_mode(void *ctx, const struct drm_display_mode *mode)
-{
-	struct hdmi_context *hdata = ctx;
-	int ret;
-
-	ret = hdmi_find_phy_conf(hdata, mode->clock * 1000);
-	if (ret < 0)
-		return ret;
-
-	DRM_DEBUG_KMS("[MODE:%s] %ux%u vrefresh: %d, interlace:%d clock: %d kHz is OK\n",
-			mode->name, mode->hdisplay, mode->vdisplay,
-			mode->vrefresh,
-			!!(mode->flags & DRM_MODE_FLAG_INTERLACE),
-			mode->clock);
-
-	return 0;
-}
-
-static int hdmi_mode_valid(struct drm_connector *connector,
-				struct drm_display_mode *mode);
-
-static struct drm_encoder *hdmi_best_encoder(struct drm_connector *connector)
-{
-	struct hdmi_context *hdata = ctx_from_connector(connector);
-
-	return hdata->encoder;
-}
-
-static struct drm_connector_helper_funcs hdmi_connector_helper_funcs = {
-	.get_modes = hdmi_get_modes,
-	.mode_valid = hdmi_mode_valid,
-	.best_encoder = hdmi_best_encoder,
-};
-
-static int (*exynos_possible_hdmi_bridges[])(struct drm_encoder *encoder) = {
-	anx7808_init,
-};
-
-static int exynos_drm_attach_hdmi_bridge(struct drm_encoder *encoder)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(exynos_possible_hdmi_bridges); i++) {
-		if (!exynos_possible_hdmi_bridges[i](encoder))
-			return 0;
-	}
-	return -ENODEV;
-}
-
-static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
-{
-	struct hdmi_context *hdata = ctx;
-	struct drm_connector *connector = &hdata->connector;
-	int ret;
-
-	hdata->encoder = encoder;
-
-	/* Pre-empt connector creation if there's a bridge */
-	if (!exynos_drm_attach_hdmi_bridge(encoder))
-		return 0;
-
-	connector->interlace_allowed = true;
-	connector->polled = DRM_CONNECTOR_POLL_HPD;
-
-	ret = drm_connector_init(hdata->drm_dev, connector,
-			&hdmi_connector_funcs, DRM_MODE_CONNECTOR_HDMIA);
-	if (ret) {
-		DRM_ERROR("Failed to initialize connector with drm\n");
-		return ret;
-	}
-
-	drm_connector_helper_add(connector, &hdmi_connector_helper_funcs);
-	ret = drm_sysfs_connector_add(connector);
-	if (ret)
-		goto err_connector;
-
-	ret = drm_mode_connector_attach_encoder(connector, encoder);
-	if (ret) {
-		DRM_ERROR("failed to attach a connector to an encoder\n");
-		goto err_sysfs;
-	}
-
-	return 0;
-
-err_sysfs:
-	drm_sysfs_connector_remove(connector);
-err_connector:
-	drm_connector_cleanup(connector);
-	return ret;
-}
-
-static bool hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
-				const struct drm_display_mode *mode,
-				struct drm_display_mode *adjusted_mode)
-{
-	struct drm_display_mode *m;
-
-	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n", DRM_BASE_ID(connector),
-			drm_get_connector_name(connector), mode->name);
-
-	/*
-	 * Match the incoming mode to a mode in the connector list and copy it
-	 * over. This is important since this might be an adjusted mode from the
-	 * mixer and those have differing crtc_* values.
-	 */
-	list_for_each_entry(m, &connector->modes, head) {
-		if (mode->hdisplay == m->hdisplay &&
-		    mode->vdisplay == m->vdisplay &&
-		    mode->clock == m->clock &&
-		    hdmi_check_mode(in_ctx, m) >= 0) {
-			drm_mode_copy(adjusted_mode, m);
-			return true;
-		}
-	}
-
-	list_for_each_entry(m, &connector->modes, head) {
-		if (mode->hdisplay == m->hdisplay &&
-		    mode->vdisplay == m->vdisplay &&
-		    hdmi_check_mode(in_ctx, m) >= 0) {
-			drm_mode_copy(adjusted_mode, m);
-			return true;
-		}
-	}
-
-	DRM_INFO("Mode %dx%d unsupported in hdmi driver, failing modeset\n",
-			mode->hdisplay, mode->vdisplay);
-	return false;
-}
-
 static int hdcp_exchange_ksvs(struct hdmi_context *hdata)
 {
 	u8 bksv[HDCP_I2C_LEN_BKSV], bcaps[HDCP_I2C_LEN_BCAPS];
@@ -1812,6 +1617,247 @@ static void hdcp_initialize(struct hdmi_context *hdata)
 	hdata->hdcp_desired = false;
 	hdata->hdcp_state = HDCP_STATE_OFF;
 	INIT_WORK(&hdata->hdcp_work, hdcp_work_func);
+}
+
+static int set_property(struct hdmi_context *hdata,
+			struct drm_property *property, uint64_t val)
+{
+	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
+	int ret = 0;
+
+	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+
+	if (property != mode_config->content_protection_property)
+		return 0;
+
+	DRM_DEBUG_KMS("[PROPERTY:%s] = %llu\n", property->name, val);
+
+	hdata->hdcp_desired = val;
+
+	if (!hdata->powered)
+		return 0;
+
+	if (hdata->hdcp_desired)
+		ret = hdcp_start(hdata);
+	else
+		hdcp_stop(hdata);
+
+	return ret;
+}
+
+static int hdmi_connector_set_property(struct drm_connector *connector,
+		void *state, struct drm_property *property, uint64_t val,
+		void *blob_data)
+{
+	struct hdmi_context *hdata = ctx_from_connector(connector);
+	int ret;
+
+	ret = set_property(hdata, property, val);
+	if (ret)
+		return ret;
+
+	return drm_object_property_set_value(&connector->base, property, val);
+}
+
+static struct drm_connector_funcs hdmi_connector_funcs = {
+	.dpms = drm_helper_connector_dpms,
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.detect = hdmi_detect,
+	.destroy = hdmi_connector_destroy,
+	.set_property	= hdmi_connector_set_property,
+};
+
+static int hdmi_get_modes(struct drm_connector *connector)
+{
+	struct hdmi_context *hdata = ctx_from_connector(connector);
+	struct edid *edid;
+	int count;
+
+	if (!hdata->ddc_port)
+		return -ENODEV;
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector));
+
+	edid = drm_get_edid(connector, hdata->ddc_port->adapter);
+	if (!edid)
+		return -ENODEV;
+
+	hdata->dvi_mode = !drm_detect_hdmi_monitor(edid);
+	DRM_DEBUG_KMS("%s : width[%d] x height[%d]\n",
+		(hdata->dvi_mode ? "dvi monitor" : "hdmi monitor"),
+		edid->width_cm, edid->height_cm);
+
+	count = drm_add_edid_modes(connector, edid);
+	if (count < 0)
+		DRM_ERROR("Add edid modes failed %d\n", count);
+	else
+		drm_mode_connector_update_edid_property(connector, edid);
+
+	kfree(edid);
+	return count;
+}
+
+static int hdmi_find_phy_conf(struct hdmi_context *hdata, u32 pixel_clock)
+{
+	const struct hdmiphy_config *confs;
+	int count, i;
+
+	DRM_DEBUG_KMS("pixel_clock: %u\n", pixel_clock);
+
+	if (hdata->version == HDMI_VER_EXYNOS4210) {
+		confs = hdmiphy_4210_configs;
+		count = ARRAY_SIZE(hdmiphy_4210_configs);
+	} else if (hdata->version == HDMI_VER_EXYNOS4212) {
+		confs = hdmiphy_4212_configs;
+		count = ARRAY_SIZE(hdmiphy_4212_configs);
+	} else if (hdata->version == HDMI_VER_EXYNOS5420) {
+		confs = hdmiphy_5420_configs;
+		count = ARRAY_SIZE(hdmiphy_5420_configs);
+	} else
+		return -EINVAL;
+
+	for (i = 0; i < count; i++)
+		if (confs[i].pixel_clock == pixel_clock)
+			return i;
+
+	DRM_DEBUG_KMS("Could not find phy config for pixel_clock: %u\n",
+			pixel_clock);
+	return -EINVAL;
+}
+
+static int hdmi_check_mode(void *ctx, const struct drm_display_mode *mode)
+{
+	struct hdmi_context *hdata = ctx;
+	int ret;
+
+	ret = hdmi_find_phy_conf(hdata, mode->clock * 1000);
+	if (ret < 0)
+		return ret;
+
+	DRM_DEBUG_KMS("[MODE:%s] %ux%u vrefresh: %d, interlace:%d clock: %d kHz is OK\n",
+			mode->name, mode->hdisplay, mode->vdisplay,
+			mode->vrefresh,
+			!!(mode->flags & DRM_MODE_FLAG_INTERLACE),
+			mode->clock);
+
+	return 0;
+}
+
+static int hdmi_mode_valid(struct drm_connector *connector,
+				struct drm_display_mode *mode);
+
+static struct drm_encoder *hdmi_best_encoder(struct drm_connector *connector)
+{
+	struct hdmi_context *hdata = ctx_from_connector(connector);
+
+	return hdata->encoder;
+}
+
+static struct drm_connector_helper_funcs hdmi_connector_helper_funcs = {
+	.get_modes = hdmi_get_modes,
+	.mode_valid = hdmi_mode_valid,
+	.best_encoder = hdmi_best_encoder,
+};
+
+static int (*exynos_possible_hdmi_bridges[])(struct drm_encoder *encoder) = {
+	anx7808_init,
+};
+
+static int exynos_drm_attach_hdmi_bridge(struct drm_encoder *encoder)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(exynos_possible_hdmi_bridges); i++) {
+		if (!exynos_possible_hdmi_bridges[i](encoder))
+			return 0;
+	}
+	return -ENODEV;
+}
+
+static int hdmi_create_connector(void *ctx, struct drm_encoder *encoder)
+{
+	struct hdmi_context *hdata = ctx;
+	struct drm_connector *connector = &hdata->connector;
+	int ret;
+
+	hdata->encoder = encoder;
+
+	/* Pre-empt connector creation if there's a bridge */
+	if (!exynos_drm_attach_hdmi_bridge(encoder))
+		return 0;
+
+	connector->interlace_allowed = true;
+	connector->polled = DRM_CONNECTOR_POLL_HPD;
+
+	ret = drm_connector_init(hdata->drm_dev, connector,
+			&hdmi_connector_funcs, DRM_MODE_CONNECTOR_HDMIA);
+	if (ret) {
+		DRM_ERROR("Failed to initialize connector with drm\n");
+		return ret;
+	}
+
+	drm_connector_helper_add(connector, &hdmi_connector_helper_funcs);
+
+	drm_object_attach_property(&connector->base,
+			hdata->drm_dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
+
+	ret = drm_sysfs_connector_add(connector);
+	if (ret)
+		goto err_connector;
+
+	ret = drm_mode_connector_attach_encoder(connector, encoder);
+	if (ret) {
+		DRM_ERROR("failed to attach a connector to an encoder\n");
+		goto err_sysfs;
+	}
+
+	return 0;
+
+err_sysfs:
+	drm_sysfs_connector_remove(connector);
+err_connector:
+	drm_connector_cleanup(connector);
+	return ret;
+}
+
+static bool hdmi_mode_fixup(void *in_ctx, struct drm_connector *connector,
+				const struct drm_display_mode *mode,
+				struct drm_display_mode *adjusted_mode)
+{
+	struct drm_display_mode *m;
+
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n", DRM_BASE_ID(connector),
+			drm_get_connector_name(connector), mode->name);
+
+	/*
+	 * Match the incoming mode to a mode in the connector list and copy it
+	 * over. This is important since this might be an adjusted mode from the
+	 * mixer and those have differing crtc_* values.
+	 */
+	list_for_each_entry(m, &connector->modes, head) {
+		if (mode->hdisplay == m->hdisplay &&
+		    mode->vdisplay == m->vdisplay &&
+		    mode->clock == m->clock &&
+		    hdmi_check_mode(in_ctx, m) >= 0) {
+			drm_mode_copy(adjusted_mode, m);
+			return true;
+		}
+	}
+
+	list_for_each_entry(m, &connector->modes, head) {
+		if (mode->hdisplay == m->hdisplay &&
+		    mode->vdisplay == m->vdisplay &&
+		    hdmi_check_mode(in_ctx, m) >= 0) {
+			drm_mode_copy(adjusted_mode, m);
+			return true;
+		}
+	}
+
+	DRM_INFO("Mode %dx%d unsupported in hdmi driver, failing modeset\n",
+			mode->hdisplay, mode->vdisplay);
+	return false;
 }
 
 static void hdmi_set_acr(u32 freq, u8 *acr)
@@ -2692,27 +2738,8 @@ static int hdmi_set_property(void *ctx, struct drm_property *property,
 			uint64_t val)
 {
 	struct hdmi_context *hdata = ctx;
-	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
-	int ret = 0;
 
-	WARN_ON(!mutex_is_locked(&mode_config->mutex));
-
-	if (property != mode_config->content_protection_property)
-		return 0;
-
-	DRM_DEBUG_KMS("[PROPERTY:%s] = %llu\n", property->name, val);
-
-	hdata->hdcp_desired = val;
-
-	if (!hdata->powered)
-		return 0;
-
-	if (hdata->hdcp_desired)
-		ret = hdcp_start(hdata);
-	else
-		hdcp_stop(hdata);
-
-	return ret;
+	return set_property(hdata, property, val);
 }
 
 static void hdmi_poweron(struct hdmi_context *hdata)
