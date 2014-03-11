@@ -402,11 +402,11 @@ static void __init set_volt_table(void)
 			max_support_idx = L2;
 		else
 			max_support_idx = L3;
-		min_support_idx = L14;
 	} else {
-		max_support_idx = L0;
-		min_support_idx = L13;
+		max_support_idx = L1;
 	}
+
+	min_support_idx = L14;
 
 	for (i = L0; i < max_support_idx; i++)
 		exynos5420_freq_table[i].frequency = CPUFREQ_ENTRY_INVALID;
@@ -433,10 +433,7 @@ static void __init set_volt_table_CA7(void)
 				exynos5420_volt_table_CA7[i]);
 	}
 
-	if (soc_is_exynos5420())
-		max_support_idx_CA7 = L2;
-	else
-		max_support_idx_CA7 = L0;
+	max_support_idx_CA7 = L2;
 	min_support_idx_CA7 = L9;
 
 	for (i = L0; i < max_support_idx_CA7; i++)
