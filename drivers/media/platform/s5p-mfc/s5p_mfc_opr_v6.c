@@ -248,9 +248,8 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 		ctx_size = buf_size->other_enc_ctx;
 		break;
 	default:
-		ctx->ctx.size = 0;
 		mfc_err("Codec type(%d) should be checked!\n", ctx->codec_mode);
-		break;
+		return -EINVAL;
 	}
 
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
@@ -1753,15 +1752,6 @@ static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 			return ret;
 		}
 		BUG_ON(ctx->bank1.dma & ((1 << MFC_BANK1_ALIGN_ORDER) - 1));
-	}
-	/* Header was generated now starting processing
-	 * First set the reference frame buffers
-	 */
-	if (ctx->capture_state != QUEUE_BUFS_REQUESTED) {
-		mfc_err("It seems that destionation buffers were not\n"
-			"requested.MFC requires that header should be generated\n"
-			"before allocating codec buffer.\n");
-		return -EAGAIN;
 	}
 
 	return 0;

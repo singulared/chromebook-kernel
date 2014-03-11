@@ -1105,7 +1105,6 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_err("error in vb2_reqbufs() for E(D)\n");
 			return ret;
 		}
-		ctx->capture_state = QUEUE_BUFS_REQUESTED;
 
 		ret = s5p_mfc_hw_call(ctx->dev->mfc_ops,
 				alloc_codec_buffers, ctx);
@@ -1115,6 +1114,9 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
 			return -ENOMEM;
 		}
+
+		ctx->capture_state = QUEUE_BUFS_REQUESTED;
+
 	} else if (reqbufs->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		if (reqbufs->count == 0) {
 			mfc_debug(2, "Freeing buffers\n");
@@ -1128,6 +1130,12 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_err("invalid output state: %d\n",
 							ctx->output_state);
 			return -EINVAL;
+		}
+
+		if (ctx->capture_state == QUEUE_FREE) {
+			mfc_err("CAPTURE buffers have to be requested "
+				"before requesting OUTPUT buffers\n");
+			return -EAGAIN;
 		}
 
 		if (IS_MFCV6(dev)) {
@@ -1145,15 +1153,23 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 			mfc_err("error in vb2_reqbufs() for E(S)\n");
 			return ret;
 		}
-		ctx->output_state = QUEUE_BUFS_REQUESTED;
 
 		if (IS_MFCV6(dev)) {
 			/* Run init encoder buffers */
-			s5p_mfc_hw_call(dev->mfc_ops, init_enc_buffers, ctx);
+			ret = s5p_mfc_hw_call(dev->mfc_ops, init_enc_buffers,
+						ctx);
+			if (ret) {
+				mfc_err("Error initializing encoder buffers\n");
+				reqbufs->count = 0;
+				vb2_reqbufs(&ctx->vq_src, reqbufs);
+				return -ENOMEM;
+			}
 			set_work_bit_irqsave(ctx);
 			s5p_mfc_clean_ctx_int_flags(ctx);
 			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 		}
+
+		ctx->output_state = QUEUE_BUFS_REQUESTED;
 	} else {
 		mfc_err("invalid buf type\n");
 		return -EINVAL;

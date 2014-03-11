@@ -198,11 +198,15 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 	size_t ctx_size = 0;
 	int ret;
 
-	if (ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
-		ctx->codec_mode == S5P_MFC_CODEC_H264_ENC)
+	if (ctx->codec_mode == S5P_MFC_CODEC_NONE) {
+		mfc_err("No codec mode set!\n");
+		return -EINVAL;
+	} else if (ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
+		 ctx->codec_mode == S5P_MFC_CODEC_H264_ENC) {
 		ctx_size = buf_size->h264_ctx;
-	else
+	} else {
 		ctx_size = buf_size->non_h264_ctx;
+	}
 
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
 	if (ret) {
@@ -219,6 +223,7 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm, buf_size->shm);
 	if (ret) {
 		mfc_err("Failed to allocate shared memory buffer\n");
+		s5p_mfc_release_priv_buf(dev->mem_dev_l, &ctx->ctx);
 		return ret;
 	}
 
