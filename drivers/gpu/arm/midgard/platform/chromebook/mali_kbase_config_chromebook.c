@@ -927,7 +927,7 @@ static ssize_t mali_sysfs_show_memory(struct device *dev,
 		return -ENODEV;
 
 	ret = sprintf(buf, "%lu bytes\n",
-		      atomic_read(&mali_memory_pages) * PAGE_SIZE);
+		      atomic_read(&kbdev->memdev.used_pages) * PAGE_SIZE);
 
 	return ret;
 }

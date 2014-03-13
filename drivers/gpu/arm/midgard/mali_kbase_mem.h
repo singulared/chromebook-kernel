@@ -602,6 +602,6 @@ static inline void kbase_wait_write_flush(kbase_context *kctx)
 void kbase_wait_write_flush(kbase_context *kctx);
 #endif
 
-extern atomic_t mali_memory_pages;
+
 
 #endif				/* _KBASE_MEM_H_ */
