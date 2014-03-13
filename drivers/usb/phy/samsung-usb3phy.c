@@ -279,6 +279,60 @@ static void samsung_exynos5_usb3phy_disable(struct samsung_usbphy *sphy)
 }
 
 /*
+ * This will switch PHY refclk from internal core clock to external PLL clock,
+ * when device is in use and vice versa across runtime suspend/resume.
+ */
+static int samsung_exynos5_usb3phy_clk_switch(struct samsung_usbphy *sphy,
+						bool use_ext_clk)
+{
+	int ret = 0;
+	u32 phyclkrst;
+	u32 phyparam0;
+
+	/* Enable the phy clock */
+	ret = clk_prepare_enable(sphy->clk);
+	if (ret) {
+		dev_err(sphy->dev, "%s: clk_prepare_enable failed\n", __func__);
+		return ret;
+	}
+
+	mutex_lock(&sphy->mutex);
+
+	phyparam0 = readl(sphy->regs + EXYNOS5_DRD_PHYPARAM0);
+	/* Select PHY CLK source */
+	if (use_ext_clk)
+		phyparam0 |= PHYPARAM0_REF_USE_PAD;
+	else
+		phyparam0 &= ~PHYPARAM0_REF_USE_PAD;
+	writel(phyparam0, sphy->regs + EXYNOS5_DRD_PHYPARAM0);
+
+	phyclkrst = readl(sphy->regs + EXYNOS5_DRD_PHYCLKRST);
+	phyclkrst &= ~(PHYCLKRST_REFCLKSEL_MASK |
+			PHYCLKRST_FSEL_MASK |
+			PHYCLKRST_MPLL_MULTIPLIER_MASK |
+			PHYCLKRST_SSC_REFCLKSEL_MASK);
+	phyclkrst |= PHYCLKRST_PORTRESET;
+	if (use_ext_clk)
+		phyclkrst |= samsung_usb3phy_set_refclk_ext();
+	else
+		phyclkrst |= samsung_usb3phy_set_refclk_int(sphy);
+
+	writel(phyclkrst, sphy->regs + EXYNOS5_DRD_PHYCLKRST);
+
+	udelay(10);
+
+	phyclkrst &= ~(PHYCLKRST_PORTRESET);
+	writel(phyclkrst, sphy->regs + EXYNOS5_DRD_PHYCLKRST);
+
+	mutex_unlock(&sphy->mutex);
+
+	/* Disable the phy clock */
+	clk_disable_unprepare(sphy->clk);
+
+	return ret;
+}
+
+/*
  * The function passed to the usb driver for phy initialization
  */
 static int samsung_usb3phy_init(struct usb_phy *phy)
@@ -421,6 +475,51 @@ static int samsung_usb3phy_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int samsung_usb3phy_runtime_suspend(struct device *dev)
+{
+	struct samsung_usbphy *sphy = dev_get_drvdata(dev);
+
+	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		/* Switch to EXTREFCLK */
+		samsung_exynos5_usb3phy_clk_switch(sphy, false);
+		/* Turn off PLL now */
+		gpio_set_value(sphy->phyclk_gpio, 0);
+	}
+
+	return 0;
+}
+
+static int samsung_usb3phy_runtime_resume(struct device *dev)
+{
+	struct samsung_usbphy *sphy = dev_get_drvdata(dev);
+
+	if (gpio_is_valid(sphy->phyclk_gpio)) {
+		/* Turn on PLL first then swithc to ref_pad_clk */
+		gpio_set_value(sphy->phyclk_gpio, 1);
+		/*
+		 * PI6C557-03 clock generator needs 3ms typically to stabilise,
+		 * but the datasheet doesn't list max.  We'll sleep for 10ms
+		 * and cross our fingers that it's enough.
+		 */
+		usleep_range(10000, 20000);
+
+		samsung_exynos5_usb3phy_clk_switch(sphy, true);
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops samsung_usb3phy_pm_ops = {
+	SET_RUNTIME_PM_OPS(samsung_usb3phy_runtime_suspend,
+				samsung_usb3phy_runtime_resume, NULL)
+};
+
+#define DEV_PM_OPS	(&samsung_usb3phy_pm_ops)
+#else
+#define DEV_PM_OPS	NULL
+#endif
+
 static struct samsung_usbphy_drvdata usb3phy_exynos5 = {
 	.cpu_type		= TYPE_EXYNOS5250,
 	.phy_en_mask		= EXYNOS_USBPHY_ENABLE,
@@ -465,6 +564,7 @@ static struct platform_driver samsung_usb3phy_driver = {
 	.driver		= {
 		.name	= "samsung-usb3phy",
 		.owner	= THIS_MODULE,
+		.pm	= DEV_PM_OPS,
 		.of_match_table = of_match_ptr(samsung_usbphy_dt_match),
 	},
 };
