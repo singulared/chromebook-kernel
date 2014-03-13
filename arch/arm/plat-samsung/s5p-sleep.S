@@ -82,6 +82,45 @@ exynos_542x_l2_cache:
 
 resume_after_542x_l2_cache:
 
+	/*
+	 * On Exynos5422, the A15 L2 auto clock gating needs to be re-enabled
+	 * since u-boot/bl2 would have disabled it. For Exynos5420, the L2 auto
+	 * clock gating should continue to be disabled.
+	 */
+
+	/* L2 auto clock gating should be re-enabled only for Exynos5422 */
+	ldr	r0, s5p_resume_cpu_id
+	lsr	r0, r0, #12
+	ldr	r1, =0xe5422
+	cmp	r0, r1
+	bne	skip_l2_auto_clock_gating
+
+	/* Is this A15 cluster. If not, this step is not applicable. */
+	mrc	p15, 0, r0, c0, c0, 0
+	ubfx	r0, r0, #4, #12
+	ldr	r1, =0x00000c0f
+	teq	r0, r1
+	bne	skip_l2_auto_clock_gating
+
+	/*
+	 * Set CMU_SPARE1 bits 1 and 3 register as suggested by hardware manual
+	 * before re-enabling L2 Auto clock gating.
+	 */
+	adr	r2, cmu_spare1_reg
+	ldr	r2, [r2]
+	ldr	r3, [r2]
+	orr	r3, r3, #0xa
+	str	r3, [r2]
+	dsb
+
+	/* Re-enable auto clock gating, bl2/u-boot would have disabled it */
+	mrc	p15, 1, r2, c15, c0, 0	/* L2 ACTLR register, bit 27 */
+	bic	r2, r2, #0x08000000
+	mcr	p15, 1, r2, c15, c0, 0
+	dsb
+	isb
+skip_l2_auto_clock_gating:
+
 #ifdef CONFIG_CACHE_L2X0
 	adr	r0, l2x0_regs_phys
 	ldr	r0, [r0]
@@ -115,3 +154,7 @@ l2x0_regs_phys:
 	.globl s5p_resume_cpu_id
 s5p_resume_cpu_id:
 	.long	0
+
+	.align	4
+cmu_spare1_reg:
+	.word	0x10012004	/* SFR address of CMU_SPARE1 register */
