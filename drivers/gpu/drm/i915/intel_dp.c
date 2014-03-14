@@ -463,95 +463,77 @@ intel_dp_aux_ch(struct intel_dp *intel_dp,
 	return recv_bytes;
 }
 
-/* Write data to the aux channel in native mode */
-static int
-intel_dp_aux_native_write(struct intel_dp *intel_dp,
-			  uint16_t address, uint8_t *send, int send_bytes)
+#define HEADER_SIZE	4
+static ssize_t
+intel_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 {
+	struct intel_dp *intel_dp = container_of(aux, struct intel_dp, aux);
+	uint8_t txbuf[20], rxbuf[20];
+	size_t txsize, rxsize;
 	int ret;
-	uint8_t	msg[20];
-	int msg_bytes;
-	uint8_t	ack;
-	int try;
 
-	intel_dp_check_edp(intel_dp);
-	if (send_bytes > 16)
-		return -1;
-	msg[0] = DP_AUX_NATIVE_WRITE << 4;
-	msg[1] = address >> 8;
-	msg[2] = address & 0xff;
-	msg[3] = send_bytes - 1;
-	memcpy(&msg[4], send, send_bytes);
-	msg_bytes = send_bytes + 4;
-	for (try = 0; try < 100; try++) {
-		ret = intel_dp_aux_ch(intel_dp, msg, msg_bytes, &ack, 1);
-		if (ret < 0)
-			return ret;
-		ack >>= 4;
-		if ((ack & DP_AUX_NATIVE_REPLY_MASK) == DP_AUX_NATIVE_REPLY_ACK)
-			break;
-		else if ((ack & DP_AUX_NATIVE_REPLY_MASK) == DP_AUX_NATIVE_REPLY_DEFER)
-			udelay(100);
-		else
-			return -EIO;
-	}
-	if (try == 100) {
-		DRM_ERROR("too many retries, giving up\n");
-		return -EREMOTEIO;
-	}
-	return send_bytes;
-}
+	txbuf[0] = msg->request << 4;
+	txbuf[1] = msg->address >> 8;
+	txbuf[2] = msg->address & 0xff;
+	txbuf[3] = msg->size - 1;
 
-/* Write a single byte to the aux channel in native mode */
-static int
-intel_dp_aux_native_write_1(struct intel_dp *intel_dp,
-			    uint16_t address, uint8_t byte)
-{
-	return intel_dp_aux_native_write(intel_dp, address, &byte, 1);
-}
+	switch (msg->request & ~DP_AUX_I2C_MOT) {
+	case DP_AUX_NATIVE_WRITE:
+	case DP_AUX_I2C_WRITE:
+		txsize = HEADER_SIZE + msg->size;
+		rxsize = 1;
 
-/* read bytes from a native aux channel */
-static int
-intel_dp_aux_native_read(struct intel_dp *intel_dp,
-			 uint16_t address, uint8_t *recv, int recv_bytes)
-{
-	uint8_t msg[4];
-	int msg_bytes;
-	uint8_t reply[20];
-	int reply_bytes;
-	uint8_t ack;
-	int ret;
-	int try;
+		if (WARN_ON(txsize > 20))
+			return -E2BIG;
 
-	intel_dp_check_edp(intel_dp);
-	msg[0] = DP_AUX_NATIVE_READ << 4;
-	msg[1] = address >> 8;
-	msg[2] = address & 0xff;
-	msg[3] = recv_bytes - 1;
+		memcpy(txbuf + HEADER_SIZE, msg->buffer, msg->size);
 
-	msg_bytes = 4;
-	reply_bytes = recv_bytes + 1;
+		ret = intel_dp_aux_ch(intel_dp, txbuf, txsize, rxbuf, rxsize);
+		if (ret > 0) {
+			msg->reply = rxbuf[0] >> 4;
 
-	for (try = 0; try < 100; try++) {
-		ret = intel_dp_aux_ch(intel_dp, msg, msg_bytes,
-				      reply, reply_bytes);
-		if (ret == 0)
-			return -EPROTO;
-		if (ret < 0)
-			return ret;
-		ack = reply[0] >> 4;
-		if ((ack & DP_AUX_NATIVE_REPLY_MASK) == DP_AUX_NATIVE_REPLY_ACK) {
-			memcpy(recv, reply + 1, ret - 1);
-			return ret - 1;
+			/* Return payload size. */
+			ret = msg->size;
 		}
-		else if ((ack & DP_AUX_NATIVE_REPLY_MASK) == DP_AUX_NATIVE_REPLY_DEFER)
-			udelay(100);
-		else
-			return -EIO;
+		break;
+
+	case DP_AUX_NATIVE_READ:
+	case DP_AUX_I2C_READ:
+		txsize = HEADER_SIZE;
+		rxsize = msg->size + 1;
+
+		if (WARN_ON(rxsize > 20))
+			return -E2BIG;
+
+		ret = intel_dp_aux_ch(intel_dp, txbuf, txsize, rxbuf, rxsize);
+		if (ret > 0) {
+			msg->reply = rxbuf[0] >> 4;
+			/*
+			 * Assume happy day, and copy the data. The caller is
+			 * expected to check msg->reply before touching it.
+			 *
+			 * Return payload size.
+			 */
+			ret--;
+			memcpy(msg->buffer, rxbuf + 1, ret);
+		}
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
 	}
 
-	DRM_ERROR("too many retries, giving up\n");
-	return -EREMOTEIO;
+	return ret;
+}
+
+static void
+intel_dp_aux_init(struct intel_dp *intel_dp, struct intel_connector *connector)
+{
+	struct drm_device *dev = intel_dp_to_dev(intel_dp);
+
+	intel_dp->aux.dev = dev->dev;
+	intel_dp->aux.transfer = intel_dp_aux_transfer;
 }
 
 static int
@@ -1212,8 +1194,8 @@ static void intel_dp_do_sink_dpms(struct intel_dp *intel_dp, int mode)
 	int ret, i;
 
 	if (mode != DRM_MODE_DPMS_ON) {
-		ret = intel_dp_aux_native_write_1(intel_dp, DP_SET_POWER,
-						  DP_SET_POWER_D3);
+		ret = drm_dp_dpcd_writeb(&intel_dp->aux, DP_SET_POWER,
+					 DP_SET_POWER_D3);
 		if (ret != 1)
 			DRM_DEBUG_DRIVER("failed to write sink power state\n");
 	} else {
@@ -1222,9 +1204,8 @@ static void intel_dp_do_sink_dpms(struct intel_dp *intel_dp, int mode)
 		 * time to wake up.
 		 */
 		for (i = 0; i < 3; i++) {
-			ret = intel_dp_aux_native_write_1(intel_dp,
-							  DP_SET_POWER,
-							  DP_SET_POWER_D0);
+			ret = drm_dp_dpcd_writeb(&intel_dp->aux, DP_SET_POWER,
+						 DP_SET_POWER_D0);
 			if (ret == 1)
 				break;
 			msleep(1);
@@ -1347,26 +1328,25 @@ static void intel_pre_enable_dp(struct intel_encoder *encoder)
 /*
  * Native read with retry for link status and receiver capability reads for
  * cases where the sink may still be asleep.
+ *
+ * Sinks are *supposed* to come up within 1ms from an off state, but we're also
+ * supposed to retry 3 times per the spec.
  */
-static bool
-intel_dp_aux_native_read_retry(struct intel_dp *intel_dp, uint16_t address,
-			       uint8_t *recv, int recv_bytes)
+static ssize_t
+intel_dp_dpcd_read_wake(struct drm_dp_aux *aux, unsigned int offset,
+			void *buffer, size_t size)
 {
-	int ret, i;
+	ssize_t ret;
+	int i;
 
-	/*
-	 * Sinks are *supposed* to come up within 1ms from an off state,
-	 * but we're also supposed to retry 3 times per the spec.
-	 */
 	for (i = 0; i < 3; i++) {
-		ret = intel_dp_aux_native_read(intel_dp, address, recv,
-					       recv_bytes);
-		if (ret == recv_bytes)
-			return true;
+		ret = drm_dp_dpcd_read(aux, offset, buffer, size);
+		if (ret == size)
+			return ret;
 		msleep(1);
 	}
 
-	return false;
+	return ret;
 }
 
 /*
@@ -1376,10 +1356,10 @@ intel_dp_aux_native_read_retry(struct intel_dp *intel_dp, uint16_t address,
 static bool
 intel_dp_get_link_status(struct intel_dp *intel_dp, uint8_t link_status[DP_LINK_STATUS_SIZE])
 {
-	return intel_dp_aux_native_read_retry(intel_dp,
-					      DP_LANE0_1_STATUS,
-					      link_status,
-					      DP_LINK_STATUS_SIZE);
+	return intel_dp_dpcd_read_wake(&intel_dp->aux,
+				       DP_LANE0_1_STATUS,
+				       link_status,
+				       DP_LINK_STATUS_SIZE) == DP_LINK_STATUS_SIZE;
 }
 
 #if 0
@@ -1721,8 +1701,8 @@ intel_dp_set_link_train(struct intel_dp *intel_dp,
 		len = intel_dp->lane_count + 1;
 	}
 
-	ret = intel_dp_aux_native_write(intel_dp, DP_TRAINING_PATTERN_SET,
-					buf, len);
+	ret = drm_dp_dpcd_write(&intel_dp->aux, DP_TRAINING_PATTERN_SET,
+				buf, len);
 
 	return ret == len;
 }
@@ -1743,9 +1723,9 @@ intel_dp_start_link_train(struct intel_dp *intel_dp)
 		intel_ddi_prepare_link_retrain(encoder);
 
 	/* Write the link configuration data */
-	intel_dp_aux_native_write(intel_dp, DP_LINK_BW_SET,
-				  intel_dp->link_configuration,
-				  DP_LINK_CONFIGURATION_SIZE);
+	drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_BW_SET,
+			intel_dp->link_configuration,
+			DP_LINK_CONFIGURATION_SIZE);
 
 	DP |= DP_PORT_EN;
 
@@ -1990,8 +1970,8 @@ intel_dp_link_down(struct intel_dp *intel_dp)
 static bool
 intel_dp_get_dpcd(struct intel_dp *intel_dp)
 {
-	if (intel_dp_aux_native_read_retry(intel_dp, 0x000, intel_dp->dpcd,
-					   sizeof(intel_dp->dpcd)) == 0)
+	if (intel_dp_dpcd_read_wake(&intel_dp->aux, 0x000, intel_dp->dpcd,
+				    sizeof(intel_dp->dpcd)) < 0)
 		return false; /* aux transfer failed */
 
 	if (intel_dp->dpcd[DP_DPCD_REV] == 0)
@@ -2004,9 +1984,9 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 	if (intel_dp->dpcd[DP_DPCD_REV] == 0x10)
 		return true; /* no per-port downstream info */
 
-	if (intel_dp_aux_native_read_retry(intel_dp, DP_DOWNSTREAM_PORT_0,
-					   intel_dp->downstream_ports,
-					   DP_MAX_DOWNSTREAM_PORTS) == 0)
+	if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_DOWNSTREAM_PORT_0,
+				    intel_dp->downstream_ports,
+				    DP_MAX_DOWNSTREAM_PORTS) < 0)
 		return false; /* downstream port status fetch failed */
 
 	return true;
@@ -2022,11 +2002,11 @@ intel_dp_probe_oui(struct intel_dp *intel_dp)
 
 	ironlake_edp_panel_vdd_on(intel_dp);
 
-	if (intel_dp_aux_native_read_retry(intel_dp, DP_SINK_OUI, buf, 3))
+	if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_SINK_OUI, buf, 3) == 3)
 		DRM_DEBUG_KMS("Sink OUI: %02hx%02hx%02hx\n",
 			      buf[0], buf[1], buf[2]);
 
-	if (intel_dp_aux_native_read_retry(intel_dp, DP_BRANCH_OUI, buf, 3))
+	if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_BRANCH_OUI, buf, 3) == 3)
 		DRM_DEBUG_KMS("Branch OUI: %02hx%02hx%02hx\n",
 			      buf[0], buf[1], buf[2]);
 
@@ -2036,22 +2016,16 @@ intel_dp_probe_oui(struct intel_dp *intel_dp)
 static bool
 intel_dp_get_sink_irq(struct intel_dp *intel_dp, u8 *sink_irq_vector)
 {
-	int ret;
-
-	ret = intel_dp_aux_native_read_retry(intel_dp,
-					     DP_DEVICE_SERVICE_IRQ_VECTOR,
-					     sink_irq_vector, 1);
-	if (!ret)
-		return false;
-
-	return true;
+	return intel_dp_dpcd_read_wake(&intel_dp->aux,
+				       DP_DEVICE_SERVICE_IRQ_VECTOR,
+				       sink_irq_vector, 1) == 1;
 }
 
 static void
 intel_dp_handle_test_request(struct intel_dp *intel_dp)
 {
 	/* NAK by default */
-	intel_dp_aux_native_write_1(intel_dp, DP_TEST_RESPONSE, DP_TEST_NAK);
+	drm_dp_dpcd_writeb(&intel_dp->aux, DP_TEST_RESPONSE, DP_TEST_NAK);
 }
 
 /*
@@ -2090,9 +2064,9 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 	if (intel_dp->dpcd[DP_DPCD_REV] >= 0x11 &&
 	    intel_dp_get_sink_irq(intel_dp, &sink_irq_vector)) {
 		/* Clear interrupt source */
-		intel_dp_aux_native_write_1(intel_dp,
-					    DP_DEVICE_SERVICE_IRQ_VECTOR,
-					    sink_irq_vector);
+		drm_dp_dpcd_writeb(&intel_dp->aux,
+				   DP_DEVICE_SERVICE_IRQ_VECTOR,
+				   sink_irq_vector);
 
 		if (sink_irq_vector & DP_AUTOMATED_TEST_REQUEST)
 			intel_dp_handle_test_request(intel_dp);
@@ -2127,9 +2101,11 @@ intel_dp_detect_dpcd(struct intel_dp *intel_dp)
 	hpd = !!(intel_dp->downstream_ports[0] & DP_DS_PORT_HPD);
 	if (hpd) {
 		uint8_t reg;
-		if (!intel_dp_aux_native_read_retry(intel_dp, DP_SINK_COUNT,
-						    &reg, 1))
+
+		if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_SINK_COUNT,
+					    &reg, 1) < 0)
 			return connector_status_unknown;
+
 		return DP_GET_SINK_COUNT(reg) ? connector_status_connected
 					      : connector_status_disconnected;
 	}
@@ -2765,6 +2741,8 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 
 	if (is_edp(intel_dp))
 		intel_dp_init_panel_power_sequencer(dev, intel_dp, &power_seq);
+
+	intel_dp_aux_init(intel_dp, intel_connector);
 
 	intel_dp_i2c_init(intel_dp, intel_connector, name);
 

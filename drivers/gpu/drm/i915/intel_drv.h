@@ -416,6 +416,7 @@ struct intel_dp {
 	struct i2c_adapter adapter;
 	struct i2c_algo_dp_aux_data algo;
 	bool is_pch_edp;
+	struct drm_dp_aux aux;
 	uint8_t train_set[4];
 	int panel_power_up_delay;
 	int panel_power_down_delay;
