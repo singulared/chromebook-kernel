@@ -1240,6 +1240,7 @@ static void mga_crtc_destroy(struct drm_crtc *crtc)
 static const struct drm_crtc_funcs mga_crtc_funcs = {
 	.gamma_set = mga_crtc_gamma_set,
 	.set_config = drm_crtc_helper_set_config,
+	.set_property = drm_atomic_crtc_set_property,
 	.destroy = mga_crtc_destroy,
 };
 

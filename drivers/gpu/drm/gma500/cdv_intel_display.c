@@ -1766,5 +1766,6 @@ const struct drm_crtc_funcs cdv_intel_crtc_funcs = {
 	.cursor_move = cdv_intel_crtc_cursor_move,
 	.gamma_set = cdv_intel_crtc_gamma_set,
 	.set_config = cdv_crtc_set_config,
+	.set_property = drm_atomic_crtc_set_property,
 	.destroy = cdv_intel_crtc_destroy,
 };
