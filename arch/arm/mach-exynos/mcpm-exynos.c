@@ -147,19 +147,22 @@ static int exynos_power_up(unsigned int cpu, unsigned int cluster)
 
 	cpu_use_count[cpu][cluster]++;
 	if (cpu_use_count[cpu][cluster] == 1) {
-		if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN)
+		bool was_cluster_down =
+			__mcpm_cluster_state(cluster) == CLUSTER_DOWN;
+
+		set_boot_flag(cpu, EXYNOS_HOTPLUG);
+		__raw_writel(virt_to_phys(mcpm_entry_point), REG_ENTRY_ADDR);
+		dsb();
+
+		if (was_cluster_down)
 			exynos_cluster_power_control(cluster, 1);
 		exynos_core_power_control(cpu, cluster, 1);
 
-		if (__mcpm_cluster_state(cluster) == CLUSTER_DOWN) {
+		if (was_cluster_down) {
 			mpidr = read_cpuid_mpidr();
 			udelay(10);
 			cci_control_port_by_cpu(mpidr, true);
 		}
-
-		set_boot_flag(cpu, EXYNOS_HOTPLUG);
-		__raw_writel(virt_to_phys(mcpm_entry_point),
-				REG_ENTRY_ADDR);
 
 		/* CPU should be powered up there */
 		/* Also setup Cluster Power Sequence here */
