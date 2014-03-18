@@ -225,6 +225,12 @@ const struct mixer_scan_range scan_ranges[] = {
 		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
 		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
 	},
+	{
+		.min_res = { 1600, 900 },
+		.max_res = { 1600, 900 },
+		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
+		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
+	},
 };
 
 const struct mixer_scan_adjustment scan_adjustments[] = {
@@ -500,6 +506,8 @@ unsigned mixer_get_horizontal_offset(unsigned width, unsigned height)
 		return 0x20;
 	else if (width == 1440 && height == 900)
 		return 0xe0;
+	else if (width == 1600 && height == 900)
+		return 0x40;
 
 	return 0;
 }
