@@ -1170,7 +1170,6 @@ static void exynos_dp_poweroff(struct exynos_dp_device *dp)
 
 	exynos_dp_led_powerdown(dp);
 	disable_irq(dp->irq);
-	flush_work(&dp->hotplug_work);
 	exynos_dp_phy_exit(dp);
 	clk_disable_unprepare(dp->clock);
 	exynos_dp_lcd_powerdown(dp);

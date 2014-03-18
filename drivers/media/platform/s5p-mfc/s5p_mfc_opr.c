@@ -37,31 +37,40 @@ void s5p_mfc_init_regs(struct s5p_mfc_dev *dev)
 		dev->mfc_regs = s5p_mfc_init_regs_v6_plus(dev);
 }
 
-int s5p_mfc_alloc_priv_buf(struct device *dev,
-					struct s5p_mfc_priv_buf *b)
+int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
+				size_t size)
 {
+	void *virt;
+	dma_addr_t dma;
 
-	mfc_debug(3, "Allocating priv: %d\n", b->size);
+	mfc_debug(3, "Allocating priv: %d\n", size);
 
-	b->virt = dma_alloc_coherent(dev, b->size, &b->dma, GFP_KERNEL);
+	/* We shouldn't normally allocate on top of previously-allocated buffer,
+	 * but if we happen to, at least free it first. */
+	WARN_ON(b->virt);
+	s5p_mfc_release_priv_buf(dev, b);
 
-	if (!b->virt) {
+	virt = dma_alloc_coherent(dev, size, &dma, GFP_KERNEL);
+	if (!virt) {
 		mfc_err("Allocating private buffer failed\n");
 		return -ENOMEM;
 	}
 
+	b->virt = virt;
+	b->size = size;
+	b->dma = dma;
 	mfc_debug(3, "Allocated addr %p %08x\n", b->virt, b->dma);
 	return 0;
 }
 
-void s5p_mfc_release_priv_buf(struct device *dev,
-						struct s5p_mfc_priv_buf *b)
+void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b)
 {
 	if (b->virt) {
 		dma_free_coherent(dev, b->size, b->virt, b->dma);
-		b->virt = NULL;
-		b->dma = 0;
-		b->size = 0;
 	}
+
+	b->virt = NULL;
+	b->dma = 0;
+	b->size = 0;
 }
 

@@ -39,7 +39,6 @@
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_iommu.h"
 #include "exynos_mixer.h"
-#include "exynos_drm_connector.h"
 
 #define get_mixer_context(dev)	platform_get_drvdata(to_platform_device(dev))
 

@@ -262,40 +262,44 @@ unsigned long __attribute__((weak)) __cpuinit calibrate_delay_is_known(void)
 void __cpuinit calibrate_delay(void)
 {
 	unsigned long lpj;
-	static bool printed;
+	static bool already_ran;
 	int this_cpu = smp_processor_id();
 
 	if (per_cpu(cpu_loops_per_jiffy, this_cpu)) {
 		lpj = per_cpu(cpu_loops_per_jiffy, this_cpu);
-		if (!printed)
+		if (!already_ran)
 			pr_info("Calibrating delay loop (skipped) "
 				"already calibrated this CPU");
 	} else if (preset_lpj) {
 		lpj = preset_lpj;
-		if (!printed)
+		if (!already_ran)
 			pr_info("Calibrating delay loop (skipped) "
 				"preset value.. ");
-	} else if ((!printed) && lpj_fine) {
+	} else if ((!already_ran) && lpj_fine) {
 		lpj = lpj_fine;
 		pr_info("Calibrating delay loop (skipped), "
 			"value calculated using timer frequency.. ");
 	} else if ((lpj = calibrate_delay_is_known())) {
 		;
 	} else if ((lpj = calibrate_delay_direct()) != 0) {
-		if (!printed)
+		if (!already_ran)
 			pr_info("Calibrating delay using timer "
 				"specific routine.. ");
 	} else {
-		if (!printed)
+		if (!already_ran)
 			pr_info("Calibrating delay loop... ");
 		lpj = calibrate_delay_converge();
 	}
 	per_cpu(cpu_loops_per_jiffy, this_cpu) = lpj;
-	if (!printed)
+	if (!already_ran) {
 		pr_cont("%lu.%02lu BogoMIPS (lpj=%lu)\n",
 			lpj/(500000/HZ),
 			(lpj/(5000/HZ)) % 100, lpj);
 
-	loops_per_jiffy = lpj;
-	printed = true;
+		loops_per_jiffy = lpj;
+	} else {
+		loops_per_jiffy = max(loops_per_jiffy, lpj);
+	}
+
+	already_ran = true;
 }

@@ -35,14 +35,6 @@
 
 #include <mach/cpufreq.h>
 
-/* System-wide loops_per_jiffy information */
-struct lpj_info {
-	unsigned long   ref;
-	unsigned int    freq;
-};
-
-static struct lpj_info global_lpj_ref;
-
 /* For switcher */
 /* Minimum (Big/Little) clock frequency */
 static unsigned int freq_min[CA_END] __read_mostly;
@@ -50,7 +42,6 @@ static unsigned int freq_min[CA_END] __read_mostly;
 static unsigned int freq_max[CA_END] __read_mostly;
 /* cpu number on (Big/Little) cluster */
 static struct cpumask cluster_cpus[CA_END];
-static unsigned long lpj[CA_END];
 
 #define ACTUAL_FREQ(x, cur)  ((cur == CA7) ? (x) << 1 : (x))
 #define VIRT_FREQ(x, cur)    ((cur == CA7) ? (x) >> 1 : (x))
@@ -115,11 +106,6 @@ static void init_cpumask_cluster_set(unsigned int cluster)
 static enum cluster_type get_cur_cluster(unsigned int cpu)
 {
 	return per_cpu(cpu_cur_cluster, cpu);
-}
-
-void reset_lpj_for_cluster(enum cluster_type cluster)
-{
-	lpj[!cluster] = 0;
 }
 
 /* Get table size */
@@ -389,16 +375,6 @@ static int exynos_cpufreq_scale(unsigned int target_freq,
 		pr_debug("\nold_index %d new_index %d\n", old_index, new_index);
 		exynos_info[cur]->set_freq(old_index, new_index);
 	}
-
-	if (!global_lpj_ref.freq) {
-		global_lpj_ref.ref = loops_per_jiffy;
-		global_lpj_ref.freq = freqs[cur]->old;
-	}
-
-	lpj[cur] = cpufreq_scale(global_lpj_ref.ref,
-			global_lpj_ref.freq, freqs[cur]->new);
-
-	loops_per_jiffy = max(lpj[CA7], lpj[CA15]);
 
 	/* When the new frequency is lower than current frequency */
 	if (!increased_frequency || (increased_frequency && safe_volt)) {

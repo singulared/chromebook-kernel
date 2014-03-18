@@ -486,10 +486,6 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	dwc->needs_fifo_resize = of_property_read_bool(node, "tx-fifo-resize");
 
-	pm_runtime_enable(dev);
-	pm_runtime_get_sync(dev);
-	pm_runtime_forbid(dev);
-
 	dwc3_cache_hwparams(dwc);
 
 	ret = dwc3_alloc_event_buffers(dwc, DWC3_EVENT_BUFFERS_SIZE);
@@ -510,6 +506,15 @@ static int dwc3_probe(struct platform_device *pdev)
 		dev_err(dwc->dev, "failed to setup event buffers\n");
 		goto err1;
 	}
+
+	/* Setting device state as 'suspended' initially,
+	 * to make sure we know device state prior to
+	 * pm_runtime_enable
+	 */
+	pm_runtime_set_suspended(dev);
+	pm_runtime_enable(dev);
+	pm_runtime_get_sync(dev);
+	pm_runtime_forbid(dev);
 
 	if (IS_ENABLED(CONFIG_USB_DWC3_HOST))
 		mode = DWC3_MODE_HOST;
@@ -561,6 +566,7 @@ static int dwc3_probe(struct platform_device *pdev)
 		goto err3;
 	}
 
+	pm_runtime_put_sync(dev);
 	pm_runtime_allow(dev);
 
 	device_enable_async_suspend(dev);
@@ -592,6 +598,7 @@ err1:
 
 err0:
 	dwc3_free_event_buffers(dwc);
+	pm_runtime_disable(&pdev->dev);
 
 	return ret;
 }
@@ -603,7 +610,6 @@ static int dwc3_remove(struct platform_device *pdev)
 	usb_phy_set_suspend(dwc->usb2_phy, 1);
 	usb_phy_set_suspend(dwc->usb3_phy, 1);
 
-	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	dwc3_debugfs_exit(dwc);
@@ -737,11 +743,44 @@ static int dwc3_resume(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int dwc3_runtime_suspend(struct device *dev)
+{
+	struct dwc3	*dwc = dev_get_drvdata(dev);
+	int ret = 0;
+
+	ret = usb_phy_autopm_put_sync(dwc->usb3_phy);
+	if (ret)
+		dev_warn(dev, "Can't autosuspend usb3-phy\n");
+
+	return ret;
+}
+
+static int dwc3_runtime_resume(struct device *dev)
+{
+	struct dwc3	*dwc = dev_get_drvdata(dev);
+	int ret = 0;
+
+	ret = usb_phy_autopm_get_sync(dwc->usb3_phy);
+	if (ret) {
+		dev_err(dev, "usb3-phy: get sync failed with err %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+#else
+#define dwc3_runtime_suspend		NULL
+#define dwc3_runtime_resume		NULL
+#endif
+
 static const struct dev_pm_ops dwc3_dev_pm_ops = {
 	.prepare	= dwc3_prepare,
 	.complete	= dwc3_complete,
 
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
+	SET_RUNTIME_PM_OPS(dwc3_runtime_suspend,
+				dwc3_runtime_resume, NULL)
 };
 
 #define DWC3_PM_OPS	&(dwc3_dev_pm_ops)

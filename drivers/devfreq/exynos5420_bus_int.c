@@ -740,7 +740,14 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 
 	for (i = 0; i < ARRAY_SIZE(int_bus_opp_list); i++) {
 #ifdef CONFIG_ARM_EXYNOS5420_ASV
-		asv_volt = get_match_volt(ID_INT, int_bus_opp_list[i].freq);
+		if (soc_is_exynos5420() && i > 2) {
+			/* Lock INT to at least 400MHz levels */
+			asv_volt = get_match_volt(ID_INT,
+					int_bus_opp_list[2].freq);
+		} else {
+			asv_volt = get_match_volt(ID_INT,
+					int_bus_opp_list[i].freq);
+		}
 #else
 		asv_volt = int_bus_opp_list[i].volt;
 #endif

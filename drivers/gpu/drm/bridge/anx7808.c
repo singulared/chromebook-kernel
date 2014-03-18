@@ -15,6 +15,7 @@
  *
  */
 
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
@@ -114,6 +115,7 @@ struct anx7808_data {
 	struct mutex big_lock;
 	struct i2c_algorithm i2c_algorithm;
 	struct i2c_adapter ddc_adapter;
+	struct dentry *debugfs;
 };
 
 static struct i2c_client *anx7808_addr_to_client(struct anx7808_data *anx7808,
@@ -1368,6 +1370,180 @@ static int anx7808_init_ddc_adapter(struct anx7808_data *anx7808,
 	return 0;
 }
 
+static int anx7808_show_regs(struct seq_file *s, void *data)
+{
+	struct anx7808_data *anx7808 = s->private;
+
+	uint8_t val;
+
+	mutex_lock(&anx7808->big_lock);
+#define DUMP_REG(reg) ({ \
+	if (!anx7808_read_reg(anx7808, reg, &val)) { \
+		seq_printf(s, "%05x %s: %02x\n", reg, #reg, val); \
+	} else { \
+		seq_printf(s, "%05x %s: could not be read\n", reg, #reg); \
+	} \
+})
+#define DUMP_DPCD(reg) ({ \
+	if (!anx7808_aux_dpcd_read(anx7808, reg, 1, &val)) { \
+		seq_printf(s, "DPCD %05x %s: %02x\n", reg, #reg, val); \
+	} else { \
+		seq_printf(s, "DPCD %05x %s: could not be read\n", reg, #reg); \
+	} \
+})
+
+	DUMP_REG(SP_TX_HDCP_STATUS);
+	DUMP_REG(SP_TX_HDCP_CTRL0_REG);
+	DUMP_REG(SP_TX_LINK_CHK_TIMER);
+	DUMP_REG(I2C_GEN_10US_TIMER0);
+	DUMP_REG(I2C_GEN_10US_TIMER1);
+	DUMP_REG(SP_TX_HDCP_CTRL);
+	DUMP_REG(SP_TX_DEBUG_REG1);
+	DUMP_REG(SP_TX_DP_POLLING_CTRL_REG);
+	DUMP_REG(SP_TX_LINK_DEBUG_REG);
+	DUMP_REG(SP_TX_MISC_CTRL_REG);
+	DUMP_REG(SP_TX_EXTRA_ADDR_REG);
+	DUMP_REG(SP_TX_AUX_STATUS);
+
+	DUMP_REG(SP_POWERD_CTRL_REG);
+	DUMP_REG(SP_TX_RST_CTRL_REG);
+	DUMP_REG(SP_TX_RST_CTRL2_REG);
+	DUMP_REG(SP_TX_VID_CTRL1_REG);
+	DUMP_REG(SP_TX_VID_CTRL2_REG);
+	DUMP_REG(SP_TX_VID_CTRL3_REG);
+	DUMP_REG(SP_TX_VID_CTRL5_REG);
+	DUMP_REG(SP_TX_VID_CTRL6_REG);
+	DUMP_REG(SP_TX_ANALOG_DEBUG_REG2);
+	DUMP_REG(SP_TX_PLL_FILTER_CTRL11);
+	DUMP_REG(SP_TX_PLL_FILTER_CTRL6);
+	DUMP_REG(SP_TX_ANALOG_CTRL);
+	DUMP_REG(SP_TX_INT_STATUS1);
+	DUMP_REG(SP_COMMON_INT_MASK1);
+	DUMP_REG(SP_COMMON_INT_MASK2);
+	DUMP_REG(SP_COMMON_INT_MASK3);
+	DUMP_REG(SP_COMMON_INT_MASK4);
+	DUMP_REG(SP_INT_MASK);
+	DUMP_REG(SP_TX_INT_CTRL_REG);
+
+	DUMP_REG(SP_TX_LT_CTRL_REG0);
+	DUMP_REG(SP_TX_LT_CTRL_REG1);
+	DUMP_REG(SP_TX_LT_CTRL_REG2);
+	DUMP_REG(SP_TX_LT_CTRL_REG3);
+	DUMP_REG(SP_TX_LT_CTRL_REG4);
+	DUMP_REG(SP_TX_LT_CTRL_REG5);
+	DUMP_REG(SP_TX_LT_CTRL_REG6);
+	DUMP_REG(SP_TX_LT_CTRL_REG7);
+	DUMP_REG(SP_TX_LT_CTRL_REG8);
+	DUMP_REG(SP_TX_LT_CTRL_REG9);
+	DUMP_REG(SP_TX_LT_CTRL_REG14);
+	DUMP_REG(SP_TX_LT_CTRL_REG15);
+	DUMP_REG(SP_TX_LT_CTRL_REG16);
+	DUMP_REG(SP_TX_LT_CTRL_REG17);
+	DUMP_REG(SP_TX_LT_CTRL_REG18);
+	DUMP_REG(SP_TX_LT_CTRL_REG19);
+
+	DUMP_REG(HDMI_RX_PORT_SEL_REG);
+	DUMP_REG(HDMI_RX_SRST_REG);
+	DUMP_REG(HDMI_RX_SYS_STATUS_REG);
+	DUMP_REG(HDMI_RX_HDMI_STATUS_REG);
+	DUMP_REG(HDMI_RX_HDMI_MUTE_CTRL_REG);
+	DUMP_REG(HDMI_RX_SYS_PWDN1_REG);
+	DUMP_REG(HDMI_RX_AEC_CTRL_REG);
+	DUMP_REG(HDMI_RX_AEC_EN0_REG);
+	DUMP_REG(HDMI_RX_AEC_EN1_REG);
+	DUMP_REG(HDMI_RX_AEC_EN2_REG);
+	DUMP_REG(HDMI_RX_INT_STATUS5_REG);
+	DUMP_REG(HDMI_RX_INT_STATUS6_REG);
+	DUMP_REG(HDMI_RX_INT_MASK1_REG);
+	DUMP_REG(HDMI_RX_INT_MASK2_REG);
+	DUMP_REG(HDMI_RX_INT_MASK3_REG);
+	DUMP_REG(HDMI_RX_INT_MASK4_REG);
+	DUMP_REG(HDMI_RX_INT_MASK5_REG);
+	DUMP_REG(HDMI_RX_INT_MASK6_REG);
+	DUMP_REG(HDMI_RX_INT_MASK7_REG);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG2);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG4);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG5);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG6);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG7);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG18);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG19);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG21);
+	DUMP_REG(HDMI_RX_TMDS_CTRL_REG22);
+	DUMP_REG(HDMI_RX_VIDEO_STATUS_REG1);
+
+	DUMP_REG(HDMI_RX_VID_DATA_RNG_CTRL_REG);
+	DUMP_REG(HDMI_RX_CEC_CTRL_REG);
+	DUMP_REG(HDMI_RX_CEC_SPEED_CTRL_REG);
+	DUMP_REG(HDMI_RX_CHIP_CTRL_REG);
+
+	DUMP_DPCD(DPCD_REV);
+	DUMP_DPCD(DP_PWR_VOLTAGE_CAP);
+	DUMP_DPCD(DOWNSTREAMPORT_PRESENT);
+	DUMP_DPCD(RECEIVE_PORT0_CAP_0);
+	DUMP_DPCD(RECEIVE_PORT0_CAP_1);
+	DUMP_DPCD(RECEIVE_PORT1_CAP_0);
+	DUMP_DPCD(RECEIVE_PORT1_CAP_1);
+	DUMP_DPCD(LINK_BW_SET);
+	DUMP_DPCD(LANE_COUNT_SET);
+	DUMP_DPCD(SINK_COUNT);
+	DUMP_DPCD(SINK_STATUS);
+	DUMP_DPCD(DOWN_STREAM_STATUS_1);
+	DUMP_DPCD(DOWN_STREAM_STATUS_2);
+	DUMP_DPCD(HPD_DP_PWR_STATUS);
+	DUMP_DPCD(AUX_HPD_BRIDGE_POWER_CONTROL);
+
+#undef DUMP_REG
+#undef DUMP_DPCD
+
+	mutex_unlock(&anx7808->big_lock);
+
+	return 0;
+}
+
+static int regs_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, anx7808_show_regs, inode->i_private);
+}
+
+static const struct file_operations anx7808_regs_operations = {
+	.open		= regs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+
+static int anx7808_debugfs_init(struct anx7808_data *anx7808,
+		struct drm_minor *minor)
+{
+	int err;
+
+	anx7808->debugfs = debugfs_create_dir("anx7808", minor->debugfs_root);
+	if (!anx7808->debugfs)
+		return -ENOMEM;
+
+	if (!debugfs_create_file("regs", S_IRUSR, anx7808->debugfs,
+				anx7808, &anx7808_regs_operations)) {
+		err = -ENOMEM;
+		goto remove;
+	}
+
+	return 0;
+
+remove:
+	debugfs_remove_recursive(anx7808->debugfs);
+	anx7808->debugfs = NULL;
+
+	return err;
+}
+
+static void anx7808_debugfs_destroy(struct anx7808_data *anx7808)
+{
+	debugfs_remove_recursive(anx7808->debugfs);
+	anx7808->debugfs = NULL;
+}
+
 void anx7808_disable(struct drm_bridge *bridge)
 {
 }
@@ -1445,6 +1621,9 @@ void anx7808_bridge_destroy(struct drm_bridge *bridge)
 {
 	int i;
 	struct anx7808_data *anx7808 = bridge->driver_private;
+
+	if (IS_ENABLED(CONFIG_DEBUG_FS))
+		anx7808_debugfs_destroy(anx7808);
 
 	drm_bridge_cleanup(bridge);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
@@ -1528,6 +1707,15 @@ out:
 int anx7808_mode_valid(struct drm_connector *connector,
 		struct drm_display_mode *mode)
 {
+	struct anx7808_data *anx7808 = container_of(connector,
+				struct anx7808_data, connector);
+	struct drm_encoder *encoder = anx7808->encoder;
+	struct drm_encoder_helper_funcs *encoder_funcs =
+				encoder->helper_private;
+
+	if (encoder_funcs && encoder_funcs->mode_valid)
+		return encoder_funcs->mode_valid(encoder, mode);
+
 	return MODE_OK;
 }
 
@@ -1861,6 +2049,12 @@ int anx7808_init(struct drm_encoder *encoder)
 	drm_mode_connector_attach_encoder(&anx7808->connector, encoder);
 	anx7808->connector.interlace_allowed = true;
 	anx7808->connector.polled = DRM_CONNECTOR_POLL_HPD;
+
+	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
+		ret = anx7808_debugfs_init(anx7808, dev->primary);
+		if (ret)
+			DRM_ERROR("Failed to initialize debugfs\n");
+	}
 
 	return 0;
 

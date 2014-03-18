@@ -17,7 +17,6 @@
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_encoder.h"
-#include "exynos_drm_connector.h"
 
 #define to_exynos_encoder(x)	container_of(x, struct exynos_drm_encoder,\
 				drm_encoder)
@@ -49,6 +48,24 @@ static void exynos_drm_encoder_dpms(struct drm_encoder *encoder, int mode)
 		display->ops->dpms(display->ctx, mode);
 
 	mutex_unlock(&dev->struct_mutex);
+}
+
+static int exynos_drm_encoder_mode_valid(struct drm_encoder *encoder,
+					 const struct drm_display_mode *mode)
+{
+	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
+	struct exynos_drm_display *display = exynos_encoder->display;
+	int ret = MODE_OK;
+
+	DRM_DEBUG_KMS("[ENCODER:%d:%s] [MODE:%s]\n",
+			DRM_BASE_ID(encoder), drm_get_encoder_name(encoder),
+			mode->name);
+
+	if (display->ops->check_mode)
+		if (display->ops->check_mode(display->ctx, mode))
+			ret = MODE_BAD;
+
+	return ret;
 }
 
 static bool
@@ -133,6 +150,7 @@ static void exynos_drm_encoder_disable(struct drm_encoder *encoder)
 
 static const struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
 	.dpms		= exynos_drm_encoder_dpms,
+	.mode_valid	= exynos_drm_encoder_mode_valid,
 	.mode_fixup	= exynos_drm_encoder_mode_fixup,
 	.mode_set	= exynos_drm_encoder_mode_set,
 	.prepare	= exynos_drm_encoder_prepare,
