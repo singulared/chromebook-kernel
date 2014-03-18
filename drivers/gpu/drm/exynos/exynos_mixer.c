@@ -99,7 +99,6 @@ struct mixer_context {
 	bool			interlace;
 	bool			powered;
 	bool			vp_enabled;
-	u32			int_en;
 	u32			previous_dxy;
 
 	struct mixer_resources	mixer_res;
@@ -950,48 +949,45 @@ static void mixer_mgr_remove(void *ctx)
 		drm_iommu_detach_device(mixer_ctx->drm_dev, mixer_ctx->dev);
 }
 
+/*
+ * This driver only uses one of mixer's interrupts, "Vertical synchronization"
+ * which is enabled by Mixer_INTR_EN.INT_EN_VSYNC.
+ */
+static void mixer_irq_mask(struct mixer_context *ctx, bool enable)
+{
+	struct mixer_resources *res = &ctx->mixer_res;
+	u32 val;
+
+	DRM_DEBUG_KMS("enable: %u\n", enable);
+
+	val = enable ? MXR_INT_EN_VSYNC : 0;
+	mixer_reg_write(res, MXR_INT_EN, val);
+}
+
 static int mixer_enable_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
-	struct mixer_resources *res = &mixer_ctx->mixer_res;
-	unsigned long flags;
 
-	DRM_DEBUG_KMS("pipe: %d\n", mixer_ctx->pipe);
-
-	spin_lock_irqsave(&res->reg_slock, flags);
-	mixer_ctx->int_en |= MXR_INT_EN_VSYNC;
+	DRM_DEBUG_KMS("powered: %d\n", mixer_ctx->powered);
 
 	if (!mixer_ctx->powered)
-		goto out;
+		return 0;
 
-	/* enable vsync interrupt */
-	mixer_reg_writemask(res, MXR_INT_EN, MXR_INT_EN_VSYNC,
-			MXR_INT_EN_VSYNC);
+	mixer_irq_mask(ctx, true);
 
-out:
-	spin_unlock_irqrestore(&res->reg_slock, flags);
 	return 0;
 }
 
 static void mixer_disable_vblank(void *ctx)
 {
 	struct mixer_context *mixer_ctx = ctx;
-	struct mixer_resources *res = &mixer_ctx->mixer_res;
-	unsigned long flags;
 
-	DRM_DEBUG_KMS("pipe: %d\n", mixer_ctx->pipe);
-
-	spin_lock_irqsave(&res->reg_slock, flags);
-	mixer_ctx->int_en &= ~MXR_INT_EN_VSYNC;
+	DRM_DEBUG_KMS("powered: %d\n", mixer_ctx->powered);
 
 	if (!mixer_ctx->powered)
-		goto out;
+		return;
 
-	/* disable vsync interrupt */
-	mixer_reg_writemask(res, MXR_INT_EN, 0, MXR_INT_EN_VSYNC);
-
-out:
-	spin_unlock_irqrestore(&res->reg_slock, flags);
+	mixer_irq_mask(ctx, false);
 }
 
 static void mixer_win_mode_set(void *ctx,
@@ -1209,7 +1205,6 @@ static void mixer_window_resume(struct mixer_context *ctx)
 static void mixer_poweron(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
-	unsigned long flags;
 
 	if (ctx->powered)
 		return;
@@ -1235,15 +1230,13 @@ static void mixer_poweron(struct mixer_context *ctx)
 	 */
 	ctx->powered = true;
 
-	spin_lock_irqsave(&res->reg_slock, flags);
-	mixer_reg_write(res, MXR_INT_EN, ctx->int_en);
-	spin_unlock_irqrestore(&res->reg_slock, flags);
+	mixer_irq_mask(ctx, drm_is_vblank_enabled(ctx->drm_dev, ctx->pipe));
+	enable_irq(ctx->mixer_res.irq);
 }
 
 static void mixer_poweroff(struct mixer_context *ctx)
 {
 	struct mixer_resources *res = &ctx->mixer_res;
-	unsigned long flags;
 
 	if (!ctx->powered)
 		return;
@@ -1252,10 +1245,7 @@ static void mixer_poweroff(struct mixer_context *ctx)
 
 	mixer_window_suspend(ctx);
 
-	spin_lock_irqsave(&res->reg_slock, flags);
-	ctx->int_en = mixer_reg_read(res, MXR_INT_EN);
-	mixer_reg_write(res, MXR_INT_EN, 0);
-	spin_unlock_irqrestore(&res->reg_slock, flags);
+	disable_irq(ctx->mixer_res.irq);
 
 	clk_disable_unprepare(res->mixer);
 	if (ctx->vp_enabled) {
@@ -1448,6 +1438,7 @@ static int mixer_resources_init(struct mixer_context *mixer_ctx,
 		return ret;
 	}
 	mixer_res->irq = res->start;
+	disable_irq(mixer_res->irq);
 
 	return 0;
 }

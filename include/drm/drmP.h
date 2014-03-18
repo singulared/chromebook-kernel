@@ -1529,6 +1529,7 @@ extern void drm_send_vblank_event(struct drm_device *dev, int crtc,
 extern bool drm_handle_vblank(struct drm_device *dev, int crtc);
 extern int drm_vblank_get(struct drm_device *dev, int crtc);
 extern void drm_vblank_put(struct drm_device *dev, int crtc);
+extern bool drm_is_vblank_enabled(struct drm_device *dev, int crtc);
 extern void drm_vblank_off(struct drm_device *dev, int crtc);
 extern void drm_vblank_cleanup(struct drm_device *dev);
 extern struct timeval drm_get_timestamp(void);

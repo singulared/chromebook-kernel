@@ -1010,6 +1010,20 @@ void drm_vblank_put(struct drm_device *dev, int crtc)
 EXPORT_SYMBOL(drm_vblank_put);
 
 /**
+ * drm_is_vblank_enabled - check if a crtc's vblank is enabled
+ * @dev: DRM device
+ * @crtc: which counter to check
+ *
+ * RETURNS
+ * true if crtc's vblank is enabled, else false
+ */
+bool drm_is_vblank_enabled(struct drm_device *dev, int crtc)
+{
+	return dev->vblank_enabled[crtc];
+}
+EXPORT_SYMBOL(drm_is_vblank_enabled);
+
+/**
  * drm_vblank_off - disable vblank events on a CRTC
  * @dev: DRM device
  * @crtc: CRTC in question

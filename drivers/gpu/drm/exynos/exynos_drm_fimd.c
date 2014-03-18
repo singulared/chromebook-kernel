@@ -688,29 +688,37 @@ static void fimd_commit(void *in_ctx)
 	exynos_set_dithering(ctx);
 }
 
+
+/*
+ * FIMD has three interrupt sources ("FIFO level", "Video frame sync", and "i80
+ * done interface".
+ * However, this driver only uses one: the "Video frame sync", which is enabled
+ * by VIDINTCON0_INT_FRAME.
+ * The Video frame sync interrupt itself has two interrupt sources, both of
+ * which are configurable.
+ * This driver only uses one source (FRAMESEL0), and configures it to interrupt
+ * at the start of VSYNC.
+ */
+static void fimd_irq_mask(struct fimd_context *ctx, bool enable)
+{
+	u32 val;
+
+	val = VIDINTCON0_INT_FRAME | VIDINTCON0_FRAMESEL0_VSYNC |
+			VIDINTCON0_FRAMESEL1_NONE;
+	val |= enable ? VIDINTCON0_INT_ENABLE : 0;
+	writel(val, ctx->regs + VIDINTCON0);
+}
+
 static int fimd_enable_vblank(void *in_ctx)
 {
 	struct fimd_context *ctx = in_ctx;
-	u32 val;
-
-	DRM_DEBUG_KMS("\n");
 
 	if (ctx->suspended)
 		return -EPERM;
 
-	val = readl(ctx->regs + VIDINTCON0);
+	DRM_DEBUG_KMS("\n");
 
-	val |= VIDINTCON0_INT_ENABLE;
-	val |= VIDINTCON0_INT_FRAME;
-
-	val &= ~VIDINTCON0_FRAMESEL0_MASK;
-	val |= VIDINTCON0_FRAMESEL0_VSYNC;
-	val &= ~VIDINTCON0_FRAMESEL1_MASK;
-	val |= VIDINTCON0_FRAMESEL1_NONE;
-
-	writel(val, ctx->regs + VIDINTCON0);
-
-	enable_irq(ctx->irq);
+	fimd_irq_mask(ctx, true);
 
 	return 0;
 }
@@ -718,21 +726,13 @@ static int fimd_enable_vblank(void *in_ctx)
 static void fimd_disable_vblank(void *in_ctx)
 {
 	struct fimd_context *ctx = in_ctx;
-	u32 val;
 
 	if (ctx->suspended)
 		return;
 
 	DRM_DEBUG_KMS("\n");
 
-	val = readl(ctx->regs + VIDINTCON0);
-
-	val &= ~VIDINTCON0_INT_FRAME;
-	val &= ~VIDINTCON0_INT_ENABLE;
-
-	writel(val, ctx->regs + VIDINTCON0);
-
-	disable_irq(ctx->irq);
+	fimd_irq_mask(ctx, false);
 }
 
 static void fimd_wait_for_vblank(struct fimd_context *ctx)
@@ -822,17 +822,10 @@ static int fimd_poweron(struct fimd_context *ctx)
 
 	fimd_dither_enable(ctx);
 
-	/*
-	 * Restore the vblank interrupts to whichever state DRM
-	 * wants them.
-	 */
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe]) {
-		ret = fimd_enable_vblank(ctx);
-		if (ret) {
-			DRM_ERROR("Failed to re-enable vblank [%d]\n", ret);
-			goto enable_vblank_err;
-		}
-	}
+	/* Update irq mask to current state of this crtc's vblank. */
+	fimd_irq_mask(ctx, drm_is_vblank_enabled(ctx->drm_dev, ctx->pipe));
+
+	enable_irq(ctx->irq);
 
 	fimd_window_resume(ctx);
 	/*
@@ -844,9 +837,6 @@ static int fimd_poweron(struct fimd_context *ctx)
 
 	return 0;
 
-enable_vblank_err:
-	fimd_dither_disable(ctx);
-	clk_disable_unprepare(ctx->lcd_clk);
 lcd_clk_err:
 	clk_disable_unprepare(ctx->bus_clk);
 bus_clk_err:
@@ -877,9 +867,7 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	 * backlog of vblank irqs that were ~16.7 ms delayed).
 	*/
 
-	/* Disable vblank irq, but only if currently enabled */
-	if (ctx->drm_dev && ctx->drm_dev->vblank_enabled[ctx->pipe])
-		fimd_disable_vblank(ctx);
+	disable_irq(ctx->irq);
 
 	fimd_dither_disable(ctx);
 
