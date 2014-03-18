@@ -268,18 +268,15 @@ static int s5p_set_outdata(struct s5p_aes_dev *dev, struct scatterlist *sg)
 {
 	int err;
 
-	if (!IS_ALIGNED(sg_dma_len(sg), AES_BLOCK_SIZE)) {
-		err = -EINVAL;
-		goto exit;
-	}
-	if (!sg_dma_len(sg)) {
-		err = -EINVAL;
-		goto exit;
-	}
-
 	err = dma_map_sg(dev->dev, sg, 1, DMA_FROM_DEVICE);
 	if (!err) {
 		err = -ENOMEM;
+		goto exit;
+	}
+
+	if (!(sg_dma_len(sg)) || !IS_ALIGNED(sg_dma_len(sg), AES_BLOCK_SIZE)) {
+		dma_unmap_sg(dev->dev, sg, 1, DMA_FROM_DEVICE);
+		err = -EINVAL;
 		goto exit;
 	}
 
@@ -294,18 +291,15 @@ static int s5p_set_indata(struct s5p_aes_dev *dev, struct scatterlist *sg)
 {
 	int err;
 
-	if (!IS_ALIGNED(sg_dma_len(sg), AES_BLOCK_SIZE)) {
-		err = -EINVAL;
-		goto exit;
-	}
-	if (!sg_dma_len(sg)) {
-		err = -EINVAL;
-		goto exit;
-	}
-
 	err = dma_map_sg(dev->dev, sg, 1, DMA_TO_DEVICE);
 	if (!err) {
 		err = -ENOMEM;
+		goto exit;
+	}
+
+	if (!(sg_dma_len(sg)) || !IS_ALIGNED(sg_dma_len(sg), AES_BLOCK_SIZE)) {
+		dma_unmap_sg(dev->dev, sg, 1, DMA_TO_DEVICE);
+		err = -EINVAL;
 		goto exit;
 	}
 
