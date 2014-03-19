@@ -422,7 +422,13 @@ static int anx7808_power_off(struct anx7808_data *anx7808, bool cancel_intp,
 	if (reset_oneshot)
 		atomic_set(&anx7808->cable_det_oneshot, 1);
 	gpio_set_value(anx7808->pd_gpio, 1);
-	usleep_range(1000, 2000);
+
+	/*
+	 * Wait here for the cable_det line to settle. This time is not
+	 * specified in the datasheet, however measurments show it does not
+	 * exceed 10ms. Double that and add a half to be safe.
+	 */
+	msleep(25);
 
 out:
 	if (cancel_intp)
