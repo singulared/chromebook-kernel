@@ -2002,7 +2002,7 @@ int anx7808_init(struct drm_encoder *encoder)
 
 	ret = devm_request_threaded_irq(&client->dev, anx7808->intp_irq, NULL,
 			anx7808_intp_threaded_handler,
-			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+			IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 			"anx7808_intp", anx7808);
 	if (ret < 0) {
 		DRM_ERROR("Failed to request intp irq: %d\n", ret);
