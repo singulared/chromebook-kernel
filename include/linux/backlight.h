@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
+#include <linux/workqueue.h>
 
 /* Notes on locking:
  *
@@ -101,6 +102,9 @@ struct backlight_device {
 
 	/* The framebuffer notifier block */
 	struct notifier_block fb_notif;
+
+	/* Worker to delay backlight enable on resume */
+	struct delayed_work resume_work;
 
 	struct device dev;
 };
