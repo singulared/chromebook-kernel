@@ -528,7 +528,6 @@ static inline void __flush_tlb_kernel_page(unsigned long kaddr)
 }
 
 #include <asm/cputype.h>
-extern bool has_erratum_a15_798181;
 #ifdef CONFIG_ARM_ERRATA_798181
 static inline int erratum_a15_798181(void)
 {
@@ -542,9 +541,6 @@ static inline int erratum_a15_798181(void)
 
 static inline void dummy_flush_tlb_a15_erratum(void)
 {
-	if (!erratum_a15_798181())
-		return;
-
 	/*
 	 * Dummy TLBIMVAIS. Using the unmapped address 0 and ASID 0.
 	 */
