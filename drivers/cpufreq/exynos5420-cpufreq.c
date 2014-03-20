@@ -511,10 +511,16 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 
 		exynos5420_clkdiv_table_CA7[i].clkdiv = tmp;
 	}
+	for (i = min_support_idx_CA7; i > max_support_idx_CA7; i--) {
+		if (exynos5420_freq_table_CA7[i].frequency >= rate)
+			break;
+	}
+	info->pll_safe_idx = i;
+	pr_debug("%s: pll_safe_idx = %d (%d, %lu)\n",
+		 __func__, i, exynos5420_freq_table_CA7[i].frequency, rate);
 
 	info->mpll_freq_khz = rate;
 	info->pm_lock_idx = L0;
-	info->pll_safe_idx = L5;
 	info->max_support_idx = max_support_idx_CA7;
 	info->min_support_idx = min_support_idx_CA7;
 	info->cpu_clk = fout_kpll;
@@ -615,10 +621,16 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 
 		exynos5420_clkdiv_table[i].clkdiv1 = tmp;
 	}
+	for (i = min_support_idx; i > max_support_idx; i--) {
+		if (exynos5420_freq_table[i].frequency >= rate)
+			break;
+	}
+	info->pll_safe_idx = i;
+	pr_debug("%s: pll_safe_idx = %d (%d, %lu)\n",
+		 __func__, i, exynos5420_freq_table[i].frequency, rate);
 
 	info->mpll_freq_khz = rate;
 	info->pm_lock_idx = L0;
-	info->pll_safe_idx = L12;
 	info->max_support_idx = max_support_idx;
 	info->min_support_idx = min_support_idx;
 	info->cpu_clk = fout_apll;
