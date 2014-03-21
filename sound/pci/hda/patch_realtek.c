@@ -562,25 +562,33 @@ static void alc_ssid_check(struct hda_codec *codec, const hda_nid_t *ports)
 /*
  * COEF access helper functions
  */
-static int alc_read_coef_idx(struct hda_codec *codec,
-			unsigned int coef_idx)
+static int alc_read_coefex_idx(struct hda_codec *codec,
+					hda_nid_t nid,
+					unsigned int coef_idx)
 {
 	unsigned int val;
-	snd_hda_codec_write(codec, 0x20, 0, AC_VERB_SET_COEF_INDEX,
+	snd_hda_codec_write(codec, nid, 0, AC_VERB_SET_COEF_INDEX,
 		    		coef_idx);
-	val = snd_hda_codec_read(codec, 0x20, 0,
+	val = snd_hda_codec_read(codec, nid, 0,
 			 	AC_VERB_GET_PROC_COEF, 0);
 	return val;
 }
 
-static void alc_write_coef_idx(struct hda_codec *codec, unsigned int coef_idx,
+#define alc_read_coef_idx(codec, coef_idx) \
+	alc_read_coefex_idx(codec, 0x20, coef_idx)
+
+static void alc_write_coefex_idx(struct hda_codec *codec, hda_nid_t nid,
+							unsigned int coef_idx,
 							unsigned int coef_val)
 {
-	snd_hda_codec_write(codec, 0x20, 0, AC_VERB_SET_COEF_INDEX,
+	snd_hda_codec_write(codec, nid, 0, AC_VERB_SET_COEF_INDEX,
 			    coef_idx);
-	snd_hda_codec_write(codec, 0x20, 0, AC_VERB_SET_PROC_COEF,
+	snd_hda_codec_write(codec, nid, 0, AC_VERB_SET_PROC_COEF,
 			    coef_val);
 }
+
+#define alc_write_coef_idx(codec, coef_idx, coef_val) \
+	alc_write_coefex_idx(codec, 0x20, coef_idx, coef_val)
 
 /* a special bypass for COEF 0; read the cached value at the second time */
 static unsigned int alc_get_coef0(struct hda_codec *codec)
