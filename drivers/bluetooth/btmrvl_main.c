@@ -62,13 +62,13 @@ bool btmrvl_check_evtpkt(struct btmrvl_private *priv, struct sk_buff *skb)
 			priv->btmrvl_dev.sendcmdflag = false;
 			priv->adapter->cmd_complete = true;
 			wake_up_interruptible(&priv->adapter->cmd_wait_q);
-		}
 
-		if (ogf == OGF) {
-			BT_DBG("vendor event skipped: ogf 0x%4.4x ocf 0x%4.4x",
-			       ogf, ocf);
-			kfree_skb(skb);
-			return false;
+			if (ogf == OGF) {
+				BT_DBG("vendor event skipped: ogf 0x%4.4x ocf 0x%4.4x",
+				       ogf, ocf);
+				kfree_skb(skb);
+				return false;
+			}
 		}
 	}
 
