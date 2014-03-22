@@ -537,19 +537,18 @@ static int vidi_get_modes(struct drm_connector *connector)
 	 */
 	if (!ctx->raw_edid) {
 		DRM_DEBUG_KMS("raw_edid is null.\n");
-		return -EFAULT;
+		return 0;
 	}
 
 	edid_len = (1 + ctx->raw_edid->extensions) * EDID_LENGTH;
 	edid = kmemdup(ctx->raw_edid, edid_len, GFP_KERNEL);
 	if (!edid) {
 		DRM_DEBUG_KMS("failed to allocate edid\n");
-		return -ENOMEM;
+		return 0;
 	}
 
-
-	int count = drm_add_edid_modes(connector, edid);
-	if (count < 0)
+	count = drm_add_edid_modes(connector, edid);
+	if (!count)
 		DRM_ERROR("Add edid modes failed %d\n", count);
 	else
 		drm_mode_connector_update_edid_property(connector, edid);

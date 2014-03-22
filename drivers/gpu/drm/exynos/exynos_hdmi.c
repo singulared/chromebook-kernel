@@ -1620,14 +1620,14 @@ static int hdmi_get_modes(struct drm_connector *connector)
 	int count;
 
 	if (!hdata->ddc_port)
-		return -ENODEV;
+		return 0;
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", DRM_BASE_ID(connector),
 			drm_get_connector_name(connector));
 
 	edid = drm_get_edid(connector, hdata->ddc_port->adapter);
 	if (!edid)
-		return -ENODEV;
+		return 0;
 
 	hdata->dvi_mode = !drm_detect_hdmi_monitor(edid);
 	DRM_DEBUG_KMS("%s : width[%d] x height[%d]\n",
@@ -1635,7 +1635,7 @@ static int hdmi_get_modes(struct drm_connector *connector)
 		edid->width_cm, edid->height_cm);
 
 	count = drm_add_edid_modes(connector, edid);
-	if (count < 0)
+	if (!count)
 		DRM_ERROR("Add edid modes failed %d\n", count);
 	else
 		drm_mode_connector_update_edid_property(connector, edid);
