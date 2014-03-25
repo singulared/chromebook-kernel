@@ -31,7 +31,7 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/printk.h>
-#include <linux/slab.h>
+#include <linux/rcupdate.h>
 
 struct fence;
 struct fence_ops;
@@ -41,6 +41,7 @@ struct fence_cb;
  * struct fence - software synchronization primitive
  * @refcount: refcount for this fence
  * @ops: fence_ops associated with this fence
+ * @rcu: used for releasing fence with kfree_rcu
  * @cb_list: list of all callbacks to call
  * @lock: spin_lock_irqsave used for locking
  * @context: execution context this fence belongs to, returned by
@@ -74,6 +75,7 @@ struct fence_cb;
 struct fence {
 	struct kref refcount;
 	const struct fence_ops *ops;
+	struct rcu_head rcu;
 	struct list_head cb_list;
 	spinlock_t *lock;
 	unsigned context, seqno;
@@ -188,11 +190,25 @@ static inline void fence_get(struct fence *fence)
 	kref_get(&fence->refcount);
 }
 
+/**
+ * fence_get_rcu - get a fence from a reservation_object_list with rcu read lock
+ * @fence:	[in]	fence to increase refcount of
+ *
+ * Function returns NULL if no refcount could be obtained, or the fence.
+ */
+static inline struct fence *fence_get_rcu(struct fence *fence)
+{
+	if (kref_get_unless_zero(&fence->refcount))
+		return fence;
+	else
+		return NULL;
+}
+
 extern void release_fence(struct kref *kref);
 
 static inline void free_fence(struct fence *fence)
 {
-	kfree(fence);
+	kfree_rcu(fence, rcu);
 }
 
 /**
