@@ -65,7 +65,7 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 	 * Ensure that max_discard_sectors is of the proper
 	 * granularity, so that requests stay aligned after a split.
 	 */
-	max_discard_sectors = min(q->limits.max_discard_sectors, UINT_MAX >> 9);
+	max_discard_sectors = q->limits.max_discard_sectors;
 	sector_div(max_discard_sectors, granularity);
 	max_discard_sectors *= granularity;
 	if (unlikely(!max_discard_sectors)) {
