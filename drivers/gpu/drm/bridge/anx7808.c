@@ -742,13 +742,12 @@ static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 	int ret;
 	uint8_t val;
 
-	ret = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &val);
+	ret = anx7808_aux_dpcd_read(anx7808, SINK_COUNT, 1, &val);
 	if (ret) {
-		DRM_ERROR("Failed to get DPCD downstream status %d\n", ret);
+		DRM_ERROR("Get sink count failed %d\n", ret);
 		return ret;
 	}
-
-	if (!(val & DOWN_STRM_HPD)) {
+	if (!(val & SINK_COUNT_MASK)) {
 		anx7808->ds_type = DOWNSTREAM_DISCONNECTED;
 		return 0;
 	}
