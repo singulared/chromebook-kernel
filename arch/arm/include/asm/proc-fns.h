@@ -109,6 +109,8 @@ extern void cpu_do_resume(void *);
 
 extern void cpu_resume(void);
 
+extern void (*plat_cpu_resume)(void);
+
 #include <asm/memory.h>
 
 #ifdef CONFIG_MMU

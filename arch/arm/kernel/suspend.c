@@ -73,3 +73,6 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 
 	return ret;
 }
+
+/* By default the platform cpu_resume() is the same as cpu_resume */
+void (*plat_cpu_resume)(void) = cpu_resume;
