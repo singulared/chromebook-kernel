@@ -201,6 +201,7 @@ static int mwifiex_sdio_suspend(struct device *dev)
 	/* Enable the Host Sleep */
 	if (!mwifiex_enable_hs(adapter)) {
 		dev_err(adapter->dev, "cmd: failed to suspend\n");
+		adapter->hs_enabling = false;
 		return -EFAULT;
 	}
 
@@ -209,6 +210,7 @@ static int mwifiex_sdio_suspend(struct device *dev)
 
 	/* Indicate device suspended */
 	adapter->is_suspended = true;
+	adapter->hs_enabling = false;
 
 	return ret;
 }
