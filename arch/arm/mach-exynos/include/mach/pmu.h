@@ -28,6 +28,8 @@ struct exynos_pmu_conf {
 	unsigned int val[NUM_SYS_POWERDOWN];
 };
 
+extern unsigned long s5p_resume_cpu_id;
+
 extern void exynos_sys_powerdown_conf(enum sys_powerdown mode);
 extern void s3c_cpu_resume(void);
 
