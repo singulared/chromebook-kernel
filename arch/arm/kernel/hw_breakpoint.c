@@ -1011,50 +1011,6 @@ static int __cpuinit dbg_reset_notify(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
-#ifdef CONFIG_SMP
-extern struct atomic_notifier_head task_migration_notifier;
-
-static void crbug_345917_handler(struct perf_event *pe,
-			  struct perf_sample_data *psd,
-			  struct pt_regs *regs)
-{
-	pr_warn("bad write to task_migration_notifier pc = %lx - %pF\n",
-		instruction_pointer(regs),
-		(void *)instruction_pointer(regs));
-	show_regs(regs);
-	dump_stack();
-	panic("tmn corruption");
-}
-
-static void __init crbug_345917_bp_init(void)
-{
-	/*
-	 * debug for crbug.com/345917
-	 * task migration notifier isn't expected to be used, but it's
-	 * getting corrupted somehow.  Use a hw watchpoint to find the
-	 * cause of the corruption.
-	 */
-	struct perf_event **ret;
-	struct perf_event_attr *attr = kzalloc(sizeof(*attr), GFP_KERNEL);
-	if (!attr) {
-		pr_warn("unable to allocate breakpoint for %s\n", __func__);
-		return;
-	}
-	hw_breakpoint_init(attr);
-	attr->bp_addr = (unsigned long)(&task_migration_notifier.head);
-	attr->bp_len  = HW_BREAKPOINT_LEN_4;
-	attr->bp_type = HW_BREAKPOINT_W;
-
-	pr_info("registering tmn watchpoint on 0x%llx\n", attr->bp_addr);
-	ret = register_wide_hw_breakpoint(attr, crbug_345917_handler, NULL);
-	if (IS_ERR(ret))
-		pr_info("watchpoint registration failed %lu\n", PTR_ERR(ret));
-
-}
-#else
-static void crbug_345917_bp_init(void) { }
-#endif
-
 static struct notifier_block __cpuinitdata dbg_reset_nb = {
 	.notifier_call = dbg_reset_notify,
 };
@@ -1108,10 +1064,6 @@ static int __init arch_hw_breakpoint_init(void)
 
 	/* Register hotplug notifier. */
 	register_cpu_notifier(&dbg_reset_nb);
-
-	/* This function is called after migration_init(), so register here */
-	crbug_345917_bp_init();
-
 	return 0;
 }
 arch_initcall(arch_hw_breakpoint_init);
