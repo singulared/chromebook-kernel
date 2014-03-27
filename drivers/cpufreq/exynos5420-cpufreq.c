@@ -34,6 +34,9 @@ static int max_support_idx_CA7;
 static int min_support_idx = (CPUFREQ_NUM_LEVELS - 1);
 static int min_support_idx_CA7 = (CPUFREQ_NUM_LEVELS_CA7 - 1);
 
+static int arm_safe_idx;
+static int kfc_safe_idx;
+
 static struct clk *mout_cpu;
 static struct clk *mout_mspll_cpu;
 static struct clk *mout_apll;
@@ -258,6 +261,10 @@ static void exynos5420_set_apll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
+	/* 0. If switching is faster than old or new, give us a safe divider */
+	if ((new_index > arm_safe_idx) && (old_index > arm_safe_idx))
+		exynos5420_set_clkdiv(arm_safe_idx);
+
 	/* 1. MUX_CORE_SEL = MOUT_MSPLL; ARMCLK uses MOUT_MSPLL for lock time */
 	if (clk_set_parent(mout_cpu, mout_mspll_cpu)) {
 		pr_err(KERN_ERR "Unable to set parent %s of clock %s.\n",
@@ -287,6 +294,10 @@ static void exynos5420_set_apll(unsigned int new_index,
 		tmp = __raw_readl(EXYNOS5_CLKMUX_STATCPU);
 		tmp &= EXYNOS5_CLKMUX_STATCPU_MUXCORE_MASK;
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_CPU_MUXCORE_SHIFT));
+
+	/* 4. restore original div value */
+	if ((new_index > arm_safe_idx) && (old_index > arm_safe_idx))
+		exynos5420_set_clkdiv(new_index);
 }
 
 static void exynos5420_set_kpll(unsigned int new_index,
@@ -295,9 +306,9 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	unsigned int tmp;
 	unsigned long rate;
 
-	/* 0. before change to MPLL, set div for MPLL output */
-	if ((new_index < L5) && (old_index < L5))
-		exynos5420_set_clkdiv_CA7(L5); /* pll_safe_index of CA7 */
+	/* 0. If switching is faster than old or new, give us a safe divider */
+	if ((new_index > kfc_safe_idx) && (old_index > kfc_safe_idx))
+		exynos5420_set_clkdiv_CA7(kfc_safe_idx);
 
 	/* 1. MUX_CORE_SEL = MPLL, KFCCLK uses MPLL for lock time */
 	if (clk_set_parent(mout_kfc, mout_mspll_kfc))
@@ -325,7 +336,7 @@ static void exynos5420_set_kpll(unsigned int new_index,
 	} while (tmp != (0x1 << EXYNOS5_CLKSRC_KFC_MUXCORE_SHIFT));
 
 	/* 4. restore original div value */
-	if ((new_index < L5) && (old_index < L5))
+	if ((new_index > kfc_safe_idx) && (old_index > kfc_safe_idx))
 		exynos5420_set_clkdiv_CA7(new_index);
 }
 
@@ -511,10 +522,16 @@ int exynos5420_cpufreq_CA7_init(struct exynos_dvfs_info *info)
 
 		exynos5420_clkdiv_table_CA7[i].clkdiv = tmp;
 	}
+	for (i = min_support_idx_CA7; i > max_support_idx_CA7; i--) {
+		if (exynos5420_freq_table_CA7[i].frequency >= rate)
+			break;
+	}
+	kfc_safe_idx = info->pll_safe_idx = i;
+	pr_debug("%s: pll_safe_idx = %d (%d, %lu)\n",
+		 __func__, i, exynos5420_freq_table_CA7[i].frequency, rate);
 
 	info->mpll_freq_khz = rate;
 	info->pm_lock_idx = L0;
-	info->pll_safe_idx = L5;
 	info->max_support_idx = max_support_idx_CA7;
 	info->min_support_idx = min_support_idx_CA7;
 	info->cpu_clk = fout_kpll;
@@ -615,10 +632,16 @@ int exynos5420_cpufreq_init(struct exynos_dvfs_info *info)
 
 		exynos5420_clkdiv_table[i].clkdiv1 = tmp;
 	}
+	for (i = min_support_idx; i > max_support_idx; i--) {
+		if (exynos5420_freq_table[i].frequency >= rate)
+			break;
+	}
+	arm_safe_idx = info->pll_safe_idx = i;
+	pr_debug("%s: pll_safe_idx = %d (%d, %lu)\n",
+		 __func__, i, exynos5420_freq_table[i].frequency, rate);
 
 	info->mpll_freq_khz = rate;
 	info->pm_lock_idx = L0;
-	info->pll_safe_idx = L12;
 	info->max_support_idx = max_support_idx;
 	info->min_support_idx = min_support_idx;
 	info->cpu_clk = fout_apll;

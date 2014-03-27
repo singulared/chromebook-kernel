@@ -195,6 +195,8 @@ static void clear_coherency(void)
 		"and	%1, %1, #0\n"
 		"orr	%0, %0, %1\n"
 		"mcr	p15, 0, %0, c1, c0, 1\n"
+		"isb\n"
+		"dsb\n"
 		: "=&r" (v), "=&r" (u)
 		: "Ir" (0x40), "Ir" (S5P_INFORM0)
 		: "cc");

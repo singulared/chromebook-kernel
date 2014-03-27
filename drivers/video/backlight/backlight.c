@@ -250,6 +250,8 @@ static int backlight_suspend(struct device *dev, pm_message_t state)
 {
 	struct backlight_device *bd = to_backlight_device(dev);
 
+	cancel_delayed_work(&bd->resume_work);
+
 	mutex_lock(&bd->ops_lock);
 	if (bd->ops && bd->ops->options & BL_CORE_SUSPENDRESUME) {
 		bd->props.state |= BL_CORE_SUSPENDED;
@@ -258,6 +260,28 @@ static int backlight_suspend(struct device *dev, pm_message_t state)
 	mutex_unlock(&bd->ops_lock);
 
 	return 0;
+}
+
+static void backlight_do_resume(struct backlight_device *bd)
+{
+	mutex_lock(&bd->ops_lock);
+	if ((bd->ops && bd->ops->options & BL_CORE_SUSPENDRESUME) ||
+		bd->props.resume_brightness != -1) {
+		bd->props.state &= ~BL_CORE_SUSPENDED;
+		if (bd->props.resume_brightness != -1)
+			bd->props.brightness = bd->props.resume_brightness;
+		backlight_update_status(bd);
+	}
+	mutex_unlock(&bd->ops_lock);
+}
+
+static void backlight_delayed_resume(struct work_struct *work)
+{
+	struct backlight_device *bd;
+
+	bd = container_of(work, struct backlight_device, resume_work.work);
+
+	backlight_do_resume(bd);
 }
 
 static int backlight_resume(struct device *dev)
@@ -269,15 +293,10 @@ static int backlight_resume(struct device *dev)
 		return 0;
 	}
 
-	mutex_lock(&bd->ops_lock);
-	if ((bd->ops && bd->ops->options & BL_CORE_SUSPENDRESUME) ||
-		bd->props.resume_brightness != -1) {
-		bd->props.state &= ~BL_CORE_SUSPENDED;
-		if (bd->props.resume_brightness != -1)
-			bd->props.brightness = bd->props.resume_brightness;
-		backlight_update_status(bd);
-	}
-	mutex_unlock(&bd->ops_lock);
+	if (of_machine_is_compatible("google,snow"))
+		schedule_delayed_work(&bd->resume_work, msecs_to_jiffies(300));
+	else
+		backlight_do_resume(bd);
 
 	return 0;
 }
@@ -354,6 +373,7 @@ struct backlight_device *backlight_device_register(const char *name,
 	new_bd->dev.release = bl_device_release;
 	dev_set_name(&new_bd->dev, name);
 	dev_set_drvdata(&new_bd->dev, devdata);
+	INIT_DELAYED_WORK(&new_bd->resume_work, backlight_delayed_resume);
 
 	/* Set default properties */
 	if (props) {
@@ -404,6 +424,8 @@ void backlight_device_unregister(struct backlight_device *bd)
 {
 	if (!bd)
 		return;
+
+	cancel_delayed_work(&bd->resume_work);
 
 #ifdef CONFIG_PMAC_BACKLIGHT
 	mutex_lock(&pmac_backlight_mutex);

@@ -186,6 +186,8 @@ ENTRY(cpu_v7_do_resume)
 	and	r4, r4, #0
 	orr	r9, r9, r4
 	mcr	p15, 0, r6, c1, c0, 1
+	isb
+	dsb
 
 	mcr	p15, 0, r10, c1, c0, 2	@ Co-processor access control
 	ldr	r4, =PRRR		@ PRRR

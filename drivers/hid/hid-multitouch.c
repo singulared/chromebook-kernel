@@ -1081,17 +1081,6 @@ static const struct hid_device_id mt_devices[] = {
 		MT_USB_DEVICE(USB_VENDOR_ID_IDEACOM,
 			USB_DEVICE_ID_IDEACOM_IDC6651) },
 
-	/* Expanded Vessel IR */
-	{ .driver_data = MT_CLS_DEFAULT,
-		MT_USB_DEVICE(USB_VENDOR_ID_IDSPULSE,
-			USB_DEVICE_ID_IDSPULSE_EVIR1) },
-	{ .driver_data = MT_CLS_DEFAULT,
-		MT_USB_DEVICE(USB_VENDOR_ID_IDSPULSE,
-			USB_DEVICE_ID_IDSPULSE_EVIR2) },
-	{ .driver_data = MT_CLS_DEFAULT,
-		MT_USB_DEVICE(USB_VENDOR_ID_IDSPULSE,
-			USB_DEVICE_ID_IDSPULSE_EVIR3) },
-
 	/* Ilitek dual touch panel */
 	{  .driver_data = MT_CLS_DEFAULT,
 		MT_USB_DEVICE(USB_VENDOR_ID_ILITEK,
