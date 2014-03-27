@@ -150,6 +150,7 @@ enum exynos_mixer_mode_type {
 	EXYNOS_MIXER_MODE_SD_PAL,
 	EXYNOS_MIXER_MODE_HD_720,
 	EXYNOS_MIXER_MODE_SXGA,
+	EXYNOS_MIXER_MODE_WXGA,
 	EXYNOS_MIXER_MODE_HD_1080,
 };
 
@@ -164,6 +165,10 @@ const char *mixer_mode_type_name(enum exynos_mixer_mode_type type)
 		return "SD_PAL";
 	case EXYNOS_MIXER_MODE_HD_720:
 		return "HD_720";
+	case EXYNOS_MIXER_MODE_SXGA:
+		return "SXGA";
+	case EXYNOS_MIXER_MODE_WXGA:
+		return "WXGA";
 	case EXYNOS_MIXER_MODE_HD_1080:
 		return "HD_1080";
 	default:
@@ -223,6 +228,18 @@ const struct mixer_scan_range scan_ranges[] = {
 		.max_res = { 1440, 900 },
 		.mode_type = EXYNOS_MIXER_MODE_HD_1080,
 		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
+	},
+	{
+		.min_res = { 1440, 480 },
+		.max_res = { 1440, 480 },
+		.mode_type = EXYNOS_MIXER_MODE_WXGA,
+		.m_ver = MXR_VER_128_0_0_184,
+	},
+	{
+		.min_res = { 1440, 576 },
+		.max_res = { 1440, 576 },
+		.mode_type = EXYNOS_MIXER_MODE_WXGA,
+		.m_ver =  MXR_VER_128_0_0_184,
 	},
 	{
 		.min_res = { 1600, 900 },
@@ -490,6 +507,7 @@ static void mixer_cfg_scan(struct mixer_context *ctx, unsigned int width,
 		val |= MXR_CFG_SCAN_HD_1080 | MXR_CFG_SCAN_HD;
 		break;
 	case EXYNOS_MIXER_MODE_SXGA:
+	case EXYNOS_MIXER_MODE_WXGA:
 		break;
 	default:
 		DRM_ERROR("Invalid config %dx%d\n", width, height);
