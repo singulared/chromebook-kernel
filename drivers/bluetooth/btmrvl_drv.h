@@ -89,6 +89,7 @@ struct btmrvl_private {
 #define MRVL_VENDOR_PKT			0xFE
 
 /* Bluetooth commands  */
+#define BT_CMD_PSCAN_WIN_REPORT_ENABLE	0x03
 #define BT_CMD_AUTO_SLEEP_MODE		0x23
 #define BT_CMD_HOST_SLEEP_CONFIG	0x59
 #define BT_CMD_HOST_SLEEP_ENABLE	0x5A
@@ -142,6 +143,7 @@ bool btmrvl_check_evtpkt(struct btmrvl_private *priv, struct sk_buff *skb);
 int btmrvl_process_event(struct btmrvl_private *priv, struct sk_buff *skb);
 
 int btmrvl_send_module_cfg_cmd(struct btmrvl_private *priv, int subcmd);
+int btmrvl_pscan_window_reporting(struct btmrvl_private *priv, u8 subcmd);
 int btmrvl_send_hscfg_cmd(struct btmrvl_private *priv);
 int btmrvl_enable_ps(struct btmrvl_private *priv);
 int btmrvl_prepare_command(struct btmrvl_private *priv);

@@ -213,6 +213,38 @@ int btmrvl_send_module_cfg_cmd(struct btmrvl_private *priv, int subcmd)
 }
 EXPORT_SYMBOL_GPL(btmrvl_send_module_cfg_cmd);
 
+int btmrvl_pscan_window_reporting(struct btmrvl_private *priv, u8 subcmd)
+{
+	struct btmrvl_sdio_card *card = priv->btmrvl_dev.card;
+	struct sk_buff *skb;
+	struct btmrvl_cmd *cmd;
+
+	if (!card->support_pscan_win_report)
+		return 0;
+
+	skb = bt_skb_alloc(sizeof(*cmd), GFP_ATOMIC);
+	if (!skb) {
+		BT_ERR("%s: No free skb", __func__);
+		return -ENOMEM;
+	}
+
+	cmd = (struct btmrvl_cmd *)skb_put(skb, sizeof(*cmd));
+	cmd->ocf_ogf = cpu_to_le16(hci_opcode_pack(
+					OGF, BT_CMD_PSCAN_WIN_REPORT_ENABLE));
+	cmd->length = 1;
+	cmd->data[0] = subcmd;
+
+	bt_cb(skb)->pkt_type = MRVL_VENDOR_PKT;
+
+	skb->dev = (void *)priv->btmrvl_dev.hcidev;
+	skb_queue_head(&priv->adapter->tx_queue, skb);
+
+	BT_DBG("Queue PSCAN_WIN_REPORT_ENABLE Command: %#x", cmd->data[0]);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(btmrvl_pscan_window_reporting);
+
 int btmrvl_send_hscfg_cmd(struct btmrvl_private *priv)
 {
 	struct sk_buff *skb;
