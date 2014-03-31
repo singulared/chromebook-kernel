@@ -272,6 +272,8 @@ static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK1_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG,
 			AUTH_START | AUTH_DONE | HDCP_ERR);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS2_REG,
+			AUTH_START | AUTH_DONE | HDCP_ERR);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK3_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK4_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK7_REG, 0x00);
@@ -1085,8 +1087,7 @@ static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 	}
 
 	if (irq[0] & DWN_STREAM_DISCONNECTED) {
-		anx7808_set_hpd(anx7808, 0);
-		return true;
+		irq_event = true;
 	}
 
 	if (anx7808->ds_type != DOWNSTREAM_HDMI)
@@ -1415,6 +1416,7 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_REG(SP_TX_DEBUG_REG1);
 	DUMP_REG(SP_TX_DP_POLLING_CTRL_REG);
 	DUMP_REG(SP_TX_LINK_DEBUG_REG);
+	DUMP_REG(SP_TX_SINK_STATUS);
 	DUMP_REG(SP_TX_MISC_CTRL_REG);
 	DUMP_REG(SP_TX_EXTRA_ADDR_REG);
 	DUMP_REG(SP_TX_AUX_STATUS);
@@ -1501,6 +1503,7 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_DPCD(LINK_BW_SET);
 	DUMP_DPCD(LANE_COUNT_SET);
 	DUMP_DPCD(SINK_COUNT);
+	DUMP_DPCD(LANE0_1_STATUS);
 	DUMP_DPCD(SINK_STATUS);
 	DUMP_DPCD(DOWN_STREAM_STATUS_1);
 	DUMP_DPCD(DOWN_STREAM_STATUS_2);

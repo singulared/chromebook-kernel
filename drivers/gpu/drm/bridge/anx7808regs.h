@@ -419,6 +419,10 @@
 #define INSERT_ER 0x02
 #define PRBS31_EN 0x01
 
+#define SP_TX_SINK_STATUS 0x70BE
+#define SINK_STATUS_1 0x02
+#define SINK_STATUS_0 0x01
+
 #define SP_TX_PLL_CTRL_REG 0x70C7
 #define PLL_RST 0x40
 
