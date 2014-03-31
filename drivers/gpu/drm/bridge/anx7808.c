@@ -1060,6 +1060,46 @@ static void anx7808_handle_hdmi_int_6(struct anx7808_data *anx7808, uint8_t irq)
 		anx7808_update_audio_infoframe(anx7808);
 }
 
+static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
+{
+	uint8_t val;
+	int ret;
+
+	/*
+	 * Attempt to retrain link when VIDEO_STABLE status is lost but
+	 * everything else is enabled and ready to go as long as the
+	 * downstream link is actually terminated.
+	 */
+
+	ret = anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read HDMI_RX_SYS_STATUS_REG %d\n", ret);
+		return;
+	}
+	if (!(val & TMDS_CLOCK_DET) || !(val & TMDS_DE_DET))
+		return;
+
+	ret = anx7808_aux_dpcd_read(anx7808, SINK_STATUS, 1, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read DPCD sink status %d\n", ret);
+		return;
+	}
+	if (val & VIDEO_STABLE)
+		return;
+
+	ret = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read DPCD downstream status %d\n", ret);
+		return;
+	}
+	if (!(val & DOWN_R_TERM_DET))
+		return;
+
+	DRM_INFO("anx7808: attempting downstream retrain\n");
+	if (!anx7808_dp_link_training(anx7808))
+		anx7808_config_dp_output(anx7808);
+}
+
 static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq[2];
@@ -1109,6 +1149,8 @@ static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 			DRM_ERROR("ANX7730 downstream HDCP sync lost\n");
 		anx7808_reset_hdcp(anx7808);
 	}
+
+	anx7808_attempt_downstream_retrain(anx7808);
 
 	return irq_event;
 }
