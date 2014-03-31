@@ -31,6 +31,7 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/printk.h>
+#include <linux/slab.h>
 
 struct fence;
 struct fence_ops;
@@ -188,6 +189,11 @@ static inline void fence_get(struct fence *fence)
 }
 
 extern void release_fence(struct kref *kref);
+
+static inline void free_fence(struct fence *fence)
+{
+	kfree(fence);
+}
 
 /**
  * fence_put - decreases refcount of the fence
