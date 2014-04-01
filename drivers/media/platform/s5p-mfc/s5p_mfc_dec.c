@@ -492,8 +492,6 @@ static int reqbufs_output(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 {
 	int ret = 0;
 
-	s5p_mfc_clock_on();
-
 	if (reqbufs->count == 0) {
 		mfc_debug(2, "Freeing buffers\n");
 		ret = vb2_reqbufs(&ctx->vq_src, reqbufs);
@@ -530,7 +528,6 @@ static int reqbufs_output(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 		ret = -EINVAL;
 	}
 out:
-	s5p_mfc_clock_off();
 	if (ret)
 		mfc_err("Failed allocating buffers for OUTPUT queue\n");
 	return ret;
@@ -540,8 +537,6 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 				struct v4l2_requestbuffers *reqbufs)
 {
 	int ret = 0;
-
-	s5p_mfc_clock_on();
 
 	if (reqbufs->count == 0) {
 		mfc_debug(2, "Freeing buffers\n");
@@ -584,7 +579,6 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 		ret = -EINVAL;
 	}
 out:
-	s5p_mfc_clock_off();
 	if (ret)
 		mfc_err("Failed allocating buffers for CAPTURE queue\n");
 	return ret;

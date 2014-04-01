@@ -798,7 +798,6 @@ static int s5p_mfc_open(struct file *file)
 		dev->watchdog_timer.expires = jiffies +
 					msecs_to_jiffies(MFC_WATCHDOG_INTERVAL);
 		add_timer(&dev->watchdog_timer);
-		s5p_mfc_clock_on();
 		ret = s5p_mfc_power_on();
 		if (ret < 0) {
 			mfc_err("power on failed\n");
@@ -812,7 +811,6 @@ static int s5p_mfc_open(struct file *file)
 		ret = s5p_mfc_init_hw(dev);
 		if (ret)
 			goto err_init_hw;
-		s5p_mfc_clock_off();
 	}
 	/* Init videobuf2 queue for CAPTURE */
 	q = &ctx->vq_dst;
@@ -895,7 +893,6 @@ static int s5p_mfc_release(struct file *file)
 
 	mfc_debug_enter();
 	mutex_lock(&dev->mfc_mutex);
-	s5p_mfc_clock_on();
 	vb2_queue_release(&ctx->vq_src);
 	vb2_queue_release(&ctx->vq_dst);
 	/* Mark context as idle */
@@ -918,7 +915,6 @@ static int s5p_mfc_release(struct file *file)
 			mfc_err("Power off failed\n");
 	}
 	mfc_debug(2, "Shutting down clock\n");
-	s5p_mfc_clock_off();
 	dev->ctx[ctx->num] = NULL;
 	s5p_mfc_dec_ctrls_delete(ctx);
 	v4l2_fh_del(&ctx->fh);
@@ -1028,7 +1024,6 @@ static int s5p_mfc_alloc_memdevs_iommu(struct s5p_mfc_dev *dev)
 	struct device *mdev = &dev->plat_dev->dev;
 	int ret;
 
-	s5p_mfc_clock_on();
 	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
 			SZ_512M, 4);
 	if (IS_ERR_OR_NULL(mapping)) {
@@ -1041,7 +1036,6 @@ static int s5p_mfc_alloc_memdevs_iommu(struct s5p_mfc_dev *dev)
 	dma_set_max_seg_size(mdev, 0xffffffffu);
 	ret = arm_iommu_attach_device(mdev, mapping);
 out:
-	s5p_mfc_clock_off();
 	return ret;
 }
 
@@ -1100,10 +1094,8 @@ static int s5p_mfc_alloc_memdevs(struct s5p_mfc_dev *dev)
 void s5p_mfc_cleanup_memdevs_iommu(struct platform_device *pdev)
 {
 	if (mapping) {
-		s5p_mfc_clock_on();
 		arm_iommu_detach_device(&pdev->dev);
 		arm_iommu_release_mapping(mapping);
-		s5p_mfc_clock_off();
 	}
 }
 
@@ -1221,9 +1213,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 	mutex_init(&dev->mfc_mutex);
 
-	s5p_mfc_clock_on();
 	ret = s5p_mfc_alloc_firmware(dev);
-	s5p_mfc_clock_off();
 	if (ret)
 		goto err_alloc_fw;
 

@@ -1906,19 +1906,14 @@ static void s5p_mfc_clear_int_flags_v6(struct s5p_mfc_dev *dev)
 static void s5p_mfc_write_info_v6(struct s5p_mfc_ctx *ctx, unsigned int data,
 		unsigned int ofs)
 {
-	s5p_mfc_clock_on();
 	WRITEL(data, (void *)ofs);
-	s5p_mfc_clock_off();
 }
 
 static unsigned int
 s5p_mfc_read_info_v6(struct s5p_mfc_ctx *ctx, unsigned int ofs)
 {
 	int ret;
-
-	s5p_mfc_clock_on();
 	ret = READL((void *)ofs);
-	s5p_mfc_clock_off();
 
 	return ret;
 }
