@@ -192,6 +192,11 @@
 	};
 
 	pinctrl@14010000 {
+		/* Drive SPI lines at x2 for better integrity */
+		spi2_bus: spi2-bus {
+			samsung,pin-drv = <2>;
+		};
+
 		/*
 		 * TODO(sjg@chromium.org: Do we need this
 		 * drive strength 3? Need to test.
@@ -399,7 +404,7 @@
 		ec: cros-ec@0 {
 			compatible = "google,cros-ec-spi";
 
-			spi-max-frequency = <4000000>;
+			spi-max-frequency = <3125000>;
 
 			pinctrl-names = "default";
 			pinctrl-0 = <&ec_spi_cs &ec_irq>;
@@ -411,7 +416,7 @@
 			controller-data {
 				cs-gpio = <&gpb1 2 0>;
 
-				samsung,spi-feedback-delay = <2>;
+				samsung,spi-feedback-delay = <1>;
 			};
 
 			/* Arbitrarily assign bus 20 since past exynos range */
