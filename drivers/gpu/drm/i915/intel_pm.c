@@ -2376,7 +2376,7 @@ static void hsw_compute_wm_parameters(struct drm_device *dev,
 		p->cur_horiz_pixels = 64;
 	}
 
-	list_for_each_entry(plane, &dev->mode_config.plane_list, head) {
+	drm_for_each_legacy_plane(plane, &dev->mode_config.plane_list) {
 		struct intel_plane *intel_plane = to_intel_plane(plane);
 		struct hsw_pipe_wm_parameters *p;
 
@@ -2615,7 +2615,7 @@ static void haswell_update_sprite_wm(struct drm_device *dev, int pipe,
 {
 	struct drm_plane *plane;
 
-	list_for_each_entry(plane, &dev->mode_config.plane_list, head) {
+	drm_for_each_legacy_plane(plane, &dev->mode_config.plane_list) {
 		struct intel_plane *intel_plane = to_intel_plane(plane);
 
 		if (intel_plane->pipe == pipe) {
