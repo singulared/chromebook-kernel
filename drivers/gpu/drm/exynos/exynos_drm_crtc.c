@@ -400,7 +400,7 @@ static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
 
 	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
-	list_for_each_entry(plane, &crtc->dev->mode_config.plane_list, head) {
+	drm_for_each_legacy_plane(plane, &crtc->dev->mode_config.plane_list) {
 		if (plane->crtc != crtc)
 			continue;
 
