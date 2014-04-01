@@ -305,7 +305,21 @@ int drm_getcap(struct drm_device *dev, void *data, struct drm_file *file_priv)
 int
 drm_setclientcap(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
-	return -EINVAL;
+	struct drm_set_client_cap *req = data;
+
+	switch (req->capability) {
+	case DRM_CLIENT_CAP_UNIVERSAL_PLANES:
+		if (!drm_universal_planes)
+			return -EINVAL;
+		if (req->value > 1)
+			return -EINVAL;
+		file_priv->universal_planes = req->value;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 /**
