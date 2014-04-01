@@ -2050,14 +2050,19 @@ int drm_mode_set_config_internal(struct drm_mode_set *set)
 }
 EXPORT_SYMBOL(drm_mode_set_config_internal);
 
-/*
- * Checks that the framebuffer is big enough for the CRTC viewport
- * (x, y, hdisplay, vdisplay)
+/**
+ * drm_crtc_check_viewport - Checks that a framebuffer is big enough for the
+ *     CRTC viewport
+ * @crtc: CRTC that framebuffer will be displayed on
+ * @x: x panning
+ * @y: y panning
+ * @mode: mode that framebuffer will be displayed under
+ * @fb: framebuffer to check size of
  */
-static int drm_crtc_check_viewport(const struct drm_crtc *crtc,
-				   int x, int y,
-				   const struct drm_display_mode *mode,
-				   const struct drm_framebuffer *fb)
+int drm_crtc_check_viewport(const struct drm_crtc *crtc,
+			    int x, int y,
+			    const struct drm_display_mode *mode,
+			    const struct drm_framebuffer *fb)
 
 {
 	int hdisplay, vdisplay;
@@ -2080,6 +2085,7 @@ static int drm_crtc_check_viewport(const struct drm_crtc *crtc,
 
 	return 0;
 }
+EXPORT_SYMBOL(drm_crtc_check_viewport);
 
 /**
  * drm_mode_setcrtc - set CRTC configuration
