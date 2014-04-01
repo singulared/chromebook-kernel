@@ -663,6 +663,12 @@ struct drm_plane_funcs {
 			    void *blob_data);
 };
 
+enum drm_plane_type {
+	DRM_PLANE_TYPE_OVERLAY,
+	DRM_PLANE_TYPE_PRIMARY,
+	DRM_PLANE_TYPE_CURSOR,
+};
+
 /**
  * drm_plane - central DRM plane control structure
  * @dev: DRM device this plane belongs to
@@ -679,6 +685,7 @@ struct drm_plane_funcs {
  * @funcs: helper functions
  * @helper_private: storage for drver layer
  * @properties: property tracking for this plane
+ * @type: type of plane (overlay, primary, cursor)
  */
 struct drm_plane {
 	struct drm_device *dev;
@@ -703,6 +710,8 @@ struct drm_plane {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+
+	enum drm_plane_type type;
 };
 
 /**
@@ -865,7 +874,15 @@ struct drm_mode_config {
 	struct list_head bridge_list;
 	int num_encoder;
 	struct list_head encoder_list;
-	int num_plane;
+
+	/*
+	 * Track # of overlay planes separately from # of total planes.  By
+	 * default we only advertise overlay planes to userspace; if userspace
+	 * sets the "universal plane" capability bit, we'll go ahead and
+	 * expose all planes.
+	 */
+	int num_overlay_plane;
+	int num_total_plane;
 	struct list_head plane_list;
 
 	int num_crtc;
@@ -1194,5 +1211,10 @@ extern int drm_format_num_planes(uint32_t format);
 extern int drm_format_plane_cpp(uint32_t format, int plane);
 extern int drm_format_horz_chroma_subsampling(uint32_t format);
 extern int drm_format_vert_chroma_subsampling(uint32_t format);
+
+/* Plane list iterator for legacy (overlay only) planes. */
+#define drm_for_each_legacy_plane(plane, planelist) \
+	list_for_each_entry(plane, planelist, head) \
+		if (plane->type == DRM_PLANE_TYPE_OVERLAY)
 
 #endif /* __DRM_CRTC_H__ */
