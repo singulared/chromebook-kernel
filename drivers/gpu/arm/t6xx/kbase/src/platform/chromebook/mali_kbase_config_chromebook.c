@@ -1990,50 +1990,8 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 	if (i == MALI_DVFS_STEP)
 		return;
 
-	if (soc_is_exynos5250()) {
-		/*
-		 * For exynos5250, lookup gpll_rate & ackl_400_rate for freq
-		 */
-		switch (freq) {
-		case 533000000:
-			gpll_rate = 533000000;
-			aclk_400_rate = 533000000;
-			break;
-		case 450000000:
-			gpll_rate = 450000000;
-			aclk_400_rate = 450000000;
-			break;
-		case 400000000:
-			gpll_rate = 800000000;
-			aclk_400_rate = 400000000;
-			break;
-		case 350000000:
-			gpll_rate = 1400000000;
-			aclk_400_rate = 350000000;
-			break;
-		case 266000000:
-			gpll_rate = 800000000;
-			aclk_400_rate = 267000000;
-			break;
-		case 160000000:
-			gpll_rate = 800000000;
-			aclk_400_rate = 160000000;
-			break;
-		case 100000000:
-			gpll_rate = 800000000;
-			aclk_400_rate = 100000000;
-			break;
-		default:
-			return;
-		}
-	} else if (soc_is_exynos542x()) {
-		/*
-		 * For exynos5420, program gpll directly to desired frequency.
-		 * sclk_g3d is always mout_gpll / 1.
-		 */
-		gpll_rate = freq;
-		aclk_400_rate = freq;
-	}
+	gpll_rate = freq;
+	aclk_400_rate = freq;
 
 	/* if changed the GPLL rate, set rate for GPLL and wait for lock time */
 	if( gpll_rate != gpll_rate_prev) {
