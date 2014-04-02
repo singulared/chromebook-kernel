@@ -485,12 +485,13 @@ i915_gem_execbuffer_reserve(struct intel_ring_buffer *ring,
 				goto err;
 		}
 
-err:		/* Decrement pin count for bound objects */
-		list_for_each_entry(obj, objects, exec_list)
-			i915_gem_execbuffer_unreserve_object(obj);
-
+err:
 		if (ret != -ENOSPC || retry++)
 			return ret;
+
+		/* Decrement pin count for bound objects */
+		list_for_each_entry(obj, objects, exec_list)
+			i915_gem_execbuffer_unreserve_object(obj);
 
 		ret = i915_gem_evict_everything(ring->dev);
 		if (ret)
@@ -518,6 +519,7 @@ i915_gem_execbuffer_relocate_slow(struct drm_device *dev,
 				       struct drm_i915_gem_object,
 				       exec_list);
 		list_del_init(&obj->exec_list);
+		i915_gem_execbuffer_unreserve_object(obj);
 		drm_gem_object_unreference(&obj->base);
 	}
 
@@ -1082,6 +1084,7 @@ err:
 				       struct drm_i915_gem_object,
 				       exec_list);
 		list_del_init(&obj->exec_list);
+		i915_gem_execbuffer_unreserve_object(obj);
 		drm_gem_object_unreference(&obj->base);
 	}
 
