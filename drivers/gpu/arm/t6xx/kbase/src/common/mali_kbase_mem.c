@@ -755,27 +755,6 @@ mali_error kbase_gpu_munmap(kbase_context *kctx, struct kbase_va_region *reg)
 	return err;
 }
 
-/**
- * @brief Find a mapping keyed with ptr in region reg
- */
-STATIC struct kbase_cpu_mapping *kbase_find_cpu_mapping(struct kbase_va_region *reg, struct vm_area_struct * vma)
-{
-	struct kbase_cpu_mapping *map;
-	struct list_head *pos;
-
-	KBASE_DEBUG_ASSERT(NULL != reg);
-
-	list_for_each(pos, &reg->map_list) {
-		map = list_entry(pos, kbase_cpu_mapping, link);
-		if (map->private == vma)
-			return map;
-	}
-
-	return NULL;
-}
-
-KBASE_EXPORT_TEST_API(kbase_find_cpu_mapping)
-
 STATIC struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping_of_region(const struct kbase_va_region *reg, void *uaddr, size_t size)
 {
 	struct kbase_cpu_mapping *map;
@@ -797,34 +776,14 @@ STATIC struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping_of_region(con
 
 KBASE_EXPORT_TEST_API(kbasep_find_enclosing_cpu_mapping_of_region)
 
-static void kbase_dump_mappings(struct kbase_va_region *reg)
-{
-	struct kbase_cpu_mapping *map;
-	struct list_head *pos;
-
-	KBASE_DEBUG_ASSERT(NULL != reg);
-
-	list_for_each(pos, &reg->map_list) {
-		map = list_entry(pos, kbase_cpu_mapping, link);
-		KBASE_DEBUG_PRINT_WARN(KBASE_MEM, "uaddr %p nr_pages %d page_off %016llx vma %p", map->uaddr, map->nr_pages, map->page_off, map->private);
-	}
-}
-
 /**
  * @brief Delete a mapping keyed with ptr in region reg
  */
 mali_error kbase_cpu_free_mapping(struct kbase_va_region *reg, struct vm_area_struct * vma)
 {
-	struct kbase_cpu_mapping *map;
+	struct kbase_cpu_mapping *map = vma->vm_private_data;
 	mali_error err = MALI_ERROR_NONE;
 	KBASE_DEBUG_ASSERT(NULL != reg);
-	map = kbase_find_cpu_mapping(reg, vma);
-	if (!map) {
-		KBASE_DEBUG_PRINT_WARN(KBASE_MEM, "Freeing unknown mapping %p in region %p", vma, (void *)reg);
-		kbase_dump_mappings(reg);
-		err = MALI_ERROR_FUNCTION_FAILED;
-		goto out;
-	}
 
 	/* As the tmem is being unmapped we need to update the pages used by the process */
 	if ( (reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_TMEM )
@@ -838,7 +797,6 @@ mali_error kbase_cpu_free_mapping(struct kbase_va_region *reg, struct vm_area_st
 	if ((reg->flags & KBASE_REG_DELAYED_FREE) && list_empty(&reg->map_list))
 		err = kbase_mem_free_region(reg->kctx, reg);
 
- out:
 	return err;
 }
 
