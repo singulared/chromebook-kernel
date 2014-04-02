@@ -609,15 +609,19 @@ static const struct samsung_pll_rate_table epll_24mhz_tbl[] = {
 static const struct samsung_pll_rate_table gpll_24mhz_tbl[] = {
 	/* sorted in descending order */
 	/* PLL_35XX_RATE(rate, m, p, s) */
-	PLL_35XX_RATE(1400000000, 175, 3, 0), /* for 466MHz */
-	PLL_35XX_RATE(800000000, 100, 3, 0),  /* for 400MHz, 200MHz */
-	PLL_35XX_RATE(667000000, 389, 7, 1),  /* for 333MHz, 222MHz, 166MHz */
-	PLL_35XX_RATE(600000000, 200, 4, 1),  /* for 300MHz, 200MHz, 150MHz */
-	PLL_35XX_RATE(533000000, 533, 12, 1), /* for 533MHz, 266MHz, 133MHz */
-	PLL_35XX_RATE(450000000, 450, 12, 1), /* for 450 Hz */
+	PLL_35XX_RATE(1400000000, 175, 3, 0),
+	PLL_35XX_RATE(800000000, 100, 3, 0),
+	PLL_35XX_RATE(667000000, 389, 7, 1),
+	PLL_35XX_RATE(600000000, 200, 4, 1),
+	PLL_35XX_RATE(533000000, 533, 12, 1),
+	PLL_35XX_RATE(450000000, 150, 4, 1),
 	PLL_35XX_RATE(400000000, 100, 3, 1),
+	PLL_35XX_RATE(350000000, 175, 3, 2),
 	PLL_35XX_RATE(333000000, 222, 4, 2),
+	PLL_35XX_RATE(266000000, 133, 3, 2),
 	PLL_35XX_RATE(200000000, 100, 3, 2),
+	PLL_35XX_RATE(160000000, 160, 3, 3),
+	PLL_35XX_RATE(100000000, 100, 3, 3),
 };
 
 /* register exynox5250 clocks */
