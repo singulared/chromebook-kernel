@@ -905,6 +905,7 @@ struct drm_mode_config {
 	struct drm_property *edid_property;
 	struct drm_property *dpms_property;
 	struct drm_property *content_protection_property;
+	struct drm_property *plane_type_property;
 
 	/* DVI-I properties */
 	struct drm_property *dvi_i_subconnector_property;
