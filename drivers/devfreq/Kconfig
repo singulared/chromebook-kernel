@@ -94,6 +94,7 @@ config ARM_EXYNOS5420_BUS_DEVFREQ
 	select ARCH_HAS_OPP
 	select PM_OPP
 	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	select REGULATOR_LOCKER_VOLTAGE
 	help
 	  This adds the DEVFREQ driver for Exynos5420 bus interface.
 

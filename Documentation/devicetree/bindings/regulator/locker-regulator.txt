@@ -1,0 +1,36 @@
+Locker Voltage regulators
+
+Required properties:
+- compatible: Must be "regulator-locker";
+- Must have atleast 2 vinX-supply nodes
+- Must have atleast 2 vout nodes
+- Must have maximum-spread
+- The counting for vout and vinX-supplies starts from 1 as shown below
+
+Any property defined as part of the core regulator
+binding, defined in regulator.txt, can also be used.
+
+Example:
+
+       int-voltage-locker {
+               compatible = "regulator-locker";
+               vin1-supply = <&buck2_reg>; /* real vdd_arm */
+               vin2-supply = <&buck3_reg>; /* real vdd_int */
+               maximum-spread = <300000>;
+               locker-regulators {
+                       vout1 {
+                               regulator-name = "vdd_arm";
+                               regulator-min-microvolt = <800000>;
+                               regulator-max-microvolt = <1500000>;
+                               regulator-always-on;
+                               regulator-boot-on;
+                       };
+                       vout2 {
+                               regulator-name = "vdd_int";
+                               regulator-min-microvolt = <800000>;
+                               regulator-max-microvolt = <1400000>;
+                               regulator-always-on;
+                               regulator-boot-on;
+                       };
+               };
+       };

@@ -62,6 +62,7 @@ config ARM_EXYNOS_CPUFREQ
 config ARM_EXYNOS_IKS_CORE
 	bool "In-kernel Switcher for Core Switching"
 	depends on SOC_EXYNOS5420 && ARM_EXYNOS_CPUFREQ && BL_SWITCHER
+	select REGULATOR_LOCKER_VOLTAGE
 	help
 	  This adds the CPUFreq driver for Exynos5420 based IKS Core switching.
 

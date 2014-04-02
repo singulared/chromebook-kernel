@@ -64,6 +64,13 @@ config REGULATOR_USERSPACE_CONSUMER
 
 	  If unsure, say no.
 
+config REGULATOR_LOCKER_VOLTAGE
+	tristate "Locker voltage regulator support"
+	help
+	  This driver provides support for virtual voltage regulators,
+	  useful for systems which has requirements to maintain a skew
+	  between 2 or more regulators.
+
 config REGULATOR_GPIO
 	tristate "GPIO regulator support"
 	depends on GENERIC_GPIO
