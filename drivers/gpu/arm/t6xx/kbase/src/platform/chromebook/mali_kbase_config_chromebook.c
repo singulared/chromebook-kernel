@@ -840,7 +840,6 @@ static ssize_t mali_sysfs_set_clock(struct device *dev,
 #ifdef CONFIG_MALI_T6XX_DVFS
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 	struct exynos_context *platform;
-	unsigned int tmp = 0;
 	unsigned long freq;
 	int level;
 
@@ -871,11 +870,6 @@ static ssize_t mali_sysfs_set_clock(struct device *dev,
 	}
 
 	kbase_platform_dvfs_set_level(kbdev, level);
-
-	/* Waiting for clock is stable */
-	do {
-		tmp = __raw_readl(EXYNOS5_CLKDIV_STAT_TOP0);
-	} while (tmp & 0x1000000);
 #endif /* CONFIG_MALI_T6XX_DVFS */
 	return count;
 }
@@ -1950,8 +1944,7 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 	static struct clk * fout_gpll = NULL;
 	static int _freq = -1;
 	static unsigned long gpll_rate_prev = 0;
-	unsigned long gpll_rate = 0, aclk_400_rate = 0;
-	unsigned long tmp = 0;
+	unsigned long gpll_rate = 0;
 	struct exynos_context *platform;
 	unsigned int i = MALI_DVFS_STEP;
 
@@ -1991,15 +1984,9 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 		return;
 
 	gpll_rate = freq;
-	aclk_400_rate = freq;
 
 	/* if changed the GPLL rate, set rate for GPLL and wait for lock time */
 	if( gpll_rate != gpll_rate_prev) {
-		/*for stable clock input.*/
-		if (soc_is_exynos5250())
-			clk_set_rate(platform->sclk_g3d, 100000000);
-		else if (soc_is_exynos542x())
-			clk_set_rate(platform->sclk_g3d, 100000000);
 		clk_set_parent(mout_gpll, fin_gpll);
 
 		/*change gpll*/
@@ -2011,15 +1998,10 @@ static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
 	}
 
 	_freq = freq;
-	clk_set_rate(platform->sclk_g3d, aclk_400_rate);
 
-	/* Waiting for clock is stable */
-	do {
-		tmp = __raw_readl(/*EXYNOS5_CLKDIV_STAT_TOP0*/EXYNOS_CLKREG(0x10610));
-	} while (tmp & 0x1000000);
 #if MALI_DVFS_DEBUG
 	printk(KERN_DEBUG "dvfs_set_clock GPLL : %lu, ACLK_400 : %luMhz\n",
-			gpll_rate, aclk_400_rate);
+			gpll_rate, clk_get_rate(platform->sclk_g3d));
 #endif /* MALI_DVFS_DEBUG */
 	return;
 }
