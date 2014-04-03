@@ -386,6 +386,31 @@ __v7_setup:
 	mcreq	p15, 0, r10, c1, c0, 1		@ write aux control register
 #endif
 
+#ifdef CONFIG_ARCH_EXYNOS5
+	/*
+	 * HACK: On exynos542x the firmware isn't setting up the L2CTLR
+	 * correctly.  Eventually we plan to release a RW firmware update to
+	 * fix this at boot time but until then we need to fix it in the kernel.
+	 *
+	 * Unfortunately this early in the kernel there's no good way to
+	 * determine that we're actually on an exynos542x.  Normally we tell
+	 * that we're on a 542x by looking at the device tree that the firmware
+	 * passed us, but we have no parsing routines yet.
+	 *
+	 * For now we'll assume that if we're on an A15 r2p3 that it's
+	 * an exynos542x.  If we need to be more multiplatform friendly we'll
+	 * require a RW firmware update.
+	 *
+	 * See exynos_542x_l2_cache (in s5p-sleep.S) for more details.
+	 */
+	teq	r6, #0x23			@ is the variant r2p3?
+	bne	8f
+	mrc	p15, 1, r5, c9, c0, 2		@ read L2 control register
+	orr	r5, r5, #0x220
+	mcr	p15, 1, r5, c9, c0, 2		@ set L2 control register
+8:
+#endif
+
 #ifdef CONFIG_ARM_ERRATA_773769
 	cmp	r6, #0x21			@ present prior to r2p1
 	bge	5f

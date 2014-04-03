@@ -30,12 +30,21 @@
 #include "drm_crtc_helper.h"
 #include "anx7808regs.h"
 
+/*
+ * _wait_for - magic (register) wait macro
+ *
+ * Does the right thing for modeset paths when run under kdgb or similar atomic
+ * contexts. Note that it's important that we check the condition again after
+ * having timed out, since the timeout could be due to preemption or similar and
+ * we've never had a chance to check the condition before the timeout.
+ */
 #define _wait_for(COND, TO_MS, INTVL_MS) ({ \
-	unsigned long timeout__ = jiffies + msecs_to_jiffies(TO_MS);	\
+	unsigned long timeout__ = jiffies + msecs_to_jiffies(TO_MS) + 1;\
 	int ret__ = 0;							\
 	while (!(COND)) {						\
 		if (time_after(jiffies, timeout__)) {			\
-			ret__ = -ETIMEDOUT;				\
+			if (!(COND))					\
+				ret__ = -ETIMEDOUT;			\
 			break;						\
 		}							\
 		if (drm_can_sleep())  {					\
@@ -262,6 +271,8 @@ static void anx7808_rx_initialization(struct anx7808_data *anx7808)
 
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK1_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK2_REG,
+			AUTH_START | AUTH_DONE | HDCP_ERR);
+	anx7808_write_reg(anx7808, HDMI_RX_INT_STATUS2_REG,
 			AUTH_START | AUTH_DONE | HDCP_ERR);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK3_REG, 0x00);
 	anx7808_write_reg(anx7808, HDMI_RX_INT_MASK4_REG, 0x00);
@@ -742,13 +753,12 @@ static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 	int ret;
 	uint8_t val;
 
-	ret = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &val);
+	ret = anx7808_aux_dpcd_read(anx7808, SINK_COUNT, 1, &val);
 	if (ret) {
-		DRM_ERROR("Failed to get DPCD downstream status %d\n", ret);
+		DRM_ERROR("Get sink count failed %d\n", ret);
 		return ret;
 	}
-
-	if (!(val & DOWN_STRM_HPD)) {
+	if (!(val & SINK_COUNT_MASK)) {
 		anx7808->ds_type = DOWNSTREAM_DISCONNECTED;
 		return 0;
 	}
@@ -1050,6 +1060,46 @@ static void anx7808_handle_hdmi_int_6(struct anx7808_data *anx7808, uint8_t irq)
 		anx7808_update_audio_infoframe(anx7808);
 }
 
+static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
+{
+	uint8_t val;
+	int ret;
+
+	/*
+	 * Attempt to retrain link when VIDEO_STABLE status is lost but
+	 * everything else is enabled and ready to go as long as the
+	 * downstream link is actually terminated.
+	 */
+
+	ret = anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read HDMI_RX_SYS_STATUS_REG %d\n", ret);
+		return;
+	}
+	if (!(val & TMDS_CLOCK_DET) || !(val & TMDS_DE_DET))
+		return;
+
+	ret = anx7808_aux_dpcd_read(anx7808, SINK_STATUS, 1, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read DPCD sink status %d\n", ret);
+		return;
+	}
+	if (val & VIDEO_STABLE)
+		return;
+
+	ret = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read DPCD downstream status %d\n", ret);
+		return;
+	}
+	if (!(val & DOWN_R_TERM_DET))
+		return;
+
+	DRM_INFO("anx7808: attempting downstream retrain\n");
+	if (!anx7808_dp_link_training(anx7808))
+		anx7808_config_dp_output(anx7808);
+}
+
 static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 {
 	uint8_t irq[2];
@@ -1077,8 +1127,7 @@ static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 	}
 
 	if (irq[0] & DWN_STREAM_DISCONNECTED) {
-		anx7808_set_hpd(anx7808, 0);
-		return true;
+		irq_event = true;
 	}
 
 	if (anx7808->ds_type != DOWNSTREAM_HDMI)
@@ -1100,6 +1149,8 @@ static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 			DRM_ERROR("ANX7730 downstream HDCP sync lost\n");
 		anx7808_reset_hdcp(anx7808);
 	}
+
+	anx7808_attempt_downstream_retrain(anx7808);
 
 	return irq_event;
 }
@@ -1407,6 +1458,7 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_REG(SP_TX_DEBUG_REG1);
 	DUMP_REG(SP_TX_DP_POLLING_CTRL_REG);
 	DUMP_REG(SP_TX_LINK_DEBUG_REG);
+	DUMP_REG(SP_TX_SINK_STATUS);
 	DUMP_REG(SP_TX_MISC_CTRL_REG);
 	DUMP_REG(SP_TX_EXTRA_ADDR_REG);
 	DUMP_REG(SP_TX_AUX_STATUS);
@@ -1493,6 +1545,7 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_DPCD(LINK_BW_SET);
 	DUMP_DPCD(LANE_COUNT_SET);
 	DUMP_DPCD(SINK_COUNT);
+	DUMP_DPCD(LANE0_1_STATUS);
 	DUMP_DPCD(SINK_STATUS);
 	DUMP_DPCD(DOWN_STREAM_STATUS_1);
 	DUMP_DPCD(DOWN_STREAM_STATUS_2);

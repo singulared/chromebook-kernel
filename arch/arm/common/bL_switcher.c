@@ -97,7 +97,7 @@ static void bL_do_switch(void *_arg)
 	 * Our state has been saved at this point.  Let's release our
 	 * inbound CPU.
 	 */
-	mcpm_set_entry_vector(cpuid, ib_cluster, cpu_resume);
+	mcpm_set_entry_vector(cpuid, ib_cluster, plat_cpu_resume);
 	sev();
 
 	/*

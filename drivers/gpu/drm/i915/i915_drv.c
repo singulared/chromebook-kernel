@@ -1120,7 +1120,7 @@ static struct drm_driver driver = {
 
 	.dumb_create = i915_gem_dumb_create,
 	.dumb_map_offset = i915_gem_mmap_gtt,
-	.dumb_destroy = i915_gem_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 
 	.atomic_begin     = drm_atomic_helper_begin,
 	.atomic_set_event = drm_atomic_helper_set_event,

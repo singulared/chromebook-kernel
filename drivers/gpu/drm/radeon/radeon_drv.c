@@ -116,14 +116,19 @@ int radeon_mode_dumb_mmap(struct drm_file *filp,
 int radeon_mode_dumb_create(struct drm_file *file_priv,
 			    struct drm_device *dev,
 			    struct drm_mode_create_dumb *args);
-int radeon_mode_dumb_destroy(struct drm_file *file_priv,
-			     struct drm_device *dev,
-			     uint32_t handle);
 struct dma_buf *radeon_gem_prime_export(struct drm_device *dev,
 					struct drm_gem_object *obj,
 					int flags);
-struct drm_gem_object *radeon_gem_prime_import(struct drm_device *dev,
-					       struct dma_buf *dma_buf);
+struct sg_table *radeon_gem_prime_get_sg_table(struct drm_gem_object *obj);
+struct drm_gem_object *radeon_gem_prime_import_sg_table(struct drm_device *dev,
+							size_t size,
+							struct sg_table *sg);
+int radeon_gem_prime_pin(struct drm_gem_object *obj);
+void radeon_gem_prime_unpin(struct drm_gem_object *obj);
+void *radeon_gem_prime_vmap(struct drm_gem_object *obj);
+void radeon_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
+extern long radeon_kms_compat_ioctl(struct file *filp, unsigned int cmd,
+				    unsigned long arg);
 
 #if defined(CONFIG_DEBUG_FS)
 int radeon_debugfs_init(struct drm_minor *minor);
@@ -393,7 +398,7 @@ static struct drm_driver kms_driver = {
 	.dma_ioctl = radeon_dma_ioctl_kms,
 	.dumb_create = radeon_mode_dumb_create,
 	.dumb_map_offset = radeon_mode_dumb_mmap,
-	.dumb_destroy = radeon_mode_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 
 	.atomic_begin     = drm_atomic_helper_begin,
 	.atomic_set_event = drm_atomic_helper_set_event,
@@ -406,8 +411,14 @@ static struct drm_driver kms_driver = {
 
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_export = radeon_gem_prime_export,
-	.gem_prime_import = radeon_gem_prime_import,
+	.gem_prime_export = drm_gem_prime_export,
+	.gem_prime_import = drm_gem_prime_import,
+	.gem_prime_pin = radeon_gem_prime_pin,
+	.gem_prime_unpin = radeon_gem_prime_unpin,
+	.gem_prime_get_sg_table = radeon_gem_prime_get_sg_table,
+	.gem_prime_import_sg_table = radeon_gem_prime_import_sg_table,
+	.gem_prime_vmap = radeon_gem_prime_vmap,
+	.gem_prime_vunmap = radeon_gem_prime_vunmap,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,

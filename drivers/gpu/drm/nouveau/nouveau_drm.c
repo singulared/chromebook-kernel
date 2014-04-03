@@ -653,8 +653,14 @@ driver = {
 
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_export = nouveau_gem_prime_export,
-	.gem_prime_import = nouveau_gem_prime_import,
+	.gem_prime_export = drm_gem_prime_export,
+	.gem_prime_import = drm_gem_prime_import,
+	.gem_prime_pin = nouveau_gem_prime_pin,
+	.gem_prime_unpin = nouveau_gem_prime_unpin,
+	.gem_prime_get_sg_table = nouveau_gem_prime_get_sg_table,
+	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table,
+	.gem_prime_vmap = nouveau_gem_prime_vmap,
+	.gem_prime_vunmap = nouveau_gem_prime_vunmap,
 
 	.gem_init_object = nouveau_gem_object_new,
 	.gem_free_object = nouveau_gem_object_del,
@@ -663,7 +669,7 @@ driver = {
 
 	.dumb_create = nouveau_display_dumb_create,
 	.dumb_map_offset = nouveau_display_dumb_map_offset,
-	.dumb_destroy = nouveau_display_dumb_destroy,
+	.dumb_destroy = drm_gem_dumb_destroy,
 
 	.atomic_begin     = drm_atomic_helper_begin,
 	.atomic_set_event = drm_atomic_helper_set_event,

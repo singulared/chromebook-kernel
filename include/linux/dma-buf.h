@@ -115,6 +115,8 @@ struct dma_buf_ops {
  * @file: file pointer used for sharing buffers across, and for refcounting.
  * @attachments: list of dma_buf_attachment that denotes all devices attached.
  * @ops: dma_buf_ops associated with this buffer object.
+ * @exp_name: name of the exporter; useful for debugging.
+ * @list_node: node for dma_buf accounting and debugging.
  * @priv: exporter specific private data for this buffer object.
  */
 struct dma_buf {
@@ -122,11 +124,15 @@ struct dma_buf {
 	struct file *file;
 	struct list_head attachments;
 	const struct dma_buf_ops *ops;
-	/* mutex to serialize list manipulation and attach/detach */
+	/* mutex to serialize list manipulation, attach/detach and vmap/unmap */
 	struct mutex lock;
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource kds;
 #endif
+	unsigned vmapping_counter;
+	void *vmap_ptr;
+	const char *exp_name;
+	struct list_head list_node;
 	void *priv;
 };
 
@@ -183,8 +189,13 @@ struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
 							struct device *dev);
 void dma_buf_detach(struct dma_buf *dmabuf,
 				struct dma_buf_attachment *dmabuf_attach);
-struct dma_buf *dma_buf_export(void *priv, const struct dma_buf_ops *ops,
-			       size_t size, int flags);
+
+struct dma_buf *dma_buf_export_named(void *priv, const struct dma_buf_ops *ops,
+			       size_t size, int flags, const char *);
+
+#define dma_buf_export(priv, ops, size, flags)	\
+	dma_buf_export_named(priv, ops, size, flags, __FILE__)
+
 int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 struct dma_buf *dma_buf_get(int fd);
 void dma_buf_put(struct dma_buf *dmabuf);
@@ -206,5 +217,6 @@ int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 		 unsigned long);
 void *dma_buf_vmap(struct dma_buf *);
 void dma_buf_vunmap(struct dma_buf *, void *vaddr);
-
+int dma_buf_debugfs_create_file(const char *name,
+				int (*write)(struct seq_file *));
 #endif /* __DMA_BUF_H__ */

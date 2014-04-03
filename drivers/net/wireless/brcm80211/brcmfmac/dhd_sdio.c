@@ -3995,6 +3995,7 @@ brcmf_sdio_watchdog_thread(void *data)
 			brcmf_sdio_bus_watchdog(bus);
 			/* Count the tick for reference */
 			bus->sdcnt.tickcnt++;
+			INIT_COMPLETION(bus->watchdog_wait);
 		} else
 			break;
 	}

@@ -699,7 +699,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	if (exynos_gem_obj->base.export_dma_buf == NULL) {
+	if (exynos_gem_obj->base.dma_buf == NULL) {
 		/* If there is no dmabuf present, there is no cross-process/
 		 * cross-device sharing and sync is unnecessary.
 		 */
@@ -710,7 +710,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	exclusive = 0;
 	if ((args->flags & DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE) != 0)
 		exclusive = 1;
-	kds = &exynos_gem_obj->base.export_dma_buf->kds;
+	kds = &exynos_gem_obj->base.dma_buf->kds;
 	kds_callback_init(&callback, 1, &cpu_acquire_kds_cb_fn);
 	ret = kds_async_waitall(&rset, &callback,
 		&completion, NULL, 1, &exclusive, &kds);
@@ -786,7 +786,7 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	if (exynos_gem_obj->base.export_dma_buf == NULL) {
+	if (exynos_gem_obj->base.dma_buf == NULL) {
 		/* If there is no dmabuf present, there is no cross-process/
 		 * cross-device sharing and sync is unnecessary.
 		 */
@@ -919,28 +919,6 @@ out:
 unlock:
 	mutex_unlock(&dev->struct_mutex);
 	return ret;
-}
-
-int exynos_drm_gem_dumb_destroy(struct drm_file *file_priv,
-				struct drm_device *dev,
-				unsigned int handle)
-{
-	int ret;
-
-	DRM_DEBUG_KMS("[BO:%u]\n", handle);
-
-	/*
-	 * obj->refcount and obj->handle_count are decreased and
-	 * if both them are 0 then exynos_drm_gem_free_object()
-	 * would be called by callback to release resources.
-	 */
-	ret = drm_gem_handle_delete(file_priv, handle);
-	if (ret < 0) {
-		DRM_ERROR("failed to delete drm_gem_handle.\n");
-		return ret;
-	}
-
-	return 0;
 }
 
 int exynos_drm_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)

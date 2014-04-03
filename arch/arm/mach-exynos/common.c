@@ -442,6 +442,10 @@ void __init exynos_init_io(struct map_desc *mach_desc, int size)
 
 	/* TO support Watch dog reset */
 	wdt_reset_init();
+
+	/* Setup platform-specific resume code */
+	s5p_resume_cpu_id = samsung_cpu_id;
+	plat_cpu_resume = s3c_cpu_resume;
 }
 
 static void __init exynos4_map_io(void)

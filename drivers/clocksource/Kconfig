@@ -57,11 +57,6 @@ config CLKSRC_DBX500_PRCMU_SCHED_CLOCK
 	help
 	  Use the always on PRCMU Timer as sched_clock
 
-config CLKSRC_ARM_GENERIC
-	def_bool y if ARM64
-	help
-	  This option enables support for the ARM generic timer.
-
 config CLKSRC_EXYNOS_MCT
 	def_bool y if ARCH_EXYNOS
 	select HAVE_SCHED_CLOCK
@@ -76,3 +71,6 @@ config CLKSRC_SAMSUNG_PWM
 	  Samsung S3C, S5P and Exynos SoCs, replacing an earlier driver
 	  for all devicetree enabled platforms. This driver will be
 	  needed only on systems that do not have the Exynos MCT available.
+
+config ARM_ARCH_TIMER
+	bool

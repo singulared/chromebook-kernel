@@ -989,4 +989,12 @@
 		clocks = <&clock 345>, <&clock 515>, <&clock 6>, <&clock 1>, <&clock 5>;
 		clock-names = "g3d", "aclk_g3d", "mout_gpll", "ext_xtal", "fout_gpll";
 	};
+
+	sss@10830000 {
+		compatible = "samsung,exynos4210-secss";
+		reg = <0x10830000 0x10000>;
+		interrupts = <0 112 0>;
+		clocks = <&clock 348>;
+		clock-names = "secss";
+	};
 };

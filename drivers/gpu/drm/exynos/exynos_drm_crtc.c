@@ -180,7 +180,7 @@ static void exynos_drm_crtc_wait_and_release_kds(
 
 	exynos_fb = to_exynos_fb(desc->fb);
 	gem_ob = (struct exynos_drm_gem_obj *)exynos_fb->exynos_gem_obj[0];
-	buf = gem_ob->base.export_dma_buf;
+	buf = gem_ob->base.dma_buf;
 	if (!buf)
 		return;
 
@@ -500,8 +500,8 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		send_event = true;
 
 	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
-	if (exynos_gem_obj->base.export_dma_buf) {
-		struct dma_buf *buf = exynos_gem_obj->base.export_dma_buf;
+	if (exynos_gem_obj->base.dma_buf) {
+		struct dma_buf *buf = exynos_gem_obj->base.dma_buf;
 		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
 		struct exynos_drm_private *dev_priv = dev->dev_private;
 		unsigned long shared = 0UL;

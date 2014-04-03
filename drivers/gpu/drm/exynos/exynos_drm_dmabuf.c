@@ -138,29 +138,6 @@ static void exynos_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 			attach->dmabuf->size, dir);
 }
 
-static void exynos_dmabuf_release(struct dma_buf *dmabuf)
-{
-	struct exynos_drm_gem_obj *exynos_gem_obj = dmabuf->priv;
-
-	DRM_DEBUG_PRIME("size: %zd\n", dmabuf->size);
-
-	/*
-	 * exynos_dmabuf_release() call means that file object's
-	 * f_count is 0 and it calls drm_gem_object_handle_unreference()
-	 * to drop the references that these values had been increased
-	 * at drm_prime_handle_to_fd()
-	 */
-	if (exynos_gem_obj->base.export_dma_buf == dmabuf) {
-		exynos_gem_obj->base.export_dma_buf = NULL;
-
-		/*
-		 * drop this gem object refcount to release allocated buffer
-		 * and resources.
-		 */
-		drm_gem_object_unreference_unlocked(&exynos_gem_obj->base);
-	}
-}
-
 static void *exynos_gem_dmabuf_kmap_atomic(struct dma_buf *dma_buf,
 						unsigned long page_num)
 {
@@ -230,7 +207,7 @@ static struct dma_buf_ops exynos_dmabuf_ops = {
 	.kunmap			= exynos_gem_dmabuf_kunmap,
 	.kunmap_atomic		= exynos_gem_dmabuf_kunmap_atomic,
 	.mmap			= exynos_gem_dmabuf_mmap,
-	.release		= exynos_dmabuf_release,
+	.release		= drm_gem_dmabuf_release,
 };
 
 struct dma_buf *exynos_dmabuf_prime_export(struct drm_device *drm_dev,
@@ -270,7 +247,6 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 			 * refcount on gem itself instead of f_count of dmabuf.
 			 */
 			drm_gem_object_reference(obj);
-			dma_buf_put(dma_buf);
 			return obj;
 		}
 	}
@@ -279,6 +255,7 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 	if (IS_ERR(attach))
 		return ERR_PTR(-EINVAL);
 
+	get_dma_buf(dma_buf);
 
 	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(sgt)) {
@@ -333,6 +310,8 @@ err_unmap_attach:
 	dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
 err_buf_detach:
 	dma_buf_detach(dma_buf, attach);
+	dma_buf_put(dma_buf);
+
 	return ERR_PTR(ret);
 }
 

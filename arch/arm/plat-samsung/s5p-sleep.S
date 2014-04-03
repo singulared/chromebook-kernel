@@ -50,6 +50,36 @@
 	 */
 
 ENTRY(s3c_cpu_resume)
+
+	/*
+	 * On exynos5420 and exynos5422 the L2 cache settings may come up with
+	 * a value that could cause some instability (not all firmware sets
+	 * things up correctly).  If we detect 5420 / 5422 make sure to enable
+	 * tag ram setup and data ram setup which will fix things.
+	 */
+	ldr	r0, s5p_resume_cpu_id
+	lsr	r0, r0, #12
+	ldr	r1, =0xe5420
+	cmp	r0, r1
+	beq	exynos_542x_l2_cache
+	add	r1, r1, #2
+	cmp	r0, r1
+	bne	resume_after_542x_l2_cache
+
+exynos_542x_l2_cache:
+	/* Skip if we're not on an A15 */
+	mrc	p15, 0, r0, c0, c0, 0
+	ubfx	r0, r0, #4, #12
+	ldr	r1, =0x00000c0f
+	teq	r0, r1
+	bne	resume_after_542x_l2_cache
+
+	mrc	p15, 1, r0, c9, c0, 2
+	orr	r0, r0, #0x220
+	mcr	p15, 1, r0, c9, c0, 2
+
+resume_after_542x_l2_cache:
+
 #ifdef CONFIG_CACHE_L2X0
 	adr	r0, l2x0_regs_phys
 	ldr	r0, [r0]
@@ -78,3 +108,8 @@ ENDPROC(s3c_cpu_resume)
 l2x0_regs_phys:
 	.long	0
 #endif
+
+	/* ID populated by boot code to help in applying fixups */
+	.globl s5p_resume_cpu_id
+s5p_resume_cpu_id:
+	.long	0

@@ -56,6 +56,11 @@
 
 #define BRCMF_JOIN_PREF_RSSI_BOOST	10	/* RSSI boost value for RSSI_DELTA */
 
+/* OBSS Coex Auto/On/Off */
+#define BRCMF_OBSS_COEX_AUTO		(-1)
+#define BRCMF_OBSS_COEX_OFF		0
+#define BRCMF_OBSS_COEX_ON		1
+
 enum brcmf_fil_p2p_if_types {
 	BRCMF_FIL_P2P_IF_CLIENT,
 	BRCMF_FIL_P2P_IF_GO,
@@ -93,6 +98,11 @@ struct brcmf_fil_af_params_le {
 struct brcmf_fil_bss_enable_le {
 	__le32 bsscfg_idx;
 	__le32 enable;
+};
+
+struct brcmf_fil_bwcap_le {
+	__le32 band;
+	__le32 bw_cap;
 };
 
 /**
