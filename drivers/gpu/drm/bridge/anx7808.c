@@ -1670,7 +1670,11 @@ void anx7808_enable(struct drm_bridge *bridge)
 	goto out;
 
 err:
-	anx7808_power_off(anx7808, true, false);
+	/*
+	 * Reset oneshot in case an unplug while locked skipped handling
+	 * POLLING_ERR
+	 */
+	anx7808_power_off(anx7808, true, true);
 
 out:
 	mutex_unlock(&anx7808->big_lock);
