@@ -23,6 +23,8 @@ enum fixed_addresses {
 	__end_of_fixed_addresses
 };
 
+void __set_fixmap(enum fixed_addresses idx, unsigned long phys, pgprot_t prot);
+
 #include <asm-generic/fixmap.h>
 
 #endif
