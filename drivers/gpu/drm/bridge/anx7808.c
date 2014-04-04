@@ -748,6 +748,14 @@ static void anx7808_update_audio(struct anx7808_data *anx7808)
 	return;
 }
 
+static void anx7808_config_downstream(struct anx7808_data *anx7808)
+{
+	anx7808_config_dp_output(anx7808);
+	anx7808_update_video_infoframe(anx7808);
+	anx7808_update_audio_infoframe(anx7808);
+	anx7808_update_audio(anx7808);
+}
+
 static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 {
 	int ret;
@@ -1065,12 +1073,7 @@ static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
 	uint8_t val;
 	int ret;
 
-	/*
-	 * Attempt to retrain link when VIDEO_STABLE status is lost but
-	 * everything else is enabled and ready to go as long as the
-	 * downstream link is actually terminated.
-	 */
-
+	/* Check upstream link is valid before retraining */
 	ret = anx7808_read_reg(anx7808, HDMI_RX_SYS_STATUS_REG, &val);
 	if (ret) {
 		DRM_ERROR("Failed to read HDMI_RX_SYS_STATUS_REG %d\n", ret);
@@ -1079,14 +1082,26 @@ static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
 	if (!(val & TMDS_CLOCK_DET) || !(val & TMDS_DE_DET))
 		return;
 
-	ret = anx7808_aux_dpcd_read(anx7808, SINK_STATUS, 1, &val);
+	/* Video is unmuted during enable, only retrain after enabled */
+	ret = anx7808_read_reg(anx7808, HDMI_RX_HDMI_MUTE_CTRL_REG, &val);
 	if (ret) {
-		DRM_ERROR("Failed to read DPCD sink status %d\n", ret);
+		DRM_ERROR("Failed to read HDMI_RX_HDMI_MUTE_CTRL_REG %d\n",
+				ret);
 		return;
 	}
-	if (val & VIDEO_STABLE)
+	if (val & VID_MUTE)
 		return;
 
+	/* Only retrain if downstream link is not up */
+	ret = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &val);
+	if (ret) {
+		DRM_ERROR("Failed to read DPCD lane status %d\n", ret);
+		return;
+	}
+	if ((val & LANE0_1_STATUS_SUCCESS) == LANE0_1_STATUS_SUCCESS)
+		return;
+
+	/* Only retrain if downstream is terminated (ie active input) */
 	ret = anx7808_aux_dpcd_read(anx7808, DOWN_STREAM_STATUS_1, 1, &val);
 	if (ret) {
 		DRM_ERROR("Failed to read DPCD downstream status %d\n", ret);
@@ -1097,7 +1112,7 @@ static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
 
 	DRM_INFO("anx7808: attempting downstream retrain\n");
 	if (!anx7808_dp_link_training(anx7808))
-		anx7808_config_dp_output(anx7808);
+		anx7808_config_downstream(anx7808);
 }
 
 static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
@@ -1662,10 +1677,7 @@ void anx7808_enable(struct drm_bridge *bridge)
 		goto err;
 	}
 
-	anx7808_config_dp_output(anx7808);
-	anx7808_update_video_infoframe(anx7808);
-	anx7808_update_audio_infoframe(anx7808);
-	anx7808_update_audio(anx7808);
+	anx7808_config_downstream(anx7808);
 
 	goto out;
 
