@@ -105,6 +105,15 @@
 			     <0 28 0>, <0 29 0>, <0 30 0>, <0 31 0>;
 	};
 
+	timer {
+		compatible = "arm,cortex-a15-timer", "arm,armv7-timer";
+		interrupts = <1 13 0x308>,
+			     <1 14 0x308>,
+			     <1 11 0x308>,
+			     <1 10 0x308>;
+		clock-frequency = <24000000>;
+	};
+
 	mct@101C0000 {
 		compatible = "samsung,exynos4210-mct";
 		reg = <0x101C0000 0x800>;
