@@ -479,13 +479,6 @@
 		clock-names = "oscclk", "pclk0", "clk0" , "dclk0";
 	};
 
-	g2d_pd: pd@10044100 {
-		compatible = "samsung,exynos4210-pd";
-		reg = <0x10044100 0x20>;
-		clocks = <&clock 1>, <&clock 1038>, <&clock 1039>, <&clock 1040>, <&clock 1041>;
-		clock-names = "oscclk", "pclk0", "clk0", "pclk1", "clk1";
-	};
-
 	msc_pd: pd@10044120 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044120 0x20>;
@@ -1015,6 +1008,5 @@
 		interrupts = <0 112 0>;
 		clocks = <&clock 471>;
 		clock-names = "secss";
-		samsung,power-domain = <&g2d_pd>;
 	};
 };
