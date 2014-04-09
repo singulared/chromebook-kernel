@@ -2732,7 +2732,8 @@ static void alc283_shutup(struct hda_codec *codec)
 
 	if (hp_pin_sense)
 		msleep(100);
-	alc_eapd_shutup(codec);
+	alc_auto_setup_eapd(codec, false);
+	snd_hda_shutup_pins(codec);
 	alc_write_coef_idx(codec, 0x43, 0x9614);
 }
 

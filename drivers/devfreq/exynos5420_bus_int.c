@@ -193,9 +193,9 @@ struct int_clk_info aclk_400_wcore[] = {
 	{LV_1, 400000, S_PLL},
 	{LV_2, 400000, S_PLL},
 	{LV_3, 333000, C_PLL},
-	{LV_4, 222000, C_PLL},
-	{LV_5, 111000, C_PLL},
-	{LV_6,  84000, C_PLL},
+	{LV_4, 333000, C_PLL},
+	{LV_5, 333000, C_PLL},
+	{LV_6, 333000, C_PLL},
 };
 
 struct int_clk_info aclk_400_wcore_5422[] = {

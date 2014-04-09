@@ -108,6 +108,34 @@ void samsung_usb3phy_tune(struct usb_phy *phy)
 		crport_ctrl_write(sphy,
 				  EXYNOS5_DRD_PHYSS_TX_VBOOSTLEVEL_OVRD_IN,
 				  temp);
+
+		/*
+		 * Set proper time to wait for RxDetect measurement, for
+		 * desired reference clock of PHY, by tuning the CRPORT
+		 * register LANE0.TX_DEBUG which is internal to PHY.
+		 * This fixes issue with few USB 3.0 devices, which are
+		 * not detected (not even generate interrupts on the bus
+		 * on insertion) without this change.
+		 * e.g. Samsung SUM-TSB16S 3.0 USB drive.
+		 */
+		switch (sphy->ref_clk_freq) {
+		case FSEL_CLKSEL_50M:
+			temp = LANE0_TX_DEBUG_RXDET_MEAS_TIME_48M_50M_52M;
+			break;
+		case FSEL_CLKSEL_20M:
+		case FSEL_CLKSEL_19200K:
+			temp = LANE0_TX_DEBUG_RXDET_MEAS_TIME_19200K_20M;
+			break;
+		case FSEL_CLKSEL_24M:
+		default:
+			temp = LANE0_TX_DEBUG_RXDET_MEAS_TIME_24M;
+			break;
+		}
+
+		crport_ctrl_write(sphy,
+				  EXYNOS5_DRD_PHYSS_LANE0_TX_DEBUG,
+				  temp);
+
 		mutex_unlock(&sphy->mutex);
 	}
 }

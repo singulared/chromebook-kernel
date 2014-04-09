@@ -524,6 +524,7 @@
 
 	usb@12110000 {
 		status = "okay";
+		supports-hsicphy-reset;
 	};
 
 	usb@12120000 {
