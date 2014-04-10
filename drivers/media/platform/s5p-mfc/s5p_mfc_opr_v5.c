@@ -40,7 +40,8 @@ static int s5p_mfc_alloc_dec_temp_buffers_v5(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf_size_v5 *buf_size = dev->variant->buf_size->priv;
 	int ret;
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->dsc, buf_size->dsc);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->dsc, buf_size->dsc,
+					true);
 	if (ret) {
 		mfc_err("Failed to allocate temporary buffer\n");
 		return ret;
@@ -161,7 +162,7 @@ static int s5p_mfc_alloc_codec_buffers_v5(struct s5p_mfc_ctx *ctx)
 	/* Allocate only if memory from bank 1 is necessary */
 	if (bank1_size > 0) {
 		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
-						bank1_size);
+						bank1_size, false);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 temporary buffer\n");
 			return ret;
@@ -171,7 +172,7 @@ static int s5p_mfc_alloc_codec_buffers_v5(struct s5p_mfc_ctx *ctx)
 	/* Allocate only if memory from bank 2 is necessary */
 	if (bank2_size > 0) {
 		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_r, &ctx->bank2,
-						bank2_size);
+						bank2_size, false);
 		if (ret) {
 			mfc_err("Failed to allocate Bank2 temporary buffer\n");
 			s5p_mfc_release_priv_buf(ctx->dev->mem_dev_l,
@@ -208,7 +209,7 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 		ctx_size = buf_size->non_h264_ctx;
 	}
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size, true);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
@@ -220,7 +221,8 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 	wmb();
 
 	/* Initialize shared memory */
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm, buf_size->shm);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm, buf_size->shm,
+					true);
 	if (ret) {
 		mfc_err("Failed to allocate shared memory buffer\n");
 		s5p_mfc_release_priv_buf(dev->mem_dev_l, &ctx->ctx);

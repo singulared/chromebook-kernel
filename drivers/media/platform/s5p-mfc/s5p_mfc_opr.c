@@ -38,39 +38,45 @@ void s5p_mfc_init_regs(struct s5p_mfc_dev *dev)
 }
 
 int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
-				size_t size)
+				size_t size, bool needs_cpu_access)
 {
-	void *virt;
+	void *token;
 	dma_addr_t dma;
+	DEFINE_DMA_ATTRS(attrs);
 
-	mfc_debug(3, "Allocating priv: %d\n", size);
+	mfc_debug(3, "Allocating priv buffer of size: %d\n", size);
 
 	/* We shouldn't normally allocate on top of previously-allocated buffer,
 	 * but if we happen to, at least free it first. */
-	WARN_ON(b->virt);
+	WARN_ON(b->token);
 	s5p_mfc_release_priv_buf(dev, b);
 
-	virt = dma_alloc_coherent(dev, size, &dma, GFP_KERNEL);
-	if (!virt) {
-		mfc_err("Allocating private buffer failed\n");
+	if (!needs_cpu_access)
+		dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
+
+	token = dma_alloc_attrs(dev, size, &dma, GFP_KERNEL, &attrs);
+	if (!token) {
+		mfc_err("Allocating private buffer of size %d failed\n", size);
 		return -ENOMEM;
 	}
 
-	b->virt = virt;
-	b->size = size;
+	if (needs_cpu_access)
+		b->virt = token;
+
 	b->dma = dma;
-	mfc_debug(3, "Allocated addr %p %08x\n", b->virt, b->dma);
+	b->size = size;
+	b->attrs = attrs;
+	b->token = token;
+
+	mfc_debug(3, "Allocated dma_addr %08x mapped to %p\n", b->dma, b->virt);
 	return 0;
 }
 
 void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b)
 {
-	if (b->virt) {
-		dma_free_coherent(dev, b->size, b->virt, b->dma);
-	}
+	if (b->token)
+		dma_free_attrs(dev, b->size, b->token, b->dma, &b->attrs);
 
-	b->virt = NULL;
-	b->dma = 0;
-	b->size = 0;
+	memset(b, 0, sizeof(*b));
 }
 

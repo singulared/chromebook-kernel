@@ -336,7 +336,7 @@ struct s5p_mfc_hw_ops {
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_regs(struct s5p_mfc_dev *dev);
 int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
-				size_t size);
+				size_t size, bool needs_cpu_access);
 void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b);
 
 
