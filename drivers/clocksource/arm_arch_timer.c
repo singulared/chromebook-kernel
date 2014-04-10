@@ -36,7 +36,7 @@ static int arch_timer_ppi[MAX_TIMER_PPI];
 
 static struct clock_event_device __percpu *arch_timer_evt;
 
-static bool arch_timer_use_virtual = true;
+static bool arch_timer_use_virtual = false;
 
 /*
  * Architected system timer support.

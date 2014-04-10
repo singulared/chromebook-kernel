@@ -1977,15 +1977,13 @@ static void hdmi_audio_control(struct hdmi_context *hdata, bool onoff)
 
 static void hdmi_start(struct hdmi_context *hdata, bool start)
 {
-	u32 val = start ? ~0 : 0;
-
-	hdmi_reg_writemask(hdata, HDMI_CON_0, val, HDMI_EN);
+	u32 val = start ? HDMI_TG_EN : 0;
 
 	if (hdata->current_mode.flags & DRM_MODE_FLAG_INTERLACE)
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, val, HDMI_TG_EN |
-				HDMI_FIELD_EN);
-	else
-		hdmi_reg_writemask(hdata, HDMI_TG_CMD, val, HDMI_TG_EN);
+		val |= HDMI_FIELD_EN;
+
+	hdmi_reg_writemask(hdata, HDMI_CON_0, start ? ~0 : 0, HDMI_EN);
+	hdmi_reg_writemask(hdata, HDMI_TG_CMD, val, HDMI_TG_EN | HDMI_FIELD_EN);
 }
 
 static void hdmi_conf_init(struct hdmi_context *hdata)

@@ -105,10 +105,9 @@ static const struct btmrvl_sdio_card_reg btmrvl_reg_88xx = {
 };
 
 static const struct btmrvl_sdio_device btmrvl_sdio_sd8688 = {
-	.helper		= "sd8688_helper.bin",
-	.firmware	= "sd8688.bin",
+	.helper		= "mrvl/sd8688_helper.bin",
+	.firmware	= "mrvl/sd8688.bin",
 	.reg		= &btmrvl_reg_8688,
-	.support_pscan_win_report = false,
 	.sd_blksz_fw_dl	= 64,
 };
 
@@ -116,7 +115,6 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8787 = {
 	.helper		= NULL,
 	.firmware	= "mrvl/sd8787_uapsta.bin",
 	.reg		= &btmrvl_reg_87xx,
-	.support_pscan_win_report = false,
 	.sd_blksz_fw_dl	= 256,
 };
 
@@ -124,7 +122,6 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8797 = {
 	.helper		= NULL,
 	.firmware	= "mrvl/sd8797_uapsta.bin",
 	.reg		= &btmrvl_reg_87xx,
-	.support_pscan_win_report = false,
 	.sd_blksz_fw_dl	= 256,
 };
 
@@ -132,7 +129,6 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8897 = {
 	.helper		= NULL,
 	.firmware	= "mrvl/sd8897_uapsta.bin",
 	.reg		= &btmrvl_reg_88xx,
-	.support_pscan_win_report = true,
 	.sd_blksz_fw_dl	= 256,
 };
 
@@ -495,7 +491,7 @@ static int btmrvl_sdio_download_fw_w_helper(struct btmrvl_sdio_card *card)
 			if (firmwarelen - offset < txlen)
 				txlen = firmwarelen - offset;
 
-			tx_blocks = (txlen + blksz_dl - 1) / blksz_dl;
+			tx_blocks = DIV_ROUND_UP(txlen, blksz_dl);
 
 			memcpy(fwbuf, &firmware[offset], txlen);
 		}
@@ -563,6 +559,7 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 	skb = bt_skb_alloc(num_blocks * blksz + BTSDIO_DMA_ALIGN, GFP_ATOMIC);
 	if (skb == NULL) {
 		BT_ERR("No free skb");
+		ret = -ENOMEM;
 		goto exit;
 	}
 
@@ -605,15 +602,14 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 	case HCI_SCODATA_PKT:
 	case HCI_EVENT_PKT:
 		bt_cb(skb)->pkt_type = type;
-		skb->dev = (void *)hdev;
 		skb_put(skb, buf_len);
 		skb_pull(skb, SDIO_HEADER_LEN);
 
 		if (type == HCI_EVENT_PKT) {
 			if (btmrvl_check_evtpkt(priv, skb))
-				hci_recv_frame(skb);
+				hci_recv_frame(hdev, skb);
 		} else {
-			hci_recv_frame(skb);
+			hci_recv_frame(hdev, skb);
 		}
 
 		hdev->stat.byte_rx += buf_len;
@@ -621,12 +617,11 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 
 	case MRVL_VENDOR_PKT:
 		bt_cb(skb)->pkt_type = HCI_VENDOR_PKT;
-		skb->dev = (void *)hdev;
 		skb_put(skb, buf_len);
 		skb_pull(skb, SDIO_HEADER_LEN);
 
 		if (btmrvl_process_event(priv, skb))
-			hci_recv_frame(skb);
+			hci_recv_frame(hdev, skb);
 
 		hdev->stat.byte_rx += buf_len;
 		break;
@@ -937,7 +932,7 @@ static int btmrvl_sdio_host_to_card(struct btmrvl_private *priv,
 	}
 
 	blksz = SDIO_BLOCK_SIZE;
-	buf_block_len = (nb + blksz - 1) / blksz;
+	buf_block_len = DIV_ROUND_UP(nb, blksz);
 
 	sdio_claim_host(card->func);
 
@@ -966,7 +961,7 @@ exit:
 
 static int btmrvl_sdio_download_fw(struct btmrvl_sdio_card *card)
 {
-	int ret = 0;
+	int ret;
 	u8 fws0;
 	int pollnum = MAX_POLL_TRIES;
 
@@ -1072,7 +1067,6 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 		card->firmware = data->firmware;
 		card->reg = data->reg;
 		card->sd_blksz_fw_dl = data->sd_blksz_fw_dl;
-		card->support_pscan_win_report = data->support_pscan_win_report;
 	}
 
 	if (btmrvl_sdio_register_dev(card) < 0) {
@@ -1110,8 +1104,6 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 		ret = -ENODEV;
 		goto disable_host_int;
 	}
-
-	btmrvl_pscan_window_reporting(priv, 0x01);
 
 	priv->btmrvl_dev.psmode = 1;
 	btmrvl_enable_ps(priv);
@@ -1285,8 +1277,8 @@ MODULE_AUTHOR("Marvell International Ltd.");
 MODULE_DESCRIPTION("Marvell BT-over-SDIO driver ver " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL v2");
-MODULE_FIRMWARE("sd8688_helper.bin");
-MODULE_FIRMWARE("sd8688.bin");
+MODULE_FIRMWARE("mrvl/sd8688_helper.bin");
+MODULE_FIRMWARE("mrvl/sd8688.bin");
 MODULE_FIRMWARE("mrvl/sd8787_uapsta.bin");
 MODULE_FIRMWARE("mrvl/sd8797_uapsta.bin");
 MODULE_FIRMWARE("mrvl/sd8897_uapsta.bin");
