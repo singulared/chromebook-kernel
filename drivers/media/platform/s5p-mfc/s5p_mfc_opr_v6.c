@@ -252,14 +252,12 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 		return -EINVAL;
 	}
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size, true);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx,
+					ctx_size, false);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
 	}
-
-	memset(ctx->ctx.virt, 0, ctx->ctx.size);
-	wmb();
 
 	mfc_debug_leave();
 
@@ -281,14 +279,11 @@ static int s5p_mfc_alloc_dev_context_buffer_v6(struct s5p_mfc_dev *dev)
 	mfc_debug_enter();
 
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &dev->ctx_buf,
-					buf_size->dev_ctx, true);
+					buf_size->dev_ctx, false);
 	if (ret) {
 		mfc_err("Failed to allocate device context buffer\n");
 		return ret;
 	}
-
-	memset(dev->ctx_buf.virt, 0, buf_size->dev_ctx);
-	wmb();
 
 	mfc_debug_leave();
 

@@ -41,15 +41,13 @@ static int s5p_mfc_alloc_dec_temp_buffers_v5(struct s5p_mfc_ctx *ctx)
 	int ret;
 
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->dsc, buf_size->dsc,
-					true);
+					false);
 	if (ret) {
 		mfc_err("Failed to allocate temporary buffer\n");
 		return ret;
 	}
 
 	BUG_ON(ctx->dsc.dma & ((1 << MFC_BANK1_ALIGN_ORDER) - 1));
-	memset(ctx->dsc.virt, 0, ctx->dsc.size);
-	wmb();
 	return 0;
 }
 
@@ -209,16 +207,13 @@ static int s5p_mfc_alloc_instance_buffer_v5(struct s5p_mfc_ctx *ctx)
 		ctx_size = buf_size->non_h264_ctx;
 	}
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size, true);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx,
+					ctx_size, false);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
 	}
 	ctx->ctx.ofs = OFFSETA(ctx->ctx.dma);
-
-	/* Zero content of the allocated memory */
-	memset(ctx->ctx.virt, 0, ctx->ctx.size);
-	wmb();
 
 	/* Initialize shared memory */
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->shm, buf_size->shm,
