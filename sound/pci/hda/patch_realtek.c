@@ -2677,13 +2677,19 @@ static void alc283_init(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
 	hda_nid_t hp_pin = spec->gen.autocfg.hp_pins[0];
-	int hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
+	bool hp_pin_sense;
 	int val;
+
+	if (!spec->gen.autocfg.hp_outs) {
+		if (spec->gen.autocfg.line_out_type == AC_JACK_HP_OUT)
+			hp_pin = spec->gen.autocfg.line_out_pins[0];
+	}
 
 	alc283_restore_default_value(codec);
 
 	if (!hp_pin)
 		return;
+	hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
 
 	alc_write_coef_idx(codec, 0x43, 0x9004);
 
@@ -2708,14 +2714,20 @@ static void alc283_shutup(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
 	hda_nid_t hp_pin = spec->gen.autocfg.hp_pins[0];
-	int hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
+	bool hp_pin_sense;
 	int val;
+
+	if (!spec->gen.autocfg.hp_outs) {
+		if (spec->gen.autocfg.line_out_type == AC_JACK_HP_OUT)
+			hp_pin = spec->gen.autocfg.line_out_pins[0];
+	}
 
 	if (!hp_pin) {
 		alc269_shutup(codec);
 		return;
 	}
 
+	hp_pin_sense = snd_hda_jack_detect(codec, hp_pin);
 	alc_write_coef_idx(codec, 0x43, 0x9004);
 
 	snd_hda_codec_write(codec, hp_pin, 0,
