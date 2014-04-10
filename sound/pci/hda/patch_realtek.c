@@ -2962,6 +2962,8 @@ static void alc283_fixup_dac_wcaps(struct hda_codec *codec,
 	case HDA_FIXUP_ACT_INIT:
 		/* MIC2-VREF control */
 		/* Set to manual mode */
+		val = alc_read_coef_idx(codec, 0x06);
+		alc_write_coef_idx(codec, 0x06, val & ~0x000c);
 		val = alc_read_coef_idx(codec, 0x1a);
 		alc_write_coef_idx(codec, 0x1a, val | (1 << 4));
 		break;
