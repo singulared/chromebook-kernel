@@ -63,7 +63,7 @@ static const char name_exynos4212[] = "EXYNOS4212";
 static const char name_exynos4412[] = "EXYNOS4412";
 static const char name_exynos5250[] = "EXYNOS5250";
 static const char name_exynos5420[] = "EXYNOS5420";
-static const char name_exynos5422[] = "EXYNOS5422";
+static const char name_exynos5422[] = "EXYNOS5800"; /* Make marketing people happy */
 static const char name_exynos5440[] = "EXYNOS5440";
 
 static void exynos4_map_io(void);

@@ -619,9 +619,8 @@ static int s5p_mfc_set_runtime_enc_params(struct s5p_mfc_ctx *ctx,
 		reg |= runtime_p->force_frame_type & 0x3;
 		WRITEL(reg, mfc_regs->e_frame_insertion);
 	}
-
-	if (params_changed)
-		WRITEL(params_changed, mfc_regs->e_param_change);
+	runtime_p->params_changed = 0;
+	WRITEL(params_changed, mfc_regs->e_param_change);
 
 	return 0;
 }
@@ -654,7 +653,6 @@ static int s5p_mfc_set_enc_params(struct s5p_mfc_ctx *ctx)
 	/* send all runtime encoder parameters. */
 	p->codec.runtime.params_changed = ~0;
 	s5p_mfc_set_runtime_enc_params(ctx, &p->codec.runtime);
-	p->codec.runtime.params_changed = 0;
 
 	/* multi-slice control */
 	/* multi-slice MB number or bit size */
