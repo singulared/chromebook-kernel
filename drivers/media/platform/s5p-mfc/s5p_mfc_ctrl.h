@@ -22,6 +22,8 @@
  * @reset:		function to reset mfc
  * @wakeup:		function to wakeup mfc
  * @sleep:		function to suspend mfc
+ * @mem_req_disable	function to stop memory request from mfc
+ * @mem_req_enable	function to start mfc memory request
  */
 struct s5p_mfc_hw_ctrl_ops {
 	int (*init_hw)(struct s5p_mfc_dev *dev);
@@ -29,6 +31,8 @@ struct s5p_mfc_hw_ctrl_ops {
 	int (*reset)(struct s5p_mfc_dev *dev);
 	int (*wakeup)(struct s5p_mfc_dev *dev);
 	int (*sleep)(struct s5p_mfc_dev *dev);
+	void (*mem_req_disable)(struct s5p_mfc_dev *dev);
+	void (*mem_req_enable)(struct s5p_mfc_dev *dev);
 };
 
 int s5p_mfc_release_firmware(struct s5p_mfc_dev *dev);

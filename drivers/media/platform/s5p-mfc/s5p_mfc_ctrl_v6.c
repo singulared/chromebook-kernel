@@ -79,11 +79,11 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset..\n");
 	WARN_ON(dev->risc_on);
-	s5p_mfc_clock_on();
+	s5p_mfc_clock_on(dev);
 	ret = s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 		return ret;
 	}
 	mfc_debug(2, "Done MFC reset..\n");
@@ -95,14 +95,14 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 
 	ret = s5p_mfc_init_fw(dev);
 	if (ret) {
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 		return ret;
 	}
 
 	ver = mfc_read(dev, S5P_FIMV_FW_VERSION_V6);
 	mfc_debug(2, "MFC F/W version : %02xyy, %02xmm, %02xdd\n",
 		(ver >> 16) & 0xFF, (ver >> 8) & 0xFF, ver & 0xFF);
-	s5p_mfc_clock_off();
+	s5p_mfc_clock_off(dev);
 	dev->risc_on = 1;
 	mfc_debug_leave();
 	return ret;
@@ -162,11 +162,11 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset..\n");
 	WARN_ON(dev->risc_on);
-	s5p_mfc_clock_on();
+	s5p_mfc_clock_on(dev);
 	ret = s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 		return ret;
 	}
 	mfc_debug(2, "Done MFC reset..\n");
@@ -180,7 +180,7 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	else
 		ret = s5p_mfc_wait_wakeup_v6(dev);
 
-	s5p_mfc_clock_off();
+	s5p_mfc_clock_off(dev);
 	if (ret)
 		return ret;
 
@@ -197,6 +197,22 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	return 0;
 }
 
+static void s5p_mfc_mem_req_disable_v6(struct s5p_mfc_dev *dev)
+{
+	if (dev->risc_on)
+		s5p_mfc_bus_reset(dev);
+}
+
+static void s5p_mfc_mem_req_enable_v6(struct s5p_mfc_dev *dev)
+{
+	unsigned int bus_reset_ctrl;
+	if (dev->risc_on) {
+		bus_reset_ctrl = mfc_read(dev, S5P_FIMV_MFC_BUS_RESET_CTRL);
+		bus_reset_ctrl &= S5P_FIMV_MFC_BUS_RESET_CTRL_MASK;
+		mfc_write(dev, bus_reset_ctrl, S5P_FIMV_MFC_BUS_RESET_CTRL);
+	}
+}
+
 /* Initialize hw ctrls function pointers for MFC v6 */
 static struct s5p_mfc_hw_ctrl_ops s5p_mfc_hw_ctrl_ops_v6_plus = {
 	.init_hw = s5p_mfc_init_hw_v6,
@@ -204,6 +220,8 @@ static struct s5p_mfc_hw_ctrl_ops s5p_mfc_hw_ctrl_ops_v6_plus = {
 	.reset = s5p_mfc_reset_v6,
 	.wakeup = s5p_mfc_wakeup_v6,
 	.sleep = s5p_mfc_sleep,
+	.mem_req_disable = s5p_mfc_mem_req_disable_v6,
+	.mem_req_enable = s5p_mfc_mem_req_enable_v6,
 };
 
 struct s5p_mfc_hw_ctrl_ops *s5p_mfc_init_hw_ctrl_ops_v6_plus(void)

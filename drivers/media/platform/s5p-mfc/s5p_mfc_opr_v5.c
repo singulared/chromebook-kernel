@@ -1374,7 +1374,7 @@ static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 	if (test_bit(0, &dev->enter_suspend)) {
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
 		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off();
+			s5p_mfc_clock_off(dev);
 		return;
 	}
 	/* Check whether hardware is not running */
@@ -1388,7 +1388,7 @@ static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 	if (new_ctx < 0) {
 		/* No contexts to run */
 		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off();
+			s5p_mfc_clock_off(dev);
 		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
 			mfc_err("Failed to unlock hardware\n");
 			return;
@@ -1403,7 +1403,7 @@ static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 	 * Now obtaining frames from MFC buffer
 	 */
 	if (test_and_set_bit(0, &dev->clk_flag) == 0)
-		s5p_mfc_clock_on();
+		s5p_mfc_clock_on(dev);
 
 	if (ctx->type == MFCINST_DECODER) {
 		s5p_mfc_set_dec_desc_buffer(ctx);
@@ -1483,7 +1483,7 @@ static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 		 * ever do this, because no interrupt related to this try_run
 		 * will ever come from hardware. */
 		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off();
+			s5p_mfc_clock_off(dev);
 	}
 }
 

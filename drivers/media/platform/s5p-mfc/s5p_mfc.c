@@ -155,7 +155,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	spin_lock_irqsave(&dev->irqlock, flags);
 
 	if (test_and_clear_bit(0, &dev->clk_flag))
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++) {
 		ctx = dev->ctx[i];
@@ -477,7 +477,7 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	if (test_and_clear_bit(0, &dev->clk_flag))
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 	wake_up_dev(dev, reason, err);
 	return;
 }
@@ -574,7 +574,7 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 
 		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off();
+			s5p_mfc_clock_off(dev);
 
 		wake_up(&ctx->queue);
 	}
@@ -857,7 +857,7 @@ err_pwr_enable:
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("power off failed\n");
 		del_timer_sync(&dev->watchdog_timer);
-		s5p_mfc_clock_off();
+		s5p_mfc_clock_off(dev);
 	}
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);

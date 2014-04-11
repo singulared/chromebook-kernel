@@ -181,13 +181,13 @@ int s5p_mfc_init_fw(struct s5p_mfc_dev *dev)
 /* Deinitialize hardware */
 void s5p_mfc_deinit_hw(struct s5p_mfc_dev *dev)
 {
-	s5p_mfc_clock_on();
+	s5p_mfc_clock_on(dev);
 
 	s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	s5p_mfc_hw_call(dev->mfc_ops, release_dev_context_buffer, dev);
 
 	dev->risc_on = 0;
-	s5p_mfc_clock_off();
+	s5p_mfc_clock_off(dev);
 }
 
 int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
@@ -195,7 +195,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	int ret;
 
 	mfc_debug_enter();
-	s5p_mfc_clock_on();
+	s5p_mfc_clock_on(dev);
 	s5p_mfc_clean_dev_int_flags(dev);
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sleep_cmd, dev);
 	if (ret) {
@@ -206,7 +206,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 		mfc_err("Failed to sleep\n");
 		return -EIO;
 	}
-	s5p_mfc_clock_off();
+	s5p_mfc_clock_off(dev);
 	dev->int_cond = 0;
 	if (dev->int_err != 0 || dev->int_type !=
 						S5P_MFC_R2H_CMD_SLEEP_RET) {
