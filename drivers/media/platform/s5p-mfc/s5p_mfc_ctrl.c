@@ -186,6 +186,7 @@ void s5p_mfc_deinit_hw(struct s5p_mfc_dev *dev)
 	s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	s5p_mfc_hw_call(dev->mfc_ops, release_dev_context_buffer, dev);
 
+	dev->risc_on = 0;
 	s5p_mfc_clock_off();
 }
 
@@ -214,6 +215,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 								dev->int_type);
 		return -EIO;
 	}
+	dev->risc_on = 0;
 	mfc_debug_leave();
 	return ret;
 }

@@ -78,8 +78,8 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset..\n");
+	WARN_ON(dev->risc_on);
 	s5p_mfc_clock_on();
-	dev->risc_on = 0;
 	ret = s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
@@ -91,7 +91,6 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 	s5p_mfc_init_memctrl_v6(dev);
 	/* 2. Release reset signal to the RISC */
 	s5p_mfc_clean_dev_int_flags(dev);
-	dev->risc_on = 1;
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
 	ret = s5p_mfc_init_fw(dev);
@@ -104,6 +103,7 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 	mfc_debug(2, "MFC F/W version : %02xyy, %02xmm, %02xdd\n",
 		(ver >> 16) & 0xFF, (ver >> 8) & 0xFF, ver & 0xFF);
 	s5p_mfc_clock_off();
+	dev->risc_on = 1;
 	mfc_debug_leave();
 	return ret;
 }
@@ -113,7 +113,6 @@ static int s5p_mfc_wait_wakeup_v8(struct s5p_mfc_dev *dev)
 	int ret;
 
 	/* Release reset signal to the RISC */
-	dev->risc_on = 1;
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
 	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET)) {
@@ -146,7 +145,6 @@ static int s5p_mfc_wait_wakeup_v6(struct s5p_mfc_dev *dev)
 	}
 
 	/* Release reset signal to the RISC */
-	dev->risc_on = 1;
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
 	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
@@ -163,8 +161,8 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	mfc_debug_enter();
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset..\n");
+	WARN_ON(dev->risc_on);
 	s5p_mfc_clock_on();
-	dev->risc_on = 0;
 	ret = s5p_mfc_ctrl_ops_call(dev, reset, dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
@@ -194,6 +192,7 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 								dev->int_type);
 		return -EIO;
 	}
+	dev->risc_on = 1;
 	mfc_debug_leave();
 	return 0;
 }
