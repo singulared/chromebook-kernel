@@ -22,7 +22,6 @@
 #define SRC_CPU			0x200
 #define DIV_CPU0		0x500
 #define SRC_CORE1		0x4204
-#define GATE_IP_ACP		0x8800
 #define EPLL_CON0		0x10130
 #define EPLL_CON1		0x10134
 #define EPLL_CON2		0x10138
@@ -110,7 +109,7 @@ enum exynos5250_clks {
 	hsi2c3, chipid, sysreg, pmu, cmu_top, cmu_core, cmu_mem, tzpc0, tzpc1,
 	tzpc2, tzpc3, tzpc4, tzpc5, tzpc6, tzpc7, tzpc8, tzpc9, hdmi_cec, mct,
 	wdt, rtc, tmu, fimd1, mie1, dsim0, dp, mixer, hdmi, g3d, smmu_tv,
-	smmu_fimd1, sss,
+	smmu_fimd1,
 
 	/* div clocks */
 	div_aclk266 = 512, div_aclk300_gscl, div_aclk333, div_aclk400_g3d,
@@ -174,7 +173,6 @@ static __initdata unsigned long exynos5250_clk_regs[] = {
 	GATE_IP_FSYS,
 	GATE_IP_PERIC,
 	GATE_IP_PERIS,
-	GATE_IP_ACP,
 	SRC_CDREX,
 	PLL_DIV2_SEL,
 	GATE_IP_DISP1,
@@ -556,7 +554,6 @@ struct samsung_gate_clock exynos5250_gate_clks[] __initdata = {
 	GATE(mixer, "mixer", "mout_aclk200_disp1_sub", GATE_IP_DISP1, 5, 0, 0),
 	GATE(hdmi, "hdmi", "mout_aclk200_disp1_sub", GATE_IP_DISP1, 6, 0, 0),
 	GATE(g3d, "g3d", "div_aclk400_g3d", GATE_IP_G3D, 0, 0, 0),
-	GATE(sss, "sss", "aclk200", GATE_IP_ACP, 2, 0, 0),
 };
 
 static __initdata struct of_device_id ext_clk_match[] = {
