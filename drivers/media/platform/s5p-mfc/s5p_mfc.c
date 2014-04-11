@@ -173,21 +173,15 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/* De-init MFC */
-	s5p_mfc_deinit_hw(dev);
+	s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
 
 	/* Double check if there is at least one instance running.
 	 * If no instance is in memory than no firmware should be present */
 	if (dev->num_inst > 0) {
-		ret = s5p_mfc_reload_firmware(dev);
-		if (ret) {
-			mfc_err("Failed to reload FW\n");
-			goto unlock;
-		}
-		ret = s5p_mfc_init_hw(dev);
+		ret = s5p_mfc_ctrl_ops_call(dev, init_hw, dev);
 		if (ret)
 			mfc_err("Failed to reinit FW\n");
 	}
-unlock:
 	if (mutex_locked)
 		mutex_unlock(&dev->mfc_mutex);
 }
@@ -803,12 +797,8 @@ static int s5p_mfc_open(struct file *file)
 			mfc_err("power on failed\n");
 			goto err_pwr_enable;
 		}
-		ret = s5p_mfc_load_firmware(dev);
-		if (ret) {
-			goto err_load_fw;
-		}
 		/* Init the FW */
-		ret = s5p_mfc_init_hw(dev);
+		ret = s5p_mfc_ctrl_ops_call(dev, init_hw, dev);
 		if (ret)
 			goto err_init_hw;
 	}
@@ -860,9 +850,8 @@ static int s5p_mfc_open(struct file *file)
 	/* Deinit when failure occured */
 err_queue_init:
 	if (dev->num_inst == 1)
-		s5p_mfc_deinit_hw(dev);
+		s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
 err_init_hw:
-err_load_fw:
 err_pwr_enable:
 	if (dev->num_inst == 1) {
 		if (s5p_mfc_power_off() < 0)
@@ -909,7 +898,7 @@ static int s5p_mfc_release(struct file *file)
 	dev->num_inst--;
 	if (dev->num_inst == 0) {
 		mfc_debug(2, "Last instance\n");
-		s5p_mfc_deinit_hw(dev);
+		s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
 		del_timer_sync(&dev->watchdog_timer);
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("Power off failed\n");
@@ -1286,6 +1275,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	s5p_mfc_init_hw_ops(dev);
 	s5p_mfc_init_hw_cmds(dev);
 	s5p_mfc_init_regs(dev);
+	s5p_mfc_init_hw_ctrls(dev);
 
 	pr_debug("%s--\n", __func__);
 	return 0;
@@ -1366,7 +1356,7 @@ static int s5p_mfc_suspend(struct device *dev)
 		}
 	}
 
-	ret = s5p_mfc_sleep(m_dev);
+	ret = s5p_mfc_ctrl_ops_call(m_dev, sleep, m_dev);
 	if (ret) {
 		clear_bit(0, &m_dev->enter_suspend);
 		clear_bit(0, &m_dev->hw_lock);
@@ -1381,7 +1371,7 @@ static int s5p_mfc_resume(struct device *dev)
 
 	if (m_dev->num_inst == 0)
 		return 0;
-	return s5p_mfc_wakeup(m_dev);
+	return s5p_mfc_ctrl_ops_call(m_dev, wakeup, m_dev);
 }
 #endif
 

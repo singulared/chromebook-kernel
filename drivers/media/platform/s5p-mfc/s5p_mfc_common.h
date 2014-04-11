@@ -320,7 +320,9 @@ struct s5p_mfc_priv_buf {
  * @warn_start:		hardware error code from which warnings start
  * @mfc_ops:		ops structure holding HW operation function pointers
  * @mfc_cmds:		cmd structure holding HW commands function pointers
- *
+ * @mfc_regs:		regs structure holding HW register offsets
+ * @mfc_ctrl_ops:	ctrl structure holding HW control function pointers
+ * @risc_on:		flag to indicate risc on/off status
  */
 struct s5p_mfc_dev {
 	struct v4l2_device	v4l2_dev;
@@ -365,6 +367,7 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_hw_ops *mfc_ops;
 	struct s5p_mfc_hw_cmds *mfc_cmds;
 	const struct s5p_mfc_regs *mfc_regs;
+	struct s5p_mfc_hw_ctrl_ops *mfc_ctrl_ops;
 	bool risc_on; /* indicates if RISC is on or off */
 };
 
@@ -721,6 +724,11 @@ struct mfc_control {
 /* Macro for making hardware specific calls */
 #define s5p_mfc_hw_call(f, op, args...) \
 	((f && f->op) ? f->op(args) : -ENODEV)
+
+/* Macro for making control specific calls */
+#define s5p_mfc_ctrl_ops_call(dev, op, args...) \
+	(((dev) && ((dev)->mfc_ctrl_ops) && ((dev)->mfc_ctrl_ops->op)) ? \
+	  (dev)->mfc_ctrl_ops->op(args) : -ENODEV)
 
 #define fh_to_ctx(__fh) container_of(__fh, struct s5p_mfc_ctx, fh)
 #define ctrl_to_ctx(__ctrl) \
