@@ -340,6 +340,12 @@ static void s5p_mfc_enc_calc_src_size_v6(struct s5p_mfc_ctx *ctx)
 	ctx->buf_width = ALIGN(ctx->img_width, S5P_FIMV_NV12M_HALIGN_V6);
 	ctx->luma_size = ALIGN((mb_width * mb_height) * 256, 256);
 	ctx->chroma_size = ALIGN((mb_width * mb_height) * 128, 256);
+
+	/* MFCv7 & v8 needs padded bytes for Luma and Chroma */
+	if (IS_MFCV7(ctx->dev)) {
+		ctx->luma_size += MFC_LUMA_PAD_BYTES_V7;
+		ctx->chroma_size += MFC_CHROMA_PAD_BYTES_V7;
+	}
 }
 
 /* Set registers for decoding stream buffer */

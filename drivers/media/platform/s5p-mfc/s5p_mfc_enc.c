@@ -1891,14 +1891,8 @@ static int s5p_mfc_queue_setup(struct vb2_queue *vq,
 		if (*buf_count > MFC_MAX_BUFFERS)
 			*buf_count = MFC_MAX_BUFFERS;
 
-		if (IS_MFCV7(dev)) {
-			/* MFCv7 needs pad bytes for input YUV */
-			psize[0] = ctx->luma_size + 256;
-			psize[1] = ctx->chroma_size + 128;
-		} else {
-			psize[0] = ctx->luma_size;
-			psize[1] = ctx->chroma_size;
-		}
+		psize[0] = ctx->luma_size;
+		psize[1] = ctx->chroma_size;
 
 		if (IS_MFCV6(dev)) {
 			allocators[0] =
