@@ -22,4 +22,27 @@
 		"google,pi-rev13", "google,pi-rev12",
 		"google,pi-rev11", "google,pi-rev10",
 		"google,pi", "google,peach", "samsung,exynos5422";
+
+	int-voltage-locker {
+		compatible = "regulator-locker";
+		vin1-supply = <&buck2_reg>; /* vdd_arm_real */
+		vin2-supply = <&buck3_reg>; /* vdd_int_real */
+		maximum-spread = <300000>;
+		locker-regulators {
+			vout1 {
+				regulator-name = "vdd_arm";
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1500000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+			vout2 {
+				regulator-name = "vdd_int";
+				regulator-min-microvolt = <800000>;
+				regulator-max-microvolt = <1400000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+		};
+	};
 };
