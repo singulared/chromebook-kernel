@@ -512,8 +512,25 @@ void bitfix_recover_chunk(phys_addr_t failed_addr,
 
 		virt = kmap_atomic(phys_to_page(addr));
 		bytes_fixed += bitfix_compare(addr, virt, recover_page);
+
+		/*
+		 * We might end up recovering something which is marked as
+		 * read-only, and crash in here.  So, we set all kernel text
+		 * to be read-write for this operation.
+		 * The early_boot_irqs_disabled is to avoid a warning in
+		 * smp_call_function_many() due to the A-15 TLB erratum
+		 * workaround.
+		 */
+		early_boot_irqs_disabled = 1;
+		set_all_modules_text_rw();
+		set_kernel_text_rw();
+
 		memcpy(virt, recover_page, PAGE_SIZE);
 		kunmap_atomic(virt);
+
+		set_kernel_text_ro();
+		set_all_modules_text_ro();
+		early_boot_irqs_disabled = 0;
 	}
 
 	BUG_ON(bytes_fixed > MAX_BYTES_TO_FIX);
