@@ -778,6 +778,9 @@ static ssize_t read_file_reset(struct file *file, char __user *user_buf,
 	len += snprintf(buf + len, sizeof(buf) - len,
 			"%17s: %2d\n", "PLL RX Hang",
 			sc->debug.stats.reset[RESET_TYPE_PLL_HANG]);
+	len += snprintf(buf + len, sizeof(buf) - len,
+			"%17s: %2d\n", "Set Channel Failed",
+			sc->debug.stats.reset[RESET_TYPE_SET_CHANNEL_FAILED]);
 
 	if (len > sizeof(buf))
 		len = sizeof(buf);
@@ -1612,6 +1615,8 @@ int ath9k_init_debug(struct ath_hw *ah)
 			    &fops_base_eeprom);
 	debugfs_create_file("modal_eeprom", S_IRUSR, sc->debug.debugfs_phy, sc,
 			    &fops_modal_eeprom);
+	debugfs_create_file("reset", S_IRUSR | S_IRGRP | S_IROTH,
+			    sc->debug.debugfs_phy, sc, &fops_reset);
 #ifdef CONFIG_ATH9K_MAC_DEBUG
 	debugfs_create_file("samples", S_IRUSR | S_IRGRP | S_IROTH,
 			    sc->debug.debugfs_phy, sc, &fops_samps);

@@ -1939,6 +1939,7 @@ static int ath9k_config(struct ieee80211_hw *hw, u32 changed)
 			ath_err(common, "Unable to set channel\n");
 			mutex_unlock(&sc->mutex);
 			ath9k_ps_restore(sc);
+			ath9k_queue_reset(sc, RESET_TYPE_SET_CHANNEL_FAILED);
 			return -EINVAL;
 		}
 
