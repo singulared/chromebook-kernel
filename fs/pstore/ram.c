@@ -269,7 +269,7 @@ static int ramoops_pstore_erase(enum pstore_type_id type, u64 id, int count,
 	return 0;
 }
 
-static struct ramoops_context oops_cxt = {
+static __suspend_volatile struct ramoops_context oops_cxt = {
 	.pstore = {
 		.owner	= THIS_MODULE,
 		.name	= "ramoops",
