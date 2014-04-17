@@ -17,7 +17,7 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
 
-#define to_exynos_plane(x)	container_of(x, struct exynos_plane, base)
+#define to_exynos_plane_deprecated(x) container_of(x, struct exynos_plane, base)
 
 struct exynos_plane {
 	struct drm_plane		base;
@@ -68,13 +68,39 @@ static int exynos_plane_get_size(int start, unsigned length, unsigned last)
 	return size;
 }
 
+void exynos_sanitize_plane_coords(struct drm_plane *plane,
+		struct drm_crtc *crtc)
+{
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+
+	exynos_plane->crtc_w = exynos_plane_get_size(exynos_plane->crtc_x,
+				exynos_plane->crtc_w, crtc->mode.hdisplay);
+	exynos_plane->crtc_h = exynos_plane_get_size(exynos_plane->crtc_y,
+				exynos_plane->crtc_h, crtc->mode.vdisplay);
+
+	if (exynos_plane->crtc_x < 0) {
+		if (exynos_plane->crtc_w > 0)
+			exynos_plane->src_x -= exynos_plane->crtc_x;
+		exynos_plane->crtc_x = 0;
+	}
+
+	if (exynos_plane->crtc_y < 0) {
+		if (exynos_plane->crtc_h)
+			exynos_plane->src_y -= exynos_plane->crtc_y;
+		exynos_plane->crtc_y = 0;
+	}
+
+	exynos_plane->src_w = min(exynos_plane->src_w, exynos_plane->crtc_w);
+	exynos_plane->src_h = min(exynos_plane->src_h, exynos_plane->crtc_h);
+}
+
 void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 			   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
 			   unsigned int crtc_w, unsigned int crtc_h,
 			   uint32_t src_x, uint32_t src_y,
 			   uint32_t src_w, uint32_t src_h)
 {
-	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_plane *exynos_plane = to_exynos_plane_deprecated(plane);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	unsigned int actual_w;
@@ -145,7 +171,7 @@ void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 
 void exynos_plane_commit(struct drm_plane *plane)
 {
-	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_plane *exynos_plane = to_exynos_plane_deprecated(plane);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
 
 	DRM_DEBUG_KMS("[PLANE:%d]\n", DRM_BASE_ID(plane));
@@ -155,7 +181,7 @@ void exynos_plane_commit(struct drm_plane *plane)
 
 void exynos_plane_dpms(struct drm_plane *plane, int mode)
 {
-	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_plane *exynos_plane = to_exynos_plane_deprecated(plane);
 	struct exynos_drm_overlay *overlay = &exynos_plane->overlay;
 
 	DRM_DEBUG_KMS("[PLANE:%d] [DPMS:%s]\n", DRM_BASE_ID(plane),
@@ -214,7 +240,7 @@ static int exynos_disable_plane(struct drm_plane *plane)
 
 static void exynos_plane_destroy(struct drm_plane *plane)
 {
-	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_plane *exynos_plane = to_exynos_plane_deprecated(plane);
 
 	DRM_DEBUG_KMS("[PLANE:%d]\n", DRM_BASE_ID(plane));
 
@@ -230,7 +256,7 @@ static int exynos_plane_set_property(struct drm_plane *plane,
 				     void *blob_data)
 {
 	struct drm_device *dev = plane->dev;
-	struct exynos_plane *exynos_plane = to_exynos_plane(plane);
+	struct exynos_plane *exynos_plane = to_exynos_plane_deprecated(plane);
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 
 	DRM_DEBUG_KMS("[PLANE:%d] [PROPERTY:%s] = %llu\n", DRM_BASE_ID(plane),

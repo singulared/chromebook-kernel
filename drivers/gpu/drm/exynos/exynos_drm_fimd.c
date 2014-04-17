@@ -26,8 +26,10 @@
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
+#include "exynos_drm_fb.h"
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_crtc.h"
+#include "exynos_drm_gem.h"
 #include "exynos_drm_iommu.h"
 
 /*
@@ -60,6 +62,12 @@
 /* FIMD has totally five hardware windows. */
 #define FIMD_WIN_NR	5
 
+static const uint32_t plane_formats[] = {
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
+};
+
+#define exynos_plane_to_win_idx(ctx, x) (unsigned int)(x - ctx->planes)
 #define get_fimd_context(dev)	platform_get_drvdata(to_platform_device(dev))
 
 struct fimd_driver_data {
@@ -72,22 +80,6 @@ static struct fimd_driver_data exynos4_fimd_driver_data = {
 
 static struct fimd_driver_data exynos5_fimd_driver_data = {
 	.timing_base = 0x20000,
-};
-
-struct fimd_win_data {
-	unsigned int		offset_x;
-	unsigned int		offset_y;
-	unsigned int		ovl_width;
-	unsigned int		ovl_height;
-	unsigned int		fb_width;
-	unsigned int		fb_height;
-	unsigned int		pitch;
-	unsigned int		bpp;
-	dma_addr_t		dma_addr;
-	unsigned int		buf_offsize;
-	unsigned int		line_size;	/* bytes */
-	bool			enabled;
-	bool			resume;
 };
 
 struct fimd_mode_data {
@@ -107,6 +99,7 @@ struct fimd_mode_data {
 struct fimd_context {
 	struct device			*dev;
 	struct drm_device		*drm_dev;
+	struct exynos_drm_plane		planes[FIMD_WIN_NR];
 	struct clk			*sclk_mout_fimd;
 	struct clk			*fimd_mux_clk;
 	struct clk			*bus_clk;
@@ -116,7 +109,6 @@ struct fimd_context {
 	void __iomem			*regs_mie;
 	void __iomem			*regs_timing;
 	struct fimd_mode_data		mode;
-	struct fimd_win_data		win_data[FIMD_WIN_NR];
 	unsigned int			default_win;
 	u32				vidcon0;
 	u32				vidcon1;
@@ -162,111 +154,6 @@ static inline struct fimd_driver_data *drm_fimd_get_driver_data(
 
 	return (struct fimd_driver_data *)
 		platform_get_device_id(pdev)->driver_data;
-}
-
-static void fimd_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
-{
-	struct fimd_context *ctx = in_ctx;
-	struct fimd_win_data *win_data;
-	int win;
-	unsigned long offset;
-
-	if (!overlay) {
-		DRM_ERROR("overlay is NULL\n");
-		return;
-	}
-
-	win = overlay->zpos;
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win >= FIMD_WIN_NR)
-		return;
-
-	DRM_DEBUG_KMS("[WIN:%d]\n", win);
-
-	offset = overlay->fb_x * (overlay->bpp >> 3);
-	offset += overlay->fb_y * overlay->pitch;
-
-	DRM_DEBUG_KMS("offset = 0x%lx, pitch = %x\n", offset, overlay->pitch);
-
-	win_data = &ctx->win_data[win];
-
-	win_data->offset_x = overlay->crtc_x;
-	win_data->offset_y = overlay->crtc_y;
-	win_data->ovl_width = overlay->crtc_width;
-	win_data->ovl_height = overlay->crtc_height;
-	win_data->fb_width = overlay->fb_width;
-	win_data->fb_height = overlay->fb_height;
-	win_data->pitch = overlay->pitch;
-	win_data->dma_addr = overlay->dma_addr[0] + offset;
-	win_data->bpp = overlay->bpp;
-	win_data->line_size = overlay->fb_width * (overlay->bpp >> 3);
-	win_data->buf_offsize = overlay->pitch - win_data->line_size;
-
-	DRM_DEBUG_KMS("offset_x = %d, offset_y = %d\n",
-			win_data->offset_x, win_data->offset_y);
-	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
-			win_data->ovl_width, win_data->ovl_height);
-	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
-	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
-			overlay->fb_width, overlay->crtc_width);
-}
-
-static void fimd_win_set_pixfmt(struct fimd_context *ctx, unsigned int win)
-{
-	struct fimd_win_data *win_data = &ctx->win_data[win];
-	unsigned long val;
-
-	DRM_DEBUG_KMS("[WIN:%u] bpp: %d\n", win, win_data->bpp);
-
-	val = WINCONx_ENWIN;
-
-	switch (win_data->bpp) {
-	case 1:
-		val |= WINCON0_BPPMODE_1BPP;
-		val |= WINCONx_BITSWP;
-		break;
-	case 2:
-		val |= WINCON0_BPPMODE_2BPP;
-		val |= WINCONx_BITSWP;
-		break;
-	case 4:
-		val |= WINCON0_BPPMODE_4BPP;
-		val |= WINCONx_BITSWP;
-		break;
-	case 8:
-		val |= WINCON0_BPPMODE_8BPP_PALETTE;
-		val |= WINCONx_BYTSWP;
-		break;
-	case 16:
-		val |= WINCON0_BPPMODE_16BPP_565;
-		val |= WINCONx_HAWSWP;
-		break;
-	case 24:
-		val |= WINCON0_BPPMODE_24BPP_888;
-		val |= WINCONx_WSWP;
-		break;
-	case 32:
-		val |= WINCON1_BPPMODE_28BPP_A4888
-			| WINCON1_BLD_PIX | WINCON1_ALPHA_SEL;
-		val |= WINCONx_WSWP;
-		break;
-	default:
-		DRM_DEBUG_KMS("invalid pixel size so using unpacked 24bpp.\n");
-
-		val |= WINCON0_BPPMODE_24BPP_888;
-		val |= WINCONx_WSWP;
-		break;
-	}
-
-	/* Restrict the burst length to 4WORD for cursor */
-	if (win_data->fb_width <= 96)
-		val |= WINCONx_BURSTLEN_4WORD;
-	else
-		val |= WINCONx_BURSTLEN_16WORD;
-
-	writel(val, ctx->regs + WINCON(win));
 }
 
 static void fimd_win_set_colkey(struct fimd_context *ctx, unsigned int win)
@@ -372,162 +259,22 @@ static void fimd_dither_disable(struct fimd_context *ctx)
 		writel(0, ctx->regs + DPCLKCON);
 }
 
-static void fimd_win_commit(void *in_ctx, int zpos)
-{
-	struct fimd_context *ctx = in_ctx;
-	struct fimd_win_data *win_data;
-	int win = zpos;
-	unsigned long val, alpha, size;
-	unsigned int last_x;
-	unsigned int last_y;
-	unsigned long flags;
-
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win >= FIMD_WIN_NR)
-		return;
-
-	DRM_DEBUG_KMS("[WIN:%d]\n", win);
-
-	win_data = &ctx->win_data[win];
-
-	/* If suspended, enable this on resume */
-	if (ctx->suspended) {
-		win_data->resume = true;
-		return;
-	}
-
-	/*
-	 * SHADOWCON register is used for enabling timing.
-	 *
-	 * for example, once only width value of a register is set,
-	 * if the dma is started then fimd hardware could malfunction so
-	 * with protect window setting, the register fields with prefix '_F'
-	 * wouldn't be updated at vsync also but updated once unprotect window
-	 * is set.
-	 */
-
-	/* protect windows, take lock for exclusive access to SHADOWCON */
-	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
-	val = readl(ctx->regs + SHADOWCON);
-	val |= SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
-
-	/* buffer start address */
-	val = (unsigned long)win_data->dma_addr;
-	writel(val, ctx->regs + VIDWx_BUF_START(win, 0));
-
-	/* buffer end address */
-	size = win_data->fb_height * win_data->pitch;
-	val = (unsigned long)(win_data->dma_addr + size);
-	writel(val, ctx->regs + VIDWx_BUF_END(win, 0));
-
-	DRM_DEBUG_KMS("start addr = 0x%lx, end addr = 0x%lx, size = 0x%lx\n",
-			(unsigned long)win_data->dma_addr, val, size);
-	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
-			win_data->ovl_width, win_data->ovl_height);
-
-	/* buffer size */
-	val = VIDW_BUF_SIZE_OFFSET(win_data->buf_offsize) |
-		VIDW_BUF_SIZE_PAGEWIDTH(win_data->line_size) |
-		VIDW_BUF_SIZE_OFFSET_E(win_data->buf_offsize) |
-		VIDW_BUF_SIZE_PAGEWIDTH_E(win_data->line_size);
-	writel(val, ctx->regs + VIDWx_BUF_SIZE(win, 0));
-
-	/* OSD position */
-	val = VIDOSDxA_TOPLEFT_X(win_data->offset_x) |
-		VIDOSDxA_TOPLEFT_Y(win_data->offset_y) |
-		VIDOSDxA_TOPLEFT_X_E(win_data->offset_x) |
-		VIDOSDxA_TOPLEFT_Y_E(win_data->offset_y);
-	writel(val, ctx->regs + VIDOSD_A(win));
-
-	last_x = win_data->offset_x + win_data->ovl_width;
-	if (last_x)
-		last_x--;
-	last_y = win_data->offset_y + win_data->ovl_height;
-	if (last_y)
-		last_y--;
-
-	val = VIDOSDxB_BOTRIGHT_X(last_x) | VIDOSDxB_BOTRIGHT_Y(last_y) |
-		VIDOSDxB_BOTRIGHT_X_E(last_x) | VIDOSDxB_BOTRIGHT_Y_E(last_y);
-
-	writel(val, ctx->regs + VIDOSD_B(win));
-
-	DRM_DEBUG_KMS("osd pos: tx = %d, ty = %d, bx = %d, by = %d\n",
-			win_data->offset_x, win_data->offset_y, last_x, last_y);
-
-	/* hardware window 0 doesn't support alpha channel. */
-	if (win != 0) {
-		/* OSD alpha */
-		alpha = VIDISD14C_ALPHA1_R(0xf) |
-			VIDISD14C_ALPHA1_G(0xf) |
-			VIDISD14C_ALPHA1_B(0xf);
-
-		writel(alpha, ctx->regs + VIDOSD_C(win));
-	}
-
-	/* OSD size */
-	if (win != 3 && win != 4) {
-		u32 offset = VIDOSD_D(win);
-		if (win == 0)
-			offset = VIDOSD_C_SIZE_W0;
-		val = win_data->ovl_width * win_data->ovl_height;
-		writel(val, ctx->regs + offset);
-
-		DRM_DEBUG_KMS("osd size = 0x%x\n", (unsigned int)val);
-	}
-
-	fimd_win_set_pixfmt(ctx, win);
-
-	/* hardware window 0 doesn't support color key. */
-	if (win != 0)
-		fimd_win_set_colkey(ctx, win);
-
-	/* wincon */
-	val = readl(ctx->regs + WINCON(win));
-	val |= WINCONx_ENWIN;
-	writel(val, ctx->regs + WINCON(win));
-
-	/* Enable DMA channel and unprotect windows */
-	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
-	val = readl(ctx->regs + SHADOWCON);
-	val |= SHADOWCON_CHx_ENABLE(win);
-	val &= ~SHADOWCON_WINx_PROTECT(win);
-	writel(val, ctx->regs + SHADOWCON);
-	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
-
-	win_data->enabled = true;
-}
-
 /*
- * Schedule a window (hardware overlay) to be disabled at the next vblank.
+ * Schedule a plane (hardware overlay) to be disabled at the next vblank.
  * This is useful when disabling multiple windows, for example during suspend.
  */
-static void fimd_win_disable_nowait(void *in_ctx, int zpos)
+static void fimd_plane_disable_nowait(struct drm_plane *plane)
 {
-	struct fimd_context *ctx = in_ctx;
-	struct fimd_win_data *win_data;
-	int win = zpos;
-	u32 val;
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+	struct fimd_context *ctx = exynos_plane->ctx;
+	int win = exynos_plane_to_win_idx(ctx, exynos_plane);
 	unsigned long flags;
-
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win >= FIMD_WIN_NR)
-		return;
+	u32 val;
 
 	DRM_DEBUG_KMS("[WIN:%d]\n", win);
 
-	win_data = &ctx->win_data[win];
-
-	if (ctx->suspended) {
-		/* do not resume this window*/
-		win_data->resume = false;
+	if (ctx->suspended)
 		return;
-	}
 
 	/* protect windows */
 	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
@@ -548,28 +295,196 @@ static void fimd_win_disable_nowait(void *in_ctx, int zpos)
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
 	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
-
-	win_data->enabled = false;
 }
 
-/*
- * Schedule a window (hardware overlay) to be disabled at the next vblank, and
- * synchronously wait for that vblank.
- * This is called when disabling a single plane.
- */
-static void fimd_win_disable(void *in_ctx, int zpos)
+static void fimd_plane_commit(struct drm_plane *plane,
+		struct drm_framebuffer *fb)
 {
-	struct fimd_context *ctx = in_ctx;
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+	struct fimd_context *ctx = exynos_plane->ctx;
+	int win = exynos_plane_to_win_idx(ctx, exynos_plane);
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_gem_buf *buffer;
+	dma_addr_t dma_addr;
+	unsigned long val, alpha, size, flags;
+	unsigned int last_x;
+	unsigned int last_y;
+	uint32_t offset, line_size;
 
-	fimd_win_disable_nowait(in_ctx, zpos);
+	DRM_DEBUG_KMS("[WIN:%d]\n", win);
+
+	if (ctx->suspended)
+		return;
+
+	if (exynos_plane->src_w == 0 || exynos_plane->src_h == 0)
+		return;
+
+	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
+	dma_addr = buffer->dma_addr + exynos_plane->src_x
+			* (fb->bits_per_pixel >> 3) + exynos_plane->src_y
+			* fb->pitches[0];
+	DRM_DEBUG_KMS("buffer: dma_addr = %p\n", (void *)dma_addr);
+
+	/*
+	 * SHADOWCON register is used for enabling timing.
+	 *
+	 * for example, once only width value of a register is set,
+	 * if the dma is started then fimd hardware could malfunction so
+	 * with protect window setting, the register fields with prefix '_F'
+	 * wouldn't be updated at vsync also but updated once unprotect window
+	 * is set.
+	 */
+
+	/* protect windows, take lock for exclusive access to SHADOWCON */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
+	val = readl(ctx->regs + SHADOWCON);
+	val |= SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
+
+	/* buffer start address */
+	val = (unsigned long)dma_addr;
+	writel(val, ctx->regs + VIDWx_BUF_START(win, 0));
+
+	/* buffer end address */
+	size = exynos_plane->src_h * fb->pitches[0];
+	val = (unsigned long)(dma_addr + size);
+	writel(val, ctx->regs + VIDWx_BUF_END(win, 0));
+
+	DRM_DEBUG_KMS("start addr = 0x%lx, end addr = 0x%lx, size = 0x%lx\n",
+			(unsigned long)dma_addr, val, size);
+	DRM_DEBUG_KMS("crtc_width = %d, crtc_height = %d\n",
+			exynos_plane->crtc_w, exynos_plane->crtc_h);
+
+	/* buffer size */
+	line_size = exynos_plane->src_w * (fb->bits_per_pixel >> 3);
+	offset = fb->pitches[0] - line_size;
+	val = VIDW_BUF_SIZE_OFFSET(offset) |
+		VIDW_BUF_SIZE_PAGEWIDTH(line_size) |
+		VIDW_BUF_SIZE_OFFSET_E(offset) |
+		VIDW_BUF_SIZE_PAGEWIDTH_E(line_size);
+	writel(val, ctx->regs + VIDWx_BUF_SIZE(win, 0));
+
+	/* OSD position */
+	val = VIDOSDxA_TOPLEFT_X(exynos_plane->crtc_x) |
+		VIDOSDxA_TOPLEFT_Y(exynos_plane->crtc_y) |
+		VIDOSDxA_TOPLEFT_X_E(exynos_plane->crtc_x) |
+		VIDOSDxA_TOPLEFT_Y_E(exynos_plane->crtc_y);
+	writel(val, ctx->regs + VIDOSD_A(win));
+
+	last_x = exynos_plane->crtc_x + exynos_plane->crtc_w;
+	if (last_x)
+		last_x--;
+	last_y = exynos_plane->crtc_y + exynos_plane->crtc_h;
+	if (last_y)
+		last_y--;
+
+	val = VIDOSDxB_BOTRIGHT_X(last_x) | VIDOSDxB_BOTRIGHT_Y(last_y) |
+		VIDOSDxB_BOTRIGHT_X_E(last_x) | VIDOSDxB_BOTRIGHT_Y_E(last_y);
+
+	writel(val, ctx->regs + VIDOSD_B(win));
+
+	DRM_DEBUG_KMS("osd pos: tx = %d, ty = %d, bx = %d, by = %d\n",
+		exynos_plane->crtc_x, exynos_plane->crtc_y, last_x, last_y);
+
+	/* hardware window 0 doesn't support alpha channel. */
+	if (win != 0) {
+		/* OSD alpha */
+		alpha = VIDISD14C_ALPHA1_R(0xf) |
+			VIDISD14C_ALPHA1_G(0xf) |
+			VIDISD14C_ALPHA1_B(0xf);
+
+		writel(alpha, ctx->regs + VIDOSD_C(win));
+	}
+
+	/* OSD size */
+	if (win != 3 && win != 4) {
+		u32 offset = VIDOSD_D(win);
+		if (win == 0)
+			offset = VIDOSD_C_SIZE_W0;
+		val = exynos_plane->crtc_w * exynos_plane->crtc_h;
+		writel(val, ctx->regs + offset);
+
+		DRM_DEBUG_KMS("osd size = 0x%x\n", (unsigned int)val);
+	}
+
+	val = WINCONx_ENWIN | WINCON1_BPPMODE_28BPP_A4888 | WINCON1_BLD_PIX |
+		WINCON1_ALPHA_SEL | WINCONx_WSWP;
+	/* Restrict the burst length to 4WORD for cursor */
+	if (exynos_plane->src_w <= 96)
+		val |= WINCONx_BURSTLEN_4WORD;
+	else
+		val |= WINCONx_BURSTLEN_16WORD;
+
+	writel(val, ctx->regs + WINCON(win));
+
+	/* hardware window 0 doesn't support color key. */
+	if (win != 0)
+		fimd_win_set_colkey(ctx, win);
+
+	/* wincon */
+	val = readl(ctx->regs + WINCON(win));
+	val |= WINCONx_ENWIN;
+	writel(val, ctx->regs + WINCON(win));
+
+	/* Enable DMA channel and unprotect windows */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
+	val = readl(ctx->regs + SHADOWCON);
+	val |= SHADOWCON_CHx_ENABLE(win);
+	val &= ~SHADOWCON_WINx_PROTECT(win);
+	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
+}
+
+static int fimd_plane_update(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h)
+{
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+
+	/* Copy the plane parameters so we can restore it later */
+	exynos_plane->crtc_x = crtc_x;
+	exynos_plane->crtc_y = crtc_y;
+	exynos_plane->crtc_w = crtc_w;
+	exynos_plane->crtc_h = crtc_h;
+	exynos_plane->src_x = src_x >> 16;
+	exynos_plane->src_y = src_y >> 16;
+	exynos_plane->src_w = src_w >> 16;
+	exynos_plane->src_h = src_h >> 16;
+
+	exynos_sanitize_plane_coords(plane, crtc);
+
+	fimd_plane_commit(plane, fb);
+
+	return 0;
+}
+
+static int fimd_plane_disable(struct drm_plane *plane)
+{
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+	struct fimd_context *ctx = exynos_plane->ctx;
+
+	DRM_DEBUG_KMS("[WIN:%d]\n", exynos_plane_to_win_idx(ctx, exynos_plane));
+
+	fimd_plane_disable_nowait(plane);
 
 	/* Synchronously wait for window to be disabled */
 	fimd_wait_for_vblank(ctx);
+
+	return 0;
 }
+
+static const struct drm_plane_funcs fimd_plane_funcs = {
+	.update_plane = fimd_plane_update,
+	.disable_plane = fimd_plane_disable,
+	.destroy = drm_plane_cleanup,
+};
 
 static int fimd_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 {
 	struct fimd_context *ctx = in_ctx;
+	int i, ret;
 
 	ctx->drm_dev = crtc->dev;
 	ctx->pipe = pipe;
@@ -587,7 +502,28 @@ static int fimd_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 	if (is_drm_iommu_supported(ctx->drm_dev))
 		drm_iommu_attach_device(ctx->drm_dev, ctx->dev);
 
+	for (i = 0; i < FIMD_WIN_NR; i++) {
+		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
+
+		ret = drm_plane_init(ctx->drm_dev, &exynos_plane->base,
+				1 << ctx->pipe, &fimd_plane_funcs,
+				plane_formats, ARRAY_SIZE(plane_formats),
+				i == ctx->default_win ? true : false);
+		if (ret) {
+			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
+			goto err;
+		}
+
+		exynos_plane->ctx = ctx;
+		exynos_plane->base.enabled = false;
+	}
+
 	return 0;
+err:
+	for (i--; i >= 0; i--)
+		drm_plane_cleanup(&ctx->planes[i].base);
+
+	return ret;
 }
 
 static void fimd_mgr_remove(void *in_ctx)
@@ -641,6 +577,39 @@ static void fimd_mode_set(void *in_ctx, const struct drm_display_mode *in_mode)
 	mode->hfpd = in_mode->crtc_hsync_start - in_mode->crtc_hdisplay;
 
 	mode->clkdiv = fimd_calc_clkdiv(ctx, in_mode);
+}
+
+static int fimd_update(void *in_ctx, struct drm_crtc *crtc,
+		struct drm_framebuffer *fb)
+{
+	struct fimd_context *ctx = in_ctx;
+	struct exynos_drm_plane *exynos_plane = &ctx->planes[ctx->default_win];
+	struct drm_plane *plane = &exynos_plane->base;
+
+	/* Copy the plane parameters so we can restore it later */
+	exynos_plane->crtc_x = 0;
+	exynos_plane->crtc_y = 0;
+	exynos_plane->crtc_w = fb->width - crtc->x;
+	exynos_plane->crtc_h = fb->height - crtc->y;
+	exynos_plane->src_x = crtc->x;
+	exynos_plane->src_y = crtc->y;
+	exynos_plane->src_w = exynos_plane->crtc_w;
+	exynos_plane->src_h = exynos_plane->crtc_h;
+
+	exynos_sanitize_plane_coords(plane, crtc);
+
+	/* Grab a reference, just as setplane would */
+	drm_framebuffer_reference(fb);
+
+	fimd_plane_commit(plane, fb);
+
+	if (plane->fb)
+		drm_framebuffer_unreference(plane->fb);
+
+	plane->fb = fb;
+	plane->crtc = crtc;
+
+	return 0;
 }
 
 static void fimd_commit(void *in_ctx)
@@ -769,40 +738,42 @@ static void fimd_wait_for_vblank(struct fimd_context *ctx)
 	drm_vblank_put(ctx->drm_dev, ctx->pipe);
 }
 
-static void fimd_window_suspend(struct fimd_context *ctx)
+static void fimd_disable_planes(struct fimd_context *ctx)
 {
-	struct fimd_win_data *win_data;
 	int i;
-	int count = 0;
+	bool wait_for_vblank = false;
 
 	DRM_DEBUG_KMS("\n");
 
-	/* Disable enabled windows and save state to restore them in resume. */
 	for (i = 0; i < FIMD_WIN_NR; i++) {
-		win_data = &ctx->win_data[i];
-		win_data->resume = win_data->enabled;
-		if (win_data->enabled) {
-			fimd_win_disable_nowait(ctx, i);
-			count += 1;
-		}
+		struct drm_plane *plane = &ctx->planes[i].base;
+
+		if (!plane->fb)
+			continue;
+
+		fimd_plane_disable_nowait(plane);
+		wait_for_vblank = true;
 	}
+
 	/* Synchronously wait for any window disables to complete */
-	if (count)
+	if (wait_for_vblank)
 		fimd_wait_for_vblank(ctx);
 }
 
-static void fimd_window_resume(struct fimd_context *ctx)
+static void fimd_enable_planes(struct fimd_context *ctx)
 {
-	struct fimd_win_data *win_data;
 	int i;
 
 	DRM_DEBUG_KMS("\n");
 
 	for (i = 0; i < FIMD_WIN_NR; i++) {
-		win_data = &ctx->win_data[i];
-		win_data->enabled = win_data->resume;
-		if (win_data->enabled)
-			fimd_win_commit(ctx, i);
+		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
+		struct drm_plane *plane = &exynos_plane->base;
+
+		if (!plane->fb)
+			continue;
+
+		fimd_plane_commit(plane, plane->fb);
 	}
 }
 
@@ -838,7 +809,8 @@ static int fimd_poweron(struct fimd_context *ctx)
 
 	enable_irq(ctx->irq);
 
-	fimd_window_resume(ctx);
+	fimd_enable_planes(ctx);
+
 	/*
 	 * Restore the lost configuration of fimd
 	 * as in case flips are not called reqularly
@@ -867,13 +839,13 @@ static int fimd_poweroff(struct fimd_context *ctx)
 	 * suspend that connector. Otherwise we might try to scan from
 	 * a destroyed buffer later.
 	 */
-	fimd_window_suspend(ctx);
+	fimd_disable_planes(ctx);
 
 	/*
 	 * There is tiny race here if a FIMD irq vblank irq arrives
-	 * between fimd_window_suspend() and fimd_disable_vblank().
+	 * between fimd_disable_planes() and fimd_disable_vblank().
 	 * However, since we've just synchronized to vblank in
-	 * fimd_window_suspend(), it is very very unlikely that we would
+	 * fimd_disable_planes(), it is very very unlikely that we would
 	 * immediately get another vblank irq (we'd need to be processing a
 	 * backlog of vblank irqs that were ~16.7 ms delayed).
 	*/
@@ -918,12 +890,10 @@ static const struct exynos_drm_manager_ops fimd_manager_ops = {
 	.dpms = fimd_dpms,
 	.mode_fixup = fimd_mode_fixup,
 	.mode_set = fimd_mode_set,
+	.update = fimd_update,
 	.commit = fimd_commit,
 	.enable_vblank = fimd_enable_vblank,
 	.disable_vblank = fimd_disable_vblank,
-	.win_mode_set = fimd_win_mode_set,
-	.win_commit = fimd_win_commit,
-	.win_disable = fimd_win_disable,
 };
 
 static struct exynos_drm_manager fimd_manager = {

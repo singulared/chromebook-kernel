@@ -79,6 +79,25 @@ enum exynos_drm_output_type {
 
 const char *exynos_drm_output_type_name(enum exynos_drm_output_type type);
 
+struct exynos_drm_plane {
+	struct drm_plane base;
+
+	void *ctx;
+
+	int crtc_x;
+	int crtc_y;
+	unsigned int crtc_w;
+	unsigned int crtc_h;
+	uint32_t src_x;
+	uint32_t src_y;
+	uint32_t src_w;
+	uint32_t src_h;
+};
+#define to_exynos_plane(x) container_of(x, struct exynos_drm_plane, base)
+
+void exynos_sanitize_plane_coords(struct drm_plane *plane,
+		struct drm_crtc *crtc);
+
 /*
  * Exynos drm common overlay structure.
  *
