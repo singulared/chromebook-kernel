@@ -1444,7 +1444,7 @@ struct s5p_mfc_buf_align mfc_buf_align_v5 = {
 };
 
 static struct s5p_mfc_variant mfc_drvdata_v5 = {
-	.version	= MFC_VERSION,
+	.version	= MFC_VERSION_V5,
 	.port_num	= MFC_NUM_PORTS,
 	.buf_size	= &buf_size_v5,
 	.buf_align	= &mfc_buf_align_v5,
