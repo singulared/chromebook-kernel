@@ -28,7 +28,6 @@
 #include "exynos_drm_gem.h"
 #endif
 #include "exynos_trace.h"
-#include "exynos_drm_plane.h"
 
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
 				drm_crtc)
@@ -51,7 +50,6 @@ struct exynos_drm_flip_desc {
  * Exynos specific crtc structure.
  *
  * @drm_crtc: crtc object.
- * @drm_plane: pointer of private plane object for this crtc
  * @manager: the manager associated with this crtc
  * @event: vblank event that is currently queued for flip
  * @pipe: a crtc index created at load() with a new crtc object creation
@@ -65,7 +63,6 @@ struct exynos_drm_flip_desc {
  */
 struct exynos_drm_crtc {
 	struct drm_crtc			drm_crtc;
-	struct drm_plane		*plane;
 	struct exynos_drm_manager	*manager;
 	struct drm_pending_vblank_event *event;
 	unsigned int			pipe;
@@ -107,7 +104,6 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 				   struct drm_framebuffer *fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct drm_plane *plane = exynos_crtc->plane;
 	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	int ret;
 	unsigned int crtc_w;
@@ -116,17 +112,11 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 	crtc_w = fb->width - crtc->x;
 	crtc_h = fb->height - crtc->y;
 
-	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
-			      crtc->x, crtc->y, crtc_w, crtc_h);
-
 	if (manager->ops->update) {
 		ret = manager->ops->update(manager->ctx, crtc, fb);
 		if (ret)
 			DRM_ERROR("Failed to update crtc, ret=%d\n", ret);
 	}
-
-	exynos_plane_commit(exynos_crtc->plane);
-	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_ON);
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
@@ -611,8 +601,7 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 			exynos_drm_crtc_commit(crtc);
 			break;
 		case CRTC_MODE_BLANK:
-			exynos_plane_dpms(exynos_crtc->plane,
-					  DRM_MODE_DPMS_OFF);
+			exynos_drm_crtc_disable(crtc);
 			break;
 		default:
 			break;
@@ -679,15 +668,8 @@ int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
 #endif
 	exynos_crtc->manager = manager;
 	exynos_crtc->pipe = manager->pipe;
-	exynos_crtc->plane = exynos_plane_init(manager->drm_dev,
-				1 << manager->pipe, true);
-	if (!exynos_crtc->plane) {
-		kfree(exynos_crtc);
-		return -ENOMEM;
-	}
 
 	crtc = &exynos_crtc->drm_crtc;
-	exynos_crtc->plane->crtc = crtc;
 
 	private->crtc[manager->pipe] = crtc;
 
@@ -778,45 +760,4 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 	exynos_drm_crtc_flip_complete(crtc);
 
 	drm_vblank_put(dev, exynos_crtc->pipe);
-}
-
-void exynos_drm_crtc_plane_mode_set(struct drm_crtc *crtc,
-			struct exynos_drm_overlay *overlay)
-{
-	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
-
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
-
-	if (manager->ops->win_mode_set)
-		manager->ops->win_mode_set(manager->ctx, overlay);
-}
-
-void exynos_drm_crtc_plane_commit(struct drm_crtc *crtc, int zpos)
-{
-	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
-
-	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
-
-	if (manager->ops->win_commit)
-		manager->ops->win_commit(manager->ctx, zpos);
-}
-
-void exynos_drm_crtc_plane_enable(struct drm_crtc *crtc, int zpos)
-{
-	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
-
-	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
-
-	if (manager->ops->win_enable)
-		manager->ops->win_enable(manager->ctx, zpos);
-}
-
-void exynos_drm_crtc_plane_disable(struct drm_crtc *crtc, int zpos)
-{
-	struct exynos_drm_manager *manager = to_exynos_crtc(crtc)->manager;
-
-	DRM_DEBUG_KMS("[CRTC:%d] zpos:%d\n", DRM_BASE_ID(crtc), zpos);
-
-	if (manager->ops->win_disable)
-		manager->ops->win_disable(manager->ctx, zpos);
 }

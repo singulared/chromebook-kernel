@@ -28,7 +28,6 @@
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
-#include "exynos_drm_plane.h"
 #include "exynos_drm_vidi.h"
 #include "exynos_drm_dmabuf.h"
 #include "exynos_drm_g2d.h"
@@ -57,7 +56,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
 	struct exynos_drm_private *private;
 	int ret;
-	int nr;
 
 	DRM_DEBUG_DRIVER("flags: 0x%lx\n", flags);
 
@@ -101,15 +99,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = exynos_drm_initialize_managers(dev);
 	if (ret)
 		goto err_mode_config_cleanup;
-
-	for (nr = 0; nr < MAX_PLANE; nr++) {
-		struct drm_plane *plane;
-		unsigned long possible_crtcs = (1 << MAX_CRTC) - 1;
-
-		plane = exynos_plane_init(dev, possible_crtcs, false);
-		if (!plane)
-			goto err_manager_cleanup;
-	}
 
 	ret = exynos_drm_initialize_displays(dev);
 	if (ret)

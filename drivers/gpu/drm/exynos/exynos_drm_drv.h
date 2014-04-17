@@ -226,10 +226,6 @@ struct exynos_drm_display {
  * @commit: appl current hw specific display mode to hw.
  * @enable_vblank: specific driver callback for enabling vblank interrupt.
  * @disable_vblank: specific driver callback for disabling vblank interrupt.
- * @win_mode_set: copy drm overlay info to hw specific overlay info.
- * @win_commit: apply hardware specific overlay data to registers.
- * @win_enable: enable hardware specific overlay.
- * @win_disable: disable hardware specific overlay.
  */
 struct exynos_drm_manager_ops {
 	int (*initialize)(void *ctx, struct drm_crtc *crtc, int pipe);
@@ -245,10 +241,6 @@ struct exynos_drm_manager_ops {
 	void (*commit)(void *ctx);
 	int (*enable_vblank)(void *ctx);
 	void (*disable_vblank)(void *ctx);
-	void (*win_mode_set)(void *ctx, struct exynos_drm_overlay *overlay);
-	void (*win_commit)(void *ctx, int zpos);
-	void (*win_enable)(void *ctx, int zpos);
-	void (*win_disable)(void *ctx, int zpos);
 };
 
 /*
