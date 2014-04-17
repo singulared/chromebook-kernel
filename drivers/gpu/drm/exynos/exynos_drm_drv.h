@@ -201,6 +201,7 @@ struct exynos_drm_display {
  * @adjust_mode: allows manager to adjust mode in check mode path
  * @mode_fixup: fix mode data before applying it
  * @mode_set: copy drm display mode to hw specific display mode.
+ * @update: updates the primary plane
  * @commit: appl current hw specific display mode to hw.
  * @enable_vblank: specific driver callback for enabling vblank interrupt.
  * @disable_vblank: specific driver callback for disabling vblank interrupt.
@@ -218,6 +219,11 @@ struct exynos_drm_manager_ops {
 	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, const struct drm_display_mode *mode);
+	void (*update)(void *ctx, struct drm_crtc *crtc,
+				struct drm_framebuffer *fb, int crtc_x,
+				int crtc_y, unsigned int crtc_w,
+				unsigned int crtc_h, uint32_t src_x,
+				uint32_t src_y, uint32_t src_w, uint32_t src_h);
 	void (*commit)(void *ctx);
 	int (*enable_vblank)(void *ctx);
 	void (*disable_vblank)(void *ctx);

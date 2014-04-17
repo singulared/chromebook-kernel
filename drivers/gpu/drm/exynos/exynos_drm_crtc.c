@@ -99,6 +99,7 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_plane *plane = exynos_crtc->plane;
+	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 
@@ -107,6 +108,11 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 
 	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
 			      crtc->x, crtc->y, crtc_w, crtc_h);
+
+	if (manager->ops->update)
+		manager->ops->update(manager->ctx, crtc, fb, 0, 0,
+				crtc_w, crtc_h, crtc->x, crtc->y, crtc_w,
+				crtc_h);
 
 	exynos_plane_commit(exynos_crtc->plane);
 	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_ON);
