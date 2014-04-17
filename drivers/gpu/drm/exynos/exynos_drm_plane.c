@@ -94,6 +94,20 @@ void exynos_sanitize_plane_coords(struct drm_plane *plane,
 	exynos_plane->src_h = min(exynos_plane->src_h, exynos_plane->crtc_h);
 }
 
+void exynos_plane_copy_state(struct exynos_drm_plane *src,
+		struct exynos_drm_plane *dst)
+{
+	dst->ctx = src->ctx;
+	dst->crtc_x = src->crtc_x;
+	dst->crtc_y = src->crtc_y;
+	dst->crtc_w = src->crtc_w;
+	dst->crtc_h = src->crtc_h;
+	dst->src_x = src->src_x;
+	dst->src_y = src->src_y;
+	dst->src_w = src->src_w;
+	dst->src_h = src->src_h;
+}
+
 void exynos_plane_mode_set(struct drm_plane *plane, struct drm_crtc *crtc,
 			   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
 			   unsigned int crtc_w, unsigned int crtc_h,

@@ -95,6 +95,8 @@ struct exynos_drm_plane {
 };
 #define to_exynos_plane(x) container_of(x, struct exynos_drm_plane, base)
 
+void exynos_plane_copy_state(struct exynos_drm_plane *src,
+		struct exynos_drm_plane *dst);
 void exynos_sanitize_plane_coords(struct drm_plane *plane,
 		struct drm_crtc *crtc);
 
@@ -181,11 +183,11 @@ struct exynos_drm_overlay {
 struct exynos_drm_display_ops {
 	int (*initialize)(void *ctx, struct drm_device *drm_dev);
 	int (*create_connector)(void *ctx,
-				struct drm_encoder *encoder);
+			struct drm_encoder *encoder);
 	void (*remove)(void *ctx);
 	bool (*mode_fixup)(void *ctx, struct drm_connector *connector,
-				const struct drm_display_mode *mode,
-				struct drm_display_mode *adjusted_mode);
+			const struct drm_display_mode *mode,
+			struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
 	int (*check_mode)(void *ctx, const struct drm_display_mode *mode);
 	void (*dpms)(void *ctx, int mode);
