@@ -22,12 +22,22 @@
 #include <drm/drm_crtc_helper.h>
 
 #include "exynos_drm_drv.h"
+#include "exynos_drm_fb.h"
 #include "exynos_drm_crtc.h"
+#include "exynos_drm_gem.h"
 #include "exynos_drm_encoder.h"
 
 /* vidi has totally three virtual windows. */
 #define WINDOWS_NR		3
 
+static const uint32_t plane_formats[] = {
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_NV12,
+	DRM_FORMAT_NV12MT,
+};
+
+#define exynos_plane_to_win_idx(ctx, x) (unsigned int)(x - ctx->planes)
 #define get_vidi_context(dev)	platform_get_drvdata(to_platform_device(dev))
 #define ctx_from_connector(c)	container_of(c, struct vidi_context, \
 					connector)
@@ -51,7 +61,7 @@ struct vidi_context {
 	struct drm_crtc			*crtc;
 	struct drm_encoder		*encoder;
 	struct drm_connector		connector;
-	struct vidi_win_data		win_data[WINDOWS_NR];
+	struct exynos_drm_plane		planes[WINDOWS_NR];
 	struct edid			*raw_edid;
 	unsigned int			clkdiv;
 	unsigned int			default_win;
@@ -143,7 +153,7 @@ static int vidi_enable_vblank(void *in_ctx)
 	/*
 	 * in case of page flip request, vidi_finish_pageflip function
 	 * will not be called because direct_vblank is true and then
-	 * that function will be called by manager_ops->win_commit callback
+	 * that function will be called by update_plane callback
 	 */
 	schedule_work(&ctx->work);
 
@@ -163,126 +173,151 @@ static void vidi_disable_vblank(void *in_ctx)
 		ctx->vblank_on = false;
 }
 
-static void vidi_win_mode_set(void *in_ctx, struct exynos_drm_overlay *overlay)
+static int vidi_plane_commit(struct drm_plane *plane,
+		struct drm_framebuffer *fb)
 {
-	struct vidi_context *ctx = in_ctx;
-	struct vidi_win_data *win_data;
-	int win;
-	unsigned long offset;
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+	struct vidi_context *ctx = exynos_plane->ctx;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_gem_buf *buffer;
+	dma_addr_t dma_addr;
 
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
-
-	if (!overlay) {
-		DRM_ERROR("overlay is NULL\n");
-		return;
-	}
-
-	win = overlay->zpos;
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
-
-	if (win < 0 || win > WINDOWS_NR)
-		return;
-
-	offset = overlay->fb_x * (overlay->bpp >> 3);
-	offset += overlay->fb_y * overlay->pitch;
-
-	DRM_DEBUG_KMS("offset = 0x%lx, pitch = %x\n", offset, overlay->pitch);
-
-	win_data = &ctx->win_data[win];
-
-	win_data->offset_x = overlay->crtc_x;
-	win_data->offset_y = overlay->crtc_y;
-	win_data->ovl_width = overlay->crtc_width;
-	win_data->ovl_height = overlay->crtc_height;
-	win_data->fb_width = overlay->fb_width;
-	win_data->fb_height = overlay->fb_height;
-	win_data->dma_addr = overlay->dma_addr[0] + offset;
-	win_data->bpp = overlay->bpp;
-	win_data->buf_offsize = (overlay->fb_width - overlay->crtc_width) *
-				(overlay->bpp >> 3);
-	win_data->line_size = overlay->crtc_width * (overlay->bpp >> 3);
-
-	/*
-	 * some parts of win_data should be transferred to user side
-	 * through specific ioctl.
-	 */
-
-	DRM_DEBUG_KMS("offset_x = %d, offset_y = %d\n",
-			win_data->offset_x, win_data->offset_y);
-	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
-			win_data->ovl_width, win_data->ovl_height);
-	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
-	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
-			overlay->fb_width, overlay->crtc_width);
-}
-
-static void vidi_win_commit(void *in_ctx, int zpos)
-{
-	struct vidi_context *ctx = in_ctx;
-	struct vidi_win_data *win_data;
-	int win = zpos;
-
-	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(ctx->crtc), win);
+	DRM_DEBUG_KMS("[WIN:%d]\n", exynos_plane_to_win_idx(ctx, exynos_plane));
 
 	if (ctx->suspended)
-		return;
+		return 0;
 
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
+	if (WARN_ON(exynos_drm_fb_get_buf_cnt(exynos_fb) > 1))
+		return -EINVAL;
 
-	if (win < 0 || win > WINDOWS_NR)
-		return;
+	buffer = exynos_drm_fb_buffer(exynos_fb, 0);
+	dma_addr = buffer->dma_addr + exynos_plane->src_x
+			* (fb->bits_per_pixel >> 3) + exynos_plane->src_y
+			* fb->pitches[0];
+	DRM_DEBUG_KMS("dma_addr = 0x%x\n", dma_addr);
 
-	win_data = &ctx->win_data[win];
-
-	win_data->enabled = true;
-
-	DRM_DEBUG_KMS("dma_addr = 0x%x\n", win_data->dma_addr);
-
-	if (ctx->vblank_on)
-		schedule_work(&ctx->work);
+	return 0;
 }
 
-static void vidi_win_disable(void *in_ctx, int zpos)
+static int vidi_plane_update(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h)
+{
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+
+	/* Copy the parameters into the plane so we can restore it later */
+	exynos_plane->crtc_x = crtc_x;
+	exynos_plane->crtc_y = crtc_y;
+	exynos_plane->crtc_w = crtc_w;
+	exynos_plane->crtc_h = crtc_h;
+	exynos_plane->src_x = src_x >> 16;
+	exynos_plane->src_y = src_y >> 16;
+	exynos_plane->src_w = src_w >> 16;
+	exynos_plane->src_h = src_h >> 16;
+
+	exynos_sanitize_plane_coords(plane, crtc);
+
+	return vidi_plane_commit(plane, fb);
+}
+
+static int vidi_plane_disable(struct drm_plane *plane)
+{
+	return 0;
+}
+
+static void vidi_plane_destroy(struct drm_plane *plane)
+{
+	drm_plane_cleanup(plane);
+}
+
+const struct drm_plane_funcs vidi_plane_funcs = {
+	.update_plane = vidi_plane_update,
+	.disable_plane = vidi_plane_disable,
+	.destroy = vidi_plane_destroy,
+};
+
+static int vidi_update(void *in_ctx, struct drm_crtc *crtc,
+		struct drm_framebuffer *fb)
 {
 	struct vidi_context *ctx = in_ctx;
-	struct vidi_win_data *win_data;
-	int win = zpos;
+	struct exynos_drm_plane *exynos_plane = &ctx->planes[ctx->default_win];
+	struct drm_plane *plane = &exynos_plane->base;
+	struct exynos_drm_plane old_plane;
+	int ret;
 
-	DRM_DEBUG_KMS("[CRTC:%d] win: %d\n", DRM_BASE_ID(ctx->crtc), win);
+	exynos_plane_copy_state(exynos_plane, &old_plane);
 
-	if (win == DEFAULT_ZPOS)
-		win = ctx->default_win;
+	/* Copy the parameters into the plane so we can restore it later */
+	exynos_plane->crtc_x = 0;
+	exynos_plane->crtc_y = 0;
+	exynos_plane->crtc_w = fb->width - crtc->x;
+	exynos_plane->crtc_h = fb->height - crtc->y;
+	exynos_plane->src_x = crtc->x;
+	exynos_plane->src_y = crtc->y;
+	exynos_plane->src_w = exynos_plane->crtc_w;
+	exynos_plane->src_h = exynos_plane->crtc_h;
 
-	if (win < 0 || win > WINDOWS_NR)
-		return;
+	exynos_sanitize_plane_coords(plane, crtc);
 
-	win_data = &ctx->win_data[win];
-	win_data->enabled = false;
+	/* Grab a reference, just as setplane would */
+	drm_framebuffer_reference(fb);
 
-	/* TODO. */
+	ret = vidi_plane_commit(plane, fb);
+	if (!ret) {
+		if (plane->fb)
+			drm_framebuffer_unreference(plane->fb);
+		plane->fb = fb;
+		plane->crtc = crtc;
+	} else {
+		/* restore old plane on failure */
+		exynos_plane_copy_state(&old_plane, exynos_plane);
+		drm_framebuffer_unreference(fb);
+		DRM_ERROR("fimd plane commit failed %d\n", ret);
+	}
+
+	return ret;
 }
 
 static int vidi_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 {
 	struct vidi_context *ctx = in_ctx;
+	int i, ret;
 
 	ctx->drm_dev = crtc->dev;
 	ctx->pipe = pipe;
 
+	for (i = 0; i < WINDOWS_NR; i++) {
+		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
+		struct drm_plane *plane = &exynos_plane->base;
+
+		ret = drm_plane_init(ctx->drm_dev, plane, 1 << ctx->pipe,
+				&vidi_plane_funcs, plane_formats,
+				ARRAY_SIZE(plane_formats),
+				i == ctx->default_win ? true : false);
+		if (ret) {
+			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
+			goto err;
+		}
+
+		exynos_plane->ctx = ctx;
+	}
+
 	return 0;
+err:
+	for (; i >= 0; i--)
+		drm_plane_cleanup(&ctx->planes[i].base);
+
+	return ret;
 }
 
 static struct exynos_drm_manager_ops vidi_manager_ops = {
 	.initialize = vidi_mgr_initialize,
 	.dpms = vidi_dpms,
+	.update = vidi_update,
 	.commit = vidi_commit,
 	.enable_vblank = vidi_enable_vblank,
 	.disable_vblank = vidi_disable_vblank,
-	.win_mode_set = vidi_win_mode_set,
-	.win_commit = vidi_win_commit,
-	.win_disable = vidi_win_disable,
 };
 
 static struct exynos_drm_manager vidi_manager = {
@@ -318,15 +353,21 @@ static void vidi_fake_vblank_handler(struct work_struct *work)
 static void vidi_apply(void *in_ctx)
 {
 	struct vidi_context *ctx = in_ctx;
-	struct vidi_win_data *win_data;
-	int i;
+	int i, ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	for (i = 0; i < WINDOWS_NR; i++) {
-		win_data = &ctx->win_data[i];
-		if (win_data->enabled)
-			vidi_win_commit(ctx, i);
+		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
+		struct drm_plane *plane = &exynos_plane->base;
+
+		if (!plane->fb)
+			continue;
+
+		ret = vidi_plane_commit(plane, plane->fb);
+		if (ret)
+			DRM_ERROR("Failed to update plane %d ret=%d\n", i, ret);
+
 	}
 	vidi_commit(ctx);
 }
