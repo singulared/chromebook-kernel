@@ -22,98 +22,25 @@
 #include <linux/delay.h>
 
 #include "drmP.h"
-#include "drm_edid.h"
 #include "drm_crtc.h"
 #include "drm_crtc_helper.h"
 
 #include "bridge/ptn3460.h"
-
-#define PTN3460_EDID_ADDR			0x0
-#define PTN3460_EDID_EMULATION_ADDR		0x84
-#define PTN3460_EDID_ENABLE_EMULATION		0
-#define PTN3460_EDID_EMULATION_SELECTION	1
-#define PTN3460_EDID_SRAM_LOAD_ADDR		0x85
 
 struct ptn3460_bridge {
 	struct drm_connector connector;
 	struct i2c_client *client;
 	struct drm_encoder *encoder;
 	struct drm_bridge bridge;
-	struct edid *edid;
+	struct drm_display_mode mode;
 	int gpio_pd_n;
 	int gpio_rst_n;
-	u32 edid_emulation;
 	bool enabled;
 };
-
-static int ptn3460_read_bytes(struct ptn3460_bridge *ptn_bridge, char addr,
-		u8 *buf, int len)
-{
-	int ret;
-
-	ret = i2c_master_send(ptn_bridge->client, &addr, 1);
-	if (ret <= 0) {
-		DRM_ERROR("Failed to send i2c command, ret=%d\n", ret);
-		return ret;
-	}
-
-	ret = i2c_master_recv(ptn_bridge->client, buf, len);
-	if (ret != len) {
-		DRM_ERROR("Failed to recv i2c data, ret=%d\n", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int ptn3460_write_byte(struct ptn3460_bridge *ptn_bridge, char addr,
-		char val)
-{
-	int ret;
-	char buf[2];
-
-	buf[0] = addr;
-	buf[1] = val;
-
-	ret = i2c_master_send(ptn_bridge->client, buf, ARRAY_SIZE(buf));
-	if (ret <= 0) {
-		DRM_ERROR("Failed to send i2c command, ret=%d\n", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int ptn3460_select_edid(struct ptn3460_bridge *ptn_bridge)
-{
-	int ret;
-	char val;
-
-	/* Load the selected edid into SRAM (accessed at PTN3460_EDID_ADDR) */
-	ret = ptn3460_write_byte(ptn_bridge, PTN3460_EDID_SRAM_LOAD_ADDR,
-			ptn_bridge->edid_emulation);
-	if (ret) {
-		DRM_ERROR("Failed to transfer edid to sram, ret=%d\n", ret);
-		return ret;
-	}
-
-	/* Enable EDID emulation and select the desired EDID */
-	val = 1 << PTN3460_EDID_ENABLE_EMULATION |
-		ptn_bridge->edid_emulation << PTN3460_EDID_EMULATION_SELECTION;
-
-	ret = ptn3460_write_byte(ptn_bridge, PTN3460_EDID_EMULATION_ADDR, val);
-	if (ret) {
-		DRM_ERROR("Failed to write edid value, ret=%d\n", ret);
-		return ret;
-	}
-
-	return 0;
-}
 
 static void ptn3460_pre_enable(struct drm_bridge *bridge)
 {
 	struct ptn3460_bridge *ptn_bridge = bridge->driver_private;
-	int ret;
 
 	DRM_DEBUG_KMS("\n");
 
@@ -135,10 +62,6 @@ static void ptn3460_pre_enable(struct drm_bridge *bridge)
 	 * time specified in the chip's datasheet to make sure we're really up.
 	 */
 	msleep(90);
-
-	ret = ptn3460_select_edid(ptn_bridge);
-	if (ret)
-		DRM_ERROR("Select edid failed ret=%d\n", ret);
 
 	ptn_bridge->enabled = true;
 }
@@ -193,47 +116,18 @@ static const struct drm_bridge_funcs ptn3460_bridge_funcs = {
 static int ptn3460_get_modes(struct drm_connector *connector)
 {
 	struct ptn3460_bridge *ptn_bridge;
-	u8 *edid;
-	int ret, num_modes;
-	bool power_off;
+	struct drm_display_mode *new_mode;
 
 	ptn_bridge = container_of(connector, struct ptn3460_bridge, connector);
 
-	/*
-	 * Note that once an edid has been read from the bridge chip, it
-	 * will not change. This is ok since the EDID is specified in the
-	 * devicetree and cannot change at runtime.
-	 */
-	if (ptn_bridge->edid)
-		return drm_add_edid_modes(connector, ptn_bridge->edid);
-
-	power_off = !ptn_bridge->enabled;
-	ptn3460_pre_enable(&ptn_bridge->bridge);
-
-	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
-	if (!edid) {
-		DRM_ERROR("Failed to allocate edid\n");
+	new_mode = drm_mode_duplicate(connector->dev, &ptn_bridge->mode);
+	if (!new_mode) {
+		DRM_ERROR("Failed to duplicate ptn_bridge mode!\n");
 		return 0;
 	}
 
-	ret = ptn3460_read_bytes(ptn_bridge, PTN3460_EDID_ADDR, edid,
-			EDID_LENGTH);
-	if (ret) {
-		kfree(edid);
-		num_modes = 0;
-		goto out;
-	}
-
-	ptn_bridge->edid = (struct edid *)edid;
-	drm_mode_connector_update_edid_property(connector, ptn_bridge->edid);
-
-	num_modes = drm_add_edid_modes(connector, ptn_bridge->edid);
-
-out:
-	if (power_off)
-		ptn3460_disable(&ptn_bridge->bridge);
-
-	return num_modes;
+	drm_mode_probed_add(connector, new_mode);
+	return 1;
 }
 
 static int ptn3460_mode_valid(struct drm_connector *connector,
@@ -269,8 +163,6 @@ static void ptn3460_connector_destroy(struct drm_connector *connector)
 	struct ptn3460_bridge *ptn_bridge;
 
 	ptn_bridge = container_of(connector, struct ptn3460_bridge, connector);
-
-	kfree(ptn_bridge->edid);
 
 	drm_connector_cleanup(connector);
 }
@@ -336,10 +228,9 @@ int ptn3460_init(struct drm_encoder *encoder)
 		}
 	}
 
-	ret = of_property_read_u32(node, "edid-emulation",
-			&ptn_bridge->edid_emulation);
+	ret = of_get_drm_display_mode(node, &ptn_bridge->mode, 0);
 	if (ret) {
-		DRM_ERROR("Can't read edid emulation value\n");
+		DRM_ERROR("Failed to get display mode, ret=%d\n", ret);
 		goto err_gpio;
 	}
 
