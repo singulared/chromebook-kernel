@@ -55,7 +55,8 @@ ENTRY(s3c_cpu_resume)
 	 * On exynos5420 and exynos5422 the L2 cache settings may come up with
 	 * a value that could cause some instability (not all firmware sets
 	 * things up correctly).  If we detect 5420 / 5422 make sure to enable
-	 * tag ram setup and data ram setup which will fix things.
+	 * tag ram setup and data ram setup and bump up latency of both tag and
+	 * data ram by 1 which will fix things.
 	 */
 	ldr	r0, s5p_resume_cpu_id
 	lsr	r0, r0, #12
@@ -76,6 +77,7 @@ exynos_542x_l2_cache:
 
 	mrc	p15, 1, r0, c9, c0, 2
 	orr	r0, r0, #0x220
+	orr	r0, r0, #0xc3
 	mcr	p15, 1, r0, c9, c0, 2
 
 resume_after_542x_l2_cache:
