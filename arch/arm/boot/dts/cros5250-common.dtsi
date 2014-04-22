@@ -437,10 +437,6 @@
 		};
 	};
 
-	adc@12D10000 {
-		vdd-supply = <&buck5_reg>;
-	};
-
 	dwmmc0@12200000 {
 		num-slots = <1>;
 		supports-highspeed;
