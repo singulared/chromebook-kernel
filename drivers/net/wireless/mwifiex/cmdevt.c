@@ -519,6 +519,11 @@ int mwifiex_send_cmd(struct mwifiex_private *priv, u16 cmd_no,
 		return -1;
 	}
 
+	if (adapter->num_cmd_timeout) {
+		dev_err(adapter->dev, "PREP_CMD: FW is in bad state\n");
+		return -1;
+	}
+
 	if (adapter->hw_status == MWIFIEX_HW_STATUS_RESET) {
 		if (cmd_no != HostCmd_CMD_FUNC_INIT) {
 			dev_err(adapter->dev, "PREP_CMD: FW in reset state\n");
@@ -949,12 +954,13 @@ mwifiex_cmd_timeout_func(unsigned long function_context)
 			adapter->cmd_wait_q.status = -ETIMEDOUT;
 			wake_up_interruptible(&adapter->cmd_wait_q.wait);
 			mwifiex_cancel_pending_ioctl(adapter);
-			/* reset cmd_sent flag to unblock new commands */
-			adapter->cmd_sent = false;
 		}
 	}
 	if (adapter->hw_status == MWIFIEX_HW_STATUS_INITIALIZING)
 		mwifiex_init_fw_complete(adapter);
+
+	if (adapter->if_ops.fw_dump)
+		adapter->if_ops.fw_dump(adapter);
 
 	if (adapter->if_ops.card_reset)
 		adapter->if_ops.card_reset(adapter);

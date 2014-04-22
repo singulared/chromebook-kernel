@@ -89,6 +89,7 @@ enum iwl_xvt_state {
 struct iwl_sw_stack_config {
 	u32 load_mask;
 	u32 calib_override_mask;
+	u32 fw_dbg_flags;
 	struct iwl_phy_cfg_cmd fw_calib_cmd_cfg[IWL_UCODE_TYPE_MAX];
 };
 
@@ -122,6 +123,10 @@ struct iwl_xvt {
 	bool rx_hdr_enabled;
 
 	wait_queue_head_t mod_tx_wq;
+	/* DMA buffer information */
+	u32 dma_buffer_size;
+	u8 *dma_cpu_addr;
+	dma_addr_t dma_addr;
 };
 
 #define IWL_OP_MODE_GET_XVT(_op_mode) \

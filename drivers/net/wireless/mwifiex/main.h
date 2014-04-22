@@ -624,7 +624,9 @@ struct mwifiex_if_ops {
 	int (*init_fw_port) (struct mwifiex_adapter *);
 	int (*dnld_fw) (struct mwifiex_adapter *, struct mwifiex_fw_image *);
 	void (*card_reset) (struct mwifiex_adapter *);
+	void (*fw_dump)(struct mwifiex_adapter *);
 	int (*clean_pcie_ring) (struct mwifiex_adapter *adapter);
+	void (*iface_work)(struct work_struct *work);
 };
 
 struct mwifiex_adapter {
@@ -757,6 +759,7 @@ struct mwifiex_adapter {
 	atomic_t is_tx_received;
 	atomic_t pending_bridged_pkts;
 	u8 fw_api_ver;
+	struct work_struct iface_work;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);

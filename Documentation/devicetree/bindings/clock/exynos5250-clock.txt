@@ -164,7 +164,6 @@ clock which they consume.
   g3d			345
   smmu_tv		346
   smmu_fimd1		347
-  sss			348
 
 
    [Clock Dividers]

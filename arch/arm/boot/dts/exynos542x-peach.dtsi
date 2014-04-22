@@ -500,6 +500,7 @@
 					compatible = "sbs,sbs-battery";
 					reg = <0xb>;
 					sbs,poll-retry-count = <1>;
+					sbs,i2c-retry-count = <2>;
 				};
 			};
 

@@ -55,6 +55,8 @@
 #define MAX_CPB_SIZE_V7			(3 * SZ_1M)	/* 3MB */
 #define MFC_VERSION_V7			0x72
 #define MFC_NUM_PORTS_V7		1
+#define MFC_LUMA_PAD_BYTES_V7		256
+#define MFC_CHROMA_PAD_BYTES_V7		128
 
 #define S5P_FIMV_SCRATCH_BUF_SIZE_VP8_ENC_V7(w, h) \
 			(((w) * 48) + 8192 + ((((w) + 1) / 2) * 128) + 144 + \

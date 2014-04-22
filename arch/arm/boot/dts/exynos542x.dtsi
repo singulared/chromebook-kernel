@@ -488,6 +488,11 @@
 		clock-names = "oscclk", "pclk0", "clk0" , "dclk0";
 	};
 
+	g2d_pd: pd@10044100 {
+		compatible = "samsung,exynos4210-pd";
+		reg = <0x10044100 0x20>;
+	};
+
 	msc_pd: pd@10044120 {
 		compatible = "samsung,exynos4210-pd";
 		reg = <0x10044120 0x20>;
@@ -1010,12 +1015,4 @@
 		clock-names = "watchdog";
 		samsung,syscon-phandle = <&pmu_syscon>;
         };
-
-	sss@10830000 {
-		compatible = "samsung,exynos4210-secss";
-		reg = <0x10830000 0x10000>;
-		interrupts = <0 112 0>;
-		clocks = <&clock 471>;
-		clock-names = "secss";
-	};
 };

@@ -200,7 +200,7 @@ int s5p_mfc_alloc_dec_buffers_v6(struct s5p_mfc_ctx *ctx)
 	/* Allocate only if memory from bank 1 is necessary */
 	if (bank1_size > 0) {
 		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
-						bank1_size);
+						bank1_size, false);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 memory\n");
 			return ret;
@@ -252,14 +252,12 @@ static int s5p_mfc_alloc_instance_buffer_v6(struct s5p_mfc_ctx *ctx)
 		return -EINVAL;
 	}
 
-	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx, ctx_size);
+	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->ctx,
+					ctx_size, false);
 	if (ret) {
 		mfc_err("Failed to allocate instance buffer\n");
 		return ret;
 	}
-
-	memset(ctx->ctx.virt, 0, ctx->ctx.size);
-	wmb();
 
 	mfc_debug_leave();
 
@@ -281,14 +279,11 @@ static int s5p_mfc_alloc_dev_context_buffer_v6(struct s5p_mfc_dev *dev)
 	mfc_debug_enter();
 
 	ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &dev->ctx_buf,
-					buf_size->dev_ctx);
+					buf_size->dev_ctx, false);
 	if (ret) {
 		mfc_err("Failed to allocate device context buffer\n");
 		return ret;
 	}
-
-	memset(dev->ctx_buf.virt, 0, buf_size->dev_ctx);
-	wmb();
 
 	mfc_debug_leave();
 
@@ -345,6 +340,12 @@ static void s5p_mfc_enc_calc_src_size_v6(struct s5p_mfc_ctx *ctx)
 	ctx->buf_width = ALIGN(ctx->img_width, S5P_FIMV_NV12M_HALIGN_V6);
 	ctx->luma_size = ALIGN((mb_width * mb_height) * 256, 256);
 	ctx->chroma_size = ALIGN((mb_width * mb_height) * 128, 256);
+
+	/* MFCv7 & v8 needs padded bytes for Luma and Chroma */
+	if (IS_MFCV7(ctx->dev)) {
+		ctx->luma_size += MFC_LUMA_PAD_BYTES_V7;
+		ctx->chroma_size += MFC_CHROMA_PAD_BYTES_V7;
+	}
 }
 
 /* Set registers for decoding stream buffer */
@@ -1719,7 +1720,7 @@ static int s5p_mfc_alloc_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 	/* Allocate only if memory from bank 1 is necessary */
 	if (bank1_size > 0) {
 		ret = s5p_mfc_alloc_priv_buf(dev->mem_dev_l, &ctx->bank1,
-						bank1_size);
+						bank1_size, false);
 		if (ret) {
 			mfc_err("Failed to allocate Bank1 memory\n");
 			return ret;

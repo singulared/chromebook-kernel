@@ -261,20 +261,21 @@ struct s5p_mfc_variant {
 
 /**
  * struct s5p_mfc_priv_buf - represents internal used buffer
- * @alloc:		allocation-specific context for each buffer
- *			(videobuf2 allocator)
  * @ofs:		offset of each buffer, will be used for MFC
  * @virt:		kernel virtual address, only valid when the
  *			buffer accessed by driver
  * @dma:		DMA address, only valid when kernel DMA API used
  * @size:		size of the buffer
+ * @attrs:		dma-mapping attributes used to allocate the buffer
+ * @token:		value returned from dma_alloc_attrs()
  */
 struct s5p_mfc_priv_buf {
-	void		*alloc;
 	unsigned long	ofs;
 	void		*virt;
 	dma_addr_t	dma;
 	size_t		size;
+	struct dma_attrs attrs;
+	void		*token;
 };
 
 /**
@@ -686,6 +687,8 @@ struct s5p_mfc_ctx {
 /*
  * struct s5p_mfc_fmt -	structure used to store information about pixelformats
  *			used by the MFC
+ * @min_version:	minimum FW version supporting given format
+ * @max_version:	maximum FW version supporting given format
  */
 struct s5p_mfc_fmt {
 	char *name;
@@ -693,6 +696,8 @@ struct s5p_mfc_fmt {
 	u32 codec_mode;
 	enum s5p_mfc_fmt_type type;
 	u32 num_planes;
+	u16 min_version;
+	u16 max_version;
 };
 
 /**
@@ -726,11 +731,20 @@ void set_work_bit(struct s5p_mfc_ctx *ctx);
 void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 
-#define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
-				(dev->variant->port_num ? 1 : 0) : 0) : 0)
-#define IS_TWOPORT(dev)		(dev->variant->port_num == 2 ? 1 : 0)
-#define IS_MFCV6(dev)		(dev->variant->version >= 0x60 ? 1 : 0)
-#define IS_MFCV7(dev)		(dev->variant->version >= 0x70 ? 1 : 0)
-#define IS_MFCV8(dev)		(dev->variant->version >= 0x80 ? 1 : 0)
+#define HAS_VARIANT(dev) ((dev) && ((dev)->variant))
+#define HAS_PORTNUM(dev) (HAS_VARIANT(dev) && ((dev)->variant->port_num))
+#define IS_TWOPORT(dev)	(HAS_PORTNUM(dev) && ((dev)->variant->port_num == 2))
+
+#define IS_MFCVX(dev, x) (HAS_VARIANT(dev) && ((dev)->variant->version >= (x)))
+#define IS_MFCV6(dev)	IS_MFCVX(dev, 0x60)
+#define IS_MFCV7(dev)	IS_MFCVX(dev, 0x70)
+#define IS_MFCV8(dev)	IS_MFCVX(dev, 0x80)
+#define IS_MFCV_RANGE(dev, min, max) (HAS_VARIANT(dev) \
+					&& ((dev)->variant->version >= (min)) \
+					&& ((dev)->variant->version <= (max)))
+#define IS_FMT_SUPPORTED(dev, fmt) \
+	((fmt) && IS_MFCV_RANGE(dev, (fmt)->min_version, (fmt)->max_version))
+
+#define MFC_VERSION_MAX  0xffff
 
 #endif /* S5P_MFC_COMMON_H_ */

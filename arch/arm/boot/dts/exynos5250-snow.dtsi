@@ -251,6 +251,7 @@
 				compatible = "sbs,sbs-battery";
 				reg = <0xb>;
 				sbs,poll-retry-count = <1>;
+				sbs,i2c-retry-count = <2>;
 			};
 		};
 	};
@@ -357,6 +358,21 @@
 		};
 	};
 
+	lcd_display_timings: display-timings {
+		native-mode = <&timing0>;
+		timing0: 1366x768 {
+			clock-frequency = <70589280>;
+			hactive = <1366>;
+			vactive = <768>;
+			hfront-porch = <40>;
+			hback-porch = <40>;
+			hsync-len = <32>;
+			vback-porch = <10>;
+			vfront-porch = <12>;
+			vsync-len = <6>;
+		};
+	};
+
 	i2c@12CD0000 {
 		ptn3460-bridge@20 {
 			compatible = "nxp,ptn3460";
@@ -366,6 +382,7 @@
 			edid-emulation = <5>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&ptn3460_gpios>;
+			display-timings = <&lcd_display_timings>;
 		};
 	};
 

@@ -30,7 +30,7 @@
 #include <linux/mfd/tps65090.h>
 
 #define MAX_CTRL_READ_TRIES	5
-#define MAX_FET_ENABLE_TRIES	5
+#define MAX_FET_ENABLE_TRIES	1000
 
 #define CTRL_EN_BIT		0 /* Regulator enable bit, active high */
 #define CTRL_WT_BIT		2 /* Regulator wait time 0 bit */
