@@ -383,6 +383,7 @@
 		clock-names = "adc";
 		#io-channel-cells = <1>;
 		io-channel-ranges;
+		status = "disabled";
 	};
 
 	spi_0: spi@12d20000 {
