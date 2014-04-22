@@ -330,16 +330,6 @@ static int vidi_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	/*
-	 * enable drm irq mode.
-	 * - with irq_enabled = 1, we can use the vblank feature.
-	 *
-	 * P.S. note that we wouldn't use drm irq handler but
-	 *	just specific driver own one instead because
-	 *	drm framework supports only one irq handler.
-	 */
-	drm_dev->irq_enabled = 1;
-
 	return 0;
 }
 

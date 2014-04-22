@@ -115,6 +115,15 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto err_manager_cleanup;
 
+	/*
+	 * enable drm irq mode.
+	 * - with irq_enabled = 1, we can use the vblank feature.
+	 *
+	 * Note that we don't use drm irq handler, since we have multiple
+	 * interrupt sources and the drm framework supports just one.
+	 */
+	dev->irq_enabled = 1;
+
 	ret = drm_vblank_init(dev, MAX_CRTC);
 	if (ret)
 		goto err_display_cleanup;

@@ -489,16 +489,6 @@ static int fimd_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 	ctx->drm_dev = crtc->dev;
 	ctx->pipe = pipe;
 
-	/*
-	 * enable drm irq mode.
-	 * - with irq_enabled = 1, we can use the vblank feature.
-	 *
-	 * P.S. note that we wouldn't use drm irq handler but
-	 *	just specific driver own one instead because
-	 *	drm framework supports only one irq handler.
-	 */
-	ctx->drm_dev->irq_enabled = 1;
-
 	if (is_drm_iommu_supported(ctx->drm_dev))
 		drm_iommu_attach_device(ctx->drm_dev, ctx->dev);
 
