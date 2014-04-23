@@ -2416,9 +2416,7 @@ int drm_mode_set_config_internal(struct drm_mode_set *set)
 	ret = crtc->funcs->set_config(set);
 	if (ret == 0) {
 		crtc->primary->crtc = crtc;
-
-		/* crtc->fb must be updated by ->set_config, enforces this. */
-		WARN_ON(fb != crtc->primary->fb);
+		crtc->primary->fb = fb;
 	}
 
 	list_for_each_entry(tmp, &crtc->dev->mode_config.crtc_list, head) {
