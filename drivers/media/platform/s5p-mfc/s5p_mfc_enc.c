@@ -32,9 +32,6 @@
 #include "s5p_mfc_intr.h"
 #include "s5p_mfc_opr.h"
 
-#define DEF_SRC_FMT_ENC	V4L2_PIX_FMT_NV12MT
-#define DEF_DST_FMT_ENC	V4L2_PIX_FMT_H264
-
 static struct s5p_mfc_fmt formats[] = {
 	{
 		.name		= "4:2:0 2 Planes 16x16 Tiles",
@@ -2196,12 +2193,22 @@ void s5p_mfc_enc_ctrls_delete(struct s5p_mfc_ctx *ctx)
 		ctx->ctrls[i] = NULL;
 }
 
-void s5p_mfc_enc_init(struct s5p_mfc_ctx *ctx)
+int s5p_mfc_enc_init(struct s5p_mfc_ctx *ctx)
 {
 	struct v4l2_format f;
-	f.fmt.pix_mp.pixelformat = DEF_SRC_FMT_ENC;
-	ctx->src_fmt = find_format(ctx->dev, &f, MFC_FMT_RAW);
-	f.fmt.pix_mp.pixelformat = DEF_DST_FMT_ENC;
-	ctx->dst_fmt = find_format(ctx->dev, &f, MFC_FMT_ENC);
+	struct s5p_mfc_dev *dev = ctx->dev;
+	f.fmt.pix_mp.pixelformat = GET_MFC_DEF_FMT(dev, SRC_FMT_ENC);
+	ctx->src_fmt = find_format(dev, &f, MFC_FMT_RAW);
+	if (!ctx->src_fmt) {
+		mfc_err("Source format unsupported.\n");
+		return -EINVAL;
+	}
+	f.fmt.pix_mp.pixelformat = GET_MFC_DEF_FMT(dev, DST_FMT_ENC);
+	ctx->dst_fmt = find_format(dev, &f, MFC_FMT_ENC);
+	if (!ctx->dst_fmt) {
+		mfc_err("Destination format unsupported.\n");
+		return -EINVAL;
+	}
+	return 0;
 }
 

@@ -257,11 +257,19 @@ struct s5p_mfc_buf_align {
 	unsigned int base;
 };
 
+enum s5p_mfc_fmt_idx {
+	SRC_FMT_DEC,
+	DST_FMT_DEC,
+	SRC_FMT_ENC,
+	DST_FMT_ENC,
+};
+
 struct s5p_mfc_variant {
 	unsigned int version;
 	unsigned int port_num;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
+	u32	*def_fmt;
 	char	*fw_name;
 };
 
@@ -757,6 +765,9 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 #define IS_FMT_SUPPORTED(dev, fmt) \
 	((fmt) && IS_MFCV_RANGE(dev, (fmt)->min_version, (fmt)->max_version))
 
+#define HAS_MFC_DEF_FMT(dev) ((HAS_VARIANT(dev)) && ((dev)->variant->def_fmt))
+#define GET_MFC_DEF_FMT(dev, fmt_idx) \
+	((HAS_MFC_DEF_FMT(dev)) ? ((dev)->variant->def_fmt[fmt_idx]) : -1)
 #define MFC_VERSION_MAX  0xffff
 
 #endif /* S5P_MFC_COMMON_H_ */

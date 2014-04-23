@@ -838,7 +838,11 @@ static int s5p_mfc_open(struct file *file)
 	if (node_type == MFCNODE_DECODER) {
 		ctx->type = MFCINST_DECODER;
 		ctx->c_ops = get_dec_codec_ops();
-		s5p_mfc_dec_init(ctx);
+		ret = s5p_mfc_dec_init(ctx);
+		if (ret) {
+			mfc_err("Failed to init mfc decoder\n");
+			goto err_no_ctx;
+		}
 		/* Setup ctrl handler */
 		ret = s5p_mfc_dec_ctrls_setup(ctx);
 		if (ret) {
@@ -851,7 +855,11 @@ static int s5p_mfc_open(struct file *file)
 		/* only for encoder */
 		INIT_LIST_HEAD(&ctx->ref_queue);
 		ctx->ref_queue_cnt = 0;
-		s5p_mfc_enc_init(ctx);
+		ret = s5p_mfc_enc_init(ctx);
+		if (ret) {
+			mfc_err("Failed to init mfc encoder\n");
+			goto err_no_ctx;
+		}
 		/* Setup ctrl handler */
 		ret = s5p_mfc_enc_ctrls_setup(ctx);
 		if (ret) {
@@ -1464,11 +1472,19 @@ struct s5p_mfc_buf_align mfc_buf_align_v5 = {
 	.base = MFC_BASE_ALIGN_ORDER,
 };
 
+static u32 mfc_def_fmt_v5[4] = {
+	[SRC_FMT_DEC] = V4L2_PIX_FMT_H264,
+	[DST_FMT_DEC] = V4L2_PIX_FMT_NV12MT,
+	[SRC_FMT_ENC] = V4L2_PIX_FMT_NV12MT,
+	[DST_FMT_ENC] = V4L2_PIX_FMT_H264,
+};
+
 static struct s5p_mfc_variant mfc_drvdata_v5 = {
 	.version	= MFC_VERSION_V5,
 	.port_num	= MFC_NUM_PORTS,
 	.buf_size	= &buf_size_v5,
 	.buf_align	= &mfc_buf_align_v5,
+	.def_fmt	= mfc_def_fmt_v5,
 	.fw_name	= "s5p-mfc.fw",
 };
 
@@ -1490,11 +1506,19 @@ struct s5p_mfc_buf_align mfc_buf_align_v6 = {
 	.base = 0,
 };
 
+static u32 mfc_def_fmt_v6[4] = {
+	[SRC_FMT_DEC] = V4L2_PIX_FMT_H264,
+	[DST_FMT_DEC] = V4L2_PIX_FMT_NV12M,
+	[SRC_FMT_ENC] = V4L2_PIX_FMT_NV12M,
+	[DST_FMT_ENC] = V4L2_PIX_FMT_H264,
+};
+
 static struct s5p_mfc_variant mfc_drvdata_v6 = {
 	.version	= MFC_VERSION_V6,
 	.port_num	= MFC_NUM_PORTS_V6,
 	.buf_size	= &buf_size_v6,
 	.buf_align	= &mfc_buf_align_v6,
+	.def_fmt	= mfc_def_fmt_v6,
 	.fw_name        = "s5p-mfc-v6.fw",
 };
 
@@ -1521,6 +1545,7 @@ static struct s5p_mfc_variant mfc_drvdata_v7 = {
 	.port_num	= MFC_NUM_PORTS_V7,
 	.buf_size	= &buf_size_v7,
 	.buf_align	= &mfc_buf_align_v7,
+	.def_fmt	= mfc_def_fmt_v6,
 	.fw_name        = "s5p-mfc-v7.fw",
 };
 
@@ -1547,6 +1572,7 @@ static struct s5p_mfc_variant mfc_drvdata_v8 = {
 	.port_num	= MFC_NUM_PORTS_V8,
 	.buf_size	= &buf_size_v8,
 	.buf_align	= &mfc_buf_align_v8,
+	.def_fmt	= mfc_def_fmt_v6,
 	.fw_name        = "s5p-mfc-v8.fw",
 };
 
