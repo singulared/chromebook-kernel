@@ -59,8 +59,7 @@ typedef struct kbase_cpu_mapping {
 	void __user *uaddr;
 	size_t nr_pages;
 	mali_size64 page_off;
-	struct kbase_va_region *region;
-	int count;
+	struct vm_area_struct * private;
 } kbase_cpu_mapping;
 
 /**

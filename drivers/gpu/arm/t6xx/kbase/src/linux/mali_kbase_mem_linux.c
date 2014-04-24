@@ -90,15 +90,6 @@ struct kbase_va_region *kbase_pmem_alloc(kbase_context *kctx, u32 size, u32 flag
 
 KBASE_EXPORT_TEST_API(kbase_pmem_alloc)
 
-STATIC void kbase_cpu_vm_open(struct vm_area_struct *vma)
-{
-	struct kbase_cpu_mapping *map = vma->vm_private_data;
-	KBASE_DEBUG_ASSERT(map);
-	KBASE_DEBUG_ASSERT(map->count > 0);
-	/* non-atomic as we're under Linux' mm lock */
-	map->count++;
-}
-
 /*
  * Callback for munmap(). PMEM receives a special treatment, as it
  * frees the memory at the same time it gets unmapped. This avoids the
@@ -107,20 +98,9 @@ STATIC void kbase_cpu_vm_open(struct vm_area_struct *vma)
  */
 STATIC void kbase_cpu_vm_close(struct vm_area_struct *vma)
 {
-	struct kbase_cpu_mapping *map = vma->vm_private_data;
-	struct kbase_va_region *reg;
-	kbase_context *kctx;
+	struct kbase_va_region *reg = vma->vm_private_data;
+	kbase_context *kctx = reg->kctx;
 	mali_error err;
-
-	KBASE_DEBUG_ASSERT(map);
-	KBASE_DEBUG_ASSERT(map->count > 0);
-
-	/* non-atomic as we're under Linux' mm lock */
-	if (--map->count)
-		return;
-
-	reg = map->region;
-	kctx = reg->kctx;
 
 	kbase_gpu_vm_lock(kctx);
 
@@ -134,7 +114,6 @@ STATIC void kbase_cpu_vm_close(struct vm_area_struct *vma)
 KBASE_EXPORT_TEST_API(kbase_cpu_vm_close)
 
 static const struct vm_operations_struct kbase_vm_ops = {
-	.open  = kbase_cpu_vm_open,
 	.close = kbase_cpu_vm_close,
 };
 
@@ -173,7 +152,7 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_RESERVED | VM_IO | VM_MIXEDMAP;
 #endif
 	vma->vm_ops = &kbase_vm_ops;
-	vma->vm_private_data = map;
+	vma->vm_private_data = reg;
 
 	page_array = kbase_get_phy_pages(reg);
 
@@ -207,10 +186,9 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 	}
 
 	map->uaddr = (void *)vma->vm_start;
-	map->region = reg;
 	map->nr_pages = nr_pages;
 	map->page_off = start_off;
-	map->count = 1; /* start with one ref */
+	map->private = vma;
 
 	if ( (reg->flags & KBASE_REG_ZONE_MASK) == KBASE_REG_ZONE_TMEM)
 	{
