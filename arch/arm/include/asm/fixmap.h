@@ -18,6 +18,9 @@
 #define FIXADDR_TOP		(FIXADDR_END - PAGE_SIZE)
 
 enum fixed_addresses {
+	FIX_TEXT_POKE0,
+	FIX_TEXT_POKE1,
+
 	FIX_KMAP_BEGIN,
 	FIX_KMAP_END = (FIXADDR_TOP - FIXADDR_START) >> PAGE_SHIFT,
 	__end_of_fixed_addresses
