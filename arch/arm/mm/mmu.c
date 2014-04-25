@@ -1346,8 +1346,8 @@ void __init paging_init(struct machine_desc *mdesc)
 
 #ifdef CONFIG_HIGHMEM
 	pm_volatile_chunk.start =
-		virt_to_phys(pte_offset_kernel(top_pmd, fix_to_virt(0)));
-	pm_volatile_chunk.num_bytes = FIX_KMAP_END * sizeof(pte_t);
+		virt_to_phys(pte_offset_kernel(top_pmd, FIXADDR_START));
+	pm_volatile_chunk.num_bytes = __end_of_fixed_addresses * sizeof(pte_t);
 	pm_register_suspend_volatile(&pm_volatile_chunk);
 #endif
 }
