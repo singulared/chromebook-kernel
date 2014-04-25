@@ -195,7 +195,7 @@ struct exynos_drm_display {
 /*
  * Exynos drm manager ops
  *
- * @initialize: initializes the manager with drm_dev
+ * @initialize: initializes the manager
  * @remove: cleans up the manager for removal
  * @dpms: control device power.
  * @adjust_mode: allows manager to adjust mode in check mode path
@@ -211,7 +211,7 @@ struct exynos_drm_display {
  * @win_disable: disable hardware specific overlay.
  */
 struct exynos_drm_manager_ops {
-	int (*initialize)(void *ctx, struct drm_device *drm_dev, int pipe);
+	int (*initialize)(void *ctx, struct drm_crtc *crtc, int pipe);
 	void (*remove)(void *ctx);
 	void (*dpms)(void *ctx, int mode);
 	void (*adjust_mode)(void *ctx, struct drm_connector *connector,
@@ -239,6 +239,7 @@ struct exynos_drm_manager_ops {
  * @list: the list entry for this manager
  * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
  * @drm_dev: pointer to the drm device
+ * @crtc: pointer to the drm crtc
  * @pipe: the pipe number for this crtc/manager
  * @ops: pointer to callbacks for exynos drm specific functionality
  * @ctx: A pointer to the manager's implementation specific context
@@ -247,6 +248,7 @@ struct exynos_drm_manager {
 	struct list_head list;
 	enum exynos_drm_output_type type;
 	struct drm_device *drm_dev;
+	struct drm_crtc *crtc;
 	int pipe;
 	const struct exynos_drm_manager_ops *ops;
 	void *ctx;

@@ -106,15 +106,6 @@ int exynos_drm_initialize_managers(struct drm_device *dev)
 	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(manager, &exynos_drm_manager_list, list) {
-		if (manager->ops->initialize) {
-			ret = manager->ops->initialize(manager->ctx, dev, pipe);
-			if (ret) {
-				DRM_ERROR("Mgr init [%d] failed with %d\n",
-						manager->type, ret);
-				goto err;
-			}
-		}
-
 		manager->drm_dev = dev;
 		manager->pipe = pipe++;
 
@@ -124,6 +115,17 @@ int exynos_drm_initialize_managers(struct drm_device *dev)
 					manager->type, ret);
 			goto err;
 		}
+
+		if (manager->ops->initialize) {
+			ret = manager->ops->initialize(manager->ctx,
+				manager->crtc, manager->pipe);
+			if (ret) {
+				DRM_ERROR("Mgr init [%d] failed with %d\n",
+						manager->type, ret);
+				goto err;
+			}
+		}
+
 	}
 	return 0;
 

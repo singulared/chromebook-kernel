@@ -942,13 +942,13 @@ static void mixer_win_reset(struct mixer_context *ctx)
 	atomic_inc(&ctx->vblank_ref);
 }
 
-static int mixer_initialize(void *ctx, struct drm_device *drm_dev, int pipe)
+static int mixer_initialize(void *ctx, struct drm_crtc *crtc, int pipe)
 {
 	struct mixer_context *mixer_ctx = ctx;
 
 	DRM_DEBUG_KMS("pipe: %d\n", pipe);
 
-	mixer_ctx->drm_dev = drm_dev;
+	mixer_ctx->drm_dev = crtc->dev;
 	mixer_ctx->pipe = pipe;
 
 	if (!is_drm_iommu_supported(mixer_ctx->drm_dev))

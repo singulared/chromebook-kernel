@@ -699,6 +699,7 @@ int exynos_drm_crtc_create(struct exynos_drm_manager *manager)
 			exynos_drm_output_type_name(manager->type),
 			manager->pipe);
 
+	manager->crtc = crtc;
 	return 0;
 }
 

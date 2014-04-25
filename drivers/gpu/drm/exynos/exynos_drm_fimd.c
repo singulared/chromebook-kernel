@@ -555,12 +555,11 @@ static void fimd_win_disable(void *in_ctx, int zpos)
 	fimd_wait_for_vblank(ctx);
 }
 
-static int fimd_mgr_initialize(void *in_ctx, struct drm_device *drm_dev,
-		int pipe)
+static int fimd_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 {
 	struct fimd_context *ctx = in_ctx;
 
-	ctx->drm_dev = drm_dev;
+	ctx->drm_dev = crtc->dev;
 	ctx->pipe = pipe;
 
 	/*
