@@ -359,19 +359,24 @@ drm_gem_handle_create_tail(struct drm_file *file_priv,
 	 */
 again:
 	/* ensure there is space available to allocate a handle */
-	if (idr_pre_get(&file_priv->object_idr, GFP_KERNEL) == 0)
+	if (idr_pre_get(&file_priv->object_idr, GFP_KERNEL) == 0) {
+		spin_unlock(&obj->dev->object_name_lock);
 		return -ENOMEM;
+	}
 
 	/* do the allocation under our spinlock */
 	spin_lock(&file_priv->table_lock);
 	ret = idr_get_new_above(&file_priv->object_idr, obj, 1, (int *)handlep);
 	spin_unlock(&file_priv->table_lock);
 
-	spin_unlock(&obj->dev->object_name_lock);
 	if (ret == -EAGAIN)
 		goto again;
-	else if (ret)
+	else if (ret) {
+		spin_unlock(&obj->dev->object_name_lock);
 		return ret;
+	}
+
+	spin_unlock(&obj->dev->object_name_lock);
 
 	drm_gem_object_handle_reference(obj);
 
