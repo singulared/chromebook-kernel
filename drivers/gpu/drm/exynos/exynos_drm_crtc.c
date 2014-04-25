@@ -78,20 +78,29 @@ struct exynos_drm_crtc {
 #endif
 };
 
-static void exynos_drm_crtc_flip_complete(struct drm_device *dev,
-                                          struct drm_pending_vblank_event *e)
+static void exynos_drm_crtc_flip_complete(struct drm_crtc *crtc)
 {
-	struct timeval now;
+	struct drm_device *dev = crtc->dev;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	unsigned long flags;
+	struct timeval now;
 
 	do_gettimeofday(&now);
-	e->event.sequence = 0;
-	e->event.tv_sec = now.tv_sec;
-	e->event.tv_usec = now.tv_usec;
+
 	spin_lock_irqsave(&dev->event_lock, flags);
-	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
-	spin_unlock_irqrestore(&dev->event_lock, flags);
-	wake_up_interruptible(&e->base.file_priv->event_wait);
+	if (exynos_crtc->event) {
+		struct drm_pending_vblank_event *e = exynos_crtc->event;
+		e->event.sequence = 0;
+		e->event.tv_sec = now.tv_sec;
+		e->event.tv_usec = now.tv_usec;
+		list_add_tail(&e->base.link, &e->base.file_priv->event_list);
+		exynos_crtc->event = NULL;
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+		wake_up_interruptible(&e->base.file_priv->event_wait);
+	} else {
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+	}
+
 }
 
 static void exynos_drm_crtc_update(struct drm_crtc *crtc,
@@ -260,10 +269,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 	exynos_drm_crtc_update(crtc, next_desc.fb);
 	to_exynos_fb(next_desc.fb)->prepared |= 1ul << exynos_crtc->pipe;
 
-	if (exynos_crtc->event) {
-		exynos_drm_crtc_flip_complete(drm_dev, exynos_crtc->event);
-		exynos_crtc->event = NULL;
-	}
+	exynos_drm_crtc_flip_complete(crtc);
 
 	*cur_desc = next_desc;
 }
@@ -461,6 +467,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_flip_desc flip_desc;
 	bool send_event = false;
+	unsigned long flags;
 #endif
 	int ret = -EINVAL;
 
@@ -501,7 +508,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 	}
 
 	/* Send flip event if no flips pending. */
-	BUG_ON(exynos_crtc->event);
 	if (event && kfifo_is_empty(&exynos_crtc->flip_fifo))
 		send_event = true;
 
@@ -529,10 +535,14 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		exynos_drm_kds_callback(fb, crtc);
 	}
 
+	/* abuse event_lock to protect the pointer */
+	spin_lock_irqsave(&dev->event_lock, flags);
+	BUG_ON(exynos_crtc->event);
+	exynos_crtc->event = event;
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+
 	if (send_event)
-		exynos_drm_crtc_flip_complete(dev, event);
-	else
-		exynos_crtc->event = event;
+		exynos_drm_crtc_flip_complete(crtc);
 
 	kfifo_put(&exynos_crtc->flip_fifo, &flip_desc);
 	crtc->fb = fb;
@@ -762,10 +772,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 	wake_up(&exynos_crtc->vsync_wq);
 #endif
 
-	if (exynos_crtc->event) {
-		exynos_drm_crtc_flip_complete(dev, exynos_crtc->event);
-		exynos_crtc->event = NULL;
-	}
+	exynos_drm_crtc_flip_complete(crtc);
 
 	drm_vblank_put(dev, exynos_crtc->pipe);
 }
