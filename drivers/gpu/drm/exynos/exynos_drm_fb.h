@@ -64,16 +64,4 @@ void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 				  struct dma_buf *buf);
 #endif
 
-void exynos_drm_fb_release(struct kref *kref);
-
-static inline void exynos_drm_fb_get(struct exynos_drm_fb *exynos_fb)
-{
-	kref_get(&exynos_fb->refcount);
-}
-
-static inline void exynos_drm_fb_put(struct exynos_drm_fb *exynos_fb)
-{
-	kref_put(&exynos_fb->refcount, exynos_drm_fb_release);
-}
-
 #endif
