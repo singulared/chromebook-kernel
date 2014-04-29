@@ -123,7 +123,6 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	/* buffer count to framebuffer always is 1 at booting time. */
 	exynos_drm_fb_set_buf_cnt(exynos_fb, 1);
 
-	dev->mode_config.fb_base = (resource_size_t)buffer->dma_addr;
 	fbi->screen_base = buffer->kvaddr;
 	fbi->screen_size = size;
 
