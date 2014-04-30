@@ -69,14 +69,6 @@ void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 }
 #endif
 
-void exynos_drm_fb_release(struct kref *kref)
-{
-	struct exynos_drm_fb *exynos_fb;
-
-	exynos_fb = container_of(kref, struct exynos_drm_fb, refcount);
-	schedule_work(&exynos_fb->release_work);
-}
-
 static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
 	struct exynos_drm_fb *exynos_fb =
@@ -111,7 +103,8 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 
 static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 {
-	exynos_drm_fb_put(to_exynos_fb(fb));
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	schedule_work(&exynos_fb->release_work);
 }
 
 static int exynos_drm_fb_create_handle(struct drm_framebuffer *fb,

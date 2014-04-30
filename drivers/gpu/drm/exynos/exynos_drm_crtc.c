@@ -99,6 +99,7 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 	struct drm_plane *plane = exynos_crtc->plane;
+	struct exynos_drm_manager *manager = exynos_crtc->manager;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 
@@ -107,6 +108,11 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 
 	exynos_plane_mode_set(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
 			      crtc->x, crtc->y, crtc_w, crtc_h);
+
+	if (manager->ops->update)
+		manager->ops->update(manager->ctx, crtc, fb, 0, 0,
+				crtc_w, crtc_h, crtc->x, crtc->y, crtc_w,
+				crtc_h);
 
 	exynos_plane_commit(exynos_crtc->plane);
 	exynos_plane_dpms(exynos_crtc->plane, DRM_MODE_DPMS_ON);
@@ -235,7 +241,7 @@ static void exynos_drm_crtc_release_flips(struct drm_crtc *crtc)
 		BUG_ON(!ret);
 
 		if (next_desc.fb)
-			exynos_drm_fb_put(to_exynos_fb(next_desc.fb));
+			drm_framebuffer_unreference(next_desc.fb);
 		if (next_desc.kds)
 			kds_resource_set_release(&next_desc.kds);
 		drm_vblank_put(drm_dev, exynos_crtc->pipe);
@@ -362,13 +368,12 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct exynos_drm_fb *exynos_fb = to_exynos_fb(crtc->fb);
 	int ret;
 
 	DRM_DEBUG_KMS("[CRTC:%d] @ (%d, %d) [OLD_FB:%d]\n",
 			DRM_BASE_ID(crtc), x, y, DRM_BASE_ID(old_fb));
 
-	exynos_drm_fb_get(exynos_fb);
+	drm_framebuffer_reference(crtc->fb);
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
@@ -379,7 +384,8 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 
 	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL, 0);
 
-	exynos_drm_fb_put(exynos_fb);
+	drm_framebuffer_unreference(crtc->fb);
+
 	return 0;
 }
 
@@ -482,7 +488,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		return ret;
 	}
 
-	exynos_drm_fb_get(exynos_fb);
+	drm_framebuffer_reference(fb);
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	flip_desc.fb = fb;
@@ -519,12 +525,6 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 			goto fail_kds;
 		}
 	} else {
-		/*
-		 * For normal page-flip (i.e. non-modeset) we should
-		 * never be flipping a non-kds buffer.
-		 */
-		if (event)
-			DRM_ERROR("flipping a non-kds buffer\n");
 		flip_desc.kds = NULL;
 		exynos_drm_kds_callback(fb, crtc);
 	}
@@ -549,7 +549,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 fail_queue_full:
 fail_kds:
-	exynos_drm_fb_put(exynos_fb);
+	drm_framebuffer_unreference(fb);
 	drm_vblank_put(dev, exynos_crtc->pipe);
 	return ret;
 #else
@@ -749,7 +749,7 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int pipe)
 	if (cur_descp->kds)
 		kds_resource_set_release(&cur_descp->kds);
 	if (cur_descp->fb)
-		exynos_drm_fb_put(to_exynos_fb(cur_descp->fb));
+		drm_framebuffer_unreference(cur_descp->fb);
 	*cur_descp = next_desc;
 	kfifo_skip(&exynos_crtc->flip_fifo);
 

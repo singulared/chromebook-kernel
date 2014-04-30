@@ -407,6 +407,7 @@ __v7_setup:
 	bne	8f
 	mrc	p15, 1, r5, c9, c0, 2		@ read L2 control register
 	orr	r5, r5, #0x220
+	orr	r5, r5, #0xc3
 	mcr	p15, 1, r5, c9, c0, 2		@ set L2 control register
 8:
 #endif

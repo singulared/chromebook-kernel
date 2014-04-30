@@ -22,6 +22,7 @@
 #include <asm/cputype.h>
 #include <asm/sections.h>
 #include <asm/cachetype.h>
+#include <asm/fixmap.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/smp_plat.h>
@@ -350,6 +351,12 @@ SET_MEMORY_FN(ro, pte_set_ro)
 SET_MEMORY_FN(rw, pte_set_rw)
 SET_MEMORY_FN(x, pte_set_x)
 SET_MEMORY_FN(nx, pte_set_nx)
+
+void __set_fixmap(enum fixed_addresses idx, unsigned long phys, pgprot_t prot)
+{
+	BUG_ON(idx >= __end_of_fixed_addresses);
+	set_top_pte(__fix_to_virt(idx), pfn_pte(__phys_to_pfn(phys), prot));
+}
 
 /*
  * Adjust the PMD section entries according to the CPU in use.
@@ -1346,8 +1353,8 @@ void __init paging_init(struct machine_desc *mdesc)
 
 #ifdef CONFIG_HIGHMEM
 	pm_volatile_chunk.start =
-		virt_to_phys(pte_offset_kernel(top_pmd, fix_to_virt(0)));
-	pm_volatile_chunk.num_bytes = FIX_KMAP_END * sizeof(pte_t);
+		virt_to_phys(pte_offset_kernel(top_pmd, FIXADDR_START));
+	pm_volatile_chunk.num_bytes = __end_of_fixed_addresses * sizeof(pte_t);
 	pm_register_suspend_volatile(&pm_volatile_chunk);
 #endif
 }

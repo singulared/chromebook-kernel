@@ -924,6 +924,7 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 {
 	struct fimd_context *ctx = (struct fimd_context *)dev_id;
 	u32 val;
+	u32 start, start_s;
 
 	WARN_ON(ctx->suspended);
 	val = readl(ctx->regs + VIDINTCON1);
@@ -937,7 +938,24 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 		goto out;
 
 	drm_handle_vblank(ctx->drm_dev, ctx->pipe);
-	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
+
+	/*
+	 * Ensure finish_pageflip is called iff a pending flip has completed.
+	 * This works around a race between a page_flip request and the latency
+	 * between vblank interrupt and this irq_handler:
+	 *   => FIMD vblank: BUF_START_S[0] := BUF_START[0], and asserts irq
+	 *   | => fimd_win_commit(0) writes new BUF_START[0]
+	 *   |    exynos_drm_crtc_try_do_flip() marks exynos_fb as prepared
+	 *   => fimd_irq_handler()
+	 *       exynos_drm_crtc_finish_pageflip() sees prepared exynos_fb,
+	 *           and unmaps "old" fb
+	 *   ==> but, since BUF_START_S[0] still points to that "old" fb...
+	 *   ==> FIMD iommu fault
+	 */
+	start = readl(ctx->regs + VIDWx_BUF_START(0, 0));
+	start_s = readl(ctx->regs + VIDWx_BUF_START_S(0, 0));
+	if (start == start_s)
+		exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
 	/* set wait vsync event to zero and wake up queue. */
 	if (atomic_read(&ctx->wait_vsync_event)) {

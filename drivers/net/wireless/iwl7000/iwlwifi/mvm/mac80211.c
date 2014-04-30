@@ -279,6 +279,9 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		    IEEE80211_HW_SUPPORTS_DYNAMIC_SMPS |
 		    IEEE80211_HW_SUPPORTS_STATIC_SMPS;
 
+	if (!iwlwifi_mod_params.uapsd_disable)
+		hw->flags |= IEEE80211_HW_SUPPORTS_UAPSD;
+
 	hw->queues = mvm->first_agg_queue;
 	hw->offchannel_tx_hw_queue = IWL_MVM_OFFCHANNEL_QUEUE;
 	hw->rate_control_algorithm = "iwl-mvm-rs";
@@ -1730,6 +1733,11 @@ static int iwl_mvm_mac_sched_scan_start(struct ieee80211_hw *hw,
 	int ret;
 
 	mutex_lock(&mvm->mutex);
+
+	if (iwl_mvm_is_associated(mvm)) {
+		ret = -EBUSY;
+		goto out;
+	}
 
 	if (mvm->scan_status != IWL_MVM_SCAN_NONE) {
 		IWL_DEBUG_SCAN(mvm,
