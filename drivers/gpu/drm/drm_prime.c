@@ -376,7 +376,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 		goto out_have_handle;
 	}
 
-	spin_lock(&dev->object_name_lock);
+	mutex_lock(&dev->object_name_lock);
 	/* re-export the original imported object */
 	if (obj->import_attach) {
 		dmabuf = obj->import_attach->dmabuf;
@@ -396,7 +396,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 		 * but if that fails then drop the ref
 		 */
 		ret = PTR_ERR(dmabuf);
-		spin_unlock(&dev->object_name_lock);
+		mutex_unlock(&dev->object_name_lock);
 		goto out;
 	}
 
@@ -409,7 +409,7 @@ out_have_obj:
 	 */
 	ret = drm_prime_add_buf_handle(&file_priv->prime,
 				       dmabuf, handle);
-	spin_unlock(&dev->object_name_lock);
+	mutex_unlock(&dev->object_name_lock);
 	if (ret)
 		goto fail_put_dmabuf;
 
@@ -515,7 +515,7 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 		goto out_put;
 
 	/* never seen this one, need to import */
-	spin_lock(&dev->object_name_lock);
+	mutex_lock(&dev->object_name_lock);
 	obj = dev->driver->gem_prime_import(dev, dma_buf);
 	if (IS_ERR(obj)) {
 		ret = PTR_ERR(obj);
@@ -552,7 +552,7 @@ fail:
 	 */
 	drm_gem_handle_delete(file_priv, *handle);
 out_unlock:
-	spin_unlock(&dev->object_name_lock);
+	mutex_unlock(&dev->object_name_lock);
 out_put:
 	dma_buf_put(dma_buf);
 	mutex_unlock(&file_priv->prime.lock);
