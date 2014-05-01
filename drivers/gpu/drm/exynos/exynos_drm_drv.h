@@ -219,11 +219,7 @@ struct exynos_drm_manager_ops {
 	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(void *ctx, const struct drm_display_mode *mode);
-	void (*update)(void *ctx, struct drm_crtc *crtc,
-				struct drm_framebuffer *fb, int crtc_x,
-				int crtc_y, unsigned int crtc_w,
-				unsigned int crtc_h, uint32_t src_x,
-				uint32_t src_y, uint32_t src_w, uint32_t src_h);
+	int (*update)(void *ctx, struct drm_framebuffer *fb);
 	void (*commit)(void *ctx);
 	int (*enable_vblank)(void *ctx);
 	void (*disable_vblank)(void *ctx);
