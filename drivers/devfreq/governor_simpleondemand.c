@@ -21,7 +21,7 @@
 static int devfreq_simple_ondemand_func(struct devfreq *df,
 					unsigned long *freq)
 {
-	struct devfreq_dev_status stat;
+	struct devfreq_dev_status stat = { };
 	int err = df->profile->get_dev_status(df->dev.parent, &stat);
 	unsigned long long a, b;
 	unsigned int dfso_upthreshold = DFSO_UPTHRESHOLD;
@@ -71,17 +71,21 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	if (stat.busy_time * 100 >
 	    stat.total_time * (dfso_upthreshold - dfso_downdifferential)) {
 		*freq = stat.current_frequency;
-		return 0;
+	} else {
+		/* Set the desired frequency based on the load */
+		a = stat.busy_time;
+		a *= stat.current_frequency;
+		b = div_u64(a, stat.total_time);
+		b *= 100;
+		b = div_u64(b, (dfso_upthreshold - dfso_downdifferential / 2));
+		*freq = (unsigned long) b;
 	}
 
-	/* Set the desired frequency based on the load */
-	a = stat.busy_time;
-	a *= stat.current_frequency;
-	b = div_u64(a, stat.total_time);
-	b *= 100;
-	b = div_u64(b, (dfso_upthreshold - dfso_downdifferential / 2));
-	*freq = (unsigned long) b;
+	/* If driver has a min, apply it */
+	if (stat.min_freq && *freq < stat.min_freq)
+		*freq = stat.min_freq;
 
+	/* Apply userspace */
 	if (df->min_freq && *freq < df->min_freq)
 		*freq = df->min_freq;
 	if (df->max_freq && *freq > df->max_freq)
