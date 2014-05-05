@@ -122,8 +122,9 @@ struct int_clk_info aclk_200_fsys[] = {
 };
 
 /*
- * Keep aclk_333 from L3 thru L6 at 222MHz
- * to avoid locking for video playback
+ * Keep aclk_333_5422 at LV_3 and higher so we get fast video decode without
+ * bumping all other clocks up to LV_3.  We can do this because we always keep
+ * voltage at LV_3 or higher.  See exynos5420_init_int_table()
  */
 struct int_clk_info aclk_333_5422[] = {
 	/* Level, Freq, Parent_Pll */
@@ -131,9 +132,9 @@ struct int_clk_info aclk_333_5422[] = {
 	{LV_1, 400000, M_PLL},
 	{LV_2, 333000, C_PLL},
 	{LV_3, 222000, C_PLL},
-	{LV_4, 222000, C_PLL},
-	{LV_5, 222000, C_PLL},
-	{LV_6, 222000, C_PLL},
+	{LV_4, 222000, C_PLL}, /* was 167000 */
+	{LV_5, 222000, C_PLL}, /* was 111000 */
+	{LV_6, 222000, C_PLL}, /* was  96000 */
 };
 
 struct int_clk_info aclk_300_gscl_5422[] = {
@@ -191,26 +192,32 @@ struct int_clk_info aclk_100_noc_5422[] = {
 	{LV_1, 100000, D_PLL},
 	{LV_2, 100000, D_PLL},
 	{LV_3,  86000, D_PLL},
-	{LV_4,  86000, D_PLL},
-	{LV_5,  86000, D_PLL},
-	{LV_6,  86000, D_PLL},
+	{LV_4,  86000, D_PLL}, /* was 75000 */
+	{LV_5,  86000, D_PLL}, /* was 60000 */
+	{LV_6,  86000, D_PLL}, /* was 60000 */
 };
 
+/*
+ * Keep aclk_400_wcore at LV_3 and higher so we get fast video decode without
+ * bumping all other clocks up to LV_3.  We can do this because we always keep
+ * voltage at LV_3 or higher.  See exynos5420_init_int_table()
+ */
 struct int_clk_info aclk_400_wcore[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 400000, S_PLL},
 	{LV_1, 400000, S_PLL},
 	{LV_2, 400000, S_PLL},
 	{LV_3, 333000, C_PLL},
-	{LV_4, 333000, C_PLL},
-	{LV_5, 333000, C_PLL},
-	{LV_6, 333000, C_PLL},
+	{LV_4, 333000, C_PLL}, /* was 222000 */
+	{LV_5, 333000, C_PLL}, /* was 111000 */
+	{LV_6, 333000, C_PLL}, /* was  84000 */
 };
 
 /*
- * Keep aclk_400_wcore from L4 thru L6 at 222MHz
- * to keep the bus at a reasonably high level
- * for MMC and video playback
+ * Keep aclk_400_wcore at LV_4 and higher for proper dw_mmc functioning and
+ * so we get fast video decode without bumping all other clocks up to LV_4.
+ * We can do this because we always keep voltage at LV_3 or higher.
+ * See exynos5420_init_int_table()
  */
 struct int_clk_info aclk_400_wcore_5422[] = {
 	/* Level, Freq, Parent_Pll */
@@ -219,8 +226,8 @@ struct int_clk_info aclk_400_wcore_5422[] = {
 	{LV_2, 400000, M_PLL},
 	{LV_3, 333000, C_PLL},
 	{LV_4, 222000, C_PLL},
-	{LV_5, 222000, C_PLL},
-	{LV_6, 222000, C_PLL},
+	{LV_5, 222000, C_PLL}, /* was 111000 */
+	{LV_6, 222000, C_PLL}, /* was  84000 */
 };
 
 struct int_clk_info aclk_200_fsys2[] = {
@@ -245,8 +252,8 @@ struct int_clk_info aclk_200_fsys2_5422[] = {
 	{LV_2, 120000, D_PLL},
 	{LV_3, 120000, D_PLL},
 	{LV_4, 120000, D_PLL},
-	{LV_5, 120000, D_PLL},
-	{LV_6, 120000, D_PLL},
+	{LV_5, 120000, D_PLL}, /* was 100000 */
+	{LV_6, 120000, D_PLL}, /* was  75000 */
 };
 
 struct int_clk_info aclk_200_disp1[] = {
@@ -403,7 +410,7 @@ struct int_clk_info aclk_300_disp1_5422[] = {
 	{LV_3, 200000, D_PLL},
 	{LV_4, 200000, D_PLL},
 	{LV_5, 200000, D_PLL},
-	{LV_6, 200000, D_PLL},
+	{LV_6, 200000, D_PLL}, /* was 120000 */
 };
 
 struct int_clk_info aclk_400_disp1[] = {
@@ -782,20 +789,94 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 	unsigned int asv_volt;
 
 	for (i = 0; i < ARRAY_SIZE(int_bus_opp_list); i++) {
+		int lvl = i;
+
+		/*
+		 * Lock voltage to LV_1 for 5422 and LV_2 for 5420
+		 *
+		 * 5422 notes:
+		 * - We must keep ARM and INT voltages relatively close to one
+		 *   another due to the fact that some things on the INT rail
+		 *   and the ARM rail need to communicate with each other (with
+		 *   no level shifter in between).  For now this is done by
+		 *   forcing the INT voltage to the voltage associated with
+		 *   LV_1.  Later we'll use a better solution to keep the two
+		 *   voltages close.
+		 * - Whenever we use dw_mmc on 5422 we need INT333 (LV_3) level
+		 *   voltages and:
+		 *   - aclk_100_noc_5422 >= 86000 (LV_3)
+		 *   - aclk_400_wcore_5422 >= 222000 (LV_4)
+		 *   - aclk_200_fsys2_5422 >= 120000 (LV_4)
+		 *   Note that dw_mmc is used for eMMC, SD Card, and SDIO (WiFi)
+		 *   and dw_mmc doesn't have Runtime PM support.
+		 * - If we're on a high resolution display we need:
+		 *   - aclk_300_disp1_5422 >= 200000 (LV_5)
+		 * - If we're using HDMI we need:
+		 *   - aclk_200_disp1_5422 >= 200000 (LV_2)
+		 * - If we want good video decode performance, we need:
+		 *   - aclk_400_wcore_5422 >= 222000 (LV_4)
+		 *   - aclk_333_5422 >= 222000 (LV_3)
+		 *
+		 * 5420 notes:
+		 * - The actual ASV table for 5420 shows that LV_3 - LV_6 have
+		 *   the exact same voltages.
+		 * - We must keep ARM and INT voltages relatively close to one
+		 *   another due to the fact that some things on the INT rail
+		 *   and the ARM rail need to communicate with each other (with
+		 *   no level shifter in between).  For now this is done by
+		 *   forcing the INT voltage to the voltage associated with
+		 *   LV_2.  Later we'll use a better solution to keep the two
+		 *   voltages close.
+		 * - We have seen crashes on 5420's camera test on some ASV
+		 *   groups if we let the voltage go down to LV_3.  Until we
+		 *   get to the bottom of it, we'll keep things at LV_2.
+		 * - If we want good video decode performance, we need:
+		 *   - aclk_400_wcore >= 333000 (LV_3)
+		 * - If we're on a high resolution display we may need some
+		 *   clocks higher.
+		 *
+		 *
+		 * From a "pure" devfreq perspective we need to simply lock
+		 * devfreq to the level of the highest need.  That means we run
+		 * at the voltage of the highest user and everyone's clocks are
+		 * bumped up.  Let's take 5422 as an example:
+		 * - Since we have ARM/INT locking, we should keep voltage and
+		 *   clocks at LV_1.
+		 * - Even if we fix ARM/INT locking problems and we don't worry
+		 *   about HDMI, we still need to keep the voltage and all
+		 *   clocks as LV_3 for dw_mmc
+		 *
+		 * ...but the above is a waste.  We can save a whole lot of
+		 * power by letting non-dw_mmc related clocks drop down to
+		 * lower speeds, just keeping the voltages at LV_3 and the
+		 * dw_mmc clocks at the needed levels.  Unfortunately devfreq
+		 * is just not designed for that (it probably needs to be
+		 * rethought).
+		 *
+		 * ...for now, we have "hacked" the tables to assume voltages
+		 * will always be LV_3 or higher.  Once we make that assumption
+		 * we can freely bump up LV_4, LV_5, and LV_6 clocks without
+		 * worrying about going out of spec.  This lets us:
+		 * - Bump up dw_mmc clocks on 5422 to maintain minimum levels.
+		 * - Bump up MFC clocks on 5420 and 5422 to give good video
+		 *   decode performance without needing to bump all clocks
+		 *   up to LV_3 during video playback.  This eats ~10mW all the
+		 *   time but saves ~35mW during video playback.
+		 * - Bump up aclk_300_disp1_5422 on 5422 to support a high
+		 *   resolution screen.  This takes up a few mW, so if we have
+		 *   a non-high-resolution 5422 we could try to do better.
+		 * Once we've done the above bumps we can let devfreq freely
+		 * swing all the way down to LV_6 without any problems.
+		 */
+		if (soc_is_exynos5422() && lvl > LV_1)
+			lvl = LV_1;
+		else if (soc_is_exynos5420() && lvl > LV_2)
+			lvl = LV_2;
+
 #ifdef CONFIG_ARM_EXYNOS5420_ASV
-		if (soc_is_exynos5420() && i > 2) {
-			/* Lock INT to at least 400MHz levels */
-			asv_volt = get_match_volt(ID_INT,
-					int_bus_opp_list[2].freq);
-		} else if (soc_is_exynos5422() && i > 1) {
-			asv_volt = get_match_volt(ID_INT,
-					int_bus_opp_list[1].freq);
-		} else {
-			asv_volt = get_match_volt(ID_INT,
-					int_bus_opp_list[i].freq);
-		}
+		asv_volt = get_match_volt(ID_INT, int_bus_opp_list[lvl].freq);
 #else
-		asv_volt = int_bus_opp_list[i].volt;
+		asv_volt = int_bus_opp_list[lvl].volt;
 #endif
 		pr_debug("INT %luKhz ASV is %duV\n",
 					int_bus_opp_list[i].freq, asv_volt);
@@ -811,7 +892,7 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		opp_disable(data->dev, 500000);
 		opp_disable(data->dev, 400000);
 
-		/* HACK: If we have a 5420 w/ high res we may need this */
+		/* TODO: Can we just bump up aclk_300_disp1? */
 		if (get_vtiming(data->dev) >= 1080) {
 			opp_disable(data->dev, 111000);
 			opp_disable(data->dev, 83000);
