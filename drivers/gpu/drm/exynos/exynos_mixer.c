@@ -607,27 +607,16 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	unsigned long flags;
 	struct hdmi_win_data *win_data;
 	unsigned int x_ratio, y_ratio;
-	unsigned int buf_num;
 	dma_addr_t luma_addr[2], chroma_addr[2];
 	bool tiled_mode = false;
-	bool crcb_mode = false;
 	u32 val;
 
 	win_data = &ctx->win_data[win];
 
-	switch (win_data->pixel_format) {
-	case DRM_FORMAT_NV12MT:
-		tiled_mode = true;
-	case DRM_FORMAT_NV12:
-		crcb_mode = false;
-		buf_num = 2;
-		break;
 	/* TODO: single buffer format NV12, NV21 */
-	default:
-		/* ignore pixel format at disable time */
-		if (!win_data->dma_addr)
-			break;
-
+	if (win_data->pixel_format == DRM_FORMAT_NV12MT) {
+		tiled_mode = true;
+	} else if (win_data->pixel_format != DRM_FORMAT_NV12) {
 		DRM_ERROR("pixel format for vp is wrong [%d].\n",
 				win_data->pixel_format);
 		return;
@@ -637,14 +626,8 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	x_ratio = (win_data->src_width << 16) / win_data->crtc_width;
 	y_ratio = (win_data->src_height << 16) / win_data->crtc_height;
 
-	if (buf_num == 2) {
-		luma_addr[0] = win_data->dma_addr;
-		chroma_addr[0] = win_data->chroma_dma_addr;
-	} else {
-		luma_addr[0] = win_data->dma_addr;
-		chroma_addr[0] = win_data->dma_addr
-			+ (win_data->fb_width * win_data->fb_height);
-	}
+	luma_addr[0] = win_data->dma_addr;
+	chroma_addr[0] = win_data->chroma_dma_addr;
 
 	if (win_data->scan_flags & DRM_MODE_FLAG_INTERLACE) {
 		ctx->interlace = true;
@@ -669,7 +652,7 @@ static void vp_video_buffer(struct mixer_context *ctx, int win)
 	vp_reg_writemask(res, VP_MODE, val, VP_MODE_LINE_SKIP);
 
 	/* setup format */
-	val = (crcb_mode ? VP_MODE_NV21 : VP_MODE_NV12);
+	val = VP_MODE_NV12;
 	val |= (tiled_mode ? VP_MODE_MEM_TILED : VP_MODE_MEM_LINEAR);
 	vp_reg_writemask(res, VP_MODE, val, VP_MODE_FMT_MASK);
 
