@@ -459,8 +459,14 @@ int gsc_try_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 
 	for (i = 0; i < pix_mp->num_planes; ++i) {
 		int bpl = (pix_mp->width * fmt->depth[i]) >> 3;
+		int sizeimage = bpl * pix_mp->height;
 		pix_mp->plane_fmt[i].bytesperline = bpl;
-		pix_mp->plane_fmt[i].sizeimage = bpl * pix_mp->height;
+		/*
+		 * Honor sizeimage (buffer size) requested by the userspace,
+		 * unless it is smaller than what we'd require.
+		 */
+		if (pix_mp->plane_fmt[i].sizeimage < sizeimage)
+			pix_mp->plane_fmt[i].sizeimage = sizeimage;
 
 		pr_debug("[%d]: bpl: %d, sizeimage: %d",
 				i, bpl, pix_mp->plane_fmt[i].sizeimage);

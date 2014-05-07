@@ -194,6 +194,7 @@ struct gsc_ctx;
  * @f_height:	SRC : SRCIMG_HEIGHT, DST : OUTPUTDMA_WHOLE_IMG_HEIGHT
  * @crop:	cropped(source)/scaled(destination) size
  * @payload:	image size in bytes (w x h x bpp)
+ * @size:       buffer size in bytes (may be larger than payload)
  * @addr:	image frame buffer physical addresses
  * @fmt:	G-Scaler color format pointer
  * @colorspace: value indicating v4l2_colorspace
@@ -204,6 +205,7 @@ struct gsc_frame {
 	u32 f_height;
 	struct v4l2_rect crop;
 	unsigned long payload[VIDEO_MAX_PLANES];
+	unsigned long size[VIDEO_MAX_PLANES];
 	struct gsc_addr	addr;
 	const struct gsc_fmt *fmt;
 	u32 colorspace;

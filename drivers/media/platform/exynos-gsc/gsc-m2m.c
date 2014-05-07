@@ -221,7 +221,7 @@ static int gsc_m2m_queue_setup(struct vb2_queue *vq,
 
 	*num_planes = frame->fmt->num_planes;
 	for (i = 0; i < frame->fmt->num_planes; i++) {
-		sizes[i] = frame->payload[i];
+		sizes[i] = frame->size[i];
 		allocators[i] = ctx->gsc_dev->alloc_ctx;
 	}
 	return 0;
@@ -334,8 +334,11 @@ static int gsc_m2m_s_fmt_mplane(struct file *file, void *fh,
 	if (!frame->fmt)
 		return -EINVAL;
 
-	for (i = 0; i < frame->fmt->num_planes; i++)
-		frame->payload[i] = pix->plane_fmt[i].sizeimage;
+	for (i = 0; i < frame->fmt->num_planes; i++) {
+		frame->payload[i] =
+			pix->plane_fmt[i].bytesperline * pix->height;
+		frame->size[i] = pix->plane_fmt[i].sizeimage;
+	}
 
 	gsc_set_frame_size(frame, pix->width, pix->height);
 
