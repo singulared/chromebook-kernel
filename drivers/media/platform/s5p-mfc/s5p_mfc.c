@@ -718,15 +718,42 @@ irq_cleanup_hw:
 	return IRQ_HANDLED;
 }
 
+static int s5p_mfc_init_vb2_queue(struct vb2_queue *q, void *priv,
+		enum v4l2_buf_type buf_type, enum s5p_mfc_node_type node_type)
+{
+	int ret = 0;
+
+	q->type = buf_type;
+	q->drv_priv = priv;
+	q->io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
+	if (node_type == MFCNODE_DECODER)
+		q->ops = get_dec_queue_ops();
+	else if (node_type == MFCNODE_ENCODER)
+		q->ops = get_enc_queue_ops();
+
+	q->mem_ops = (struct vb2_mem_ops *)&vb2_dma_contig_memops;
+	ret = vb2_queue_init(q);
+	if (ret) {
+		mfc_err("Failed to initialize videobuf2 queue type %d\n",
+				buf_type);
+	}
+	return ret;
+}
+
 /* Open an MFC node */
 static int s5p_mfc_open(struct file *file)
 {
 	struct s5p_mfc_dev *dev = video_drvdata(file);
+	enum s5p_mfc_node_type node_type;
 	struct s5p_mfc_ctx *ctx = NULL;
-	struct vb2_queue *q;
 	int ret = 0;
 
 	mfc_debug_enter();
+
+	node_type = s5p_mfc_get_node_type(file);
+	if (node_type != MFCNODE_DECODER && node_type != MFCNODE_ENCODER)
+		return -ENOENT;
+
 	if (mutex_lock_interruptible(&dev->mfc_mutex))
 		return -ERESTARTSYS;
 	dev->num_inst++;	/* It is guarded by mfc_mutex in vfd */
@@ -758,7 +785,7 @@ static int s5p_mfc_open(struct file *file)
 	/* Mark context as idle */
 	clear_work_bit_irqsave(ctx);
 	dev->ctx[ctx->num] = ctx;
-	if (s5p_mfc_get_node_type(file) == MFCNODE_DECODER) {
+	if (node_type == MFCNODE_DECODER) {
 		ctx->type = MFCINST_DECODER;
 		ctx->c_ops = get_dec_codec_ops();
 		s5p_mfc_dec_init(ctx);
@@ -768,7 +795,7 @@ static int s5p_mfc_open(struct file *file)
 			mfc_err("Failed to setup mfc controls\n");
 			goto err_ctrls_setup;
 		}
-	} else if (s5p_mfc_get_node_type(file) == MFCNODE_ENCODER) {
+	} else if (node_type == MFCNODE_ENCODER) {
 		ctx->type = MFCINST_ENCODER;
 		ctx->c_ops = get_enc_codec_ops();
 		/* only for encoder */
@@ -781,10 +808,8 @@ static int s5p_mfc_open(struct file *file)
 			mfc_err("Failed to setup mfc controls\n");
 			goto err_ctrls_setup;
 		}
-	} else {
-		ret = -ENOENT;
-		goto err_bad_node;
 	}
+
 	ctx->fh.ctrl_handler = &ctx->ctrl_handler;
 	ctx->inst_no = MFC_NO_INSTANCE_SET;
 	/* Load firmware if this is the first instance */
@@ -802,51 +827,18 @@ static int s5p_mfc_open(struct file *file)
 		if (ret)
 			goto err_init_hw;
 	}
-	/* Init videobuf2 queue for CAPTURE */
-	q = &ctx->vq_dst;
-	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	q->drv_priv = &ctx->fh;
-	if (s5p_mfc_get_node_type(file) == MFCNODE_DECODER) {
-		q->io_modes = VB2_MMAP;
-		q->ops = get_dec_queue_ops();
-	} else if (s5p_mfc_get_node_type(file) == MFCNODE_ENCODER) {
-		q->io_modes = VB2_MMAP | VB2_USERPTR;
-		q->ops = get_enc_queue_ops();
-	} else {
-		ret = -ENOENT;
+	/* Init videobuf2 queues */
+	if (s5p_mfc_init_vb2_queue(&ctx->vq_dst, &ctx->fh,
+			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, node_type)
+		|| s5p_mfc_init_vb2_queue(&ctx->vq_src, &ctx->fh,
+			V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, node_type))
 		goto err_queue_init;
-	}
-	q->mem_ops = (struct vb2_mem_ops *)&vb2_dma_contig_memops;
-	ret = vb2_queue_init(q);
-	if (ret) {
-		mfc_err("Failed to initialize videobuf2 queue(capture)\n");
-		goto err_queue_init;
-	}
-	/* Init videobuf2 queue for OUTPUT */
-	q = &ctx->vq_src;
-	q->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	q->io_modes = VB2_MMAP;
-	q->drv_priv = &ctx->fh;
-	if (s5p_mfc_get_node_type(file) == MFCNODE_DECODER) {
-		q->io_modes = VB2_MMAP;
-		q->ops = get_dec_queue_ops();
-	} else if (s5p_mfc_get_node_type(file) == MFCNODE_ENCODER) {
-		q->io_modes = VB2_MMAP | VB2_USERPTR;
-		q->ops = get_enc_queue_ops();
-	} else {
-		ret = -ENOENT;
-		goto err_queue_init;
-	}
-	q->mem_ops = (struct vb2_mem_ops *)&vb2_dma_contig_memops;
-	ret = vb2_queue_init(q);
-	if (ret) {
-		mfc_err("Failed to initialize videobuf2 queue(output)\n");
-		goto err_queue_init;
-	}
+
 	init_waitqueue_head(&ctx->queue);
 	mutex_unlock(&dev->mfc_mutex);
 	mfc_debug_leave();
 	return ret;
+
 	/* Deinit when failure occured */
 err_queue_init:
 	if (dev->num_inst == 1)
@@ -861,7 +853,6 @@ err_pwr_enable:
 	}
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);
-err_bad_node:
 	dev->ctx[ctx->num] = NULL;
 err_no_ctx:
 	v4l2_fh_del(&ctx->fh);
