@@ -64,11 +64,6 @@ struct drm_exynos_gem_mmap {
 	uint64_t mapped;
 };
 
-struct drm_exynos_plane_set_zpos {
-	__u32 plane_id;
-	__s32 zpos;
-};
-
 /**
  * A structure to gem information.
  *
