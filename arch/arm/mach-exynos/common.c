@@ -52,7 +52,6 @@
 #include <plat/tv-core.h>
 #include <plat/spi-core.h>
 #include <plat/regs-serial.h>
-#include <plat/regs-watchdog.h>
 
 #include "common.h"
 #define L2_AUX_VAL 0x7C470001
@@ -383,28 +382,23 @@ static void wdt_reset_init(void)
 	unsigned int value;
 
 	/*
-	 * Set a higher reset value for WDT so that CCF gets time to come in
-	 * and gate it. Also set the divisor to the maximum value.
+	 * The bootloader may have left the watchdog on.  Let's mask it now (at
+	 * the SoC level) and we'll let the watchdog driver unmask it later.
+	 * Note that it's important to work at the SoC level here (rather than
+	 * at the WDT level).  If we don't the system will reset at suspend.
 	 */
-	value = __raw_readl(S3C2410_WTCON);
-	value &= ~S3C2410_WTCON_DIV_MASK;
-	value |= S3C2410_WTCON_DIV128;
-	__raw_writel(value, S3C2410_WTCON);
-
-	__raw_writel(0xffff, S3C2410_WTCNT);
-
 	value = __raw_readl(EXYNOS5_AUTO_WDTRESET_DISABLE);
 	if (soc_is_exynos542x())
-		value &= ~EXYNOS5420_SYS_WDTRESET;
+		value |= EXYNOS5420_SYS_WDTRESET;
 	else
-		value &= ~EXYNOS5_SYS_WDTRESET;
+		value |= EXYNOS5_SYS_WDTRESET;
 	__raw_writel(value, EXYNOS5_AUTO_WDTRESET_DISABLE);
 
 	value = __raw_readl(EXYNOS5_MASK_WDTRESET_REQUEST);
 	if (soc_is_exynos542x())
-		value &= ~EXYNOS5420_SYS_WDTRESET;
+		value |= EXYNOS5420_SYS_WDTRESET;
 	else
-		value &= ~EXYNOS5_SYS_WDTRESET;
+		value |= EXYNOS5_SYS_WDTRESET;
 	__raw_writel(value, EXYNOS5_MASK_WDTRESET_REQUEST);
 }
 

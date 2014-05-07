@@ -574,6 +574,8 @@ static struct chromeos_laptop wolf = {
 	.i2c_peripherals = {
 		/* Touchpad. */
 		{ .add = setup_cyapa_tp, I2C_ADAPTER_I2C0 },
+		/* Elan Touchpad option. */
+		{ .add = setup_elantech_tp, I2C_ADAPTER_I2C0 },
 	},
 };
 
