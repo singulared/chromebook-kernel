@@ -1028,8 +1028,7 @@ static int __qbuf_dmabuf(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		if (planes[plane].length == 0)
 			planes[plane].length = dbuf->size;
 
-		if (planes[plane].length < planes[plane].data_offset +
-		    q->plane_sizes[plane]) {
+		if (planes[plane].length < q->plane_sizes[plane]) {
 			ret = -EINVAL;
 			goto err;
 		}
