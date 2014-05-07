@@ -304,7 +304,7 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 
 	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
-	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL, 0);
+	exynos_drm_crtc_page_flip(crtc, crtc->primary->fb, NULL, 0);
 
 	if (manager->ops->commit)
 		manager->ops->commit(manager->ctx);
@@ -371,7 +371,7 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	DRM_DEBUG_KMS("[CRTC:%d] @ (%d, %d) [OLD_FB:%d]\n",
 			DRM_BASE_ID(crtc), x, y, DRM_BASE_ID(old_fb));
 
-	drm_framebuffer_reference(crtc->fb);
+	drm_framebuffer_reference(crtc->primary->fb);
 
 	/* We should never timeout here. */
 	ret = wait_event_timeout(exynos_crtc->vsync_wq,
@@ -380,9 +380,9 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	if (!ret)
 		DRM_ERROR("Timed out waiting for flips to complete\n");
 
-	exynos_drm_crtc_page_flip(crtc, crtc->fb, NULL, 0);
+	exynos_drm_crtc_page_flip(crtc, crtc->primary->fb, NULL, 0);
 
-	drm_framebuffer_unreference(crtc->fb);
+	drm_framebuffer_unreference(crtc->primary->fb);
 
 	return 0;
 }
@@ -537,7 +537,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		exynos_drm_crtc_flip_complete(crtc);
 
 	kfifo_put(&exynos_crtc->flip_fifo, &flip_desc);
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 
 	/*
 	 * The KDS callback could've been triggered before we put on the fifo,
@@ -555,7 +555,7 @@ fail_kds:
 	drm_vblank_put(dev, exynos_crtc->pipe);
 	return ret;
 #else
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 	exynos_crtc->event = event;
 	exynos_drm_crtc_update(crtc, fb);
 	return 0;

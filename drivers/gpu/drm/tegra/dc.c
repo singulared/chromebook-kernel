@@ -157,7 +157,7 @@ static int tegra_crtc_mode_set(struct drm_crtc *crtc,
 			       struct drm_display_mode *adjusted,
 			       int x, int y, struct drm_framebuffer *old_fb)
 {
-	struct tegra_framebuffer *fb = to_tegra_fb(crtc->fb);
+	struct tegra_framebuffer *fb = to_tegra_fb(crtc->primary->fb);
 	struct tegra_dc *dc = to_tegra_dc(crtc);
 	unsigned int h_dda, v_dda, bpp;
 	struct tegra_dc_window win;
@@ -201,7 +201,7 @@ static int tegra_crtc_mode_set(struct drm_crtc *crtc,
 	win.outw = mode->hdisplay;
 	win.outh = mode->vdisplay;
 
-	switch (crtc->fb->pixel_format) {
+	switch (crtc->primary->fb->pixel_format) {
 	case DRM_FORMAT_XRGB8888:
 		win.fmt = WIN_COLOR_DEPTH_B8G8R8A8;
 		break;
@@ -216,8 +216,8 @@ static int tegra_crtc_mode_set(struct drm_crtc *crtc,
 		break;
 	}
 
-	bpp = crtc->fb->bits_per_pixel / 8;
-	win.stride = crtc->fb->pitches[0];
+	bpp = crtc->primary->fb->bits_per_pixel / 8;
+	win.stride = crtc->primary->fb->pitches[0];
 
 	/* program window registers */
 	value = WINDOW_A_SELECT;

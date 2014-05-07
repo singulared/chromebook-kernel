@@ -410,7 +410,7 @@ nouveau_display_suspend(struct drm_device *dev)
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct nouveau_framebuffer *nouveau_fb;
 
-		nouveau_fb = nouveau_framebuffer(crtc->fb);
+		nouveau_fb = nouveau_framebuffer(crtc->primary->fb);
 		if (!nouveau_fb || !nouveau_fb->nvbo)
 			continue;
 
@@ -437,7 +437,7 @@ nouveau_display_resume(struct drm_device *dev)
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct nouveau_framebuffer *nouveau_fb;
 
-		nouveau_fb = nouveau_framebuffer(crtc->fb);
+		nouveau_fb = nouveau_framebuffer(crtc->primary->fb);
 		if (!nouveau_fb || !nouveau_fb->nvbo)
 			continue;
 
@@ -614,7 +614,7 @@ nouveau_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 {
 	struct drm_device *dev = crtc->dev;
 	struct nouveau_drm *drm = nouveau_drm(dev);
-	struct nouveau_bo *old_bo = nouveau_framebuffer(crtc->fb)->nvbo;
+	struct nouveau_bo *old_bo = nouveau_framebuffer(crtc->primary->fb)->nvbo;
 	struct nouveau_bo *new_bo = nouveau_framebuffer(fb)->nvbo;
 	struct nouveau_page_flip_state *s;
 	struct nouveau_channel *chan = NULL;
@@ -662,7 +662,7 @@ nouveau_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		goto fail_unreserve;
 
 	/* Update the crtc struct and cleanup */
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 
 	nouveau_page_flip_unreserve(old_bo, new_bo, fence);
 	nouveau_fence_unref(&fence);

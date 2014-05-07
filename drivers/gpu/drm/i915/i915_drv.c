@@ -471,9 +471,9 @@ static void i915_repin_bound_fbs(struct drm_device *dev)
 	int ret;
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		if (!crtc || !crtc->fb)
+		if (!crtc || !crtc->primary->fb)
 			continue;
-		obj = to_intel_framebuffer(crtc->fb)->obj;
+		obj = to_intel_framebuffer(crtc->primary->fb)->obj;
 		if (!obj)
 			continue;
 
