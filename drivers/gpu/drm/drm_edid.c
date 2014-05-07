@@ -131,6 +131,8 @@ static struct edid_quirk {
 
 	/* Samsung TFT-LCD LTN121AT10-301 */
 	{ "SEC", 0x3142, EDID_QUIRK_ADD_DOWNCLOCK_MODE },
+	/* Samsung TFT-LCD LTN116AT06-402 */
+	{ "SEC", 0x3143, EDID_QUIRK_ADD_DOWNCLOCK_MODE },
 	/* Acer B116XW03 */
 	{ "AUO", 0x325c, EDID_QUIRK_ADD_DOWNCLOCK_MODE },
 	/* Lenovo B116XW03 */
@@ -144,6 +146,8 @@ static struct downclock_rate {
 } downclock_rate_list[] = {
 	/* Samsung TFT-LCD LTN121AT10-301 */
 	{ "SEC", 0x3142, 56428 },
+	/* Samsung TFT-LCD LTN116AT06-402 */
+	{ "SEC", 0x3143, 56428 },
 	/* Acer B116XW03 */
 	{ "AUO", 0x325c, 46285 },
 	/* Lenovo B116XW03 */
