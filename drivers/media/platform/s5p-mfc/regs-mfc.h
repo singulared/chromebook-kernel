@@ -398,6 +398,8 @@
 #define S5P_FIMV_ERR_DEC_SHIFT			0
 #define S5P_FIMV_ERR_DSPL_MASK			0xFFFF0000
 #define S5P_FIMV_ERR_DSPL_SHIFT			16
+/* Error codes */
+#define S5P_FIMV_ERR_CODE_HEADER_NOT_FOUND_V5	52
 
 /* Shared memory registers' offsets */
 

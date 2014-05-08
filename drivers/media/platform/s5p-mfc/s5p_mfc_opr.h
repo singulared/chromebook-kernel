@@ -315,6 +315,7 @@ struct s5p_mfc_hw_ops {
 	int (*get_int_err)(struct s5p_mfc_dev *dev);
 	int (*err_dec)(unsigned int err);
 	int (*err_dspl)(unsigned int err);
+	enum s5p_mfc_error (*translate_error)(unsigned int err);
 	int (*get_img_width)(struct s5p_mfc_dev *dev);
 	int (*get_img_height)(struct s5p_mfc_dev *dev);
 	int (*get_dpb_count)(struct s5p_mfc_dev *dev);

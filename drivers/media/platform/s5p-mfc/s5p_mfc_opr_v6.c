@@ -1969,6 +1969,19 @@ static int s5p_mfc_err_dspl_v6(unsigned int err)
 	return (err & S5P_FIMV_ERR_DSPL_MASK_V6) >> S5P_FIMV_ERR_DSPL_SHIFT_V6;
 }
 
+static enum s5p_mfc_error s5p_mfc_translate_error_v6(unsigned int err)
+{
+	if (err >= S5P_FIMV_ERR_WARNINGS_START_V6)
+		return ERR_WARNING;
+
+	switch (err) {
+	case S5P_FIMV_ERR_CODE_HEADER_NOT_FOUND_V6:
+		return ERR_HEADER_NOT_FOUND;
+	default:
+		return ERR_UNKNOWN;
+	}
+}
+
 static int s5p_mfc_get_img_width_v6(struct s5p_mfc_dev *dev)
 {
 	return READL(dev->mfc_regs->d_display_frame_width);
@@ -2331,6 +2344,7 @@ static struct s5p_mfc_hw_ops s5p_mfc_ops_v6 = {
 	.get_int_err = s5p_mfc_get_int_err_v6,
 	.err_dec = s5p_mfc_err_dec_v6,
 	.err_dspl = s5p_mfc_err_dspl_v6,
+	.translate_error = s5p_mfc_translate_error_v6,
 	.get_img_width = s5p_mfc_get_img_width_v6,
 	.get_img_height = s5p_mfc_get_img_height_v6,
 	.get_dpb_count = s5p_mfc_get_dpb_count_v6,

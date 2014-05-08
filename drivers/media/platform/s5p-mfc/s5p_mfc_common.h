@@ -182,6 +182,12 @@ enum s5p_mfc_encode_param_change {
 	MFC_ENC_FRAME_INSERTION,
 };
 
+enum s5p_mfc_error {
+	ERR_HEADER_NOT_FOUND,
+	ERR_WARNING,
+	ERR_UNKNOWN,
+};
+
 #define MFC_BUF_FLAG_USED	(1 << 0)
 #define MFC_BUF_FLAG_EOS	(1 << 1)
 
@@ -317,7 +323,6 @@ struct s5p_mfc_priv_buf {
  * @clk_flag:		flag used for dynamic control of mfc clock
  * @enter_suspend:	flag set when entering suspend
  * @ctx_buf:		common context memory (MFCv6)
- * @warn_start:		hardware error code from which warnings start
  * @mfc_ops:		ops structure holding HW operation function pointers
  * @mfc_cmds:		cmd structure holding HW commands function pointers
  * @mfc_regs:		regs structure holding HW register offsets
@@ -363,7 +368,6 @@ struct s5p_mfc_dev {
 	unsigned long enter_suspend;
 
 	struct s5p_mfc_priv_buf ctx_buf;
-	int warn_start;
 	struct s5p_mfc_hw_ops *mfc_ops;
 	struct s5p_mfc_hw_cmds *mfc_cmds;
 	const struct s5p_mfc_regs *mfc_regs;

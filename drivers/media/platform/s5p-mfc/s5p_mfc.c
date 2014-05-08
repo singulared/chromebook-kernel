@@ -436,50 +436,97 @@ leave_handle_frame:
 	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 }
 
-/* Error handling for interrupt */
-static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
+static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
+				struct s5p_mfc_ctx *ctx)
+{
+	unsigned long flags;
+
+	mfc_err("Got a fatal error, will clean up context if present.\n");
+
+	if (!ctx)
+		return;
+
+	clear_work_bit(ctx);
+	ctx->state = MFCINST_ERROR;
+
+	/* If we are decoding, clean up queues and mark any outstanding
+	 * buffers as having an error.
+	 */
+	switch (ctx->state) {
+	case MFCINST_RES_CHANGE_INIT:
+	case MFCINST_RES_CHANGE_FLUSH:
+	case MFCINST_RES_CHANGE_END:
+	case MFCINST_FINISHING:
+	case MFCINST_FINISHED:
+	case MFCINST_RUNNING:
+		spin_lock_irqsave(&dev->irqlock, flags);
+		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
+					&ctx->dst_queue, &ctx->vq_dst);
+		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
+					&ctx->src_queue, &ctx->vq_src);
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+		break;
+	default:
+		break;
+	}
+}
+
+static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		struct s5p_mfc_ctx *ctx, unsigned int reason, unsigned int err)
 {
+	struct s5p_mfc_buf *src_buf;
+	enum s5p_mfc_error decode_error;
 	unsigned long flags;
 
 	mfc_err("Interrupt Error: %08x\n", err);
 
-	if (ctx != NULL) {
-		/* Error recovery is dependent on the state of context */
-		switch (ctx->state) {
-		case MFCINST_RES_CHANGE_INIT:
-		case MFCINST_RES_CHANGE_FLUSH:
-		case MFCINST_RES_CHANGE_END:
-		case MFCINST_FINISHING:
-		case MFCINST_FINISHED:
-		case MFCINST_RUNNING:
-			/* It is higly probable that an error occured
-			 * while decoding a frame */
-			clear_work_bit(ctx);
-			ctx->state = MFCINST_ERROR;
-			/* Mark all dst buffers as having an error */
-			spin_lock_irqsave(&dev->irqlock, flags);
-			s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
-						&ctx->dst_queue, &ctx->vq_dst);
-			/* Mark all src buffers as having an error */
-			s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
-						&ctx->src_queue, &ctx->vq_src);
-			spin_unlock_irqrestore(&dev->irqlock, flags);
-			wake_up_ctx(ctx, reason, err);
-			break;
-		default:
-			clear_work_bit(ctx);
-			ctx->state = MFCINST_ERROR;
-			wake_up_ctx(ctx, reason, err);
-			break;
+	decode_error = s5p_mfc_hw_call(dev->mfc_ops, translate_error,
+				s5p_mfc_hw_call(dev->mfc_ops, err_dec, err));
+
+	/* If an error is recoverable, try to recover */
+	switch (decode_error) {
+	case ERR_HEADER_NOT_FOUND:
+		if (ctx->state != MFCINST_GOT_INST
+			&& ctx->state != MFCINST_RES_CHANGE_END) {
+			mfc_err("Invalid header error in unexpected state\n");
+			return 1;
+
 		}
+
+		mfc_debug(2, "Stream header not found.\n");
+
+		/* Current source buffer did not have stream header information.
+		 * Return it to userspace and continue.
+		 */
+		spin_lock_irqsave(&dev->irqlock, flags);
+		if (!list_empty(&ctx->src_queue)) {
+			src_buf = list_entry(ctx->src_queue.next,
+				     struct s5p_mfc_buf, list);
+			list_del(&src_buf->list);
+			ctx->src_queue_cnt--;
+			vb2_buffer_done(src_buf->b,
+					VB2_BUF_STATE_DONE);
+		}
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
+		wake_up_ctx(ctx, reason, err);
+		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+		return 0;
+
+	case ERR_WARNING:
+		if (ctx->state == MFCINST_RUNNING) {
+			mfc_debug(2, "Continuing with decode warning\n");
+			s5p_mfc_handle_frame(ctx, reason, err);
+			return 0;
+		}
+		break;
+
+	default:
+		break;
 	}
-	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	if (test_and_clear_bit(0, &dev->clk_flag))
-		s5p_mfc_clock_off(dev);
-	wake_up_dev(dev, reason, err);
-	return;
+
+	/* Unrecoverable error. */
+	return 1;
 }
 
 /* Header parsing interrupt handling */
@@ -630,14 +677,17 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	mfc_debug(1, "Int reason: %d (err: %08x)\n", reason, err);
 	switch (reason) {
 	case S5P_MFC_R2H_CMD_ERR_RET:
-		/* An error has occured */
-		if (ctx->state == MFCINST_RUNNING &&
-			s5p_mfc_hw_call(dev->mfc_ops, err_dec, err) >=
-				dev->warn_start)
-			s5p_mfc_handle_frame(ctx, reason, err);
-		else
-			s5p_mfc_handle_error(dev, ctx, reason, err);
-		clear_bit(0, &dev->enter_suspend);
+		if (s5p_mfc_handle_irq_error(dev, ctx, reason, err)) {
+			/* Couldn't recover from this error. */
+			s5p_mfc_fatal_error(dev, ctx);
+			wake_up_ctx(ctx, reason, err);
+			WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+			s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
+			if (test_and_clear_bit(0, &dev->clk_flag))
+				s5p_mfc_clock_off(dev);
+			wake_up_dev(dev, reason, err);
+			clear_bit(0, &dev->enter_suspend);
+		}
 		break;
 
 	case S5P_MFC_R2H_CMD_SLICE_DONE_RET:
