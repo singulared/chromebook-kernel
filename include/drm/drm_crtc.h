@@ -1234,4 +1234,21 @@ extern int drm_format_vert_chroma_subsampling(uint32_t format);
 	list_for_each_entry(plane, planelist, head) \
 		if (plane->type == DRM_PLANE_TYPE_OVERLAY)
 
+/* Helpers */
+static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
+	uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_CRTC);
+	return mo ? obj_to_crtc(mo) : NULL;
+}
+
+static inline struct drm_encoder *drm_encoder_find(struct drm_device *dev,
+	uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_ENCODER);
+	return mo ? obj_to_encoder(mo) : NULL;
+}
+
 #endif /* __DRM_CRTC_H__ */
