@@ -161,10 +161,8 @@ static enum drm_connector_status cdv_hdmi_detect(
 }
 
 static int cdv_hdmi_set_property(struct drm_connector *connector,
-				       void *state,
 				       struct drm_property *property,
-				       uint64_t value,
-				       void *blob_data)
+				       uint64_t value)
 {
 	struct drm_encoder *encoder = connector->encoder;
 

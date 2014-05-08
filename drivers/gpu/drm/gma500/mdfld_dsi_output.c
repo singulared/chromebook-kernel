@@ -240,10 +240,8 @@ mdfld_dsi_connector_detect(struct drm_connector *connector, bool force)
 }
 
 static int mdfld_dsi_connector_set_property(struct drm_connector *connector,
-				void *state,
 				struct drm_property *property,
-				uint64_t value,
-				void *blob_data)
+				uint64_t value)
 {
 	struct drm_encoder *encoder = connector->encoder;
 

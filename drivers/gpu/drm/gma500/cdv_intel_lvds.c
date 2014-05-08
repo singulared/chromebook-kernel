@@ -455,10 +455,8 @@ static void cdv_intel_lvds_destroy(struct drm_connector *connector)
 }
 
 static int cdv_intel_lvds_set_property(struct drm_connector *connector,
-				       void *state,
 				       struct drm_property *property,
-				       uint64_t value,
-				       void *blob_data)
+				       uint64_t value)
 {
 	struct drm_encoder *encoder = connector->encoder;
 

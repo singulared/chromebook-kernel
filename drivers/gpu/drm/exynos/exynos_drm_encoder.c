@@ -159,8 +159,7 @@ static const struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
 };
 
 static int exynos_drm_encoder_set_property(struct drm_encoder *encoder,
-		void *state, struct drm_property *property, uint64_t val,
-		void *blob_data)
+		struct drm_property *property, uint64_t val)
 {
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_encoder->display;

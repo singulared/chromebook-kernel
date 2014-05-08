@@ -576,10 +576,8 @@ static void exynos_drm_crtc_destroy(struct drm_crtc *crtc)
 }
 
 static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
-					void *state,
 					struct drm_property *property,
-					uint64_t val,
-					void *blob_data)
+					uint64_t val)
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_private *dev_priv = dev->dev_private;
