@@ -187,6 +187,10 @@ void kbase_destroy_context(kbase_context *kctx)
 
 	kbase_mem_allocator_term(&kctx->osalloc);
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
+
+	/* Purposely corrupt the traceback to see if someone keeps using it */
+	kctx->jctx.tb = (void *)0xe7;
+
 	vfree(kctx);
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context)

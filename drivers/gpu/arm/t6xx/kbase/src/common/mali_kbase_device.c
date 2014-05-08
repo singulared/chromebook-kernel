@@ -21,6 +21,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/seq_file.h>
 
 #include <kbase/src/common/mali_kbase.h>
@@ -271,6 +272,31 @@ void kbase_device_trace_register_access(kbase_context *kctx, kbase_reg_access_ty
 {
 	unsigned long flags;
 	spin_lock_irqsave(&kctx->jctx.tb_lock, flags);
+
+	/*
+	 * We've seen corruption of the low bits when tb is supposed to be
+	 * NULL.  Collect some data, print and warning, and then fix it up.
+	 *
+	 * Note that delays / barriers below are just throwing things at the
+	 * wall to see what sticks--we don't know that any of them will do
+	 * anything useful.
+	 */
+	if (kctx->jctx.tb && (u32)kctx->jctx.tb < 0x100) {
+		void *tb1, *tb2, *tb3, *tb4;
+
+		tb1 = kctx->jctx.tb;
+		dsb();
+		tb2 = kctx->jctx.tb;
+		udelay(5);
+		tb3 = ((volatile kbase_context *)kctx)->jctx.tb;
+		flush_cache_all();
+		tb4 = kctx->jctx.tb;
+
+		WARN(1, "tb failure: %p %p %p %p\n", tb1, tb2, tb3, tb4);
+
+		kctx->jctx.tb = NULL;
+	}
+
 	if (kctx->jctx.tb) {
 		u16 wrap_count;
 		u16 write_offset;
