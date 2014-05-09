@@ -18,17 +18,12 @@
 #include "s5p_mfc_opr_v6.h"
 #include "s5p_mfc_ctrl.h"
 
-static struct s5p_mfc_hw_ops *s5p_mfc_ops;
-static struct s5p_mfc_hw_ctrl_ops *s5p_mfc_ctrl_ops;
-
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev)
 {
 	if (IS_MFCV6(dev))
-		s5p_mfc_ops = s5p_mfc_init_hw_ops_v6();
+		dev->mfc_ops = s5p_mfc_init_hw_ops_v6();
 	else
-		s5p_mfc_ops = s5p_mfc_init_hw_ops_v5();
-
-	dev->mfc_ops = s5p_mfc_ops;
+		dev->mfc_ops = s5p_mfc_init_hw_ops_v5();
 }
 
 void s5p_mfc_init_regs(struct s5p_mfc_dev *dev)
@@ -40,11 +35,9 @@ void s5p_mfc_init_regs(struct s5p_mfc_dev *dev)
 void s5p_mfc_init_hw_ctrls(struct s5p_mfc_dev *dev)
 {
 	if (IS_MFCV6(dev))
-		s5p_mfc_ctrl_ops = s5p_mfc_init_hw_ctrl_ops_v6_plus();
+		dev->mfc_ctrl_ops = s5p_mfc_init_hw_ctrl_ops_v6_plus();
 	else
-		s5p_mfc_ctrl_ops = s5p_mfc_init_hw_ctrl_ops_v5();
-
-	dev->mfc_ctrl_ops = s5p_mfc_ctrl_ops;
+		dev->mfc_ctrl_ops = s5p_mfc_init_hw_ctrl_ops_v5();
 }
 
 int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
