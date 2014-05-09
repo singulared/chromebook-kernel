@@ -14,6 +14,7 @@
 #include <drm/drmP.h>
 
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -126,6 +127,7 @@ struct fimd_context {
 	enum dither_mode		dither_mode;
 	u32				dither_rgb;
 	unsigned int			irq;
+	spinlock_t			shadowcon_lock;
 };
 
 static struct device *dp_dev;
@@ -378,6 +380,7 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 	unsigned long val, alpha, size;
 	unsigned int last_x;
 	unsigned int last_y;
+	unsigned long flags;
 
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
@@ -405,10 +408,12 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 	 * is set.
 	 */
 
-	/* protect windows */
+	/* protect windows, take lock for exclusive access to SHADOWCON */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
 	val = readl(ctx->regs + SHADOWCON);
 	val |= SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
 
 	/* buffer start address */
 	val = (unsigned long)win_data->dma_addr;
@@ -486,10 +491,12 @@ static void fimd_win_commit(void *in_ctx, int zpos)
 	writel(val, ctx->regs + WINCON(win));
 
 	/* Enable DMA channel and unprotect windows */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
 	val = readl(ctx->regs + SHADOWCON);
 	val |= SHADOWCON_CHx_ENABLE(win);
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
 
 	win_data->enabled = true;
 }
@@ -504,6 +511,7 @@ static void fimd_win_disable_nowait(void *in_ctx, int zpos)
 	struct fimd_win_data *win_data;
 	int win = zpos;
 	u32 val;
+	unsigned long flags;
 
 	if (win == DEFAULT_ZPOS)
 		win = ctx->default_win;
@@ -522,9 +530,11 @@ static void fimd_win_disable_nowait(void *in_ctx, int zpos)
 	}
 
 	/* protect windows */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
 	val = readl(ctx->regs + SHADOWCON);
 	val |= SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
 
 	/* wincon */
 	val = readl(ctx->regs + WINCON(win));
@@ -532,10 +542,12 @@ static void fimd_win_disable_nowait(void *in_ctx, int zpos)
 	writel(val, ctx->regs + WINCON(win));
 
 	/* unprotect windows */
+	spin_lock_irqsave(&ctx->shadowcon_lock, flags);
 	val = readl(ctx->regs + SHADOWCON);
 	val &= ~SHADOWCON_CHx_ENABLE(win);
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
+	spin_unlock_irqrestore(&ctx->shadowcon_lock, flags);
 
 	win_data->enabled = false;
 }
@@ -961,6 +973,7 @@ static void fimd_clear_win(struct fimd_context *ctx, int win)
 	if (win == 1 || win == 2)
 		writel(0, ctx->regs + VIDOSD_D(win));
 
+	/* No lock needed as this is only called during probe() */
 	val = readl(ctx->regs + SHADOWCON);
 	val &= ~SHADOWCON_WINx_PROTECT(win);
 	writel(val, ctx->regs + SHADOWCON);
@@ -1054,6 +1067,8 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
+
+	spin_lock_init(&ctx->shadowcon_lock);
 
 	ctx->bus_clk = devm_clk_get(dev, "fimd");
 	if (IS_ERR(ctx->bus_clk)) {
