@@ -120,7 +120,7 @@ static void exynos_drm_crtc_update(struct drm_crtc *crtc,
 			      crtc->x, crtc->y, crtc_w, crtc_h);
 
 	if (manager->ops->update) {
-		ret = manager->ops->update(manager->ctx, fb);
+		ret = manager->ops->update(manager->ctx, crtc, fb);
 		if (ret)
 			DRM_ERROR("Failed to update crtc, ret=%d\n", ret);
 	}
