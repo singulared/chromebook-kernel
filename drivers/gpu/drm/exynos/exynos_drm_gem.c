@@ -13,7 +13,11 @@
 
 #include <linux/completion.h>
 #include <linux/dma-buf.h>
+#include <linux/reservation.h>
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
+#endif
+#include <drm/drm_sync_helper.h>
 #include <linux/shmem_fs.h>
 #include <drm/exynos_drm.h>
 
@@ -168,11 +172,15 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 
 	DRM_DEBUG_KMS("handle count = %d\n", atomic_read(&obj->handle_count));
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (exynos_gem_obj->resource_set != NULL) {
 		/* kds_resource_set_release NULLs the pointer */
 		kds_resource_set_release(&exynos_gem_obj->resource_set);
 	}
-
+#endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
+#endif
 	/*
 	 * do not release memory region from exporter.
 	 *
@@ -664,6 +672,69 @@ static void cpu_acquire_kds_cb_fn(void *param1, void *param2)
 }
 #endif
 
+#ifdef CONFIG_DRM_DMA_SYNC
+static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
+	struct exynos_drm_gem_obj *exynos_gem_obj,
+	bool exclusive)
+{
+	struct fence *fence = 0;
+	struct exynos_drm_private *dev_priv = dev->dev_private;
+	struct reservation_object *resv = exynos_gem_obj->base.dma_buf->resv;
+	int ret = 0;
+	struct drm_reservation_cb rcb;
+	fence = drm_sw_fence_new(dev_priv->cpu_fence_context,
+			atomic_add_return(1, &dev_priv->cpu_fence_seqno));
+	if (IS_ERR(fence)) {
+		ret = PTR_ERR(fence);
+		DRM_ERROR("Failed to create acquire fence %d.\n", ret);
+		return ret;
+	}
+	ww_mutex_lock(&resv->lock, NULL);
+	if (!exynos_gem_obj->acquire_exclusive) {
+		ret = reservation_object_reserve_shared(resv);
+		if (ret < 0) {
+			DRM_ERROR("Failed to reserve space for shared fence %d.\n",
+				  ret);
+			goto resv_unlock;
+		}
+	}
+	drm_reservation_cb_init(&rcb, NULL, NULL);
+	ret = drm_reservation_cb_add(&rcb, resv, exclusive);
+	if (ret < 0) {
+		DRM_ERROR("Failed to add reservation to callback %d.\n", ret);
+		goto resv_unlock;
+	}
+	drm_reservation_cb_done(&rcb);
+	if (exclusive)
+		reservation_object_add_excl_fence(resv,
+						  fence);
+	else
+		reservation_object_add_shared_fence(resv,
+						    fence);
+
+	ww_mutex_unlock(&resv->lock);
+	mutex_unlock(&dev->struct_mutex);
+	ret = wait_for_completion_interruptible(&rcb.compl);
+	mutex_lock(&dev->struct_mutex);
+	if (ret < 0) {
+		DRM_ERROR("Failed wait for reservation callback %d.\n", ret);
+		drm_reservation_cb_fini(&rcb);
+		/* somebody else may be already waiting on it */
+		drm_fence_signal_and_put(&fence);
+		return ret;
+	}
+	exynos_gem_obj->acquire_fence = fence;
+	exynos_gem_obj->acquire_exclusive = exclusive;
+	atomic_set(&exynos_gem_obj->acquire_shared_count, 1);
+	return ret;
+
+resv_unlock:
+	ww_mutex_unlock(&resv->lock);
+	fence_put(fence);
+	return ret;
+}
+#endif
+
 int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file)
 {
@@ -700,7 +771,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+
 	if (exynos_gem_obj->base.dma_buf == NULL) {
 		/* If there is no dmabuf present, there is no cross-process/
 		 * cross-device sharing and sync is unnecessary.
@@ -709,6 +780,7 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 		goto unref_obj;
 	}
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	exclusive = 0;
 	if ((args->flags & DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE) != 0)
 		exclusive = 1;
@@ -726,10 +798,30 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	if (IS_ERR_VALUE(ret))
 		goto release_rset;
 #endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	if (exynos_gem_obj->base.dma_buf == NULL) {
+		/* If there is no dmabuf present, there is no cross-process/
+		 * cross-device sharing and sync is unnecessary.
+		 */
+		ret = 0;
+		goto unref_obj;
+	}
+
+	if (!(args->flags & DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE) &&
+	    !exynos_gem_obj->acquire_exclusive &&
+	    exynos_gem_obj->acquire_fence) {
+		atomic_inc(&exynos_gem_obj->acquire_shared_count);
+	} else {
+		ret = exynos_drm_gem_cpu_sync(dev, exynos_gem_obj,
+			args->flags & DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE);
+		if (ret < 0)
+			goto unref_obj;
+	}
+#endif
 
 	gem_node = kzalloc(sizeof(*gem_node), GFP_KERNEL);
 	if (!gem_node) {
-		DRM_ERROR("failed to allocate eyxnos_drm_gem_obj_node.\n");
+		DRM_ERROR("Failed to allocate eyxnos_drm_gem_obj_node.\n");
 		ret = -ENOMEM;
 		goto release_rset;
 	}
@@ -749,7 +841,6 @@ release_rset:
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	kds_resource_set_release_sync(&rset);
 #endif
-
 unref_obj:
 	drm_gem_object_unreference(obj);
 
@@ -787,7 +878,6 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 
 	exynos_gem_obj = to_exynos_gem_obj(obj);
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (exynos_gem_obj->base.dma_buf == NULL) {
 		/* If there is no dmabuf present, there is no cross-process/
 		 * cross-device sharing and sync is unnecessary.
@@ -795,7 +885,6 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 		ret = 0;
 		goto unref_obj;
 	}
-#endif
 
 	list_for_each(cur, &file_priv->gem_cpu_acquire_list) {
 		struct exynos_drm_gem_obj_node *node = list_entry(
@@ -813,6 +902,16 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 	/* kds_resource_set_release NULLs the pointer */
 	WARN_ON(exynos_gem_obj->resource_set == NULL);
 	kds_resource_set_release(&exynos_gem_obj->resource_set);
+#endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	BUG_ON(!exynos_gem_obj->acquire_fence);
+	if (exynos_gem_obj->acquire_exclusive) {
+		drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
+	} else {
+		if (atomic_sub_and_test(1,
+				&exynos_gem_obj->acquire_shared_count))
+			drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
+	}
 #endif
 
 	list_del(cur);

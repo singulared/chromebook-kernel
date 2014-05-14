@@ -69,6 +69,13 @@ config DRM_KMS_CMA_HELPER
 	help
 	  Choose this if you need the KMS CMA helper functions
 
+config DRM_DMA_SYNC
+	bool "DRM DMA Sync"
+	depends on DRM && !DMA_SHARED_BUFFER_USES_KDS
+	help
+	  Choose this option if you want to use fences and reservations for
+	  synchronization of shared dma-buf access between different drivers.
+
 config DRM_TDFX
 	tristate "3dfx Banshee/Voodoo3+"
 	depends on DRM && PCI

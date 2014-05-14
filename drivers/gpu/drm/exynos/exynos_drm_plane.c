@@ -11,15 +11,16 @@
 
 #include <drm/drmP.h>
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 #include <linux/dma-buf.h>
+#endif
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
-#include <linux/kfifo.h>
 #endif
 
 #include <drm/exynos_drm.h>
 #include "exynos_drm_drv.h"
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
 #endif
@@ -101,10 +102,13 @@ void exynos_plane_copy_state(struct exynos_drm_plane *src,
 	dst->src_h = src->src_h;
 }
 
-struct kds_callback_cookie {
+struct sync_callback_cookie {
 	struct drm_plane *plane;
 	struct drm_crtc *crtc;
 	struct drm_framebuffer *fb;
+#ifdef CONFIG_DRM_DMA_SYNC
+	struct drm_reservation_cb rcb;
+#endif
 };
 
 void exynos_drm_crtc_send_event(struct drm_plane *plane, struct drm_crtc *crtc)
@@ -153,7 +157,9 @@ void exynos_plane_helper_finish_update(struct drm_plane *plane,
 	if (exynos_plane->kds_cb.user_cb)
 		kds_callback_term(&exynos_plane->kds_cb);
 #endif
-
+#ifdef CONFIG_DRM_DMA_SYNC
+	drm_fence_signal_and_put(&exynos_plane->fence);
+#endif
 	if (update_fb)
 		exynos_plane->fb = exynos_plane->pending_fb;
 
@@ -170,14 +176,14 @@ void exynos_plane_helper_finish_update(struct drm_plane *plane,
 
 static void exynos_plane_helper_commit_cb(void *cookie, void *unused)
 {
-	struct kds_callback_cookie *kds_cookie = cookie;
-	struct drm_plane *plane = kds_cookie->plane;
+	struct sync_callback_cookie *sync_cookie = cookie;
+	struct drm_plane *plane = sync_cookie->plane;
 	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
-	struct drm_framebuffer *fb = kds_cookie->fb;
-	struct drm_crtc *crtc = kds_cookie->crtc;
+	struct drm_framebuffer *fb = sync_cookie->fb;
+	struct drm_crtc *crtc = sync_cookie->crtc;
 	int ret;
 
-	kfree(kds_cookie);
+	kfree(sync_cookie);
 
 	drm_vblank_get(crtc->dev, exynos_drm_pipe_from_crtc(crtc));
 
@@ -210,6 +216,14 @@ err:
 
 	exynos_plane_helper_finish_update(&exynos_plane->base, crtc, true);
 }
+
+#ifdef CONFIG_DRM_DMA_SYNC
+static void exynos_plane_reservation_cb(struct drm_reservation_cb *rcb,
+					void *cookie)
+{
+	exynos_plane_helper_commit_cb(cookie, NULL);
+}
+#endif
 
 int exynos_plane_helper_freeze_plane(struct drm_plane *plane)
 {
@@ -262,11 +276,63 @@ void exynos_plane_helper_init(struct drm_plane *plane,
 
 	exynos_plane->helper_funcs = funcs;
 
+#ifdef CONFIG_DRM_DMA_SYNC
+	exynos_plane->fence_context = fence_context_alloc(1);
+	atomic_set(&exynos_plane->fence_seqno, 0);
+#endif
+
 	init_completion(&exynos_plane->completion);
 
 	/* Start this completed so the first wait_for_completion is a noop */
 	complete(&exynos_plane->completion);
 }
+
+#ifdef CONFIG_DRM_DMA_SYNC
+static int exynos_drm_plane_update_sync(struct reservation_object *resv,
+					struct sync_callback_cookie *cookie)
+{
+	struct drm_plane *plane = cookie->plane;
+	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
+	struct fence *fence;
+	int ret = 0;
+
+	ww_mutex_lock(&resv->lock, NULL);
+	ret = reservation_object_reserve_shared(resv);
+	if (ret < 0) {
+		DRM_ERROR("Reserving space for shared fence failed: %d.\n",
+			ret);
+		ww_mutex_unlock(&resv->lock);
+		return ret;
+	}
+	fence = drm_sw_fence_new(exynos_plane->fence_context,
+				 atomic_add_return(1,
+					&exynos_plane->fence_seqno));
+	if (IS_ERR(fence)) {
+		ret = PTR_ERR(fence);
+		DRM_ERROR("Failed to create fence: %d.\n", ret);
+		ww_mutex_unlock(&resv->lock);
+		return ret;
+	}
+	exynos_plane->fence = fence;
+	drm_reservation_cb_init(&cookie->rcb,
+				exynos_plane_reservation_cb,
+				cookie);
+	ret = drm_reservation_cb_add(&cookie->rcb,
+				     resv, false);
+	if (ret < 0) {
+		DRM_ERROR("Adding reservation to callback failed: %d.\n", ret);
+		fence_put(exynos_plane->fence);
+		exynos_plane->fence = NULL;
+		ww_mutex_unlock(&resv->lock);
+		return ret;
+	}
+	drm_reservation_cb_done(&cookie->rcb);
+	reservation_object_add_shared_fence(resv,
+					exynos_plane->fence);
+	ww_mutex_unlock(&resv->lock);
+	return ret;
+}
+#endif
 
 static int do_update_plane(struct drm_plane *plane,
 		struct drm_crtc *crtc, struct drm_framebuffer *fb, int crtc_x,
@@ -274,13 +340,15 @@ static int do_update_plane(struct drm_plane *plane,
 		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h)
 {
 	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 	int ret;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	struct dma_buf *buf;
+	struct sync_callback_cookie *cookie;
+#endif
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource *res_list;
-	struct kds_callback_cookie *cookie;
 	unsigned long shared = 0UL;
 #endif
 
@@ -309,12 +377,7 @@ static int do_update_plane(struct drm_plane *plane,
 
 	cookie->fb = fb;
 
-#ifndef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	/* If we don't have kds synchronization, just put the fb on the plane */
-	exynos_plane_helper_commit_cb(cookie, NULL);
-	return 0;
-
-#else
+#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS)
 	BUG_ON(exynos_plane->kds);
 
 	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
@@ -353,6 +416,42 @@ err:
 	kfree(cookie);
 
 	return ret;
+#elif defined(CONFIG_DRM_DMA_SYNC)
+	BUG_ON(exynos_plane->fence);
+
+	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
+	if (!exynos_gem_obj->base.dma_buf) {
+		exynos_plane_helper_commit_cb(cookie, NULL);
+		return 0;
+	}
+
+	buf = exynos_gem_obj->base.dma_buf;
+	exynos_drm_fb_attach_dma_buf(exynos_fb, buf);
+
+	trace_exynos_page_flip_state(exynos_drm_pipe_from_crtc(crtc),
+			DRM_BASE_ID(fb), "wait_resv");
+
+	ret = exynos_drm_plane_update_sync(buf->resv, cookie);
+	if (ret) {
+		DRM_ERROR("Failed dma sync ret=%d\n", ret);
+		goto err;
+	}
+
+	return 0;
+
+err:
+	drm_framebuffer_unreference(fb);
+	kfree(cookie);
+
+	return ret;
+
+#else
+	/*
+	 * If we don't have dma buffer synchronization,
+	 * just put the fb on the plane.
+	 */
+	exynos_plane_helper_commit_cb(cookie, NULL);
+	return 0;
 #endif
 }
 

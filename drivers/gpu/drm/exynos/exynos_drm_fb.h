@@ -15,6 +15,7 @@
 #define _EXYNOS_DRM_FB_H
 
 #include <linux/kref.h>
+#include <drm/drm_sync_helper.h>
 
 #define to_exynos_fb(x)	container_of(x, struct exynos_drm_fb, fb)
 
@@ -25,6 +26,11 @@
  * @fb: drm framebuffer object.
  * @buf_cnt: a buffer count to drm framebuffer.
  * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
+ * @dma_buf: shared dma buffer object
+ * @rendered: true when framebuffer has been rendered to and ready to display
+ * @prepared: bitmask of CRTCs for which registers were programmed
+ * @resv_cb: reservation callback to receive notification when fb has been
+ *           rendered
  */
 struct exynos_drm_fb {
 	struct kref			refcount;
@@ -32,10 +38,11 @@ struct exynos_drm_fb {
 	struct work_struct		release_work;
 	unsigned int			buf_cnt;
 	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct dma_buf			*dma_buf;
 	bool				rendered;
 	unsigned long			prepared;
+#ifdef CONFIG_DRM_DMA_SYNC
+	struct drm_reservation_cb	resv_cb[2];
 #endif
 };
 
@@ -58,10 +65,8 @@ void exynos_drm_fb_set_buf_cnt(struct exynos_drm_fb *exynos_fb,
 /* get a buffer count to drm framebuffer. */
 unsigned int exynos_drm_fb_get_buf_cnt(struct exynos_drm_fb *exynos_fb);
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 /* store a reference to the dma_buf for this fb */
 void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 				  struct dma_buf *buf);
-#endif
 
 #endif
