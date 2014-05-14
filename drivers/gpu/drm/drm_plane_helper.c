@@ -228,11 +228,15 @@ int drm_primary_helper_disable(struct drm_plane *plane)
 		/* Already disabled */
 		return 0;
 
-	list_for_each_entry(p, &plane->dev->mode_config.plane_list, head)
+	list_for_each_entry(p, &plane->dev->mode_config.plane_list, head) {
+		if (p->crtc != plane->crtc)
+			continue;
+
 		if (p != plane && p->fb) {
 			DRM_DEBUG_KMS("Cannot disable primary plane while other planes are still active on CRTC.\n");
 			return -EBUSY;
 		}
+	}
 
 	/*
 	 * N.B.  We call set_config() directly here rather than
