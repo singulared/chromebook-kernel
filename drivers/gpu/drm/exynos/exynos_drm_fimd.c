@@ -495,10 +495,19 @@ static int fimd_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 	for (i = 0; i < FIMD_WIN_NR; i++) {
 		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
 
+		/*
+		 * TODO: There's a small hack here which sets possible_crtcs to
+		 *	 0 for the default win. This will prevent userspace from
+		 *	 choosing it for display. It's necessary until we
+		 *	 properly implement it as the primary plane. For now,
+		 *	 we'll let drm treat it as an overlay plane so it's
+		 *	 disabled at the right times (notably when we restore
+		 *	 fbdev mode).
+		 */
 		ret = drm_plane_init(ctx->drm_dev, &exynos_plane->base,
-				1 << ctx->pipe, &fimd_plane_funcs,
-				plane_formats, ARRAY_SIZE(plane_formats),
-				i == ctx->default_win ? true : false);
+			i == ctx->default_win ?	0 : 1 << ctx->pipe,
+			&fimd_plane_funcs, plane_formats,
+			ARRAY_SIZE(plane_formats), false);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
 			goto err;

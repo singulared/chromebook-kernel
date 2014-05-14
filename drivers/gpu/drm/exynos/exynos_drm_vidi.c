@@ -291,10 +291,19 @@ static int vidi_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
 		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
 		struct drm_plane *plane = &exynos_plane->base;
 
-		ret = drm_plane_init(ctx->drm_dev, plane, 1 << ctx->pipe,
+		/*
+		 * TODO: There's a small hack here which sets possible_crtcs to
+		 *	 0 for the default win. This will prevent userspace from
+		 *	 choosing it for display. It's necessary until we
+		 *	 properly implement it as the primary plane. For now,
+		 *	 we'll let drm treat it as an overlay plane so it's
+		 *	 disabled at the right times (notably when we restore
+		 *	 fbdev mode).
+		 */
+		ret = drm_plane_init(ctx->drm_dev, plane,
+				i == ctx->default_win ? 0 : 1 << ctx->pipe,
 				&vidi_plane_funcs, plane_formats,
-				ARRAY_SIZE(plane_formats),
-				i == ctx->default_win ? true : false);
+				ARRAY_SIZE(plane_formats), false);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
 			goto err;

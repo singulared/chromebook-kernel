@@ -1139,10 +1139,19 @@ static int mixer_initialize(void *ctx, struct drm_crtc *crtc, int pipe)
 		struct drm_plane *plane = &mixer_ctx->planes[i].base;
 		struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
 
+		/*
+		 * TODO: There's a small hack here which sets possible_crtcs to
+		 *	 0 for the default win. This will prevent userspace from
+		 *	 choosing it for display. It's necessary until we
+		 *	 properly implement it as the primary plane. For now,
+		 *	 we'll let drm treat it as an overlay plane so it's
+		 *	 disabled at the right times (notably when we restore
+		 *	 fbdev mode).
+		 */
 		ret = drm_plane_init(mixer_ctx->drm_dev, plane,
-				1 << mixer_ctx->pipe, &mixer_plane_funcs,
-				plane_formats, ARRAY_SIZE(plane_formats),
-				i == MIXER_DEFAULT_WIN ? true : false);
+			i == MIXER_DEFAULT_WIN ? 0 : 1 << mixer_ctx->pipe,
+			&mixer_plane_funcs, plane_formats,
+			ARRAY_SIZE(plane_formats), false);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
 			goto err;
