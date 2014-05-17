@@ -673,6 +673,7 @@ __ieee80211_vif_copy_chanctx_to_vlans(struct ieee80211_sub_if_data *sdata,
 	if (WARN_ON(sdata->vif.type != NL80211_IFTYPE_AP))
 		return;
 
+	WARN_ON(!local);
 	lockdep_assert_held(&local->mtx);
 
 	/* Check that conf exists, even when clearing this function
