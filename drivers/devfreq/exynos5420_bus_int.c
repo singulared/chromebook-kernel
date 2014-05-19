@@ -20,9 +20,11 @@
 #include <linux/regulator/consumer.h>
 #include <linux/module.h>
 #include <linux/pm_qos.h>
+#include <linux/pm_runtime.h>
 #include <linux/reboot.h>
 #include <linux/kobject.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 
 #include <mach/regs-clock.h>
 #include <mach/devfreq.h>
@@ -107,6 +109,8 @@ struct busfreq_data_int {
 	struct regulator *vdd_int;
 	struct exynos5420_ppmu_handle *ppmu;
 	int busy;
+
+	struct device *hdmi_dev;
 };
 
 /* TOP 0 */
@@ -267,19 +271,15 @@ struct int_clk_info aclk_200_disp1[] = {
 	{LV_6, 100000, D_PLL},
 };
 
-/*
- * Keep aclk_200_disp1 from L1 thru L6 at 200MHz
- * to meet the HDMI locking requirement
- */
 struct int_clk_info aclk_200_disp1_5422[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 200000, D_PLL},
 	{LV_1, 200000, D_PLL},
 	{LV_2, 200000, D_PLL},
-	{LV_3, 200000, D_PLL},
-	{LV_4, 200000, D_PLL},
-	{LV_5, 200000, D_PLL},
-	{LV_6, 200000, D_PLL},
+	{LV_3, 150000, D_PLL},
+	{LV_4, 150000, D_PLL},
+	{LV_5, 100000, D_PLL},
+	{LV_6, 100000, D_PLL},
 };
 
 struct int_clk_info aclk_400_mscl[] = {
@@ -742,6 +742,21 @@ static int exynos5_int_bus_get_dev_status(struct device *dev,
 						&int_ccnt, &int_pmcnt);
 	stat->total_time = int_ccnt;
 	stat->busy_time = int_pmcnt;
+
+	/*
+	 * Adjust minimum levels depending on what's active.
+	 */
+	if (soc_is_exynos5422()) {
+		int slowest_usable_level = LV_END - 1;
+
+		/* Need aclk_200_disp1_5422 >= 200000 (LV_2) for HDMI */
+		if (!pm_runtime_suspended(data->hdmi_dev))
+			slowest_usable_level = min(LV_2, slowest_usable_level);
+
+		/* Apply the min level */
+		stat->min_freq = int_bus_opp_list[slowest_usable_level].freq;
+	}
+
 	return 0;
 }
 
@@ -792,7 +807,7 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		int lvl = i;
 
 		/*
-		 * Lock voltage to LV_2 for 5422 and LV_2 for 5420
+		 * Lock voltage to LV_3 for 5422 and LV_2 for 5420
 		 *
 		 * 5422 notes:
 		 * - Whenever we use dw_mmc on 5422 we need INT333 (LV_3) level
@@ -850,9 +865,13 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		 *   a non-high-resolution 5422 we could try to do better.
 		 * Once we've done the above bumps we can let devfreq freely
 		 * swing all the way down to LV_6 without any problems.
+		 *
+		 * Note that we dynamically detect when HDMI is plugged in on
+		 * 5422 and bump everything up to LV_2 then.  That allows us
+		 * to go down to LV_3 voltages when HDMI isn't present.
 		 */
-		if (soc_is_exynos5422() && lvl > LV_2)
-			lvl = LV_2;
+		if (soc_is_exynos5422() && lvl > LV_3)
+			lvl = LV_3;
 		else if (soc_is_exynos5420() && lvl > LV_2)
 			lvl = LV_2;
 
@@ -968,6 +987,48 @@ static void exynos5_int_remove_clocks(struct busfreq_data_int *data)
 	}
 }
 
+/**
+ * exynos5_busfreq_prepare_hdmi - prepare for checking HDMI power
+ *
+ * One part of the information needed to pick the right INT frequency is whether
+ * HDMI is currently enabled.  We'll grab a handle to the dev node so we can
+ * poll to see whether it's runtime suspended or not.
+ */
+static int exynos5_busfreq_prepare_hdmi(struct busfreq_data_int *data)
+{
+	struct device_node *np;
+	struct platform_device *pdev;
+	int err = 0;
+
+	/*
+	 * Try to find the node; not an error if no node or disabled
+	 *
+	 * NOTE: we use the mixer which happens to be runtime PM enabled.
+	 */
+	np = of_find_compatible_node(NULL, NULL, "samsung,exynos5420-mixer");
+	if (!np)
+		return 0;
+	if (!of_device_is_available(np))
+		goto exit;
+
+	/* If we can't find the device we should defer */
+	pdev = of_find_device_by_node(np);
+	if (pdev)
+		data->hdmi_dev = &pdev->dev;
+	else
+		err = -EPROBE_DEFER;
+
+exit:
+	of_node_put(np);
+	return err;
+}
+
+static void exynos5_busfreq_done_hdmi(struct busfreq_data_int *data)
+{
+	if (data->hdmi_dev)
+		put_device(data->hdmi_dev);
+}
+
 static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 {
 	struct busfreq_data_int *data;
@@ -984,6 +1045,10 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 		dev_err(dev, "Cannot allocate memory for INT.\n");
 		return -ENOMEM;
 	}
+
+	err = exynos5_busfreq_prepare_hdmi(data);
+	if (err)
+		goto err_hdmi_prep;
 
 	data->dev = dev;
 	INIT_LIST_HEAD(&data->list);
@@ -1138,6 +1203,8 @@ err_mout_dpll:
 err_mout_mpll:
 	regulator_put(data->vdd_int);
 err_regulator:
+	exynos5_busfreq_done_hdmi(data);
+err_hdmi_prep:
 	kfree(data);
 
 	return err;
