@@ -792,16 +792,9 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		int lvl = i;
 
 		/*
-		 * Lock voltage to LV_1 for 5422 and LV_2 for 5420
+		 * Lock voltage to LV_2 for 5422 and LV_2 for 5420
 		 *
 		 * 5422 notes:
-		 * - We must keep ARM and INT voltages relatively close to one
-		 *   another due to the fact that some things on the INT rail
-		 *   and the ARM rail need to communicate with each other (with
-		 *   no level shifter in between).  For now this is done by
-		 *   forcing the INT voltage to the voltage associated with
-		 *   LV_1.  Later we'll use a better solution to keep the two
-		 *   voltages close.
 		 * - Whenever we use dw_mmc on 5422 we need INT333 (LV_3) level
 		 *   voltages and:
 		 *   - aclk_100_noc_5422 >= 86000 (LV_3)
@@ -820,13 +813,6 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		 * 5420 notes:
 		 * - The actual ASV table for 5420 shows that LV_3 - LV_6 have
 		 *   the exact same voltages.
-		 * - We must keep ARM and INT voltages relatively close to one
-		 *   another due to the fact that some things on the INT rail
-		 *   and the ARM rail need to communicate with each other (with
-		 *   no level shifter in between).  For now this is done by
-		 *   forcing the INT voltage to the voltage associated with
-		 *   LV_2.  Later we'll use a better solution to keep the two
-		 *   voltages close.
 		 * - We have seen crashes on 5420's camera test on some ASV
 		 *   groups if we let the voltage go down to LV_3.  Until we
 		 *   get to the bottom of it, we'll keep things at LV_2.
@@ -840,11 +826,8 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		 * devfreq to the level of the highest need.  That means we run
 		 * at the voltage of the highest user and everyone's clocks are
 		 * bumped up.  Let's take 5422 as an example:
-		 * - Since we have ARM/INT locking, we should keep voltage and
-		 *   clocks at LV_1.
-		 * - Even if we fix ARM/INT locking problems and we don't worry
-		 *   about HDMI, we still need to keep the voltage and all
-		 *   clocks as LV_3 for dw_mmc
+		 * - Even if we don't worry about HDMI, we still need to keep
+		 *   the voltage and all clocks as LV_3 for dw_mmc
 		 *
 		 * ...but the above is a waste.  We can save a whole lot of
 		 * power by letting non-dw_mmc related clocks drop down to
@@ -868,8 +851,8 @@ static int exynos5420_init_int_table(struct busfreq_data_int *data)
 		 * Once we've done the above bumps we can let devfreq freely
 		 * swing all the way down to LV_6 without any problems.
 		 */
-		if (soc_is_exynos5422() && lvl > LV_1)
-			lvl = LV_1;
+		if (soc_is_exynos5422() && lvl > LV_2)
+			lvl = LV_2;
 		else if (soc_is_exynos5420() && lvl > LV_2)
 			lvl = LV_2;
 
