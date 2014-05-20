@@ -267,6 +267,7 @@ enum s5p_mfc_fmt_idx {
 struct s5p_mfc_variant {
 	unsigned int version;
 	unsigned int port_num;
+	u32 version_bit;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
 	u32	*def_fmt;
@@ -709,6 +710,7 @@ struct s5p_mfc_fmt {
 	u32 codec_mode;
 	enum s5p_mfc_fmt_type type;
 	u32 num_planes;
+	u32 versions;
 };
 
 /**
@@ -757,5 +759,10 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 #define HAS_MFC_DEF_FMT(dev) ((HAS_VARIANT(dev)) && ((dev)->variant->def_fmt))
 #define GET_MFC_DEF_FMT(dev, fmt_idx) \
 	((HAS_MFC_DEF_FMT(dev)) ? ((dev)->variant->def_fmt[fmt_idx]) : -1)
+
+#define MFC_V5_BIT	BIT(0)
+#define MFC_V6_BIT	BIT(1)
+#define MFC_V7_BIT	BIT(2)
+
 
 #endif /* S5P_MFC_COMMON_H_ */

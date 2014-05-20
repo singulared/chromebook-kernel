@@ -39,6 +39,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_NONE,
 		.type		= MFC_FMT_RAW,
 		.num_planes	= 2,
+		.versions	= MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "4:2:0 2 Planes 64x32 Tiles",
@@ -46,6 +47,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_NONE,
 		.type		= MFC_FMT_RAW,
 		.num_planes	= 2,
+		.versions	= MFC_V5_BIT,
 	},
 	{
 		.name		= "4:2:0 2 Planes Y/CbCr",
@@ -53,6 +55,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_NONE,
 		.type		= MFC_FMT_RAW,
 		.num_planes	= 2,
+		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "4:2:0 2 Planes Y/CrCb",
@@ -60,6 +63,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_NONE,
 		.type		= MFC_FMT_RAW,
 		.num_planes	= 2,
+		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "H264 Encoded Stream",
@@ -67,6 +71,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_H264_ENC,
 		.type		= MFC_FMT_ENC,
 		.num_planes	= 1,
+		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "MPEG4 Encoded Stream",
@@ -74,6 +79,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_MPEG4_ENC,
 		.type		= MFC_FMT_ENC,
 		.num_planes	= 1,
+		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "H263 Encoded Stream",
@@ -81,6 +87,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_H263_ENC,
 		.type		= MFC_FMT_ENC,
 		.num_planes	= 1,
+		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT,
 	},
 	{
 		.name		= "VP8 Encoded Stream",
@@ -88,6 +95,7 @@ static struct s5p_mfc_fmt formats[] = {
 		.codec_mode	= S5P_MFC_CODEC_VP8_ENC,
 		.type		= MFC_FMT_ENC,
 		.num_planes	= 1,
+		.versions	= MFC_V7_BIT,
 	},
 };
 
@@ -880,8 +888,10 @@ static int vidioc_querycap(struct file *file, void *priv,
 	return 0;
 }
 
-static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
+static int vidioc_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
+							bool mplane, bool out)
 {
+	struct s5p_mfc_dev *dev = video_drvdata(file);
 	struct s5p_mfc_fmt *fmt;
 	int i, j = 0;
 
@@ -894,6 +904,9 @@ static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
 			continue;
 		else if (!out && formats[i].type != MFC_FMT_ENC)
 			continue;
+		else if ((dev->variant->version_bit & formats[i].versions) == 0)
+			continue;
+
 		if (j == f->index) {
 			fmt = &formats[i];
 			strlcpy(f->description, fmt->name,
@@ -909,25 +922,25 @@ static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool mplane, bool out)
 static int vidioc_enum_fmt_vid_cap(struct file *file, void *pirv,
 				   struct v4l2_fmtdesc *f)
 {
-	return vidioc_enum_fmt(f, false, false);
+	return vidioc_enum_fmt(file, f, false, false);
 }
 
 static int vidioc_enum_fmt_vid_cap_mplane(struct file *file, void *pirv,
 					  struct v4l2_fmtdesc *f)
 {
-	return vidioc_enum_fmt(f, true, false);
+	return vidioc_enum_fmt(file, f, true, false);
 }
 
 static int vidioc_enum_fmt_vid_out(struct file *file, void *prov,
 				   struct v4l2_fmtdesc *f)
 {
-	return vidioc_enum_fmt(f, false, true);
+	return vidioc_enum_fmt(file, f, false, true);
 }
 
 static int vidioc_enum_fmt_vid_out_mplane(struct file *file, void *prov,
 					  struct v4l2_fmtdesc *f)
 {
-	return vidioc_enum_fmt(f, true, true);
+	return vidioc_enum_fmt(file, f, true, true);
 }
 
 static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
@@ -979,14 +992,12 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			mfc_err("failed to try capture format\n");
 			return -EINVAL;
 		}
-
-		if (!IS_MFCV7(dev) && (fmt->fourcc == V4L2_PIX_FMT_VP8)) {
-			mfc_err("VP8 is supported only in MFC v7\n");
-			return -EINVAL;
-		}
-
 		if (pix_fmt_mp->plane_fmt[0].sizeimage == 0) {
 			mfc_err("must be set encoding output size\n");
+			return -EINVAL;
+		}
+		if ((dev->variant->version_bit & fmt->versions) == 0) {
+			mfc_err("Unsupported format by this MFC version.\n");
 			return -EINVAL;
 		}
 
@@ -999,16 +1010,9 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			return -EINVAL;
 		}
 
-		if (!IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT_16X16) {
-				mfc_err("Not supported format.\n");
-				return -EINVAL;
-			}
-		} else if (IS_MFCV6(dev)) {
-			if (fmt->fourcc == V4L2_PIX_FMT_NV12MT) {
-				mfc_err("Not supported format.\n");
-				return -EINVAL;
-			}
+		if ((dev->variant->version_bit & fmt->versions) == 0) {
+			mfc_err("Unsupported format by this MFC version.\n");
+			return -EINVAL;
 		}
 
 		if (fmt->num_planes != pix_fmt_mp->num_planes) {
