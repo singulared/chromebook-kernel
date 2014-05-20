@@ -1536,11 +1536,10 @@ static void dw_mci_tasklet_func(unsigned long priv)
 				 * If we do have a command complete we'll fall
 				 * through to the SENDING_STOP command and
 				 * everything will be peachy keen.
-				 *
-				 * TODO: I guess we shouldn't send a stop?
 				 */
 				if (!test_bit(EVENT_CMD_COMPLETE,
 					      &host->pending_events)) {
+					host->cmd = NULL;
 					dw_mci_request_end(host, mrq);
 					goto unlock;
 				}
