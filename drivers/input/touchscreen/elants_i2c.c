@@ -1481,7 +1481,7 @@ static int elan_mt_event(struct elants_data *ts, int num_fingers, u8 *buf)
 	elan_parse_widths(&buf[FW_POS_WIDTH], widths);
 	elan_parse_pressures(&buf[FW_POS_PRESSURE], pressures);
 
-	for (i = 0; i < MAX_CONTACT_NUM && i < num_fingers; i++) {
+	for (i = 0; (i < MAX_CONTACT_NUM) && (num_fingers > 0); i++) {
 		/* tracking id */
 		td->curdata.contactid = (fid[i] > 0) ? i + 1 : 0;
 
