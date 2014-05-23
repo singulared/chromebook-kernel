@@ -1504,6 +1504,8 @@ static int elan_mt_event(struct elants_data *ts, int num_fingers, u8 *buf)
 		td->curdata.p = pressures[i];
 		td->curdata.w = td->curdata.h = widths[i];
 
+		num_fingers--;
+
 		elan_mt_complete_slot(td);
 	}
 
