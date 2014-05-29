@@ -6514,6 +6514,8 @@ bool intel_get_load_detect_pipe(struct drm_connector *connector,
 		      connector->base.id, drm_get_connector_name(connector),
 		      encoder->base.id, drm_get_encoder_name(encoder));
 
+	mutex_lock(&dev->mode_config.connection_mutex);
+
 	/*
 	 * Algorithm gets a little messy:
 	 *
@@ -6556,7 +6558,7 @@ bool intel_get_load_detect_pipe(struct drm_connector *connector,
 	 */
 	if (!crtc) {
 		DRM_DEBUG_KMS("no pipe available for load-detect\n");
-		return false;
+		goto fail_unlock_connector;
 	}
 
 	mutex_lock(&crtc->mutex);
@@ -6610,6 +6612,9 @@ bool intel_get_load_detect_pipe(struct drm_connector *connector,
 	else
 		intel_crtc->new_config = NULL;
 	mutex_unlock(&crtc->mutex);
+fail_unlock_connector:
+	mutex_unlock(&dev->mode_config.connection_mutex);
+
 	return false;
 }
 
@@ -6639,6 +6644,7 @@ void intel_release_load_detect_pipe(struct drm_connector *connector,
 		}
 
 		mutex_unlock(&crtc->mutex);
+		mutex_unlock(&connector->dev->mode_config.connection_mutex);
 		return;
 	}
 
@@ -6647,6 +6653,7 @@ void intel_release_load_detect_pipe(struct drm_connector *connector,
 		connector->funcs->dpms(connector, old->dpms_mode);
 
 	mutex_unlock(&crtc->mutex);
+	mutex_unlock(&connector->dev->mode_config.connection_mutex);
 }
 
 /* Returns the clock of the currently programmed mode of the given pipe. */

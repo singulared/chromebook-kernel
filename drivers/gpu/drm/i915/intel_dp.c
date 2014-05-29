@@ -969,7 +969,7 @@ static void ironlake_panel_vdd_off_sync(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 pp;
 
-	WARN_ON(!mutex_is_locked(&dev->mode_config.mutex));
+	WARN_ON(!mutex_is_locked(&dev->mode_config.connection_mutex));
 
 	if (!intel_dp->want_panel_vdd && ironlake_edp_have_panel_vdd(intel_dp)) {
 		pp = ironlake_get_pp_control(dev_priv);
@@ -991,9 +991,9 @@ static void ironlake_panel_vdd_work(struct work_struct *__work)
 						 struct intel_dp, panel_vdd_work);
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 
-	mutex_lock(&dev->mode_config.mutex);
+	mutex_lock(&dev->mode_config.connection_mutex);
 	ironlake_panel_vdd_off_sync(intel_dp);
-	mutex_unlock(&dev->mode_config.mutex);
+	mutex_unlock(&dev->mode_config.connection_mutex);
 }
 
 void ironlake_edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
@@ -2055,6 +2055,7 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 	u8 sink_irq_vector;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
+	/* FIXME: This access isn't protected by any locks. */
 	if (!intel_encoder->connectors_active)
 		return;
 
@@ -2462,9 +2463,9 @@ void intel_dp_encoder_destroy(struct drm_encoder *encoder)
 	drm_encoder_cleanup(encoder);
 	if (is_edp(intel_dp)) {
 		cancel_delayed_work_sync(&intel_dp->panel_vdd_work);
-		mutex_lock(&dev->mode_config.mutex);
+		mutex_lock(&dev->mode_config.connection_mutex);
 		ironlake_panel_vdd_off_sync(intel_dp);
-		mutex_unlock(&dev->mode_config.mutex);
+		mutex_unlock(&dev->mode_config.connection_mutex);
 	}
 	kfree(intel_dig_port);
 }
