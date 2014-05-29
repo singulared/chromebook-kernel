@@ -309,6 +309,20 @@ static void exynos_drm_lastclose(struct drm_device *dev)
 	exynos_drm_fbdev_restore_mode(dev);
 }
 
+int exynos_drm_pipe_from_crtc(struct drm_crtc *crtc)
+{
+	struct drm_crtc *c;
+	int i = 0;
+
+	list_for_each_entry(c, &crtc->dev->mode_config.crtc_list, head) {
+		if (crtc == c)
+			return i;
+		i++;
+	}
+	DRM_ERROR("Could not find pipe from crtc %d\n", DRM_BASE_ID(crtc));
+	return -EINVAL;
+}
+
 static u32 exynos_drm_get_vblank_counter(struct drm_device *dev, int pipe)
 {
 	struct exynos_drm_private *private = dev->dev_private;

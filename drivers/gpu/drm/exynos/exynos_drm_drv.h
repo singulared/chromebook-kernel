@@ -79,6 +79,14 @@ enum exynos_drm_output_type {
 
 const char *exynos_drm_output_type_name(enum exynos_drm_output_type type);
 
+int exynos_drm_pipe_from_crtc(struct drm_crtc *crtc);
+
+struct exynos_plane_helper_funcs {
+	int (*commit_plane)(struct drm_plane *plane, struct drm_crtc *crtc,
+				struct drm_framebuffer *fb);
+	int (*disable_plane)(struct drm_plane *plane);
+};
+
 struct exynos_drm_plane {
 	struct drm_plane base;
 
@@ -92,12 +100,49 @@ struct exynos_drm_plane {
 	uint32_t src_y;
 	uint32_t src_w;
 	uint32_t src_h;
+
+	struct completion completion;
+	struct drm_framebuffer *fb;
+	struct drm_framebuffer *pending_fb;
+	struct drm_pending_vblank_event *pending_event;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct kds_resource_set *kds;
+	struct kds_callback kds_cb;
+#endif
+
+	const struct exynos_plane_helper_funcs *helper_funcs;
 };
 #define to_exynos_plane(x) container_of(x, struct exynos_drm_plane, base)
 
 void exynos_plane_copy_state(struct exynos_drm_plane *src,
 		struct exynos_drm_plane *dst);
 void exynos_sanitize_plane_coords(struct drm_plane *plane,
+		struct drm_crtc *crtc);
+
+void exynos_plane_helper_init(struct drm_plane *plane,
+			const struct exynos_plane_helper_funcs *funcs);
+
+int exynos_plane_helper_update_plane_with_event(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb,
+		struct drm_pending_vblank_event *event, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h);
+
+int exynos_plane_helper_update_plane(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h);
+
+void exynos_plane_helper_finish_update(struct drm_plane *plane,
+		struct drm_crtc *crtc, bool update_fb);
+
+int exynos_plane_helper_disable_plane(struct drm_plane *plane);
+
+void exynos_drm_crtc_send_event(struct drm_plane *plane, struct drm_crtc *crtc);
+
+int exynos_plane_helper_freeze_plane(struct drm_plane *plane);
+
+void exynos_plane_helper_thaw_plane(struct drm_plane *plane,
 		struct drm_crtc *crtc);
 
 /*
