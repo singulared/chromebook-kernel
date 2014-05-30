@@ -310,12 +310,7 @@ static bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
  */
 bool drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper)
 {
-	struct drm_device *dev = fb_helper->dev;
-	bool ret;
-	drm_modeset_lock_all(dev);
-	ret = restore_fbdev_mode(fb_helper, true);
-	drm_modeset_unlock_all(dev);
-	return ret;
+	return restore_fbdev_mode(fb_helper, false);
 }
 EXPORT_SYMBOL(drm_fb_helper_restore_fbdev_mode_unlocked);
 

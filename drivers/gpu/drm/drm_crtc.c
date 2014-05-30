@@ -1001,6 +1001,9 @@ int drm_universal_plane_init(struct drm_device *dev, struct drm_plane *plane,
 	struct drm_mode_config *config = &dev->mode_config;
 	int ret;
 
+	/* this is now required: */
+	WARN_ON(!funcs->set_property);
+
 	drm_modeset_lock_all(dev);
 
 	ret = drm_mode_object_get(dev, &plane->base, DRM_MODE_OBJECT_PLANE);
