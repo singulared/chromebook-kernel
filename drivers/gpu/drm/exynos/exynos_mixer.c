@@ -1027,6 +1027,17 @@ static int mixer_update(void *ctx, struct drm_crtc *crtc,
 		DRM_ERROR("fimd plane commit failed %d\n", ret);
 	}
 
+	/* Reset workaround state if the resolution is not 800x600 */
+	if (fb->width != 800 || fb->height != 600) {
+		mixer_ctx->workaround_state = WORKAROUND_STATE_INACTIVE;
+		goto done;
+	}
+
+	/* Initialize workaround state if not active */
+	if (mixer_ctx->workaround_state != WORKAROUND_STATE_ACTIVE)
+		mixer_ctx->workaround_state = WORKAROUND_STATE_INIT;
+
+done:
 	return ret;
 }
 
