@@ -175,6 +175,7 @@ struct mixer_scan_range {
 
 struct mixer_scan_adjustment {
 	int res[2], new_res[2];
+	enum mixer_version_id m_ver;
 };
 
 const struct mixer_scan_range scan_ranges[] = {
@@ -211,6 +212,12 @@ const struct mixer_scan_range scan_ranges[] = {
 	{
 		.min_res = { 1360, 768 },
 		.max_res = { 1360, 768 },
+		.mode_type = EXYNOS_MIXER_MODE_WXGA,
+		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
+	},
+	{
+		.min_res = { 1366, 768 },
+		.max_res = { 1366, 768 },
 		.mode_type = EXYNOS_MIXER_MODE_WXGA,
 		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
 	},
@@ -262,10 +269,17 @@ const struct mixer_scan_adjustment scan_adjustments[] = {
 	{
 		.res = { 1024, 768 },
 		.new_res = { 1024, 720 },
+		.m_ver = MXR_VER_16_0_33_0,
 	},
 	{
 		.res = { 1280, 800 },
 		.new_res = { 1280, 720 },
+		.m_ver = MXR_VER_16_0_33_0,
+	},
+	{
+		.res = { 1366, 768 },
+		.new_res = { 1360, 768 },
+		.m_ver = MXR_VER_16_0_33_0 | MXR_VER_128_0_0_184,
 	},
 };
 
@@ -333,13 +347,11 @@ static void mixer_adjust_mode(void *ctx, struct drm_connector *connector,
 		connector->helper_private;
 	int i;
 
-	if (mctx->mxr_ver == MXR_VER_128_0_0_184)
-		return;
-
 	for (i = 0; i < ARRAY_SIZE(scan_adjustments); i++) {
 		const struct mixer_scan_adjustment *adj = &scan_adjustments[i];
 		if (adj->res[0] == mode_to_adjust->hdisplay &&
-		    adj->res[1] == mode_to_adjust->vdisplay) {
+		    adj->res[1] == mode_to_adjust->vdisplay &&
+		    (adj->m_ver & mctx->mxr_ver)) {
 			struct drm_display_mode *mode;
 
 			/*
