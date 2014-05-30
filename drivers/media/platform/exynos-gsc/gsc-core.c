@@ -434,12 +434,23 @@ int gsc_try_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 		min_w = variant->pix_min->target_rot_dis_w;
 		min_h = variant->pix_min->target_rot_dis_h;
 	}
+	/*
+	 * Use the requested size as the minimum bound, unless it's less than
+	 * the required hardware minimum. The bound align function will align
+	 * to the closest value but we do not want to adjust below the requested
+	 * size. The maximum size should be aligned, so the bound align function
+	 * will always find valid values.
+	 */
+	min_w = min(max(min_w, pix_mp->width), max_w);
+	min_h = min(max(min_h, pix_mp->height), max_h);
 
 	pr_debug("mod_x: %d, mod_y: %d, max_w: %d, max_h = %d",
 			mod_x, mod_y, max_w, max_h);
 
-	/* To check if image size is modified to adjust parameter against
-	   hardware abilities */
+	/*
+	 * To check if image size is modified to adjust parameter against
+	 * hardware abilities.
+	 */
 	tmp_w = pix_mp->width;
 	tmp_h = pix_mp->height;
 
