@@ -39,6 +39,7 @@
 #include <linux/of_address.h>
 
 #include <drm/exynos_drm.h>
+#include <drm/drm_atomic.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_mixer.h"
@@ -1654,8 +1655,8 @@ static int set_property(struct hdmi_context *hdata, struct drm_mode_object *obj,
 	return ret;
 }
 
-static int hdmi_connector_set_property(struct drm_connector *connector,
-		struct drm_property *property, uint64_t val)
+static int hdmi_connector_set_property(struct drm_connector *connector, struct drm_atomic_state *a_state,
+		struct drm_property *property, uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
 	int ret;
@@ -2924,7 +2925,8 @@ static const struct drm_encoder_helper_funcs hdmi_encoder_helper_funcs = {
 };
 
 static int hdmi_encoder_set_property(struct drm_encoder *encoder,
-		struct drm_property *property, uint64_t val)
+		struct drm_atomic_state *state, struct drm_property *property,
+		uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_encoder(encoder);
 

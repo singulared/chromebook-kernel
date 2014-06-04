@@ -29,6 +29,7 @@
 #include "drm_crtc.h"
 #include "drm_crtc_helper.h"
 #include "anx7808regs.h"
+#include "drm_atomic.h"
 
 /*
  * _wait_for - magic (register) wait macro
@@ -1631,7 +1632,7 @@ void anx7808_disable(struct drm_bridge *bridge)
 
 	anx7808_stop_hdcp(anx7808);
 
-	ret = anx7808->encoder->funcs->set_property(anx7808->encoder,
+	ret = drm_object_property_set_value(&anx7808->encoder->base,
 			mode_config->content_protection_property,
 			DRM_MODE_CONTENT_PROTECTION_OFF);
 	if (ret)
@@ -1679,7 +1680,7 @@ static void anx7808_hdcp_en_work(struct work_struct *work)
 	anx7808 = container_of(work, struct anx7808_data, hdcp_en_work.work);
 
 	mutex_lock(&anx7808->dev->mode_config.mutex);
-	ret = anx7808->encoder->funcs->set_property(anx7808->encoder,
+	ret = drm_object_property_set_value(&anx7808->encoder->base,
 			anx7808->dev->mode_config.content_protection_property,
 			DRM_MODE_CONTENT_PROTECTION_DESIRED);
 	mutex_unlock(&anx7808->dev->mode_config.mutex);
@@ -1903,7 +1904,8 @@ out:
 }
 
 int anx7808_set_property(struct drm_connector *connector,
-		struct drm_property *property, uint64_t val)
+		struct drm_atomic_state *a_state,
+		struct drm_property *property, uint64_t val, void *blob_data)
 {
 	struct anx7808_data *anx7808;
 	struct drm_mode_config *mode_config = &connector->dev->mode_config;
@@ -1919,7 +1921,7 @@ int anx7808_set_property(struct drm_connector *connector,
 	anx7808->hdcp_desired = val;
 
 	ret |= anx7808->encoder->funcs->set_property(anx7808->encoder,
-			property, val);
+			a_state, property, val, blob_data);
 
 	/*
 	 * During HDCP enable:
