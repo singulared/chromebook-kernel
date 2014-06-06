@@ -1586,7 +1586,7 @@ static inline int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
-static inline void s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
+static inline int s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	unsigned long flags;
@@ -1594,6 +1594,11 @@ static inline void s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 
 	/* Initializing decoding - parsing header */
 	spin_lock_irqsave(&dev->irqlock, flags);
+	if (list_empty(&ctx->src_queue)) {
+		mfc_err("No src buffers while init decoding.\n");
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+		return -EAGAIN;
+	}
 	mfc_debug(2, "Preparing to init decoding.\n");
 	temp_vb = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
 	mfc_debug(2, "Header size: %d\n", temp_vb->b->v4l2_planes[0].bytesused);
@@ -1603,6 +1608,7 @@ static inline void s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 	dev->curr_ctx = ctx->num;
 	s5p_mfc_init_decode_v6(ctx);
+	return 0;
 }
 
 static inline void s5p_mfc_run_init_enc(struct s5p_mfc_ctx *ctx)
@@ -1808,7 +1814,7 @@ static void s5p_mfc_try_run_v6(struct s5p_mfc_dev *dev)
 					ctx);
 			break;
 		case MFCINST_GOT_INST:
-			s5p_mfc_run_init_dec(ctx);
+			ret = s5p_mfc_run_init_dec(ctx);
 			break;
 		case MFCINST_HEAD_PARSED:
 			ret = s5p_mfc_run_init_dec_buffers(ctx);
@@ -1826,7 +1832,7 @@ static void s5p_mfc_try_run_v6(struct s5p_mfc_dev *dev)
 			mfc_debug(2, "Finished remaining frames after resolution change.\n");
 			ctx->capture_state = QUEUE_FREE;
 			mfc_debug(2, "Will re-init the codec`.\n");
-			s5p_mfc_run_init_dec(ctx);
+			ret = s5p_mfc_run_init_dec(ctx);
 			break;
 		default:
 			ret = -EAGAIN;
