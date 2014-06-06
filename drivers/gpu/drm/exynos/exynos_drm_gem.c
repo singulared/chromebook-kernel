@@ -656,11 +656,13 @@ void exynos_gem_unmap_sgt_from_dma(struct drm_device *drm_dev,
 	dma_unmap_sg(drm_dev->dev, sgt->sgl, sgt->nents, dir);
 }
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 static void cpu_acquire_kds_cb_fn(void *param1, void *param2)
 {
 	struct completion* completion = (struct completion *)param1;
 	complete(completion);
 }
+#endif
 
 int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file)
