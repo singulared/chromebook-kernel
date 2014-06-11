@@ -19,4 +19,8 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 #define vidi_connection_ioctl	NULL
 #endif
 
+int vidi_get_crtc_id(struct drm_device *dev);
+int vidi_enable_vblank(struct drm_crtc *crtc);
+void vidi_disable_vblank(struct drm_crtc *crtc);
+
 #endif

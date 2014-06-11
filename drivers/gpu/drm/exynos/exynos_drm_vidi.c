@@ -23,7 +23,7 @@
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
-#include "exynos_drm_crtc.h"
+#include "exynos_drm_vidi.h"
 #include "exynos_drm_gem.h"
 #include "exynos_drm_encoder.h"
 
@@ -38,6 +38,7 @@ static const uint32_t plane_formats[] = {
 };
 
 #define exynos_plane_to_win_idx(ctx, x) (unsigned int)(x - ctx->planes)
+#define to_vidi_ctx(x) container_of(x, struct vidi_context, crtc)
 #define get_vidi_context(dev)	platform_get_drvdata(to_platform_device(dev))
 #define ctx_from_connector(c)	container_of(c, struct vidi_context, \
 					connector)
@@ -58,7 +59,7 @@ struct vidi_win_data {
 
 struct vidi_context {
 	struct drm_device		*drm_dev;
-	struct drm_crtc			*crtc;
+	struct drm_crtc			crtc;
 	struct drm_encoder		*encoder;
 	struct drm_connector		connector;
 	struct exynos_drm_plane		planes[WINDOWS_NR];
@@ -100,11 +101,11 @@ static const char fake_edid_info[] = {
 	0x00, 0x00, 0x00, 0x06
 };
 
-static void vidi_dpms(void *in_ctx, int mode)
+static void vidi_crtc_dpms(struct drm_crtc *crtc, int mode)
 {
-	struct vidi_context *ctx = in_ctx;
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
 
-	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(ctx->crtc),
+	DRM_DEBUG_KMS("[CRTC:%d] [DPMS:%s]\n", DRM_BASE_ID(crtc),
 			drm_get_dpms_name(mode));
 
 	mutex_lock(&ctx->lock);
@@ -126,19 +127,40 @@ static void vidi_dpms(void *in_ctx, int mode)
 	mutex_unlock(&ctx->lock);
 }
 
-static void vidi_commit(void *in_ctx)
+static void vidi_crtc_prepare(struct drm_crtc *crtc)
 {
-	struct vidi_context *ctx = in_ctx;
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
 
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
-
-	if (ctx->suspended)
-		return;
+	drm_vblank_pre_modeset(crtc->dev, ctx->pipe);
 }
 
-static int vidi_enable_vblank(void *in_ctx)
+static void vidi_crtc_commit(struct drm_crtc *crtc)
 {
-	struct vidi_context *ctx = in_ctx;
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
+
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
+
+	drm_vblank_post_modeset(crtc->dev, ctx->pipe);
+}
+
+static bool vidi_crtc_mode_fixup(struct drm_crtc *crtc,
+		const struct drm_display_mode *mode,
+		struct drm_display_mode *adjusted_mode)
+{
+	return true;
+}
+
+static int vidi_crtc_mode_set(struct drm_crtc *crtc,
+		struct drm_display_mode *mode,
+		struct drm_display_mode *adjusted_mode, int x, int y,
+		struct drm_framebuffer *old_fb)
+{
+	return 0;
+}
+
+int vidi_enable_vblank(struct drm_crtc *crtc)
+{
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -160,11 +182,11 @@ static int vidi_enable_vblank(void *in_ctx)
 	return 0;
 }
 
-static void vidi_disable_vblank(void *in_ctx)
+void vidi_disable_vblank(struct drm_crtc *crtc)
 {
-	struct vidi_context *ctx = in_ctx;
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
 
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(crtc));
 
 	if (ctx->suspended)
 		return;
@@ -237,102 +259,83 @@ const struct drm_plane_funcs vidi_plane_funcs = {
 	.destroy = vidi_plane_destroy,
 };
 
-static int vidi_update(void *in_ctx, struct drm_crtc *crtc,
-		struct drm_framebuffer *fb)
+static void vidi_crtc_load_lut(struct drm_crtc *crtc)
 {
-	struct vidi_context *ctx = in_ctx;
+}
+
+static const struct drm_crtc_helper_funcs vidi_crtc_helper_funcs = {
+	.dpms = vidi_crtc_dpms,
+	.prepare = vidi_crtc_prepare,
+	.commit = vidi_crtc_commit,
+	.mode_fixup = vidi_crtc_mode_fixup,
+	.mode_set = vidi_crtc_mode_set,
+	.load_lut = vidi_crtc_load_lut,
+};
+
+static int vidi_crtc_page_flip(struct drm_crtc *crtc,
+		struct drm_framebuffer *fb,
+		struct drm_pending_vblank_event *event,	uint32_t flip_flags)
+{
+	struct vidi_context *ctx = to_vidi_ctx(crtc);
 	struct exynos_drm_plane *exynos_plane = &ctx->planes[ctx->default_win];
 	struct drm_plane *plane = &exynos_plane->base;
-	struct exynos_drm_plane old_plane;
+	unsigned int crtc_w, crtc_h;
 	int ret;
 
-	exynos_plane_copy_state(exynos_plane, &old_plane);
+	if (ctx->suspended)
+		return -ENODEV;
 
-	/* Copy the parameters into the plane so we can restore it later */
-	exynos_plane->crtc_x = 0;
-	exynos_plane->crtc_y = 0;
-	exynos_plane->crtc_w = fb->width - crtc->x;
-	exynos_plane->crtc_h = fb->height - crtc->y;
-	exynos_plane->src_x = crtc->x;
-	exynos_plane->src_y = crtc->y;
-	exynos_plane->src_w = exynos_plane->crtc_w;
-	exynos_plane->src_h = exynos_plane->crtc_h;
+	crtc_w = fb->width - crtc->x;
+	crtc_h = fb->height - crtc->y;
 
-	exynos_sanitize_plane_coords(plane, crtc);
+	ret = plane->funcs->update_plane(plane, crtc, fb, 0, 0, crtc_w, crtc_h,
+		crtc->x << 16, crtc->y << 16, crtc_w << 16, crtc_h << 16);
+	if (ret)
+		goto fail;
 
-	/* Grab a reference, just as setplane would */
-	drm_framebuffer_reference(fb);
-
-	ret = vidi_plane_commit(plane, fb);
-	if (!ret) {
-		if (plane->fb)
-			drm_framebuffer_unreference(plane->fb);
-		plane->fb = fb;
-		plane->crtc = crtc;
-	} else {
-		/* restore old plane on failure */
-		exynos_plane_copy_state(&old_plane, exynos_plane);
-		drm_framebuffer_unreference(fb);
-		DRM_ERROR("fimd plane commit failed %d\n", ret);
+	if (event) {
+		exynos_plane->pending_event = event;
+		exynos_drm_crtc_send_event(plane, crtc);
 	}
 
-	return ret;
-}
-
-static int vidi_mgr_initialize(void *in_ctx, struct drm_crtc *crtc, int pipe)
-{
-	struct vidi_context *ctx = in_ctx;
-	int i, ret;
-
-	ctx->drm_dev = crtc->dev;
-	ctx->pipe = pipe;
-
-	for (i = 0; i < WINDOWS_NR; i++) {
-		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
-		struct drm_plane *plane = &exynos_plane->base;
-
-		/*
-		 * TODO: There's a small hack here which sets possible_crtcs to
-		 *	 0 for the default win. This will prevent userspace from
-		 *	 choosing it for display. It's necessary until we
-		 *	 properly implement it as the primary plane. For now,
-		 *	 we'll let drm treat it as an overlay plane so it's
-		 *	 disabled at the right times (notably when we restore
-		 *	 fbdev mode).
-		 */
-		ret = drm_plane_init(ctx->drm_dev, plane,
-				i == ctx->default_win ? 0 : 1 << ctx->pipe,
-				&vidi_plane_funcs, plane_formats,
-				ARRAY_SIZE(plane_formats), false);
-		if (ret) {
-			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
-			goto err;
-		}
-
-		exynos_plane->ctx = ctx;
-	}
+	plane->fb = fb;
+	plane->crtc = crtc;
 
 	return 0;
-err:
-	for (; i >= 0; i--)
-		drm_plane_cleanup(&ctx->planes[i].base);
 
+fail:
+	DRM_ERROR("Page flip failed, ret=%d\n", ret);
 	return ret;
 }
 
-static struct exynos_drm_manager_ops vidi_manager_ops = {
-	.initialize = vidi_mgr_initialize,
-	.dpms = vidi_dpms,
-	.update = vidi_update,
-	.commit = vidi_commit,
-	.enable_vblank = vidi_enable_vblank,
-	.disable_vblank = vidi_disable_vblank,
+static void vidi_crtc_destroy(struct drm_crtc *crtc)
+{
+}
+
+static const struct drm_crtc_funcs vidi_crtc_funcs = {
+	.set_config	= drm_crtc_helper_set_config,
+	.page_flip	= vidi_crtc_page_flip,
+	.destroy	= vidi_crtc_destroy,
 };
 
-static struct exynos_drm_manager vidi_manager = {
-	.pipe		= -1,
-	.ops		= &vidi_manager_ops,
-};
+int vidi_get_crtc_id(struct drm_device *dev)
+{
+	struct drm_crtc *crtc;
+	struct vidi_context *ctx;
+
+	/*
+	 * This is a hack which we should be able to remove once we keep tabs on
+	 * each of the crtc's
+	 */
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (crtc->funcs == &vidi_crtc_funcs) {
+			ctx = to_vidi_ctx(crtc);
+			return ctx->pipe;
+		}
+	}
+
+	return -ENODEV;
+}
 
 static void vidi_fake_vblank_handler(struct work_struct *work)
 {
@@ -355,8 +358,6 @@ static void vidi_fake_vblank_handler(struct work_struct *work)
 	}
 
 	mutex_unlock(&ctx->lock);
-
-	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 }
 
 static void vidi_apply(void *in_ctx)
@@ -378,12 +379,12 @@ static void vidi_apply(void *in_ctx)
 			DRM_ERROR("Failed to update plane %d ret=%d\n", i, ret);
 
 	}
-	vidi_commit(ctx);
+	vidi_crtc_commit(&ctx->crtc);
 }
 
 static int vidi_power_on(struct vidi_context *ctx, bool enable)
 {
-	DRM_DEBUG_KMS("[CRTC:%d] enable: %u\n", DRM_BASE_ID(ctx->crtc),
+	DRM_DEBUG_KMS("[CRTC:%d] enable: %u\n", DRM_BASE_ID(&ctx->crtc),
 			enable);
 
 	if (enable != false && enable != true)
@@ -394,7 +395,7 @@ static int vidi_power_on(struct vidi_context *ctx, bool enable)
 
 		/* if vblank was enabled status, enable it again. */
 		if (test_and_clear_bit(0, &ctx->irq_flags))
-			vidi_enable_vblank(ctx);
+			vidi_enable_vblank(&ctx->crtc);
 
 		vidi_apply(ctx);
 	} else {
@@ -426,7 +427,7 @@ static int vidi_store_connection(struct device *dev,
 	struct vidi_context *ctx = get_vidi_context(dev);
 	int ret;
 
-	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(ctx->crtc));
+	DRM_DEBUG_KMS("[CRTC:%d]\n", DRM_BASE_ID(&ctx->crtc));
 
 	ret = kstrtoint(buf, 0, &ctx->connected);
 	if (ret)
@@ -647,6 +648,58 @@ static struct exynos_drm_display vidi_display = {
 	.ops = &vidi_display_ops,
 };
 
+static int vidi_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct vidi_context *ctx = platform_get_drvdata(pdev);
+	int i, ret;
+
+	ctx->drm_dev = drm_dev;
+	ctx->pipe = drm_dev->mode_config.num_crtc;
+
+	for (i = 0; i < WINDOWS_NR; i++) {
+		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
+		struct drm_plane *plane = &exynos_plane->base;
+
+		ret = drm_universal_plane_init(drm_dev, plane,
+			1 << ctx->pipe, &vidi_plane_funcs, plane_formats,
+			ARRAY_SIZE(plane_formats),
+			i == ctx->default_win ? DRM_PLANE_TYPE_PRIMARY
+				: DRM_PLANE_TYPE_OVERLAY);
+		if (ret) {
+			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
+			goto err;
+		}
+
+		exynos_plane->ctx = ctx;
+	}
+
+	ret = drm_crtc_init_with_planes(drm_dev, &ctx->crtc,
+		&ctx->planes[ctx->default_win].base, NULL, &vidi_crtc_funcs);
+	if (ret) {
+		DRM_ERROR("Init crtc failed (ret=%d)\n", ret);
+		goto err;
+	}
+
+	drm_crtc_helper_add(&ctx->crtc, &vidi_crtc_helper_funcs);
+
+	return 0;
+err:
+	for (; i >= 0; i--)
+		drm_plane_cleanup(&ctx->planes[i].base);
+
+	return ret;
+}
+
+static void vidi_subdrv_remove(struct drm_device *drm_dev, struct device *dev)
+{
+}
+
+static struct exynos_drm_subdrv vidi_subdrv = {
+	.probe = vidi_subdrv_probe,
+	.remove = vidi_subdrv_remove,
+};
+
 static int vidi_probe(struct platform_device *pdev)
 {
 	struct vidi_context *ctx;
@@ -662,13 +715,15 @@ static int vidi_probe(struct platform_device *pdev)
 
 	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
 
-	vidi_manager.ctx = ctx;
-	exynos_drm_manager_register(&vidi_manager);
+	vidi_display.ctx = ctx;
 	exynos_drm_display_register(&vidi_display);
 
 	mutex_init(&ctx->lock);
 
 	platform_set_drvdata(pdev, ctx);
+
+	vidi_subdrv.dev = &pdev->dev;
+	exynos_drm_subdrv_register(&vidi_subdrv);
 
 	ret = device_create_file(&pdev->dev, &dev_attr_connection);
 	if (ret < 0)
@@ -684,7 +739,7 @@ static int vidi_remove(struct platform_device *pdev)
 	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
 	exynos_drm_display_unregister(&vidi_display);
-	exynos_drm_manager_unregister(&vidi_manager);
+	exynos_drm_subdrv_unregister(&vidi_subdrv);
 
 	if (ctx->raw_edid != (struct edid *)fake_edid_info) {
 		kfree(ctx->raw_edid);

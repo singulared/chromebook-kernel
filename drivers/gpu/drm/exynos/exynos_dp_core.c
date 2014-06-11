@@ -33,6 +33,7 @@
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
+#include "exynos_drm_fimd.h"
 
 #define ctx_from_connector(c)	container_of(c, struct exynos_dp_device, \
 					connector)
@@ -925,11 +926,20 @@ static void exynos_dp_commit(void *in_ctx)
 		dev_err(dp->dev, "unable to config video\n");
 }
 
-static int exynos_dp_initialize(void *in_ctx, struct drm_device *drm_dev)
+static int exynos_dp_initialize(void *in_ctx, struct drm_device *drm_dev,
+		uint32_t *possible_crtcs)
 {
 	struct exynos_dp_device *dp = in_ctx;
+	int fimd_id;
+
+	fimd_id = fimd_get_crtc_id(drm_dev);
+	if (fimd_id < 0) {
+		DRM_ERROR("Failed to get fimd crtc id\n");
+		return -ENODEV;
+	}
 
 	dp->drm_dev = drm_dev;
+	*possible_crtcs = 1 << fimd_id;
 
 	return 0;
 }

@@ -14,29 +14,21 @@
 
 #include <drm/drmP.h>
 #include "exynos_drm_drv.h"
-#include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
 #include "exynos_drm_fbdev.h"
 
 static LIST_HEAD(exynos_drm_subdrv_list);
-static LIST_HEAD(exynos_drm_manager_list);
 static LIST_HEAD(exynos_drm_display_list);
 
 static int exynos_drm_create_enc_conn(struct drm_device *dev,
-					struct exynos_drm_display *display)
+					struct exynos_drm_display *display,
+					uint32_t possible_crtcs)
 {
 	struct drm_encoder *encoder;
-	struct exynos_drm_manager *manager;
 	int ret;
-	unsigned long possible_crtcs = 0;
 
 	DRM_DEBUG_KMS("[DISPLAY:%s]\n",
 			exynos_drm_output_type_name(display->type));
-
-	/* Find possible crtcs for this display */
-	list_for_each_entry(manager, &exynos_drm_manager_list, list)
-		if (manager->type == display->type)
-			possible_crtcs |= 1 << manager->pipe;
 
 	/* create and initialize a encoder for this sub driver. */
 	encoder = exynos_drm_encoder_create(dev, display, possible_crtcs);
@@ -98,69 +90,6 @@ static void exynos_drm_subdrv_remove(struct drm_device *dev,
 		subdrv->remove(dev, subdrv->dev);
 }
 
-int exynos_drm_initialize_managers(struct drm_device *dev)
-{
-	struct exynos_drm_manager *manager, *n;
-	int ret, pipe = 0;
-
-	DRM_DEBUG_DRIVER("\n");
-
-	list_for_each_entry(manager, &exynos_drm_manager_list, list) {
-		manager->drm_dev = dev;
-		manager->pipe = pipe++;
-
-		ret = exynos_drm_crtc_create(manager);
-		if (ret) {
-			DRM_ERROR("CRTC create [%d] failed with %d\n",
-					manager->type, ret);
-			goto err;
-		}
-
-		if (manager->ops->initialize) {
-			ret = manager->ops->initialize(manager->ctx,
-				manager->crtc, manager->pipe);
-			if (ret) {
-				DRM_ERROR("Mgr init [%d] failed with %d\n",
-						manager->type, ret);
-				goto err;
-			}
-		}
-
-	}
-	return 0;
-
-err:
-	list_for_each_entry_safe(manager, n, &exynos_drm_manager_list, list) {
-		if (pipe-- > 0)
-			exynos_drm_manager_unregister(manager);
-		else
-			list_del(&manager->list);
-	}
-	return ret;
-}
-
-void exynos_drm_remove_managers(struct drm_device *dev)
-{
-	struct exynos_drm_manager *manager, *n;
-
-	DRM_DEBUG_DRIVER("\n");
-
-	list_for_each_entry_safe(manager, n, &exynos_drm_manager_list, list)
-		exynos_drm_manager_unregister(manager);
-}
-
-struct exynos_drm_manager *exynos_drm_manager_from_display(
-		struct exynos_drm_display *display)
-{
-	struct exynos_drm_manager *manager;
-
-	list_for_each_entry(manager, &exynos_drm_manager_list, list) {
-		if (manager->type == display->type)
-			return manager;
-	}
-	return NULL;
-}
-
 int exynos_drm_initialize_displays(struct drm_device *dev)
 {
 	struct exynos_drm_display *display, *n;
@@ -169,8 +98,11 @@ int exynos_drm_initialize_displays(struct drm_device *dev)
 	DRM_DEBUG_DRIVER("\n");
 
 	list_for_each_entry(display, &exynos_drm_display_list, list) {
+		uint32_t possible_crtcs;
+
 		if (display->ops->initialize) {
-			ret = display->ops->initialize(display->ctx, dev);
+			ret = display->ops->initialize(display->ctx, dev,
+				&possible_crtcs);
 			if (ret) {
 				DRM_ERROR("Display init [%d] failed with %d\n",
 						display->type, ret);
@@ -180,7 +112,7 @@ int exynos_drm_initialize_displays(struct drm_device *dev)
 
 		initialized++;
 
-		ret = exynos_drm_create_enc_conn(dev, display);
+		ret = exynos_drm_create_enc_conn(dev, display, possible_crtcs);
 		if (ret) {
 			DRM_ERROR("Encoder create [%d] failed with %d\n",
 					display->type, ret);
@@ -248,28 +180,6 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 		exynos_drm_subdrv_remove(dev, subdrv);
 	}
 
-	return 0;
-}
-
-int exynos_drm_manager_register(struct exynos_drm_manager *manager)
-{
-	DRM_DEBUG_KMS("[MANAGER:%s]\n",
-			exynos_drm_output_type_name(manager->type));
-
-	BUG_ON(!manager->ops);
-	list_add_tail(&manager->list, &exynos_drm_manager_list);
-	return 0;
-}
-
-int exynos_drm_manager_unregister(struct exynos_drm_manager *manager)
-{
-	DRM_DEBUG_KMS("[MANAGER:%s]\n",
-			exynos_drm_output_type_name(manager->type));
-
-	if (manager->ops->remove)
-		manager->ops->remove(manager->ctx);
-
-	list_del(&manager->list);
 	return 0;
 }
 

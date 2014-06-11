@@ -226,7 +226,8 @@ struct exynos_drm_overlay {
  * @set_property: sets a drm propery on the display
  */
 struct exynos_drm_display_ops {
-	int (*initialize)(void *ctx, struct drm_device *drm_dev);
+	int (*initialize)(void *ctx, struct drm_device *drm_dev,
+			uint32_t *possible_crtcs);
 	int (*create_connector)(void *ctx,
 			struct drm_encoder *encoder);
 	void (*remove)(void *ctx);
@@ -244,7 +245,7 @@ struct exynos_drm_display_ops {
 /*
  * Exynos drm display structure, maps 1:1 with an encoder/connector
  *
- * @list: the list entry for this manager
+ * @list: the list entry for this display
  * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
  * @encoder: encoder object this display maps to
  * @ops: pointer to callbacks for exynos drm specific functionality
@@ -255,57 +256,6 @@ struct exynos_drm_display {
 	enum exynos_drm_output_type type;
 	struct drm_encoder *encoder;
 	const struct exynos_drm_display_ops *ops;
-	void *ctx;
-};
-
-/*
- * Exynos drm manager ops
- *
- * @initialize: initializes the manager
- * @remove: cleans up the manager for removal
- * @dpms: control device power.
- * @adjust_mode: allows manager to adjust mode in check mode path
- * @mode_fixup: fix mode data before applying it
- * @mode_set: copy drm display mode to hw specific display mode.
- * @update: updates the primary plane
- * @commit: appl current hw specific display mode to hw.
- * @enable_vblank: specific driver callback for enabling vblank interrupt.
- * @disable_vblank: specific driver callback for disabling vblank interrupt.
- */
-struct exynos_drm_manager_ops {
-	int (*initialize)(void *ctx, struct drm_crtc *crtc, int pipe);
-	void (*remove)(void *ctx);
-	void (*dpms)(void *ctx, int mode);
-	void (*adjust_mode)(void *ctx, struct drm_connector *connector,
-				struct drm_display_mode *mode_to_adjust);
-	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
-				struct drm_display_mode *adjusted_mode);
-	void (*mode_set)(void *ctx, const struct drm_display_mode *mode);
-	int (*update)(void *ctx, struct drm_crtc *crtc,
-				struct drm_framebuffer *fb);
-	void (*commit)(void *ctx);
-	int (*enable_vblank)(void *ctx);
-	void (*disable_vblank)(void *ctx);
-};
-
-/*
- * Exynos drm common manager structure, maps 1:1 with a crtc
- *
- * @list: the list entry for this manager
- * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
- * @drm_dev: pointer to the drm device
- * @crtc: pointer to the drm crtc
- * @pipe: the pipe number for this crtc/manager
- * @ops: pointer to callbacks for exynos drm specific functionality
- * @ctx: A pointer to the manager's implementation specific context
- */
-struct exynos_drm_manager {
-	struct list_head list;
-	enum exynos_drm_output_type type;
-	struct drm_device *drm_dev;
-	struct drm_crtc *crtc;
-	int pipe;
-	const struct exynos_drm_manager_ops *ops;
 	void *ctx;
 };
 
@@ -348,9 +298,6 @@ struct exynos_drm_private {
 	struct drm_property *plane_zpos_property;
 	struct drm_property *crtc_mode_property;
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct kds_callback kds_cb;
-#endif
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
 		atomic_t object_memory;
@@ -366,8 +313,6 @@ struct exynos_drm_private {
  * @dev: pointer to device object for subdrv device driver.
  * @drm_dev: pointer to drm_device and this pointer would be set
  *	when sub driver calls exynos_drm_subdrv_register().
- * @manager: subdrv has its own manager to control a hardware appropriately
- *	and we can access a hardware drawing on this manager.
  * @probe: this callback would be called by exynos drm driver after
  *	subdrv is registered to it.
  * @remove: this callback is used to release resources created
@@ -400,19 +345,11 @@ int exynos_drm_device_register(struct drm_device *dev);
  */
 int exynos_drm_device_unregister(struct drm_device *dev);
 
-int exynos_drm_initialize_managers(struct drm_device *dev);
-void exynos_drm_remove_managers(struct drm_device *dev);
 int exynos_drm_initialize_displays(struct drm_device *dev);
 void exynos_drm_remove_displays(struct drm_device *dev);
 
-int exynos_drm_manager_register(struct exynos_drm_manager *manager);
-int exynos_drm_manager_unregister(struct exynos_drm_manager *manager);
 int exynos_drm_display_register(struct exynos_drm_display *display);
 int exynos_drm_display_unregister(struct exynos_drm_display *display);
-
-/* This function returns a manager of the same type as the given display */
-struct exynos_drm_manager *exynos_drm_manager_from_display(
-		struct exynos_drm_display *display);
 
 /*
  * this function would be called by sub drivers such as display controller

@@ -4,7 +4,7 @@
 
 ccflags-y := -Iinclude/drm -Idrivers/gpu/drm/exynos
 exynosdrm-y := exynos_drm_drv.o exynos_drm_encoder.o \
-		exynos_drm_crtc.o exynos_drm_fbdev.o exynos_drm_fb.o \
+		exynos_drm_fbdev.o exynos_drm_fb.o \
 		exynos_drm_buf.o exynos_drm_gem.o exynos_drm_core.o \
 		exynos_drm_plane.o exynos_trace_points.o
 
