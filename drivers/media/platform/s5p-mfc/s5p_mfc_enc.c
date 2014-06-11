@@ -1001,6 +1001,7 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	struct s5p_mfc_dev *dev = video_drvdata(file);
 	struct s5p_mfc_fmt *fmt;
 	struct v4l2_pix_format_mplane *pix_fmt_mp = &f->fmt.pix_mp;
+	u32 min_w, min_h;
 
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		fmt = find_format(dev, f, MFC_FMT_ENC);
@@ -1027,8 +1028,16 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			mfc_err("failed to try output format\n");
 			return -EINVAL;
 		}
-		v4l_bound_align_image(&pix_fmt_mp->width, 16, 1920, 4,
-			&pix_fmt_mp->height, 16, 1088, 4, 0);
+		/*
+		 * Use the requested size as the minimum bound, unless it's less
+		 * than the required hardware minimum. The bound align function
+		 * will align to the closest value but we do not want to adjust
+		 * below the requested size.
+		 */
+		min_w = min(max(16u, pix_fmt_mp->width), 1920u);
+		min_h = min(max(16u, pix_fmt_mp->height), 1088u);
+		v4l_bound_align_image(&pix_fmt_mp->width, min_w, 1920, 4,
+			&pix_fmt_mp->height, min_h, 1088, 4, 0);
 	} else {
 		mfc_err("invalid buf type\n");
 		return -EINVAL;
