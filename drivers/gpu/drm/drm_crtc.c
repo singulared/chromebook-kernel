@@ -1978,8 +1978,8 @@ out:
  *
  * src_{x,y,w,h} are provided in 16.16 fixed point format
  */
-static int setplane_internal(struct drm_crtc *crtc,
-			     struct drm_plane *plane,
+static int setplane_internal(struct drm_plane *plane,
+			     struct drm_crtc *crtc,
 			     struct drm_framebuffer *fb,
 			     int32_t crtc_x, int32_t crtc_y,
 			     uint32_t crtc_w, uint32_t crtc_h,
@@ -1987,7 +1987,7 @@ static int setplane_internal(struct drm_crtc *crtc,
 			     uint32_t src_x, uint32_t src_y,
 			     uint32_t src_w, uint32_t src_h)
 {
-	struct drm_device *dev = crtc->dev;
+	struct drm_device *dev = plane->dev;
 	struct drm_framebuffer *old_fb = NULL;
 	int ret = 0;
 	unsigned int fb_width, fb_height;
@@ -2133,7 +2133,7 @@ int drm_mode_setplane(struct drm_device *dev, void *data,
 		crtc = obj_to_crtc(obj);
 	}
 
-	return setplane_internal(crtc, plane, fb,
+	return setplane_internal(plane, crtc, fb,
 				 plane_req->crtc_x, plane_req->crtc_y,
 				 plane_req->crtc_w, plane_req->crtc_h,
 				 plane_req->src_x, plane_req->src_y,
