@@ -63,7 +63,6 @@
 #define EXYNOS_MODE_ADJUSTED 0x1
 
 struct drm_device;
-struct exynos_drm_overlay;
 struct drm_connector;
 
 /* this enumerates display type. */
@@ -144,72 +143,6 @@ int exynos_plane_helper_freeze_plane(struct drm_plane *plane);
 
 void exynos_plane_helper_thaw_plane(struct drm_plane *plane,
 		struct drm_crtc *crtc);
-
-/*
- * Exynos drm common overlay structure.
- *
- * @fb_x: offset x on a framebuffer to be displayed.
- *	- the unit is screen coordinates.
- * @fb_y: offset y on a framebuffer to be displayed.
- *	- the unit is screen coordinates.
- * @fb_width: width of a framebuffer.
- * @fb_height: height of a framebuffer.
- * @src_width: width of a partial image to be displayed from framebuffer.
- * @src_height: height of a partial image to be displayed from framebuffer.
- * @crtc_x: offset x on hardware screen.
- * @crtc_y: offset y on hardware screen.
- * @crtc_width: window width to be displayed (hardware screen).
- * @crtc_height: window height to be displayed (hardware screen).
- * @mode_width: width of screen mode.
- * @mode_height: height of screen mode.
- * @refresh: refresh rate.
- * @scan_flag: interlace or progressive way.
- *	(it could be DRM_MODE_FLAG_*)
- * @bpp: pixel size.(in bit)
- * @pitch: pitch of a framebuffer.
- * @pixel_format: fourcc pixel format of this overlay
- * @dma_addr: array of bus(accessed by dma) address to the memory region
- *	      allocated for a overlay.
- * @zpos: order of overlay layer(z position).
- * @default_win: a window to be enabled.
- * @color_key: color key on or off.
- * @index_color: if using color key feature then this value would be used
- *			as index color.
- * @local_path: in case of lcd type, local path mode on or off.
- * @transparency: transparency on or off.
- * @activated: activated or not.
- *
- * this structure is common to exynos SoC and its contents would be copied
- * to hardware specific overlay info.
- */
-struct exynos_drm_overlay {
-	unsigned int fb_x;
-	unsigned int fb_y;
-	unsigned int fb_width;
-	unsigned int fb_height;
-	unsigned int src_width;
-	unsigned int src_height;
-	unsigned int crtc_x;
-	unsigned int crtc_y;
-	unsigned int crtc_width;
-	unsigned int crtc_height;
-	unsigned int mode_width;
-	unsigned int mode_height;
-	unsigned int refresh;
-	unsigned int scan_flag;
-	unsigned int bpp;
-	unsigned int pitch;
-	uint32_t pixel_format;
-	dma_addr_t dma_addr[MAX_FB_BUFFER];
-	int zpos;
-
-	bool default_win;
-	bool color_key;
-	unsigned int index_color;
-	bool local_path;
-	bool transparency;
-	bool activated;
-};
 
 /*
  * Exynos DRM Display Structure.
