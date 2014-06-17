@@ -127,15 +127,7 @@ struct fimd_context {
 	spinlock_t			shadowcon_lock;
 };
 
-static struct device *dp_dev;
-
 static void fimd_wait_for_vblank(struct fimd_context *ctx);
-
-void exynos_fimd_dp_attach(struct device *dev)
-{
-	DRM_DEBUG_KMS("%s\n", dev_name(dev));
-	dp_dev = dev;
-}
 
 static const struct of_device_id fimd_driver_dt_match[] = {
 	{ .compatible = "samsung,exynos4-fimd",

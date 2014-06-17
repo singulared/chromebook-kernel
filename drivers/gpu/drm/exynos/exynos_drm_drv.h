@@ -295,8 +295,6 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *drm_subdrv);
 /* this function removes subdrv list from exynos drm driver */
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *drm_subdrv);
 
-void exynos_fimd_dp_attach(struct device *dev);
-
 int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file);
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file);
 

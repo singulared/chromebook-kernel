@@ -1539,8 +1539,6 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dp);
 
-	exynos_fimd_dp_attach(dp->dev);
-
 	exynos_dp_display.ctx = dp;
 	exynos_drm_display_register(&exynos_dp_display);
 
