@@ -223,13 +223,6 @@ struct drm_exynos_file_private {
 struct exynos_drm_private {
 	struct drm_fb_helper *fb_helper;
 
-	/*
-	 * created crtc object would be contained at this array and
-	 * this array is used to be aware of which crtc did it request vblank.
-	 */
-	struct drm_crtc *crtc[MAX_CRTC];
-	struct drm_property *plane_zpos_property;
-	struct drm_property *crtc_mode_property;
 
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
