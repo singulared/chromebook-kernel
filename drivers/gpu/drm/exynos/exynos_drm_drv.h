@@ -223,6 +223,10 @@ struct drm_exynos_file_private {
 struct exynos_drm_private {
 	struct drm_fb_helper *fb_helper;
 
+	struct drm_crtc *fimd_crtc;
+	struct drm_crtc *mixer_crtc;
+	struct drm_crtc *vidi_crtc;
+
 
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {

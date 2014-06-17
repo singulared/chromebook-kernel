@@ -1352,6 +1352,7 @@ static int mixer_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct mixer_context *mixer_ctx = platform_get_drvdata(pdev);
+	struct exynos_drm_private *priv = drm_dev->dev_private;
 	int ret, i;
 
 	mixer_ctx->drm_dev = drm_dev;
@@ -1397,6 +1398,8 @@ static int mixer_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 	}
 
 	drm_crtc_helper_add(&mixer_ctx->crtc, &mixer_crtc_helper_funcs);
+
+	priv->mixer_crtc = &mixer_ctx->crtc;
 
 	return 0;
 err:

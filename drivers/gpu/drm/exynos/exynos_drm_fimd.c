@@ -969,6 +969,7 @@ static int fimd_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct fimd_context *ctx = platform_get_drvdata(pdev);
+	struct exynos_drm_private *priv = drm_dev->dev_private;
 	int i, ret;
 
 	ctx->drm_dev = drm_dev;
@@ -1004,6 +1005,8 @@ static int fimd_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 	}
 
 	drm_crtc_helper_add(&ctx->crtc, &fimd_crtc_helper_funcs);
+
+	priv->fimd_crtc = &ctx->crtc;
 
 	return 0;
 err:
