@@ -47,6 +47,21 @@
 /* platform device pointer for eynos drm device. */
 static struct platform_device *exynos_drm_pdev;
 
+static void exynos_drm_setup_encoder_clones(struct drm_device *dev)
+{
+	struct drm_encoder *e;
+	unsigned int clone_mask = 0;
+	int cnt = 0;
+
+	DRM_DEBUG_KMS("\n");
+
+	list_for_each_entry(e, &dev->mode_config.encoder_list, head)
+			clone_mask |= (1 << (cnt++));
+
+	list_for_each_entry(e, &dev->mode_config.encoder_list, head)
+		e->possible_clones = clone_mask;
+}
+
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
 	struct exynos_drm_private *private;
@@ -107,9 +122,8 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto err_display_cleanup;
 
-
 	/* setup possible_clones. */
-	exynos_drm_encoder_setup(dev);
+	exynos_drm_setup_encoder_clones(dev);
 
 	/*
 	 * create and configure fb helper and also exynos specific
