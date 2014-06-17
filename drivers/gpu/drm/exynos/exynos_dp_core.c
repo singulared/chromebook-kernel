@@ -1557,26 +1557,6 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	return 0;
 }
 
-int exynos_dp_suspend(struct device *dev)
-{
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
-
-	DRM_DEBUG_KMS("\n");
-
-	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
-	return 0;
-}
-
-int exynos_dp_resume(struct device *dev)
-{
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
-
-	DRM_DEBUG_KMS("\n");
-
-	exynos_dp_dpms(dp, DRM_MODE_DPMS_ON);
-	return 0;
-}
-
 static const struct of_device_id exynos_dp_match[] = {
 	{ .compatible = "samsung,exynos5-dp" },
 	{},

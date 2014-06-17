@@ -77,10 +77,6 @@ struct exynos_dp_device {
 	u32 quirks;
 };
 
-/* exynos_dp_core.c */
-int exynos_dp_suspend(struct device *dev);
-int exynos_dp_resume(struct device *dev);
-
 /* exynos_dp_reg.c */
 void exynos_dp_enable_video_mute(struct exynos_dp_device *dp, bool enable);
 void exynos_dp_stop_video(struct exynos_dp_device *dp);
