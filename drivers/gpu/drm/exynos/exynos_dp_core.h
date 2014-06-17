@@ -39,8 +39,8 @@ struct link_train {
 struct exynos_dp_device {
 	struct device		*dev;
 	struct drm_device	*drm_dev;
+	struct drm_encoder	encoder;
 	struct drm_connector	connector;
-	struct drm_encoder	*encoder;
 	struct clk		*clock;
 	unsigned int		irq;
 	unsigned int		irq_flags;

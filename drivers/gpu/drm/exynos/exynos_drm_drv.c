@@ -109,6 +109,10 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto err_drm_device;
 
+	if (private->dp_encoder && private->fimd_crtc)
+		private->dp_encoder->possible_crtcs =
+			1 << exynos_drm_pipe_from_crtc(private->fimd_crtc);
+
 	/*
 	 * enable drm irq mode.
 	 * - with irq_enabled = 1, we can use the vblank feature.

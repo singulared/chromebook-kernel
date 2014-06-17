@@ -227,6 +227,8 @@ struct exynos_drm_private {
 	struct drm_crtc *mixer_crtc;
 	struct drm_crtc *vidi_crtc;
 
+	struct drm_encoder *dp_encoder;
+
 
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
