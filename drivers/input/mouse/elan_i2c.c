@@ -4,7 +4,7 @@
  * Copyright (c) 2013 ELAN Microelectronics Corp.
  *
  * Author: 林政維 (Duson Lin) <dusonlin@emc.com.tw>
- * Version: 1.5.2
+ * Version: 1.5.4
  *
  * Based on cyapa driver:
  * copyright (c) 2011-2012 Cypress Semiconductor, Inc.
@@ -18,6 +18,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/async.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
@@ -38,7 +39,7 @@
 #include <linux/completion.h>
 
 #define DRIVER_NAME		"elan_i2c"
-#define ELAN_DRIVER_VERSION	"1.5.2"
+#define ELAN_DRIVER_VERSION	"1.5.4"
 #define ETP_PRESSURE_OFFSET	25
 #define ETP_MAX_PRESSURE	255
 #define ETP_FWIDTH_REDUCE	90
@@ -626,15 +627,15 @@ static int elan_firmware(struct elan_tp_data *data, const char *fw_name)
 			goto done;
 		}
 
-		ret = elan_wait_for_chg(data, 200);
+		ret = elan_wait_for_chg(data, 300);
 		if (ret) {
 			dev_err(dev, "Failed waiting for reset %d.\n", ret);
 			goto done;
 		}
 
 		ret = i2c_master_recv(data->client, buffer, ETP_INF_LENGTH);
-		if (ret != 2 || le16_to_cpup((__le16 *)buffer) != 0) {
-			dev_err(dev, "Failed INT signal data %d.\n", ret);
+		if (ret != ETP_INF_LENGTH) {
+			dev_err(dev, "Failed INT signal data ret=%d\n", ret);
 			goto done;
 		}
 		data->wait_signal_from_updatefw = false;
@@ -652,11 +653,6 @@ static int elan_firmware(struct elan_tp_data *data, const char *fw_name)
 done:
 	if (ret != 0)
 		elan_iap_reset(data);
-	else {
-		disable_irq(data->irq);
-		elan_initialize(data);
-		enable_irq(data->irq);
-	}
 	release_firmware(fw);
 	return ret;
 }
@@ -1471,17 +1467,17 @@ static void elan_report_absolute(struct elan_tp_data *data, u8 *packet)
 	int pos_x, pos_y;
 	int pressure, mk_x, mk_y;
 	int i, area_x, area_y, major, minor, new_pressure;
-	int finger_count = 0;
 	int btn_click;
 	u8  tp_info;
+	struct device *dev = &data->client->dev;
 
 	if (!data) {
-		dev_err(&data->client->dev, "tp data structure is null");
+		dev_err(dev, "tp data structure is null");
 		return;
 	}
 	input = data->input;
 	if (!input) {
-		dev_err(&data->client->dev, "input structure is null");
+		dev_err(dev, "input structure is null");
 		return;
 	}
 
@@ -1508,6 +1504,20 @@ static void elan_report_absolute(struct elan_tp_data *data, u8 *packet)
 			mk_y = (finger_data[3] >> 4);
 			pressure = finger_data[4];
 
+			if (pos_x > data->max_x) {
+				dev_err(dev, "[%d] x=%d y=%d over max_x (%d)",
+					i, pos_x, pos_y, data->max_x);
+				finger_data += ETP_FINGER_DATA_LEN;
+				continue;
+			}
+
+			if (pos_y > data->max_y) {
+				dev_err(dev, "[%d] x=%d y=%d over max_y (%d)",
+					i, pos_x, pos_y, data->max_y);
+				finger_data += ETP_FINGER_DATA_LEN;
+				continue;
+			}
+
 			/*
 			 * to avoid fat finger be as palm, so reduce the
 			 * width x and y per trace
@@ -1532,7 +1542,6 @@ static void elan_report_absolute(struct elan_tp_data *data, u8 *packet)
 			input_report_abs(input, ABS_MT_TOUCH_MAJOR, major);
 			input_report_abs(input, ABS_MT_TOUCH_MINOR, minor);
 			finger_data += ETP_FINGER_DATA_LEN;
-			finger_count++;
 		} else {
 			input_mt_slot(input, i);
 			input_mt_report_slot_state(input,
@@ -1698,11 +1707,56 @@ static u8 elan_check_adapter_functionality(struct i2c_client *client)
 	return ret;
 }
 
+static void elan_async_init(void *arg, async_cookie_t cookie)
+{
+	struct elan_tp_data *data = arg;
+	struct i2c_client *client = data->client;
+	int ret;
+
+	/* initial elan touch pad */
+	ret = elan_initialize(data);
+	if (ret < 0)
+		goto err_init;
+
+	/* create input device */
+	ret = elan_input_dev_create(data);
+	if (ret < 0)
+		goto err_input_dev;
+
+	ret = request_threaded_irq(client->irq, NULL, elan_isr,
+				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				   client->name, data);
+	if (ret < 0) {
+		dev_err(&client->dev, "cannot register irq=%d\n",
+				client->irq);
+		goto err_irq;
+	}
+
+	ret = sysfs_create_group(&client->dev.kobj, &elan_sysfs_group);
+	if (ret < 0) {
+		dev_err(&client->dev, "cannot register dev attribute %d", ret);
+		goto err_create_group;
+	}
+	device_init_wakeup(&client->dev, true);
+	device_set_wakeup_enable(&client->dev, false);
+	i2c_set_clientdata(client, data);
+
+	return;
+
+err_create_group:
+	free_irq(data->irq, data);
+err_irq:
+	input_unregister_device(data->input);
+err_input_dev:
+err_init:
+	kfree(data);
+	dev_err(&client->dev, "Elan Trackpad probe fail!\n");
+}
+
 static int elan_probe(struct i2c_client *client,
 		      const struct i2c_device_id *dev_id)
 {
 	struct elan_tp_data *data;
-	int ret;
 	u8 adapter_func;
 	union i2c_smbus_data dummy;
 	struct device *dev = &client->dev;
@@ -1736,45 +1790,10 @@ static int elan_probe(struct i2c_client *client,
 	data->wait_signal_from_updatefw = false;
 	init_completion(&data->fw_completion);
 
-	/* initial elan touch pad */
-	ret = elan_initialize(data);
-	if (ret < 0)
-		goto err_init;
-
-	/* create input device */
-	ret = elan_input_dev_create(data);
-	if (ret < 0)
-		goto err_input_dev;
-
-	ret = request_threaded_irq(client->irq, NULL, elan_isr,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				   client->name, data);
-	if (ret < 0) {
-		dev_err(&client->dev, "cannot register irq=%d\n",
-				client->irq);
-		goto err_irq;
-	}
-
-	ret = sysfs_create_group(&client->dev.kobj, &elan_sysfs_group);
-	if (ret < 0) {
-		dev_err(&client->dev, "cannot register dev attribute %d", ret);
-		goto err_create_group;
-	}
-	device_init_wakeup(&client->dev, true);
-	device_set_wakeup_enable(&client->dev, false);
-	i2c_set_clientdata(client, data);
+	/* Do slower init steps asynchonously. */
+	async_schedule(elan_async_init, data);
 
 	return 0;
-
-err_create_group:
-	free_irq(data->irq, data);
-err_irq:
-	input_unregister_device(data->input);
-err_input_dev:
-err_init:
-	kfree(data);
-	dev_err(&client->dev, "Elan Trackpad probe fail!\n");
-	return ret;
 }
 
 static int elan_remove(struct i2c_client *client)
