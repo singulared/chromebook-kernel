@@ -113,6 +113,10 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		private->dp_encoder->possible_crtcs =
 			1 << exynos_drm_pipe_from_crtc(private->fimd_crtc);
 
+	if (private->hdmi_encoder && private->mixer_crtc)
+		private->hdmi_encoder->possible_crtcs =
+			1 << exynos_drm_pipe_from_crtc(private->mixer_crtc);
+
 	/*
 	 * enable drm irq mode.
 	 * - with irq_enabled = 1, we can use the vblank feature.

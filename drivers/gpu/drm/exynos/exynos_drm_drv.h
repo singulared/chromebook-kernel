@@ -228,6 +228,7 @@ struct exynos_drm_private {
 	struct drm_crtc *vidi_crtc;
 
 	struct drm_encoder *dp_encoder;
+	struct drm_encoder *hdmi_encoder;
 
 
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
