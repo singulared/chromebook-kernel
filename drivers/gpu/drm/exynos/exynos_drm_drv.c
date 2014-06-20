@@ -22,7 +22,6 @@
 
 #include "exynos_drm_debugfs.h"
 #include "exynos_drm_drv.h"
-#include "exynos_drm_encoder.h"
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
@@ -105,10 +104,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto err_mode_config_cleanup;
 
-	ret = exynos_drm_initialize_displays(dev);
-	if (ret)
-		goto err_drm_device;
-
 	if (private->dp_encoder && private->fimd_crtc)
 		private->dp_encoder->possible_crtcs =
 			1 << exynos_drm_pipe_from_crtc(private->fimd_crtc);
@@ -132,7 +127,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 
 	ret = drm_vblank_init(dev, MAX_CRTC);
 	if (ret)
-		goto err_display_cleanup;
+		goto err_drm_device;
 
 	/* setup possible_clones. */
 	exynos_drm_setup_encoder_clones(dev);
@@ -151,8 +146,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 
 err_vblank:
 	drm_vblank_cleanup(dev);
-err_display_cleanup:
-	exynos_drm_remove_displays(dev);
 err_drm_device:
 	exynos_drm_device_unregister(dev);
 err_mode_config_cleanup:
@@ -174,7 +167,6 @@ static int exynos_drm_unload(struct drm_device *dev)
 	exynos_drm_device_unregister(dev);
 	drm_vblank_cleanup(dev);
 	drm_kms_helper_poll_fini(dev);
-	exynos_drm_remove_displays(dev);
 	drm_mode_config_cleanup(dev);
 
 	drm_release_iommu_mapping(dev);
@@ -509,22 +501,6 @@ static int exynos_drm_platform_remove(struct platform_device *pdev)
 	drm_platform_exit(&exynos_drm_driver, pdev);
 
 	return 0;
-}
-
-const char *exynos_drm_output_type_name(enum exynos_drm_output_type type)
-{
-	switch (type) {
-	case EXYNOS_DISPLAY_TYPE_NONE:
-		return "NONE";
-	case EXYNOS_DISPLAY_TYPE_LCD:
-		return "LCD";
-	case EXYNOS_DISPLAY_TYPE_HDMI:
-		return "HDMI";
-	case EXYNOS_DISPLAY_TYPE_VIDI:
-		return "VIDI";
-	default:
-		return "?";
-	}
 }
 
 #ifdef CONFIG_PM_SLEEP

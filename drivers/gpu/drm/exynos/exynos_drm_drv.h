@@ -65,19 +65,6 @@
 struct drm_device;
 struct drm_connector;
 
-/* this enumerates display type. */
-enum exynos_drm_output_type {
-	EXYNOS_DISPLAY_TYPE_NONE,
-	/* RGB or CPU Interface. */
-	EXYNOS_DISPLAY_TYPE_LCD,
-	/* HDMI Interface. */
-	EXYNOS_DISPLAY_TYPE_HDMI,
-	/* Virtual Display Interface. */
-	EXYNOS_DISPLAY_TYPE_VIDI,
-};
-
-const char *exynos_drm_output_type_name(enum exynos_drm_output_type type);
-
 int exynos_drm_pipe_from_crtc(struct drm_crtc *crtc);
 
 struct exynos_plane_helper_funcs {
@@ -143,54 +130,6 @@ int exynos_plane_helper_freeze_plane(struct drm_plane *plane);
 
 void exynos_plane_helper_thaw_plane(struct drm_plane *plane,
 		struct drm_crtc *crtc);
-
-/*
- * Exynos DRM Display Structure.
- *	- this structure is common to analog tv, digital tv and lcd panel.
- *
- * @initialize: initializes the display with drm_dev
- * @remove: cleans up the display for removal
- * @mode_fixup: fix mode data comparing to hw specific display mode.
- * @mode_set: convert drm_display_mode to hw specific display mode and
- *	      would be called by encoder->mode_set().
- * @check_mode: check if mode is valid or not.
- * @dpms: display device on or off.
- * @commit: apply changes to hw
- * @set_property: sets a drm propery on the display
- */
-struct exynos_drm_display_ops {
-	int (*initialize)(void *ctx, struct drm_device *drm_dev,
-			uint32_t *possible_crtcs);
-	int (*create_connector)(void *ctx,
-			struct drm_encoder *encoder);
-	void (*remove)(void *ctx);
-	bool (*mode_fixup)(void *ctx, struct drm_connector *connector,
-			const struct drm_display_mode *mode,
-			struct drm_display_mode *adjusted_mode);
-	void (*mode_set)(void *ctx, struct drm_display_mode *mode);
-	int (*check_mode)(void *ctx, const struct drm_display_mode *mode);
-	void (*dpms)(void *ctx, int mode);
-	void (*commit)(void *ctx);
-	int (*set_property)(void *ctx, struct drm_property *property,
-			uint64_t val);
-};
-
-/*
- * Exynos drm display structure, maps 1:1 with an encoder/connector
- *
- * @list: the list entry for this display
- * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
- * @encoder: encoder object this display maps to
- * @ops: pointer to callbacks for exynos drm specific functionality
- * @ctx: A pointer to the display's implementation specific context
- */
-struct exynos_drm_display {
-	struct list_head list;
-	enum exynos_drm_output_type type;
-	struct drm_encoder *encoder;
-	const struct exynos_drm_display_ops *ops;
-	void *ctx;
-};
 
 struct exynos_drm_g2d_private {
 	struct device		*dev;
@@ -281,9 +220,6 @@ int exynos_drm_device_unregister(struct drm_device *dev);
 
 int exynos_drm_initialize_displays(struct drm_device *dev);
 void exynos_drm_remove_displays(struct drm_device *dev);
-
-int exynos_drm_display_register(struct exynos_drm_display *display);
-int exynos_drm_display_unregister(struct exynos_drm_display *display);
 
 /*
  * this function would be called by sub drivers such as display controller
