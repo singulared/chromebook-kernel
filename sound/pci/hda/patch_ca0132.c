@@ -4165,6 +4165,24 @@ static struct hda_pcm_stream ca0132_pcm_analog_capture = {
 	},
 };
 
+const struct snd_pcm_chmap_elem ca0132_kb_chmap[] = {
+	{ .channels = 2,
+	  .map = { SNDRV_CHMAP_FC, SNDRV_CHMAP_NA } },
+	{ }
+};
+
+static struct hda_pcm_stream ca0132_pcm_kb_capture = {
+	.substreams = 1,
+	.channels_min = 2,
+	.channels_max = 2,
+	.chmap = ca0132_kb_chmap,
+	.ops = {
+		.prepare = ca0132_capture_pcm_prepare,
+		.cleanup = ca0132_capture_pcm_cleanup,
+		.get_delay = ca0132_capture_pcm_delay,
+	},
+};
+
 static struct hda_pcm_stream ca0132_pcm_digital_playback = {
 	.substreams = 1,
 	.channels_min = 2,
@@ -4202,8 +4220,8 @@ static int ca0132_build_pcms(struct hda_codec *codec)
 	codec->num_pcms++;
 
 	info++;
-	info->name = "CA0132 Analog Mic-In2";
-	info->stream[SNDRV_PCM_STREAM_CAPTURE] = ca0132_pcm_analog_capture;
+	info->name = "CA0132 Keyboard Mic";
+	info->stream[SNDRV_PCM_STREAM_CAPTURE] = ca0132_pcm_kb_capture;
 	info->stream[SNDRV_PCM_STREAM_CAPTURE].substreams = 1;
 	info->stream[SNDRV_PCM_STREAM_CAPTURE].nid = spec->adcs[1];
 	codec->num_pcms++;
