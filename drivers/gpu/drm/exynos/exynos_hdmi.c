@@ -1094,11 +1094,20 @@ static void hdmi_reg_infoframe(struct hdmi_context *hdata,
 	}
 }
 
-static int hdmi_initialize(void *ctx, struct drm_device *drm_dev)
+static int hdmi_initialize(void *ctx, struct drm_device *drm_dev,
+		uint32_t *possible_crtcs)
 {
 	struct hdmi_context *hdata = ctx;
+	int mixer_id;
+
+	mixer_id = mixer_get_crtc_id(drm_dev);
+	if (mixer_id < 0) {
+		DRM_ERROR("Failed to get mixer crtc id\n");
+		return -ENODEV;
+	}
 
 	hdata->drm_dev = drm_dev;
+	*possible_crtcs = 1 << mixer_id;
 
 	return 0;
 }
@@ -1664,8 +1673,7 @@ static int set_property(struct hdmi_context *hdata,
 }
 
 static int hdmi_connector_set_property(struct drm_connector *connector,
-		void *state, struct drm_property *property, uint64_t val,
-		void *blob_data)
+		struct drm_property *property, uint64_t val)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
 	int ret;
@@ -2861,11 +2869,8 @@ static int hdmi_mode_valid(struct drm_connector *connector,
 				struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
-	struct exynos_drm_manager *manager =
-				exynos_drm_manager_from_display(&hdmi_display);
 
-	if (manager && manager->ops->adjust_mode)
-		manager->ops->adjust_mode(manager->ctx, connector, mode);
+	mixer_adjust_mode(connector, mode);
 
 	return !hdmi_check_mode(hdata, mode) ? MODE_OK : MODE_BAD;
 }

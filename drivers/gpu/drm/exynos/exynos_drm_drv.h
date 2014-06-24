@@ -63,7 +63,6 @@
 #define EXYNOS_MODE_ADJUSTED 0x1
 
 struct drm_device;
-struct exynos_drm_overlay;
 struct drm_connector;
 
 /* this enumerates display type. */
@@ -79,6 +78,14 @@ enum exynos_drm_output_type {
 
 const char *exynos_drm_output_type_name(enum exynos_drm_output_type type);
 
+int exynos_drm_pipe_from_crtc(struct drm_crtc *crtc);
+
+struct exynos_plane_helper_funcs {
+	int (*commit_plane)(struct drm_plane *plane, struct drm_crtc *crtc,
+				struct drm_framebuffer *fb);
+	int (*disable_plane)(struct drm_plane *plane);
+};
+
 struct exynos_drm_plane {
 	struct drm_plane base;
 
@@ -92,6 +99,17 @@ struct exynos_drm_plane {
 	uint32_t src_y;
 	uint32_t src_w;
 	uint32_t src_h;
+
+	struct completion completion;
+	struct drm_framebuffer *fb;
+	struct drm_framebuffer *pending_fb;
+	struct drm_pending_vblank_event *pending_event;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct kds_resource_set *kds;
+	struct kds_callback kds_cb;
+#endif
+
+	const struct exynos_plane_helper_funcs *helper_funcs;
 };
 #define to_exynos_plane(x) container_of(x, struct exynos_drm_plane, base)
 
@@ -100,71 +118,31 @@ void exynos_plane_copy_state(struct exynos_drm_plane *src,
 void exynos_sanitize_plane_coords(struct drm_plane *plane,
 		struct drm_crtc *crtc);
 
-/*
- * Exynos drm common overlay structure.
- *
- * @fb_x: offset x on a framebuffer to be displayed.
- *	- the unit is screen coordinates.
- * @fb_y: offset y on a framebuffer to be displayed.
- *	- the unit is screen coordinates.
- * @fb_width: width of a framebuffer.
- * @fb_height: height of a framebuffer.
- * @src_width: width of a partial image to be displayed from framebuffer.
- * @src_height: height of a partial image to be displayed from framebuffer.
- * @crtc_x: offset x on hardware screen.
- * @crtc_y: offset y on hardware screen.
- * @crtc_width: window width to be displayed (hardware screen).
- * @crtc_height: window height to be displayed (hardware screen).
- * @mode_width: width of screen mode.
- * @mode_height: height of screen mode.
- * @refresh: refresh rate.
- * @scan_flag: interlace or progressive way.
- *	(it could be DRM_MODE_FLAG_*)
- * @bpp: pixel size.(in bit)
- * @pitch: pitch of a framebuffer.
- * @pixel_format: fourcc pixel format of this overlay
- * @dma_addr: array of bus(accessed by dma) address to the memory region
- *	      allocated for a overlay.
- * @zpos: order of overlay layer(z position).
- * @default_win: a window to be enabled.
- * @color_key: color key on or off.
- * @index_color: if using color key feature then this value would be used
- *			as index color.
- * @local_path: in case of lcd type, local path mode on or off.
- * @transparency: transparency on or off.
- * @activated: activated or not.
- *
- * this structure is common to exynos SoC and its contents would be copied
- * to hardware specific overlay info.
- */
-struct exynos_drm_overlay {
-	unsigned int fb_x;
-	unsigned int fb_y;
-	unsigned int fb_width;
-	unsigned int fb_height;
-	unsigned int src_width;
-	unsigned int src_height;
-	unsigned int crtc_x;
-	unsigned int crtc_y;
-	unsigned int crtc_width;
-	unsigned int crtc_height;
-	unsigned int mode_width;
-	unsigned int mode_height;
-	unsigned int refresh;
-	unsigned int scan_flag;
-	unsigned int bpp;
-	unsigned int pitch;
-	uint32_t pixel_format;
-	dma_addr_t dma_addr[MAX_FB_BUFFER];
-	int zpos;
+void exynos_plane_helper_init(struct drm_plane *plane,
+			const struct exynos_plane_helper_funcs *funcs);
 
-	bool default_win;
-	bool color_key;
-	unsigned int index_color;
-	bool local_path;
-	bool transparency;
-	bool activated;
-};
+int exynos_plane_helper_update_plane_with_event(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb,
+		struct drm_pending_vblank_event *event, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h);
+
+int exynos_plane_helper_update_plane(struct drm_plane *plane,
+		struct drm_crtc *crtc, struct drm_framebuffer *fb, int crtc_x,
+		int crtc_y, unsigned int crtc_w, unsigned int crtc_h,
+		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h);
+
+void exynos_plane_helper_finish_update(struct drm_plane *plane,
+		struct drm_crtc *crtc, bool update_fb);
+
+int exynos_plane_helper_disable_plane(struct drm_plane *plane);
+
+void exynos_drm_crtc_send_event(struct drm_plane *plane, struct drm_crtc *crtc);
+
+int exynos_plane_helper_freeze_plane(struct drm_plane *plane);
+
+void exynos_plane_helper_thaw_plane(struct drm_plane *plane,
+		struct drm_crtc *crtc);
 
 /*
  * Exynos DRM Display Structure.
@@ -181,7 +159,8 @@ struct exynos_drm_overlay {
  * @set_property: sets a drm propery on the display
  */
 struct exynos_drm_display_ops {
-	int (*initialize)(void *ctx, struct drm_device *drm_dev);
+	int (*initialize)(void *ctx, struct drm_device *drm_dev,
+			uint32_t *possible_crtcs);
 	int (*create_connector)(void *ctx,
 			struct drm_encoder *encoder);
 	void (*remove)(void *ctx);
@@ -199,7 +178,7 @@ struct exynos_drm_display_ops {
 /*
  * Exynos drm display structure, maps 1:1 with an encoder/connector
  *
- * @list: the list entry for this manager
+ * @list: the list entry for this display
  * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
  * @encoder: encoder object this display maps to
  * @ops: pointer to callbacks for exynos drm specific functionality
@@ -210,57 +189,6 @@ struct exynos_drm_display {
 	enum exynos_drm_output_type type;
 	struct drm_encoder *encoder;
 	const struct exynos_drm_display_ops *ops;
-	void *ctx;
-};
-
-/*
- * Exynos drm manager ops
- *
- * @initialize: initializes the manager
- * @remove: cleans up the manager for removal
- * @dpms: control device power.
- * @adjust_mode: allows manager to adjust mode in check mode path
- * @mode_fixup: fix mode data before applying it
- * @mode_set: copy drm display mode to hw specific display mode.
- * @update: updates the primary plane
- * @commit: appl current hw specific display mode to hw.
- * @enable_vblank: specific driver callback for enabling vblank interrupt.
- * @disable_vblank: specific driver callback for disabling vblank interrupt.
- */
-struct exynos_drm_manager_ops {
-	int (*initialize)(void *ctx, struct drm_crtc *crtc, int pipe);
-	void (*remove)(void *ctx);
-	void (*dpms)(void *ctx, int mode);
-	void (*adjust_mode)(void *ctx, struct drm_connector *connector,
-				struct drm_display_mode *mode_to_adjust);
-	bool (*mode_fixup)(void *ctx, const struct drm_display_mode *mode,
-				struct drm_display_mode *adjusted_mode);
-	void (*mode_set)(void *ctx, const struct drm_display_mode *mode);
-	int (*update)(void *ctx, struct drm_crtc *crtc,
-				struct drm_framebuffer *fb);
-	void (*commit)(void *ctx);
-	int (*enable_vblank)(void *ctx);
-	void (*disable_vblank)(void *ctx);
-};
-
-/*
- * Exynos drm common manager structure, maps 1:1 with a crtc
- *
- * @list: the list entry for this manager
- * @type: one of EXYNOS_DISPLAY_TYPE_LCD and HDMI.
- * @drm_dev: pointer to the drm device
- * @crtc: pointer to the drm crtc
- * @pipe: the pipe number for this crtc/manager
- * @ops: pointer to callbacks for exynos drm specific functionality
- * @ctx: A pointer to the manager's implementation specific context
- */
-struct exynos_drm_manager {
-	struct list_head list;
-	enum exynos_drm_output_type type;
-	struct drm_device *drm_dev;
-	struct drm_crtc *crtc;
-	int pipe;
-	const struct exynos_drm_manager_ops *ops;
 	void *ctx;
 };
 
@@ -295,17 +223,13 @@ struct drm_exynos_file_private {
 struct exynos_drm_private {
 	struct drm_fb_helper *fb_helper;
 
-	/*
-	 * created crtc object would be contained at this array and
-	 * this array is used to be aware of which crtc did it request vblank.
-	 */
-	struct drm_crtc *crtc[MAX_CRTC];
-	struct drm_property *plane_zpos_property;
-	struct drm_property *crtc_mode_property;
+	struct drm_crtc *fimd_crtc;
+	struct drm_crtc *mixer_crtc;
+	struct drm_crtc *vidi_crtc;
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct kds_callback kds_cb;
-#endif
+	struct drm_encoder *dp_encoder;
+
+
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
 		atomic_t object_memory;
@@ -321,8 +245,6 @@ struct exynos_drm_private {
  * @dev: pointer to device object for subdrv device driver.
  * @drm_dev: pointer to drm_device and this pointer would be set
  *	when sub driver calls exynos_drm_subdrv_register().
- * @manager: subdrv has its own manager to control a hardware appropriately
- *	and we can access a hardware drawing on this manager.
  * @probe: this callback would be called by exynos drm driver after
  *	subdrv is registered to it.
  * @remove: this callback is used to release resources created
@@ -355,19 +277,11 @@ int exynos_drm_device_register(struct drm_device *dev);
  */
 int exynos_drm_device_unregister(struct drm_device *dev);
 
-int exynos_drm_initialize_managers(struct drm_device *dev);
-void exynos_drm_remove_managers(struct drm_device *dev);
 int exynos_drm_initialize_displays(struct drm_device *dev);
 void exynos_drm_remove_displays(struct drm_device *dev);
 
-int exynos_drm_manager_register(struct exynos_drm_manager *manager);
-int exynos_drm_manager_unregister(struct exynos_drm_manager *manager);
 int exynos_drm_display_register(struct exynos_drm_display *display);
 int exynos_drm_display_unregister(struct exynos_drm_display *display);
-
-/* This function returns a manager of the same type as the given display */
-struct exynos_drm_manager *exynos_drm_manager_from_display(
-		struct exynos_drm_display *display);
 
 /*
  * this function would be called by sub drivers such as display controller
@@ -379,8 +293,6 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *drm_subdrv);
 
 /* this function removes subdrv list from exynos drm driver */
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *drm_subdrv);
-
-void exynos_fimd_dp_attach(struct device *dev);
 
 int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file);
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file);

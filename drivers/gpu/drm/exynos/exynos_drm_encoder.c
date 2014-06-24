@@ -159,8 +159,7 @@ static const struct drm_encoder_helper_funcs exynos_encoder_helper_funcs = {
 };
 
 static int exynos_drm_encoder_set_property(struct drm_encoder *encoder,
-		void *state, struct drm_property *property, uint64_t val,
-		void *blob_data)
+		struct drm_property *property, uint64_t val)
 {
 	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
 	struct exynos_drm_display *display = exynos_encoder->display;
@@ -190,43 +189,6 @@ static const struct drm_encoder_funcs exynos_encoder_funcs = {
 	.set_property = exynos_drm_encoder_set_property,
 	.destroy = exynos_drm_encoder_destroy,
 };
-
-static unsigned int exynos_drm_encoder_clones(struct drm_encoder *encoder)
-{
-	struct drm_encoder *clone;
-	struct drm_device *dev = encoder->dev;
-	struct exynos_drm_encoder *exynos_encoder = to_exynos_encoder(encoder);
-	struct exynos_drm_display *display = exynos_encoder->display;
-	unsigned int clone_mask = 0;
-	int cnt = 0;
-
-	DRM_DEBUG_KMS("[ENCODER:%d:%s]\n", DRM_BASE_ID(encoder),
-			drm_get_encoder_name(encoder));
-
-	list_for_each_entry(clone, &dev->mode_config.encoder_list, head) {
-		switch (display->type) {
-		case EXYNOS_DISPLAY_TYPE_LCD:
-		case EXYNOS_DISPLAY_TYPE_HDMI:
-		case EXYNOS_DISPLAY_TYPE_VIDI:
-			clone_mask |= (1 << (cnt++));
-			break;
-		default:
-			continue;
-		}
-	}
-
-	return clone_mask;
-}
-
-void exynos_drm_encoder_setup(struct drm_device *dev)
-{
-	struct drm_encoder *encoder;
-
-	DRM_DEBUG_KMS("\n");
-
-	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head)
-		encoder->possible_clones = exynos_drm_encoder_clones(encoder);
-}
 
 struct drm_encoder *
 exynos_drm_encoder_create(struct drm_device *dev,

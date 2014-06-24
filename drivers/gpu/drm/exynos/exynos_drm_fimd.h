@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Google, Inc.
+ * Copyright (C) 2014 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -11,18 +11,15 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _EXYNOS_MIXER_H_
-#define _EXYNOS_MIXER_H_
+#ifndef _EXYNOS_FIMD_H_
+#define _EXYNOS_FIMD_H_
 
-/* This function returns the horizontal offset for a mode */
-unsigned mixer_get_horizontal_offset(unsigned width, unsigned height);
+struct drm_device;
+struct drm_crtc;
 
-void mixer_adjust_mode(struct drm_connector *connector,
-		struct drm_display_mode *mode);
+int fimd_get_crtc_id(struct drm_device *dev);
 
-int mixer_get_crtc_id(struct drm_device *dev);
-
-int mixer_enable_vblank(struct drm_crtc *crtc);
-void mixer_disable_vblank(struct drm_crtc *crtc);
+int fimd_enable_vblank(struct drm_crtc *crtc);
+void fimd_disable_vblank(struct drm_crtc *crtc);
 
 #endif

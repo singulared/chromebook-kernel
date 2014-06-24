@@ -1859,8 +1859,8 @@ out:
 	return status;
 }
 
-int anx7808_set_property(struct drm_connector *connector, void *state,
-		struct drm_property *property, uint64_t val, void *blob_data)
+int anx7808_set_property(struct drm_connector *connector,
+		struct drm_property *property, uint64_t val)
 {
 	struct anx7808_data *anx7808;
 	struct drm_mode_config *mode_config = &connector->dev->mode_config;
@@ -1875,8 +1875,8 @@ int anx7808_set_property(struct drm_connector *connector, void *state,
 
 	anx7808->hdcp_desired = val;
 
-	ret |= anx7808->encoder->funcs->set_property(anx7808->encoder, state,
-			property, val, blob_data);
+	ret |= anx7808->encoder->funcs->set_property(anx7808->encoder,
+			property, val);
 
 	/*
 	 * During HDCP enable:

@@ -365,9 +365,8 @@ struct drm_crtc_funcs {
 			 struct drm_pending_vblank_event *event,
 			 uint32_t flags);
 
-	int (*set_property)(struct drm_crtc *crtc, void *state,
-			    struct drm_property *property, uint64_t val,
-			    void *blob_data);
+	int (*set_property)(struct drm_crtc *crtc,
+			    struct drm_property *property, uint64_t val);
 };
 
 /**
@@ -480,8 +479,8 @@ struct drm_connector_funcs {
 	enum drm_connector_status (*detect)(struct drm_connector *connector,
 					    bool force);
 	int (*fill_modes)(struct drm_connector *connector, uint32_t max_width, uint32_t max_height);
-	int (*set_property)(struct drm_connector *connector, void *state,
-			struct drm_property *property, uint64_t val, void *blob_data);
+	int (*set_property)(struct drm_connector *connector, struct drm_property *property,
+			     uint64_t val);
 	void (*destroy)(struct drm_connector *connector);
 	void (*force)(struct drm_connector *connector);
 };
@@ -496,9 +495,8 @@ struct drm_connector_funcs {
  */
 struct drm_encoder_funcs {
 	void (*reset)(struct drm_encoder *encoder);
-	int (*set_property)(struct drm_encoder *encoder, void *state,
-			    struct drm_property *property, uint64_t val,
-			    void *blob_data);
+	int (*set_property)(struct drm_encoder *encoder,
+			    struct drm_property *property, uint64_t val);
 	void (*destroy)(struct drm_encoder *encoder);
 };
 
@@ -661,9 +659,8 @@ struct drm_plane_funcs {
 	int (*disable_plane)(struct drm_plane *plane);
 	void (*destroy)(struct drm_plane *plane);
 
-	int (*set_property)(struct drm_plane *plane, void *state,
-			    struct drm_property *property, uint64_t val,
-			    void *blob_data);
+	int (*set_property)(struct drm_plane *plane,
+			    struct drm_property *property, uint64_t val);
 };
 
 enum drm_plane_type {
@@ -1236,5 +1233,22 @@ extern int drm_format_vert_chroma_subsampling(uint32_t format);
 #define drm_for_each_legacy_plane(plane, planelist) \
 	list_for_each_entry(plane, planelist, head) \
 		if (plane->type == DRM_PLANE_TYPE_OVERLAY)
+
+/* Helpers */
+static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
+	uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_CRTC);
+	return mo ? obj_to_crtc(mo) : NULL;
+}
+
+static inline struct drm_encoder *drm_encoder_find(struct drm_device *dev,
+	uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_ENCODER);
+	return mo ? obj_to_encoder(mo) : NULL;
+}
 
 #endif /* __DRM_CRTC_H__ */

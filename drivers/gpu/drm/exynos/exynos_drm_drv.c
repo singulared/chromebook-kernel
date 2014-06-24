@@ -13,7 +13,6 @@
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_atomic_helper.h>
 
 #include <drm/exynos_drm.h>
 
@@ -23,7 +22,6 @@
 
 #include "exynos_drm_debugfs.h"
 #include "exynos_drm_drv.h"
-#include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_fb.h"
@@ -33,6 +31,8 @@
 #include "exynos_drm_g2d.h"
 #include "exynos_drm_ipp.h"
 #include "exynos_drm_iommu.h"
+#include "exynos_drm_fimd.h"
+#include "exynos_mixer.h"
 
 #include <linux/i2c.h>
 #include <linux/kds.h>
@@ -47,10 +47,20 @@
 /* platform device pointer for eynos drm device. */
 static struct platform_device *exynos_drm_pdev;
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-void exynos_drm_kds_callback(void *callback_parameter,
-			     void *callback_extra_parameter);
-#endif
+static void exynos_drm_setup_encoder_clones(struct drm_device *dev)
+{
+	struct drm_encoder *e;
+	unsigned int clone_mask = 0;
+	int cnt = 0;
+
+	DRM_DEBUG_KMS("\n");
+
+	list_for_each_entry(e, &dev->mode_config.encoder_list, head)
+			clone_mask |= (1 << (cnt++));
+
+	list_for_each_entry(e, &dev->mode_config.encoder_list, head)
+		e->possible_clones = clone_mask;
+}
 
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
@@ -68,15 +78,6 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	dev_set_drvdata(dev->dev, dev);
 	dev->dev_private = (void *)private;
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	ret = kds_callback_init(&private->kds_cb, 1,
-				exynos_drm_kds_callback);
-	if (ret < 0) {
-		DRM_ERROR("kds callback init failed: %d\n", ret);
-		goto err_freepriv;
-	}
-#endif
-
 	/*
 	 * create mapping to manage iommu table and set a pointer to iommu
 	 * mapping structure to iommu_mapping of private data.
@@ -86,7 +87,7 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = drm_create_iommu_mapping(dev);
 	if (ret < 0) {
 		DRM_ERROR("failed to create iommu mapping.\n");
-		goto err_kds;
+		goto err_freepriv;
 	}
 
 	drm_mode_config_init(dev);
@@ -95,14 +96,22 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	drm_kms_helper_poll_init(dev);
 
 	exynos_drm_mode_config_init(dev);
-
-	ret = exynos_drm_initialize_managers(dev);
+	/*
+	 * probe sub drivers such as display controller and hdmi driver,
+	 * that were registered at probe() of platform driver
+	 * to the sub driver and create encoder and connector for them.
+	 */
+	ret = exynos_drm_device_register(dev);
 	if (ret)
 		goto err_mode_config_cleanup;
 
 	ret = exynos_drm_initialize_displays(dev);
 	if (ret)
-		goto err_manager_cleanup;
+		goto err_drm_device;
+
+	if (private->dp_encoder && private->fimd_crtc)
+		private->dp_encoder->possible_crtcs =
+			1 << exynos_drm_pipe_from_crtc(private->fimd_crtc);
 
 	/*
 	 * enable drm irq mode.
@@ -117,17 +126,8 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	if (ret)
 		goto err_display_cleanup;
 
-	/*
-	 * probe sub drivers such as display controller and hdmi driver,
-	 * that were registered at probe() of platform driver
-	 * to the sub driver and create encoder and connector for them.
-	 */
-	ret = exynos_drm_device_register(dev);
-	if (ret)
-		goto err_vblank;
-
 	/* setup possible_clones. */
-	exynos_drm_encoder_setup(dev);
+	exynos_drm_setup_encoder_clones(dev);
 
 	/*
 	 * create and configure fb helper and also exynos specific
@@ -136,26 +136,20 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	ret = exynos_drm_fbdev_init(dev);
 	if (ret) {
 		DRM_ERROR("failed to initialize drm fbdev\n");
-		goto err_drm_device;
+		goto err_vblank;
 	}
 
 	return 0;
 
-err_drm_device:
-	exynos_drm_device_unregister(dev);
 err_vblank:
 	drm_vblank_cleanup(dev);
 err_display_cleanup:
 	exynos_drm_remove_displays(dev);
-err_manager_cleanup:
-	exynos_drm_remove_managers(dev);
+err_drm_device:
+	exynos_drm_device_unregister(dev);
 err_mode_config_cleanup:
 	drm_mode_config_cleanup(dev);
 	drm_release_iommu_mapping(dev);
-err_kds:
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	kds_callback_term(&private->kds_cb);
-#endif
 err_freepriv:
 	kfree(private);
 
@@ -173,12 +167,7 @@ static int exynos_drm_unload(struct drm_device *dev)
 	drm_vblank_cleanup(dev);
 	drm_kms_helper_poll_fini(dev);
 	exynos_drm_remove_displays(dev);
-	exynos_drm_remove_managers(dev);
 	drm_mode_config_cleanup(dev);
-
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	kds_callback_term(&private->kds_cb);
-#endif
 
 	drm_release_iommu_mapping(dev);
 	kfree(private);
@@ -310,12 +299,45 @@ static void exynos_drm_lastclose(struct drm_device *dev)
 	exynos_drm_fbdev_restore_mode(dev);
 }
 
+int exynos_drm_pipe_from_crtc(struct drm_crtc *crtc)
+{
+	struct drm_crtc *c;
+	int i = 0;
+
+	list_for_each_entry(c, &crtc->dev->mode_config.crtc_list, head) {
+		if (crtc == c)
+			return i;
+		i++;
+	}
+	DRM_ERROR("Could not find pipe from crtc %d\n", DRM_BASE_ID(crtc));
+	return -EINVAL;
+}
+
+static struct drm_crtc *exynos_drm_crtc_from_pipe(struct drm_device *dev,
+				int pipe)
+{
+	struct drm_crtc *crtc;
+	int i = 0;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		if (i == pipe)
+			return crtc;
+		i++;
+	}
+	return NULL;
+}
+
 static u32 exynos_drm_get_vblank_counter(struct drm_device *dev, int pipe)
 {
-	struct exynos_drm_private *private = dev->dev_private;
-	struct drm_crtc *crtc = private->crtc[pipe];
+	struct drm_crtc *crtc;
 	u32 cur_vblank;
 	struct timeval last_timestamp;
+
+	crtc = exynos_drm_crtc_from_pipe(dev, pipe);
+	if (!crtc) {
+		DRM_ERROR("Could not find crtc for pipe %d\n", pipe);
+		return -ENODEV;
+	}
 
 	cur_vblank = drm_vblank_count_and_time(dev, pipe, &last_timestamp);
 	if (crtc->enabled && !dev->vblank_enabled[pipe] && crtc->framedur_ns) {
@@ -327,6 +349,47 @@ static u32 exynos_drm_get_vblank_counter(struct drm_device *dev, int pipe)
 	}
 
 	return cur_vblank;
+}
+
+static int exynos_drm_enable_vblank(struct drm_device *dev, int pipe)
+{
+	struct drm_crtc *crtc;
+
+	crtc = exynos_drm_crtc_from_pipe(dev, pipe);
+	if (!crtc) {
+		DRM_ERROR("Could not find crtc for pipe %d\n", pipe);
+		return -ENODEV;
+	}
+
+	if (pipe == fimd_get_crtc_id(dev))
+		return fimd_enable_vblank(crtc);
+	else if (pipe == mixer_get_crtc_id(dev))
+		return mixer_enable_vblank(crtc);
+	else if (pipe == vidi_get_crtc_id(dev))
+		return vidi_enable_vblank(crtc);
+
+	DRM_ERROR("Could not find enable_vblank for crtc %d\n", pipe);
+	return -ENODEV;
+}
+
+static void exynos_drm_disable_vblank(struct drm_device *dev, int pipe)
+{
+	struct drm_crtc *crtc;
+
+	crtc = exynos_drm_crtc_from_pipe(dev, pipe);
+	if (!crtc) {
+		DRM_ERROR("Could not find crtc for pipe %d\n", pipe);
+		return;
+	}
+
+	if (pipe == fimd_get_crtc_id(dev))
+		return fimd_disable_vblank(crtc);
+	else if (pipe == mixer_get_crtc_id(dev))
+		return mixer_disable_vblank(crtc);
+	else if (pipe == vidi_get_crtc_id(dev))
+		return vidi_disable_vblank(crtc);
+
+	DRM_ERROR("Could not find disable_vblank for crtc %d\n", pipe);
 }
 
 static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
@@ -394,8 +457,8 @@ static struct drm_driver exynos_drm_driver = {
 	.lastclose		= exynos_drm_lastclose,
 	.postclose		= exynos_drm_postclose,
 	.get_vblank_counter	= exynos_drm_get_vblank_counter,
-	.enable_vblank		= exynos_drm_crtc_enable_vblank,
-	.disable_vblank		= exynos_drm_crtc_disable_vblank,
+	.enable_vblank		= exynos_drm_enable_vblank,
+	.disable_vblank		= exynos_drm_disable_vblank,
 #if defined(CONFIG_DEBUG_FS)
 	.debugfs_init		= exynos_drm_debugfs_init,
 	.debugfs_cleanup	= exynos_drm_debugfs_cleanup,
@@ -405,12 +468,6 @@ static struct drm_driver exynos_drm_driver = {
 	.dumb_create		= exynos_drm_gem_dumb_create,
 	.dumb_map_offset	= exynos_drm_gem_dumb_map_offset,
 	.dumb_destroy		= drm_gem_dumb_destroy,
-	.atomic_begin		= drm_atomic_helper_begin,
-	.atomic_set_event	= drm_atomic_helper_set_event,
-	.atomic_check		= drm_atomic_helper_check,
-	.atomic_commit		= drm_atomic_helper_commit,
-	.atomic_end		= drm_atomic_helper_end,
-	.atomic_helpers		= &drm_atomic_helper_funcs,
 	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
 	.gem_prime_export	= exynos_dmabuf_prime_export,

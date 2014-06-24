@@ -33,9 +33,12 @@
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_drv.h"
+#include "exynos_drm_fimd.h"
 
 #define ctx_from_connector(c)	container_of(c, struct exynos_dp_device, \
 					connector)
+#define ctx_from_encoder(e)	container_of(e, struct exynos_dp_device, \
+					encoder)
 
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
@@ -886,54 +889,6 @@ static void exynos_dp_hotplug(struct work_struct *work)
 		drm_helper_hpd_irq_event(dp->drm_dev);
 }
 
-static void exynos_dp_commit(void *in_ctx)
-{
-	struct exynos_dp_device *dp = in_ctx;
-	int ret;
-
-	DRM_DEBUG_KMS("\n");
-
-	ret = exynos_dp_detect_hpd(dp);
-	if (ret) {
-		/* Cable has been disconnected, we're done */
-		return;
-	}
-
-	ret = exynos_dp_handle_edid(dp);
-	if (ret) {
-		dev_err(dp->dev, "unable to handle edid\n");
-		return;
-	}
-
-	ret = exynos_dp_set_link_train(dp, dp->video_info->lane_count,
-					dp->video_info->link_rate);
-	if (ret) {
-		dev_err(dp->dev, "unable to do link train\n");
-		return;
-	}
-
-	exynos_dp_enable_scramble(dp, 1);
-	exynos_dp_enable_rx_to_enhanced_mode(dp, 1);
-	exynos_dp_enable_enhanced_mode(dp, 1);
-
-	exynos_dp_set_lane_count(dp, dp->video_info->lane_count);
-	exynos_dp_set_link_bandwidth(dp, dp->video_info->link_rate);
-
-	exynos_dp_init_video(dp);
-	ret = exynos_dp_config_video(dp);
-	if (ret)
-		dev_err(dp->dev, "unable to config video\n");
-}
-
-static int exynos_dp_initialize(void *in_ctx, struct drm_device *drm_dev)
-{
-	struct exynos_dp_device *dp = in_ctx;
-
-	dp->drm_dev = drm_dev;
-
-	return 0;
-}
-
 static enum drm_connector_status exynos_dp_detect(
 				struct drm_connector *connector, bool force)
 {
@@ -985,7 +940,7 @@ static struct drm_encoder *exynos_dp_best_encoder(
 {
 	struct exynos_dp_device *dp = ctx_from_connector(connector);
 
-	return dp->encoder;
+	return &dp->encoder;
 }
 
 static struct drm_connector_helper_funcs exynos_dp_connector_helper_funcs = {
@@ -994,37 +949,15 @@ static struct drm_connector_helper_funcs exynos_dp_connector_helper_funcs = {
 	.best_encoder = exynos_dp_best_encoder,
 };
 
-static int (*exynos_possible_dp_bridges[])(struct drm_encoder *encoder) = {
-	ptn3460_init,
-	ps8622_init,
-};
-
-static int exynos_drm_attach_dp_bridge(struct drm_encoder *encoder)
+static int exynos_dp_create_connector(struct drm_encoder *encoder)
 {
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(exynos_possible_dp_bridges); i++) {
-		if (!exynos_possible_dp_bridges[i](encoder))
-			return 0;
-	}
-	return -ENODEV;
-}
-
-static int exynos_dp_create_connector(void *ctx, struct drm_encoder *encoder)
-{
-	struct exynos_dp_device *dp = ctx;
+	struct exynos_dp_device *dp = ctx_from_encoder(encoder);
 	struct drm_connector *connector = &dp->connector;
 	int ret;
 
-	dp->encoder = encoder;
-
-	/* Pre-empt DP connector creation if there's a bridge */
-	if (!exynos_drm_attach_dp_bridge(encoder))
-		return 0;
-
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 
-	ret = drm_connector_init(dp->drm_dev, connector,
+	ret = drm_connector_init(encoder->dev, connector,
 			&exynos_dp_connector_funcs, DRM_MODE_CONNECTOR_eDP);
 	if (ret) {
 		DRM_ERROR("Failed to initialize connector with drm\n");
@@ -1157,8 +1090,7 @@ static void exynos_dp_poweron(struct exynos_dp_device *dp)
 	exynos_dp_phy_init(dp);
 	exynos_dp_init_dp(dp);
 	enable_irq(dp->irq);
-	exynos_dp_commit(dp);
-	exynos_dp_led_powerup(dp);
+	dp->dpms_mode = DRM_MODE_DPMS_ON;
 }
 
 static void exynos_dp_poweroff(struct exynos_dp_device *dp)
@@ -1173,17 +1105,61 @@ static void exynos_dp_poweroff(struct exynos_dp_device *dp)
 	exynos_dp_phy_exit(dp);
 	clk_disable_unprepare(dp->clock);
 	exynos_dp_lcd_powerdown(dp);
+	dp->dpms_mode = DRM_MODE_DPMS_OFF;
 }
 
-static void exynos_dp_dpms(void *in_ctx, int mode)
+static void exynos_dp_encoder_commit(struct drm_encoder *encoder)
 {
-	struct exynos_dp_device *dp = in_ctx;
+	struct exynos_dp_device *dp = ctx_from_encoder(encoder);
+	int ret;
+
+	DRM_DEBUG_KMS("\n");
+
+	exynos_dp_poweron(dp);
+
+	ret = exynos_dp_detect_hpd(dp);
+	if (ret) {
+		/* Cable has been disconnected, we're done */
+		return;
+	}
+
+	ret = exynos_dp_handle_edid(dp);
+	if (ret) {
+		dev_err(dp->dev, "unable to handle edid\n");
+		return;
+	}
+
+	ret = exynos_dp_set_link_train(dp, dp->video_info->lane_count,
+					dp->video_info->link_rate);
+	if (ret) {
+		dev_err(dp->dev, "unable to do link train\n");
+		return;
+	}
+
+	exynos_dp_enable_scramble(dp, 1);
+	exynos_dp_enable_rx_to_enhanced_mode(dp, 1);
+	exynos_dp_enable_enhanced_mode(dp, 1);
+
+	exynos_dp_set_lane_count(dp, dp->video_info->lane_count);
+	exynos_dp_set_link_bandwidth(dp, dp->video_info->link_rate);
+
+	exynos_dp_init_video(dp);
+	ret = exynos_dp_config_video(dp);
+	if (ret)
+		dev_err(dp->dev, "unable to config video\n");
+
+	exynos_dp_led_powerup(dp);
+}
+
+static void exynos_dp_encoder_dpms(struct drm_encoder *encoder, int mode)
+{
+	struct exynos_dp_device *dp = ctx_from_encoder(encoder);
 
 	DRM_DEBUG_KMS("[DPMS:%s]\n", drm_get_dpms_name(mode));
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
-		exynos_dp_poweron(dp);
+		exynos_dp_encoder_commit(encoder);
 		break;
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
@@ -1193,19 +1169,98 @@ static void exynos_dp_dpms(void *in_ctx, int mode)
 	default:
 		break;
 	};
-	dp->dpms_mode = mode;
 }
 
-static const struct exynos_drm_display_ops exynos_dp_display_ops = {
-	.initialize = exynos_dp_initialize,
-	.create_connector = exynos_dp_create_connector,
-	.dpms = exynos_dp_dpms,
-	.commit = exynos_dp_commit,
+static bool exynos_dp_encoder_mode_fixup(struct drm_encoder *encoder,
+		const struct drm_display_mode *mode,
+		struct drm_display_mode *adjusted_mode)
+{
+	return true;
+}
+
+static void exynos_dp_encoder_mode_set(struct drm_encoder *encoder,
+		struct drm_display_mode *mode,
+		struct drm_display_mode *adjusted_mode)
+{
+}
+
+static void exynos_dp_encoder_prepare(struct drm_encoder *encoder)
+{
+	struct exynos_dp_device *dp = ctx_from_encoder(encoder);
+
+	exynos_dp_poweroff(dp);
+}
+
+static const struct drm_encoder_helper_funcs exynos_dp_encoder_helper_funcs = {
+	.dpms		= exynos_dp_encoder_dpms,
+	.mode_fixup	= exynos_dp_encoder_mode_fixup,
+	.mode_set	= exynos_dp_encoder_mode_set,
+	.prepare	= exynos_dp_encoder_prepare,
+	.commit		= exynos_dp_encoder_commit,
 };
 
-static struct exynos_drm_display exynos_dp_display = {
-	.type = EXYNOS_DISPLAY_TYPE_LCD,
-	.ops = &exynos_dp_display_ops,
+static const struct drm_encoder_funcs exynos_dp_encoder_funcs = {
+	.destroy = drm_encoder_cleanup,
+};
+
+static int (*exynos_possible_dp_bridges[])(struct drm_encoder *encoder) = {
+	ptn3460_init,
+	ps8622_init,
+};
+
+static int exynos_drm_attach_dp_bridge(struct drm_encoder *encoder)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(exynos_possible_dp_bridges); i++) {
+		if (!exynos_possible_dp_bridges[i](encoder))
+			return 0;
+	}
+	return -ENODEV;
+}
+
+static int exynos_dp_subdrv_probe(struct drm_device *dev, struct device *dp_dev)
+{
+	struct platform_device *pdev = to_platform_device(dp_dev);
+	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
+	struct drm_encoder *encoder = &dp->encoder;
+	struct exynos_drm_private *priv = dev->dev_private;
+	int ret;
+
+	ret = drm_encoder_init(dev, encoder, &exynos_dp_encoder_funcs,
+			DRM_MODE_ENCODER_NONE);
+	if (ret) {
+		DRM_ERROR("Failed to initialize the encoder ret=%d\n", ret);
+		return ret;
+	}
+
+	drm_encoder_helper_add(encoder, &exynos_dp_encoder_helper_funcs);
+
+	/* Only initialize the connector if there's no bridge downstream */
+	if (exynos_drm_attach_dp_bridge(encoder)) {
+		ret = exynos_dp_create_connector(encoder);
+		if (ret) {
+			DRM_ERROR("Create dp connector failed, ret=%d\n", ret);
+			goto err;
+		}
+	}
+
+	priv->dp_encoder = encoder;
+	return 0;
+
+err:
+	drm_encoder_cleanup(encoder);
+	return ret;
+}
+
+static void exynos_dp_subdrv_remove(struct drm_device *dev,
+		struct device *dp_dev)
+{
+}
+
+static struct exynos_drm_subdrv exynos_dp_subdrv = {
+	.probe = exynos_dp_subdrv_probe,
+	.remove = exynos_dp_subdrv_remove,
 };
 
 static const struct {
@@ -1529,43 +1584,18 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dp);
 
-	exynos_fimd_dp_attach(dp->dev);
-
-	exynos_dp_display.ctx = dp;
-	exynos_drm_display_register(&exynos_dp_display);
+	exynos_dp_subdrv.dev = &pdev->dev;
+	exynos_drm_subdrv_register(&exynos_dp_subdrv);
 
 	return 0;
 }
 
 static int exynos_dp_remove(struct platform_device *pdev)
 {
-	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
-
 	DRM_DEBUG_KMS("\n");
 
-	exynos_drm_display_unregister(&exynos_dp_display);
-	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
+	exynos_drm_subdrv_unregister(&exynos_dp_subdrv);
 
-	return 0;
-}
-
-int exynos_dp_suspend(struct device *dev)
-{
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
-
-	DRM_DEBUG_KMS("\n");
-
-	exynos_dp_dpms(dp, DRM_MODE_DPMS_OFF);
-	return 0;
-}
-
-int exynos_dp_resume(struct device *dev)
-{
-	struct exynos_dp_device *dp = dev_get_drvdata(dev);
-
-	DRM_DEBUG_KMS("\n");
-
-	exynos_dp_dpms(dp, DRM_MODE_DPMS_ON);
 	return 0;
 }
 
