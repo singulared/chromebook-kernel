@@ -301,7 +301,8 @@ endif
 
 config DMA_SHARED_BUFFER_USES_KDS
 	bool "Add KDS resource within every dma_buf allocation"
-	depends on DMA_SHARED_BUFFER && KDS
+	select DMA_SHARED_BUFFER
+	select KDS
 	default n
 	help
 	  This option adds a KDS resource within every dma_buf allocation.

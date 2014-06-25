@@ -25,7 +25,6 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_vidi.h"
 #include "exynos_drm_gem.h"
-#include "exynos_drm_encoder.h"
 
 /* vidi has totally three virtual windows. */
 #define WINDOWS_NR		3
@@ -40,6 +39,8 @@ static const uint32_t plane_formats[] = {
 #define exynos_plane_to_win_idx(ctx, x) (unsigned int)(x - ctx->planes)
 #define to_vidi_ctx(x) container_of(x, struct vidi_context, crtc)
 #define get_vidi_context(dev)	platform_get_drvdata(to_platform_device(dev))
+#define ctx_from_encoder(e)	container_of(e, struct vidi_context, \
+					encoder)
 #define ctx_from_connector(c)	container_of(c, struct vidi_context, \
 					connector)
 
@@ -60,7 +61,7 @@ struct vidi_win_data {
 struct vidi_context {
 	struct drm_device		*drm_dev;
 	struct drm_crtc			crtc;
-	struct drm_encoder		*encoder;
+	struct drm_encoder		encoder;
 	struct drm_connector		connector;
 	struct exynos_drm_plane		planes[WINDOWS_NR];
 	struct edid			*raw_edid;
@@ -593,7 +594,7 @@ static struct drm_encoder *vidi_best_encoder(struct drm_connector *connector)
 {
 	struct vidi_context *ctx = ctx_from_connector(connector);
 
-	return ctx->encoder;
+	return &ctx->encoder;
 }
 
 static struct drm_connector_helper_funcs vidi_connector_helper_funcs = {
@@ -602,13 +603,12 @@ static struct drm_connector_helper_funcs vidi_connector_helper_funcs = {
 	.best_encoder = vidi_best_encoder,
 };
 
-static int vidi_create_connector(void *in_ctx, struct drm_encoder *encoder)
+static int vidi_create_connector(struct drm_encoder *encoder)
 {
-	struct vidi_context *ctx = in_ctx;
+	struct vidi_context *ctx = ctx_from_encoder(encoder);
 	struct drm_connector *connector = &ctx->connector;
 	int ret;
 
-	ctx->encoder = encoder;
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 
 	ret = drm_connector_init(ctx->drm_dev, connector,
@@ -638,20 +638,16 @@ err_connector:
 	return ret;
 }
 
-
-static struct exynos_drm_display_ops vidi_display_ops = {
-	.create_connector = vidi_create_connector,
-};
-
-static struct exynos_drm_display vidi_display = {
-	.type = EXYNOS_DISPLAY_TYPE_VIDI,
-	.ops = &vidi_display_ops,
+static const struct drm_encoder_funcs vidi_encoder_funcs = {
+	.destroy = drm_encoder_cleanup,
 };
 
 static int vidi_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct vidi_context *ctx = platform_get_drvdata(pdev);
+	struct drm_crtc *crtc = &ctx->crtc;
+	struct drm_encoder *encoder = &ctx->encoder;
 	struct exynos_drm_private *priv = drm_dev->dev_private;
 	int i, ret;
 
@@ -669,25 +665,45 @@ static int vidi_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 				: DRM_PLANE_TYPE_OVERLAY);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
-			goto err;
+			goto err_plane;
 		}
 
 		exynos_plane->ctx = ctx;
 	}
 
-	ret = drm_crtc_init_with_planes(drm_dev, &ctx->crtc,
+	ret = drm_crtc_init_with_planes(drm_dev, crtc,
 		&ctx->planes[ctx->default_win].base, NULL, &vidi_crtc_funcs);
 	if (ret) {
 		DRM_ERROR("Init crtc failed (ret=%d)\n", ret);
-		goto err;
+		goto err_crtc;
 	}
 
-	drm_crtc_helper_add(&ctx->crtc, &vidi_crtc_helper_funcs);
+	drm_crtc_helper_add(crtc, &vidi_crtc_helper_funcs);
 
-	priv->vidi_crtc = &ctx->crtc;
+	ret = drm_encoder_init(drm_dev, encoder, &vidi_encoder_funcs,
+			DRM_MODE_ENCODER_NONE);
+	if (ret) {
+		DRM_ERROR("Failed to initialize the encoder ret=%d\n", ret);
+		goto err_encoder;
+	}
+
+	ret = vidi_create_connector(encoder);
+	if (ret) {
+		DRM_ERROR("Create hdmi connector fail, ret=%d\n", ret);
+		goto err_connector;
+	}
+
+	priv->vidi_crtc = crtc;
+	priv->vidi_encoder = encoder;
 
 	return 0;
-err:
+
+err_connector:
+	drm_encoder_cleanup(encoder);
+err_encoder:
+	drm_crtc_cleanup(crtc);
+err_crtc:
+err_plane:
 	for (; i >= 0; i--)
 		drm_plane_cleanup(&ctx->planes[i].base);
 
@@ -718,9 +734,6 @@ static int vidi_probe(struct platform_device *pdev)
 
 	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
 
-	vidi_display.ctx = ctx;
-	exynos_drm_display_register(&vidi_display);
-
 	mutex_init(&ctx->lock);
 
 	platform_set_drvdata(pdev, ctx);
@@ -741,7 +754,6 @@ static int vidi_remove(struct platform_device *pdev)
 
 	DRM_DEBUG_KMS("[PDEV:%s]\n", pdev->name);
 
-	exynos_drm_display_unregister(&vidi_display);
 	exynos_drm_subdrv_unregister(&vidi_subdrv);
 
 	if (ctx->raw_edid != (struct edid *)fake_edid_info) {
