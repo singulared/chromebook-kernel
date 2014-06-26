@@ -2809,8 +2809,27 @@ static bool hdmi_encoder_mode_fixup(struct drm_encoder *encoder,
 				struct drm_display_mode *adjusted_mode)
 {
 	struct hdmi_context *hdata = ctx_from_encoder(encoder);
-	struct drm_connector *connector = &hdata->connector;
+	struct drm_mode_config *mode_config = &encoder->dev->mode_config;
+	struct drm_connector *connector, *c;
 	struct drm_display_mode *m;
+
+	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+
+	/*
+	 * We can't just assume that the connector will be hdata->connector
+	 * since we might have a bridge attached which implements the connector.
+	 * So we need to find the connector attached to this encoder to be safe.
+	 */
+	list_for_each_entry(c, &mode_config->connector_list, head) {
+		if (c->encoder == encoder) {
+			connector = c;
+			break;
+		}
+	}
+	if (!connector) {
+		DRM_ERROR("Failed to find connector for HDMI encoder\n");
+		return false;
+	}
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s] [MODE:%s]\n", DRM_BASE_ID(connector),
 			drm_get_connector_name(connector), mode->name);
