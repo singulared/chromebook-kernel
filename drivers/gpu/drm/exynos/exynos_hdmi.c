@@ -232,6 +232,7 @@ struct hdmi_context {
 	spinlock_t                      writemask_lock;
 
 	bool                            hdcp_desired;
+	struct drm_mode_object		*hdcp_object;
 	struct work_struct              hdcp_work;
 	enum exynos_hdcp_state          hdcp_state;
 	bool                            hdcp_repeater;
@@ -1416,17 +1417,11 @@ out:
 static int hdcp_update_drm_property(struct hdmi_context *hdata, int value)
 {
 	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
-	struct drm_connector *connector;
 
 	WARN_ON(!mutex_is_locked(&mode_config->mutex));
 
-	list_for_each_entry(connector, &mode_config->connector_list, head) {
-		if (connector->connector_type == DRM_MODE_CONNECTOR_HDMIA)
-			return drm_object_property_set_value(&connector->base,
-				mode_config->content_protection_property,
-				value);
-	}
-	return -ENODEV;
+	return drm_object_property_set_value(hdata->hdcp_object,
+			mode_config->content_protection_property, value);
 }
 
 static void hdcp_disable(struct hdmi_context *hdata)
@@ -1625,11 +1620,12 @@ static int hdcp_start(struct hdmi_context *hdata)
 static void hdcp_initialize(struct hdmi_context *hdata)
 {
 	hdata->hdcp_desired = false;
+	hdata->hdcp_object = NULL;
 	hdata->hdcp_state = HDCP_STATE_OFF;
 	INIT_WORK(&hdata->hdcp_work, hdcp_work_func);
 }
 
-static int set_property(struct hdmi_context *hdata,
+static int set_property(struct hdmi_context *hdata, struct drm_mode_object *obj,
 			struct drm_property *property, uint64_t val)
 {
 	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
@@ -1643,6 +1639,11 @@ static int set_property(struct hdmi_context *hdata,
 	DRM_DEBUG_KMS("[PROPERTY:%s] = %llu\n", property->name, val);
 
 	hdata->hdcp_desired = val;
+
+	if (val == DRM_MODE_CONTENT_PROTECTION_DESIRED)
+		hdata->hdcp_object = obj;
+	else
+		hdata->hdcp_object = NULL;
 
 	if (!hdata->powered)
 		return 0;
@@ -1661,7 +1662,7 @@ static int hdmi_connector_set_property(struct drm_connector *connector,
 	struct hdmi_context *hdata = ctx_from_connector(connector);
 	int ret;
 
-	ret = set_property(hdata, property, val);
+	ret = set_property(hdata, &connector->base, property, val);
 	if (ret)
 		return ret;
 
@@ -2900,7 +2901,7 @@ static int hdmi_encoder_set_property(struct drm_encoder *encoder,
 {
 	struct hdmi_context *hdata = ctx_from_encoder(encoder);
 
-	return set_property(hdata, property, val);
+	return set_property(hdata, &encoder->base, property, val);
 }
 
 static const struct drm_encoder_funcs hdmi_encoder_funcs = {
