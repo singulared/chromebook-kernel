@@ -66,6 +66,7 @@
 #define AUX_WAIT_MS 100
 #define AUX_BUFFER_SIZE 0x10
 #define CABLE_DET_DEBOUNCE_MS 500
+#define HDCP_EN_WAIT_MS 1500
 /*
  * Time in ms to wait for R0 checking in HDCP first step authentication after
  * AKSV is written to receiver. Must be > 100ms per HDCP protocol.
@@ -113,6 +114,7 @@ struct anx7808_data {
 	struct i2c_client *rx_p0;
 	struct i2c_client *rx_p1;
 	struct delayed_work cable_det_work;
+	struct delayed_work hdcp_en_work;
 	enum dp_link_bw dp_manual_bw;
 	int dp_manual_bw_changed;
 	enum downstream_type ds_type;
@@ -934,6 +936,8 @@ static int anx7808_stop_hdcp(struct anx7808_data *anx7808)
 	DRM_DEBUG("Stopping HDCP for ANX7808\n");
 	WARN_ON(!mutex_is_locked(&anx7808->big_lock));
 
+	cancel_delayed_work(&anx7808->hdcp_en_work);
+
 	anx7808_update_hdcp_property(anx7808, false);
 
 	if (!anx7808->powered)
@@ -1141,9 +1145,8 @@ static bool anx7808_handle_sink_specific_int(struct anx7808_data *anx7808)
 		irq_event = true;
 	}
 
-	if (irq[0] & DWN_STREAM_DISCONNECTED) {
-		irq_event = true;
-	}
+	if (irq[0] & DWN_STREAM_DISCONNECTED)
+		return true;
 
 	if (anx7808->ds_type != DOWNSTREAM_HDMI)
 		return irq_event;
@@ -1620,6 +1623,21 @@ static void anx7808_debugfs_destroy(struct anx7808_data *anx7808)
 
 void anx7808_disable(struct drm_bridge *bridge)
 {
+	struct anx7808_data *anx7808 = bridge->driver_private;
+	struct drm_mode_config *mode_config = &bridge->dev->mode_config;
+	int ret;
+
+	mutex_lock(&anx7808->big_lock);
+
+	anx7808_stop_hdcp(anx7808);
+
+	ret = anx7808->encoder->funcs->set_property(anx7808->encoder,
+			mode_config->content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
+	if (ret)
+		DRM_ERROR("Failed to disable encoder hdcp\n");
+
+	mutex_unlock(&anx7808->big_lock);
 }
 
 void anx7808_post_disable(struct drm_bridge *bridge)
@@ -1651,6 +1669,22 @@ void anx7808_pre_enable(struct drm_bridge *bridge)
 	anx7808_set_hpd(anx7808, 1);
 
 	mutex_unlock(&anx7808->big_lock);
+}
+
+static void anx7808_hdcp_en_work(struct work_struct *work)
+{
+	struct anx7808_data *anx7808;
+	int ret;
+
+	anx7808 = container_of(work, struct anx7808_data, hdcp_en_work.work);
+
+	mutex_lock(&anx7808->dev->mode_config.mutex);
+	ret = anx7808->encoder->funcs->set_property(anx7808->encoder,
+			anx7808->dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_DESIRED);
+	mutex_unlock(&anx7808->dev->mode_config.mutex);
+	if (ret)
+		DRM_ERROR("Failed to re-enable HDCP\n");
 }
 
 void anx7808_enable(struct drm_bridge *bridge)
@@ -1689,6 +1723,14 @@ err:
 	anx7808_power_off(anx7808, true, true);
 
 out:
+	/*
+	 * If we re-enable hdcp too soon, the bridge chip will lose its mind,
+	 * so we'll kick it off in HDCP_EN_WAIT_MS milliseconds.
+	 */
+	if (anx7808->hdcp_desired)
+		mod_delayed_work(system_wq, &anx7808->hdcp_en_work,
+				msecs_to_jiffies(HDCP_EN_WAIT_MS));
+
 	mutex_unlock(&anx7808->big_lock);
 }
 
@@ -1701,6 +1743,7 @@ void anx7808_bridge_destroy(struct drm_bridge *bridge)
 		anx7808_debugfs_destroy(anx7808);
 
 	drm_bridge_cleanup(bridge);
+	cancel_delayed_work(&anx7808->hdcp_en_work);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
 
 	for (i = 0; i < ARRAY_SIZE(anx7808_device_attrs); i++)
@@ -1947,6 +1990,7 @@ int anx7808_init(struct drm_encoder *encoder)
 
 	atomic_set(&anx7808->cable_det_oneshot, 1);
 	INIT_DELAYED_WORK(&anx7808->cable_det_work, anx7808_cable_det_work);
+	INIT_DELAYED_WORK(&anx7808->hdcp_en_work, anx7808_hdcp_en_work);
 
 	anx7808->vdd_mydp = regulator_get(dev->dev, "vdd_mydp");
 	if (IS_ERR(anx7808->vdd_mydp)) {
@@ -2145,6 +2189,7 @@ err_gpio:
 err_reg:
 	regulator_put(anx7808->vdd_mydp);
 err_work:
+	cancel_delayed_work_sync(&anx7808->hdcp_en_work);
 	cancel_delayed_work_sync(&anx7808->cable_det_work);
 
 err_client:
