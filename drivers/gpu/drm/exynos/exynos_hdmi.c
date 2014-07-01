@@ -1631,8 +1631,6 @@ static int set_property(struct hdmi_context *hdata, struct drm_mode_object *obj,
 	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
 	int ret = 0;
 
-	WARN_ON(!mutex_is_locked(&mode_config->mutex));
-
 	if (property != mode_config->content_protection_property)
 		return 0;
 
