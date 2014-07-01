@@ -2425,7 +2425,7 @@ static void hdmi_conf_apply(struct hdmi_context *hdata)
 	if (!support_hdmi_audio_through_alsa(hdata))
 		hdmi_audio_control(hdata, true);
 
-	hdcp_stop(hdata);
+	hdcp_disable(hdata);
 	hdcp_start(hdata);
 
 	hdmi_regs_dump(hdata, "start");
