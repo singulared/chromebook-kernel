@@ -2713,10 +2713,17 @@ static int hdmi_mode_valid(struct drm_connector *connector,
 				struct drm_display_mode *mode)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
+	int ret = MODE_OK;
 
 	mixer_adjust_mode(connector, mode);
 
-	return !hdmi_check_mode(hdata, mode) ? MODE_OK : MODE_BAD;
+	ret = mixer_mode_valid(connector, mode);
+	if (ret != MODE_OK)
+		return ret;
+
+	if (hdmi_check_mode(hdata, mode))
+		ret = MODE_BAD;
+	return ret;
 }
 
 static void hdmi_hotplug_work_func(struct work_struct *work)

@@ -341,6 +341,25 @@ enum exynos_mixer_mode_type exynos_mixer_get_mode_type(
 
 static struct drm_crtc *mixer_get_crtc_from_dev(struct drm_device *dev);
 
+int mixer_mode_valid(struct drm_connector *connector,
+			struct drm_display_mode *mode)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_crtc *crtc;
+	struct mixer_context *mctx;
+	enum exynos_mixer_mode_type mt;
+
+	crtc = mixer_get_crtc_from_dev(dev);
+	if (!crtc)
+		return MODE_ERROR;
+
+	mctx = to_mixer_ctx(crtc);
+
+	mt = exynos_mixer_get_mode_type(mctx, mode->hdisplay, mode->vdisplay);
+
+	return (mt == EXYNOS_MIXER_MODE_INVALID) ? MODE_BAD : MODE_OK;
+}
+
 void mixer_adjust_mode(struct drm_connector *connector,
 		struct drm_display_mode *mode)
 {

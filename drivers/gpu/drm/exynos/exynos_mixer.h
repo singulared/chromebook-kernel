@@ -17,6 +17,9 @@
 /* This function returns the horizontal offset for a mode */
 unsigned mixer_get_horizontal_offset(unsigned width, unsigned height);
 
+int mixer_mode_valid(struct drm_connector *connector,
+			struct drm_display_mode *mode);
+
 void mixer_adjust_mode(struct drm_connector *connector,
 		struct drm_display_mode *mode);
 
