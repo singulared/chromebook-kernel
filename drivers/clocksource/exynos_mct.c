@@ -221,6 +221,13 @@ struct syscore_ops mct_frc_core = {
 	.resume		= exynos4_frc_resume,
 };
 
+static struct delay_timer exynos4_delay_timer;
+
+static cycles_t exynos4_read_current_timer(void)
+{
+	return exynos4_frc_read(&mct_frc);
+}
+
 static void __init exynos4_clocksource_init(void)
 {
 	u64 initial_time = exynos4_frc_read(&mct_frc);
@@ -229,6 +236,10 @@ static void __init exynos4_clocksource_init(void)
 	printk(KERN_INFO "Initial usec timer %llu\n", initial_time);
 
 	exynos4_mct_frc_start();
+
+	exynos4_delay_timer.read_current_timer = &exynos4_read_current_timer;
+	exynos4_delay_timer.freq = clk_rate;
+	register_current_timer_delay(&exynos4_delay_timer);
 
 	if (clocksource_register_hz(&mct_frc, clk_rate))
 		panic("%s: can't register clocksource\n", mct_frc.name);
