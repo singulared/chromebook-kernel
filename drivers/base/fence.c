@@ -170,7 +170,7 @@ void release_fence(struct kref *kref)
 	if (fence->ops->release)
 		fence->ops->release(fence);
 	else
-		kfree(fence);
+		free_fence(fence);
 }
 EXPORT_SYMBOL(release_fence);
 
@@ -445,7 +445,7 @@ static void seqno_release(struct fence *fence)
 	if (f->ops->release)
 		f->ops->release(fence);
 	else
-		kfree(f);
+		free_fence(fence);
 }
 
 static long seqno_wait(struct fence *fence, bool intr, signed long timeout)

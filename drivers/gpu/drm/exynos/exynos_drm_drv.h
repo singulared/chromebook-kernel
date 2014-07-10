@@ -22,6 +22,9 @@
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
 #endif
+#ifdef CONFIG_DRM_DMA_SYNC
+#include "drm_sync_helper.h"
+#endif
 
 #define DRM_BASE_ID(obj)	((obj) ? (obj)->base.id : -1)
 
@@ -95,7 +98,11 @@ struct exynos_drm_plane {
 	struct kds_resource_set *kds;
 	struct kds_callback kds_cb;
 #endif
-
+#ifdef CONFIG_DRM_DMA_SYNC
+	unsigned fence_context;
+	atomic_t fence_seqno;
+	struct fence *fence;
+#endif
 	const struct exynos_plane_helper_funcs *helper_funcs;
 };
 #define to_exynos_plane(x) container_of(x, struct exynos_drm_plane, base)
@@ -176,6 +183,10 @@ struct exynos_drm_private {
 		atomic_t object_memory;
 		atomic_t object_count;
 	} mm;
+#endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	unsigned int cpu_fence_context;
+	atomic_t cpu_fence_seqno;
 #endif
 };
 

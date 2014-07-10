@@ -73,6 +73,11 @@ struct exynos_drm_gem_obj {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_resource_set         *resource_set;
 #endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	struct fence			*acquire_fence;
+	atomic_t			acquire_shared_count;
+	bool				acquire_exclusive;
+#endif
 	unsigned int			flags;
 };
 

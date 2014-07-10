@@ -17,10 +17,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <uapi/drm/exynos_drm.h>
-
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/dma-buf.h>
-#endif
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
@@ -53,7 +50,6 @@ static int check_fb_gem_memory_type(struct drm_device *drm_dev,
 	return 0;
 }
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 				  struct dma_buf *buf)
 {
@@ -67,7 +63,6 @@ void exynos_drm_fb_attach_dma_buf(struct exynos_drm_fb *exynos_fb,
 	}
 	BUG_ON(exynos_fb->dma_buf != buf);
 }
-#endif
 
 static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 {
@@ -93,10 +88,8 @@ static void exynos_drm_fb_release_work_fn(struct work_struct *work)
 	}
 	mutex_unlock(&drm_dev->struct_mutex);
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (exynos_fb->dma_buf)
 		dma_buf_put(exynos_fb->dma_buf);
-#endif
 
 	kfree(exynos_fb);
 }

@@ -19,6 +19,9 @@
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
 #endif
+#ifdef CONFIG_DRM_DMA_SYNC
+#include <drm/drm_sync_helper.h>
+#endif
 
 #include "exynos_drm_debugfs.h"
 #include "exynos_drm_drv.h"
@@ -34,7 +37,6 @@
 #include "exynos_mixer.h"
 
 #include <linux/i2c.h>
-#include <linux/kds.h>
 #include <linux/pm_runtime.h>
 
 #define DRIVER_NAME	"exynos"
@@ -76,6 +78,11 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 
 	dev_set_drvdata(dev->dev, dev);
 	dev->dev_private = (void *)private;
+
+#ifdef CONFIG_DRM_DMA_SYNC
+	private->cpu_fence_context = fence_context_alloc(1);
+	atomic_set(&private->cpu_fence_seqno, 0);
+#endif
 
 	/*
 	 * create mapping to manage iommu table and set a pointer to iommu
@@ -271,6 +278,10 @@ static void exynos_drm_preclose(struct drm_device *dev,
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 		BUG_ON(cur->exynos_gem_obj->resource_set == NULL);
 		kds_resource_set_release(&cur->exynos_gem_obj->resource_set);
+#endif
+#ifdef CONFIG_DRM_DMA_SYNC
+		BUG_ON(!cur->exynos_gem_obj->acquire_fence);
+		drm_fence_signal_and_put(&cur->exynos_gem_obj->acquire_fence);
 #endif
 		drm_gem_object_unreference(&cur->exynos_gem_obj->base);
 		kfree(cur);
