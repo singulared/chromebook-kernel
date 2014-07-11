@@ -1290,7 +1290,7 @@ static int mixer_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	unsigned int crtc_w, crtc_h;
 
 	if (!ctx->powered)
-		return -ENODEV;
+		mixer_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
 
 	crtc_w = plane->fb->width - x;
 	crtc_h = plane->fb->height - y;
