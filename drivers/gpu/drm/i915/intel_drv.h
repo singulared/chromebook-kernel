@@ -331,6 +331,10 @@ struct cxsr_latency {
 #define DIP_AVI_RGB_QUANT_RANGE_DEFAULT	(0 << 2)
 #define DIP_AVI_RGB_QUANT_RANGE_LIMITED	(1 << 2)
 #define DIP_AVI_RGB_QUANT_RANGE_FULL	(2 << 2)
+#define DIP_AVI_APAR_SAME_AS_CODED      0x08
+#define DIP_AVI_APAR_4X3_CENTERED       0x09
+#define DIP_AVI_APAR_16X9_CENTERED      0x0A
+#define DIP_AVI_APAR_14X9_CENTERED      0x0B
 
 #define DIP_TYPE_SPD	0x83
 #define DIP_VERSION_SPD	0x1

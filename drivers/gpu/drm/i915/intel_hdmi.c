@@ -349,7 +349,9 @@ static void intel_hdmi_set_avi_infoframe(struct drm_encoder *encoder,
 			avi_if.body.avi.ITC_EC_Q_SC |= DIP_AVI_RGB_QUANT_RANGE_FULL;
 	}
 
-	avi_if.body.avi.VIC = drm_mode_cea_vic(adjusted_mode);
+	avi_if.body.avi.C_M_R = DIP_AVI_APAR_SAME_AS_CODED;
+
+	avi_if.body.avi.VIC = drm_match_cea_mode(adjusted_mode);
 
 	intel_set_infoframe(encoder, &avi_if);
 }
