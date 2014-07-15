@@ -738,7 +738,10 @@ static void fimd_crtc_commit(struct drm_crtc *crtc)
 {
 	struct fimd_context *ctx = to_fimd_ctx(crtc);
 	struct fimd_mode_data *mode = &ctx->mode;
+	struct drm_plane *plane = crtc->primary;
+	unsigned int crtc_w, crtc_h;
 	u32 val;
+	int ret;
 
 	/* nothing to do if we haven't set the mode yet */
 	if (mode->htotal == 0 || mode->vtotal == 0)
@@ -785,6 +788,16 @@ static void fimd_crtc_commit(struct drm_crtc *crtc)
 	 */
 	val |= VIDCON0_ENVID | VIDCON0_ENVID_F;
 	writel(val, ctx->regs + VIDCON0);
+
+	/* setup the primary plane. */
+	crtc_w = plane->fb->width;
+	crtc_h = plane->fb->height;
+
+	ret = plane->funcs->update_plane(plane, crtc, plane->fb, 0, 0,
+					 crtc_w, crtc_h, 0, 0,
+					 crtc_w << 16, crtc_h << 16);
+	if (ret)
+		DRM_ERROR("update_plane failed, ret=%d\n", ret);
 
 	exynos_set_dithering(ctx);
 
