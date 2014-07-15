@@ -130,12 +130,12 @@ static void reservation_cb_work(struct work_struct *pwork)
 	struct drm_reservation_cb *rcb =
 		container_of(pwork, struct drm_reservation_cb, work);
 	/*
-	 * signal completion and clean up everything before
+	 * clean up everything and signal completion before
 	 * calling the callback, because the callback may free
 	 * structure containing rcb and work_struct
 	 */
-	complete(&rcb->compl);
 	reservation_cb_cleanup(rcb);
+	complete(&rcb->compl);
 	if (rcb->func)
 		rcb->func(rcb, rcb->context);
 }

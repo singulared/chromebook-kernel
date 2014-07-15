@@ -284,6 +284,8 @@ static void kbase_atom_release_sync(kbase_jd_atom *katom)
 #ifdef CONFIG_KDS
 	kds_resource_set_release_sync(&katom->kds_rset);
 #elif defined(CONFIG_DRM_DMA_SYNC)
+	/* clean up rcb in case context was zapped and callback wasn't called */
+	drm_reservation_cb_fini(&katom->rcb);
 	drm_fence_signal_and_put(&katom->rendered_fence);
 #endif
 }
