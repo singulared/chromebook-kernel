@@ -1293,7 +1293,7 @@ static int mixer_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	unsigned int crtc_w, crtc_h;
 
 	if (!ctx->powered)
-		mixer_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
+		return -ENODEV;
 
 	crtc_w = plane->fb->width - x;
 	crtc_h = plane->fb->height - y;
@@ -1316,6 +1316,40 @@ static const struct drm_crtc_helper_funcs mixer_crtc_helper_funcs = {
 	.mode_set_base = mixer_crtc_mode_set_base,
 	.load_lut = mixer_crtc_load_lut,
 };
+
+static int mixer_crtc_set_config(struct drm_mode_set *set)
+{
+	struct drm_crtc *crtc = set->crtc;
+	struct mixer_context *ctx;
+	int ret;
+
+	if (!crtc)
+		return -EINVAL;
+
+	ctx = to_mixer_ctx(crtc);
+
+	/*
+	 * If we're currently powered off, invalidate our current mode
+	 * so the set_config() helper goes through a full modeset instead
+	 * of just calling mode_set_base (which will fail).
+	 */
+	if (!ctx->powered)
+		crtc->mode.flags |= EXYNOS_DRM_MODE_FLAG_FORCE_MODESET;
+
+	ret = drm_crtc_helper_set_config(set);
+	if (ret)
+		DRM_ERROR("drm_crtc_helper_set_config failed ret=%d\n", ret);
+
+	/*
+	 * If the force modeset flag is still present here it likely means we
+	 * failed modeset and we've rolled it back. In any case, strip
+	 * the flag from crtc->mode before returning.
+	 */
+	if (crtc->mode.flags & EXYNOS_DRM_MODE_FLAG_FORCE_MODESET)
+		crtc->mode.flags &= ~EXYNOS_DRM_MODE_FLAG_FORCE_MODESET;
+
+	return ret;
+}
 
 static int mixer_crtc_page_flip(struct drm_crtc *crtc,
 		struct drm_framebuffer *fb,
@@ -1352,7 +1386,7 @@ static void mixer_crtc_destroy(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs mixer_crtc_funcs = {
-	.set_config	= drm_crtc_helper_set_config,
+	.set_config	= mixer_crtc_set_config,
 	.page_flip	= mixer_crtc_page_flip,
 	.destroy	= mixer_crtc_destroy,
 };
