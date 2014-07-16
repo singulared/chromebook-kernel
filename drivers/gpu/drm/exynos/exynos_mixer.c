@@ -1174,6 +1174,7 @@ static void mixer_crtc_commit(struct drm_crtc *crtc)
 	struct drm_display_mode *m = &crtc->mode;
 	struct drm_plane *plane = crtc->primary;
 	unsigned int crtc_w, crtc_h;
+	int x, y;
 	unsigned long flags;
 	int ret;
 
@@ -1212,11 +1213,13 @@ static void mixer_crtc_commit(struct drm_crtc *crtc)
 	spin_unlock_irqrestore(&res->reg_slock, flags);
 
 	/* setup the primary plane. */
-	crtc_w = plane->fb->width;
-	crtc_h = plane->fb->height;
+	x = crtc->x;
+	y = crtc->y;
+	crtc_w = plane->fb->width - x;
+	crtc_h = plane->fb->height - y;
 
 	ret = plane->funcs->update_plane(plane, crtc, plane->fb, 0, 0,
-					 crtc_w, crtc_h, 0, 0,
+					 crtc_w, crtc_h, x << 16, y << 16,
 					 crtc_w << 16, crtc_h << 16);
 	if (ret)
 		DRM_ERROR("update_plane failed, ret=%d\n", ret);
