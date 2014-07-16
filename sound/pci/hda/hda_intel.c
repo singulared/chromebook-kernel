@@ -2876,9 +2876,13 @@ static int azx_suspend(struct device *dev)
 {
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 	struct azx_pcm *p;
 
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
 	if (chip->disabled || chip->init_failed)
 		return 0;
 
@@ -2906,8 +2910,12 @@ static int azx_resume(struct device *dev)
 {
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
 	if (chip->disabled || chip->init_failed)
 		return 0;
 
@@ -2939,8 +2947,12 @@ static int azx_resume(struct device *dev)
 static int azx_runtime_suspend(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
 	if (chip->disabled || chip->init_failed)
 		return 0;
 
@@ -2957,11 +2969,15 @@ static int azx_runtime_suspend(struct device *dev)
 static int azx_runtime_resume(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 	struct hda_bus *bus;
 	struct hda_codec *codec;
 	int status;
 
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
 	if (chip->disabled || chip->init_failed)
 		return 0;
 
@@ -2989,8 +3005,12 @@ static int azx_runtime_resume(struct device *dev)
 static int azx_runtime_idle(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
 	if (chip->disabled || chip->init_failed)
 		return 0;
 
