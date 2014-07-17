@@ -130,14 +130,11 @@ static void reservation_cb_work(struct work_struct *pwork)
 	struct drm_reservation_cb *rcb =
 		container_of(pwork, struct drm_reservation_cb, work);
 	/*
-	 * clean up everything and signal completion before
-	 * calling the callback, because the callback may free
-	 * structure containing rcb and work_struct
+	 * clean up everything before calling the callback, because the callback
+	 * may free structure containing rcb and work_struct
 	 */
 	reservation_cb_cleanup(rcb);
-	complete(&rcb->compl);
-	if (rcb->func)
-		rcb->func(rcb, rcb->context);
+	rcb->func(rcb, rcb->context);
 }
 
 static int
@@ -192,7 +189,6 @@ drm_reservation_cb_init(struct drm_reservation_cb *rcb,
 			drm_reservation_cb_func_t func, void *context)
 {
 	INIT_WORK(&rcb->work, reservation_cb_work);
-	init_completion(&rcb->compl);
 	atomic_set(&rcb->count, 1);
 	rcb->num_fence_cbs = 0;
 	rcb->fence_cbs = NULL;
@@ -257,10 +253,10 @@ drm_reservation_cb_done(struct drm_reservation_cb *rcb)
 	 */
 	if (atomic_dec_and_test(&rcb->count)) {
 		/*
-		 * we could call the callback and completion here directly
-		 * but in case the callback function needs to lock the same
-		 * mutex as our caller it could cause a deadlock, so it
-		 * is safer to call it from a worker
+		 * we could call the callback here directly but in case
+		 * the callback function needs to lock the same mutex
+		 * as our caller it could cause a deadlock, so it is
+		 * safer to call it from a worker
 		 */
 		schedule_work(&rcb->work);
 	}

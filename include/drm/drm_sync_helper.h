@@ -21,7 +21,6 @@
 #include <linux/reservation.h>
 #include <linux/atomic.h>
 #include <linux/workqueue.h>
-#include <linux/completion.h>
 
 struct fence *drm_sw_fence_new(unsigned int context,
 			unsigned seqno);
@@ -48,7 +47,6 @@ typedef void (*drm_reservation_cb_func_t)(struct drm_reservation_cb *rcb,
 
 struct drm_reservation_cb {
 	struct work_struct work;
-	struct completion compl;
 	struct drm_reservation_fence_cb **fence_cbs;
 	unsigned num_fence_cbs;
 	atomic_t count;
