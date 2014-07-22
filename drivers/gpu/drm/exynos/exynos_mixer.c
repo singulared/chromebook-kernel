@@ -35,6 +35,7 @@
 
 #include <drm/exynos_drm.h>
 
+#include "exynos_drm_cursor.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
@@ -47,6 +48,7 @@
 
 #define MIXER_WIN_NR		3
 #define MIXER_DEFAULT_WIN	0
+#define MIXER_CURSOR_WIN	1
 
 static const uint32_t plane_formats[] = {
 	DRM_FORMAT_XRGB8888,
@@ -83,6 +85,7 @@ struct mixer_context {
 	struct device		*dev;
 	struct drm_device	*drm_dev;
 	struct drm_crtc		crtc;
+	struct exynos_drm_cursor cursor;
 	struct exynos_drm_plane	planes[MIXER_WIN_NR];
 	bool			plane_updated[MIXER_WIN_NR];
 	int			pipe;
@@ -1385,10 +1388,28 @@ static void mixer_crtc_destroy(struct drm_crtc *crtc)
 {
 }
 
+static int mixer_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file,
+		uint32_t handle, uint32_t width, uint32_t height)
+{
+	struct mixer_context *ctx = to_mixer_ctx(crtc);
+	struct exynos_drm_plane *plane = &ctx->planes[MIXER_CURSOR_WIN];
+	return exynos_crtc_cursor_set(crtc, file, handle, width, height,
+			&ctx->cursor, &plane->base);
+}
+
+static int mixer_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
+{
+	struct mixer_context *ctx = to_mixer_ctx(crtc);
+	struct exynos_drm_plane *plane = &ctx->planes[MIXER_CURSOR_WIN];
+	return exynos_crtc_cursor_move(crtc, x, y, &ctx->cursor, &plane->base);
+}
+
 static const struct drm_crtc_funcs mixer_crtc_funcs = {
 	.set_config	= mixer_crtc_set_config,
 	.page_flip	= mixer_crtc_page_flip,
 	.destroy	= mixer_crtc_destroy,
+	.cursor_set	= mixer_crtc_cursor_set,
+	.cursor_move	= mixer_crtc_cursor_move,
 };
 
 struct drm_crtc *mixer_get_crtc_from_dev(struct drm_device *dev)
@@ -1438,18 +1459,28 @@ static int mixer_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 		}
 	}
 
+	ret = exynos_drm_cursor_init(drm_dev, &mixer_ctx->cursor);
+	if (ret) {
+		DRM_ERROR("Init cursor failed (ret=%d)\n", ret);
+		goto err_iommu_cleanup;
+	}
+
 	for (i = 0; i < MIXER_WIN_NR; i++) {
 		struct exynos_drm_plane *exynos_plane = &mixer_ctx->planes[i];
 		struct drm_plane *plane = &exynos_plane->base;
-
+		enum drm_plane_type plane_type;
+		if (i == MIXER_DEFAULT_WIN)
+			plane_type = DRM_PLANE_TYPE_PRIMARY;
+		else if (i == MIXER_CURSOR_WIN)
+			plane_type = DRM_PLANE_TYPE_CURSOR;
+		else
+			plane_type = DRM_PLANE_TYPE_OVERLAY;
 		ret = drm_universal_plane_init(drm_dev, plane,
 			1 << mixer_ctx->pipe, &mixer_plane_funcs, plane_formats,
-			ARRAY_SIZE(plane_formats),
-			i == MIXER_DEFAULT_WIN ? DRM_PLANE_TYPE_PRIMARY
-				: DRM_PLANE_TYPE_OVERLAY);
+			ARRAY_SIZE(plane_formats), plane_type);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
-			goto err;
+			goto err_plane_cleanup;
 		}
 
 		exynos_plane->ctx = mixer_ctx;
@@ -1463,7 +1494,7 @@ static int mixer_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 		&mixer_crtc_funcs);
 	if (ret) {
 		DRM_ERROR("Init crtc failed (ret=%d)\n", ret);
-		goto err;
+		goto err_plane_cleanup;
 	}
 
 	drm_crtc_helper_add(&mixer_ctx->crtc, &mixer_crtc_helper_funcs);
@@ -1471,10 +1502,12 @@ static int mixer_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 	priv->mixer_crtc = &mixer_ctx->crtc;
 
 	return 0;
-err:
+err_plane_cleanup:
 	for (i--; i >= 0; i--)
 		drm_plane_cleanup(&mixer_ctx->planes[i].base);
+	exynos_drm_cursor_fini(&mixer_ctx->cursor);
 
+err_iommu_cleanup:
 	if (is_drm_iommu_supported(mixer_ctx->drm_dev))
 		drm_iommu_detach_device(mixer_ctx->drm_dev, mixer_ctx->dev);
 
@@ -1487,6 +1520,8 @@ static void mixer_subdrv_remove(struct drm_device *drm_dev, struct device *dev)
 	struct mixer_context *mixer_ctx = platform_get_drvdata(pdev);
 
 	DRM_DEBUG_KMS("pipe: %d\n", mixer_ctx->pipe);
+
+	exynos_drm_cursor_fini(&mixer_ctx->cursor);
 
 	if (is_drm_iommu_supported(mixer_ctx->drm_dev))
 		drm_iommu_detach_device(mixer_ctx->drm_dev, mixer_ctx->dev);
