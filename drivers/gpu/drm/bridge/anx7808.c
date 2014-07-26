@@ -1832,7 +1832,7 @@ int anx7808_mode_valid(struct drm_connector *connector,
 				encoder->helper_private;
 
 	if (encoder_funcs && encoder_funcs->mode_valid)
-		return encoder_funcs->mode_valid(encoder, mode);
+		return encoder_funcs->mode_valid(encoder, connector, mode);
 
 	return MODE_OK;
 }

@@ -2709,10 +2709,16 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 	hdata->powered = false;
 }
 
-static int hdmi_mode_valid(struct drm_connector *connector,
-				struct drm_display_mode *mode)
+/* We should be careful here and make sure functions that take connector
+ * as argument here only use the device independent part. In particular
+ * this function may be called from ANX7808 bridge via encoder_mode_valid
+ * so the private part of drm_connector in this case would belong to ANX
+ * driver.
+ */
+static int hdmi_mode_valid_common(struct drm_connector *connector,
+					struct drm_display_mode *mode,
+					struct hdmi_context *hdata)
 {
-	struct hdmi_context *hdata = ctx_from_connector(connector);
 	int ret = MODE_OK;
 
 	mixer_adjust_mode(connector, mode);
@@ -2724,6 +2730,21 @@ static int hdmi_mode_valid(struct drm_connector *connector,
 	if (hdmi_check_mode(hdata, mode))
 		ret = MODE_BAD;
 	return ret;
+}
+
+static int hdmi_mode_valid(struct drm_connector *connector,
+				struct drm_display_mode *mode)
+{
+	struct hdmi_context *hdata = ctx_from_connector(connector);
+	return hdmi_mode_valid_common(connector, mode, hdata);
+}
+
+static int hdmi_encoder_mode_valid(struct drm_encoder *encoder,
+					struct drm_connector *connector,
+					struct drm_display_mode *mode)
+{
+	struct hdmi_context *hdata = ctx_from_encoder(encoder);
+	return hdmi_mode_valid_common(connector, mode, hdata);
 }
 
 static void hdmi_hotplug_work_func(struct work_struct *work)
@@ -2896,6 +2917,7 @@ static void hdmi_encoder_prepare(struct drm_encoder *encoder)
 static const struct drm_encoder_helper_funcs hdmi_encoder_helper_funcs = {
 	.commit		= hdmi_encoder_commit,
 	.dpms		= hdmi_encoder_dpms,
+	.mode_valid	= hdmi_encoder_mode_valid,
 	.mode_fixup	= hdmi_encoder_mode_fixup,
 	.mode_set	= hdmi_encoder_mode_set,
 	.prepare	= hdmi_encoder_prepare,

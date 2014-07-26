@@ -97,7 +97,8 @@ struct drm_encoder_helper_funcs {
 	void (*restore)(struct drm_encoder *encoder);
 
 	int (*mode_valid)(struct drm_encoder *encoder,
-			  const struct drm_display_mode *mode);
+			  struct drm_connector *connector,
+			  struct drm_display_mode *mode);
 	bool (*mode_fixup)(struct drm_encoder *encoder,
 			   const struct drm_display_mode *mode,
 			   struct drm_display_mode *adjusted_mode);
