@@ -2692,7 +2692,7 @@ static void hdmi_poweroff(struct hdmi_context *hdata)
 
 	DRM_DEBUG_KMS("\n");
 
-	hdcp_stop(hdata);
+	hdcp_disable(hdata);
 
 	/* HDMI System Disable */
 	hdmi_reg_writemask(hdata, HDMI_CON_0, 0, HDMI_EN);

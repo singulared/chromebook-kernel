@@ -443,6 +443,14 @@ static int daisy_init(struct snd_soc_pcm_runtime *rtd)
 		daisy_hp_jack_gpio.invert = !!(flags & OF_GPIO_ACTIVE_LOW);
 	}
 
+	if (codec_dn) {
+		if (of_device_is_compatible(codec_dn, "maxim,max98091") ||
+			of_device_is_compatible(codec_dn, "maxim,max98090")) {
+			daisy_hp_jack_gpio.debounce_time = 600;
+			daisy_mic_jack_gpio.debounce_time = 200;
+		}
+	}
+
 	if (gpio_is_valid(daisy_mic_jack_gpio.gpio)) {
 		snd_soc_jack_new(codec, "Mic Jack", SND_JACK_MICROPHONE,
 				 &daisy_mic_jack);

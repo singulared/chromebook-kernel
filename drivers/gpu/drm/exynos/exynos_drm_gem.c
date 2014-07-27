@@ -14,6 +14,7 @@
 #include <linux/completion.h>
 #include <linux/dma-buf.h>
 #include <linux/reservation.h>
+#include <linux/completion.h>
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 #include <linux/kds.h>
 #endif
@@ -673,6 +674,13 @@ static void cpu_acquire_kds_cb_fn(void *param1, void *param2)
 #endif
 
 #ifdef CONFIG_DRM_DMA_SYNC
+static void exynos_drm_sync_complete(struct drm_reservation_cb *rcb,
+					void *context)
+{
+	struct completion *compl = (struct completion *)context;
+	complete(compl);
+}
+
 static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 	struct exynos_drm_gem_obj *exynos_gem_obj,
 	bool exclusive)
@@ -682,6 +690,8 @@ static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 	struct reservation_object *resv = exynos_gem_obj->base.dma_buf->resv;
 	int ret = 0;
 	struct drm_reservation_cb rcb;
+	DECLARE_COMPLETION_ONSTACK(compl);
+
 	fence = drm_sw_fence_new(dev_priv->cpu_fence_context,
 			atomic_add_return(1, &dev_priv->cpu_fence_seqno));
 	if (IS_ERR(fence)) {
@@ -698,7 +708,7 @@ static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 			goto resv_unlock;
 		}
 	}
-	drm_reservation_cb_init(&rcb, NULL, NULL);
+	drm_reservation_cb_init(&rcb, exynos_drm_sync_complete, &compl);
 	ret = drm_reservation_cb_add(&rcb, resv, exclusive);
 	if (ret < 0) {
 		DRM_ERROR("Failed to add reservation to callback %d.\n", ret);
@@ -714,7 +724,7 @@ static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 
 	ww_mutex_unlock(&resv->lock);
 	mutex_unlock(&dev->struct_mutex);
-	ret = wait_for_completion_interruptible(&rcb.compl);
+	ret = wait_for_completion_interruptible(&compl);
 	mutex_lock(&dev->struct_mutex);
 	if (ret < 0) {
 		DRM_ERROR("Failed wait for reservation callback %d.\n", ret);

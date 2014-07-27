@@ -740,6 +740,7 @@ static void fimd_crtc_commit(struct drm_crtc *crtc)
 	struct fimd_mode_data *mode = &ctx->mode;
 	struct drm_plane *plane = crtc->primary;
 	unsigned int crtc_w, crtc_h;
+	int x, y;
 	u32 val;
 	int ret;
 
@@ -790,11 +791,13 @@ static void fimd_crtc_commit(struct drm_crtc *crtc)
 	writel(val, ctx->regs + VIDCON0);
 
 	/* setup the primary plane. */
-	crtc_w = plane->fb->width;
-	crtc_h = plane->fb->height;
+	x = crtc->x;
+	y = crtc->y;
+	crtc_w = plane->fb->width - x;
+	crtc_h = plane->fb->height - y;
 
 	ret = plane->funcs->update_plane(plane, crtc, plane->fb, 0, 0,
-					 crtc_w, crtc_h, 0, 0,
+					 crtc_w, crtc_h, x << 16, y << 16,
 					 crtc_w << 16, crtc_h << 16);
 	if (ret)
 		DRM_ERROR("update_plane failed, ret=%d\n", ret);
@@ -919,6 +922,40 @@ static const struct drm_crtc_helper_funcs fimd_crtc_helper_funcs = {
 	.load_lut = fimd_crtc_load_lut,
 };
 
+static int fimd_crtc_set_config(struct drm_mode_set *set)
+{
+	struct drm_crtc *crtc = set->crtc;
+	struct fimd_context *ctx;
+	int ret;
+
+	if (!crtc)
+		return -EINVAL;
+
+	ctx = to_fimd_ctx(crtc);
+
+	/*
+	 * If we're currently powered off, invalidate our current mode
+	 * so the set_config() helper goes through a full modeset instead
+	 * of just calling mode_set_base (which will fail).
+	 */
+	if (ctx->suspended)
+		crtc->mode.flags |= EXYNOS_DRM_MODE_FLAG_FORCE_MODESET;
+
+	ret = drm_crtc_helper_set_config(set);
+	if (ret)
+		DRM_ERROR("drm_crtc_helper_set_config failed ret=%d\n", ret);
+
+	/*
+	 * If the force modeset flag is still present here it likely means we
+	 * failed modeset and we've rolled it back. In any case, strip
+	 * the flag from crtc->mode before returning.
+	 */
+	if (crtc->mode.flags & EXYNOS_DRM_MODE_FLAG_FORCE_MODESET)
+		crtc->mode.flags &= ~EXYNOS_DRM_MODE_FLAG_FORCE_MODESET;
+
+	return ret;
+}
+
 static int fimd_crtc_page_flip(struct drm_crtc *crtc,
 		struct drm_framebuffer *fb,
 		struct drm_pending_vblank_event *event,	uint32_t flip_flags)
@@ -954,7 +991,7 @@ static void fimd_crtc_destroy(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs fimd_crtc_funcs = {
-	.set_config	= drm_crtc_helper_set_config,
+	.set_config	= fimd_crtc_set_config,
 	.page_flip	= fimd_crtc_page_flip,
 	.destroy	= fimd_crtc_destroy,
 };

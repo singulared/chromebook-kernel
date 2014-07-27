@@ -3461,7 +3461,7 @@ static int ca0132_select_mic(struct hda_codec *codec)
 
 	if (spec->cur_mic_type == DIGITAL_MIC) {
 		/* enable digital Mic */
-		chipio_set_conn_rate(codec, MEM_CONNID_DMIC, SR_32_000);
+		chipio_set_conn_rate(codec, MEM_CONNID_DMIC, SR_48_000);
 		ca0132_set_dmic(codec, 1);
 		ca0132_mic_boost_set(codec, 0);
 		/* set voice focus */
@@ -4405,7 +4405,7 @@ static void ca0132_init_dmic(struct hda_codec *codec)
 	 * Bit   6: set to select Data2, clear for Data1
 	 * Bit   7: set to enable DMic, clear for AMic
 	 */
-	val = 0x23;
+	val = 0x33;
 	/* keep a copy of dmic ctl val for enable/disable dmic purpuse */
 	spec->dmic_ctl = val;
 	snd_hda_codec_write(codec, spec->input_pins[0], 0,

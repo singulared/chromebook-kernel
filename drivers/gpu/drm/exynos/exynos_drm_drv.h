@@ -32,6 +32,7 @@
 #define MAX_PLANE	5
 #define MAX_FB_BUFFER	4
 #define DEFAULT_ZPOS	-1
+#define EXYNOS_DRM_MODE_FLAG_FORCE_MODESET	(1<<31)
 
 /*
  * _wait_for - magic (register) wait macro
