@@ -425,6 +425,7 @@ struct intel_dp {
 	int backlight_off_delay;
 	struct delayed_work panel_vdd_work;
 	bool want_panel_vdd;
+	bool is_apple_vga;
 	struct intel_connector *attached_connector;
 };
 

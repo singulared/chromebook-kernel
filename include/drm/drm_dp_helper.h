@@ -451,4 +451,23 @@ static inline ssize_t drm_dp_dpcd_writeb(struct drm_dp_aux *aux,
 	return drm_dp_dpcd_write(aux, offset, &value, 1);
 }
 
+#define DP_APPLE_OUI 0x10fa
+
+#define DP_APPLE_LOAD_DETECT (DP_BRANCH_OUI + 12)
+
+static inline bool drm_dp_branch_is_apple(const u8 buf[3])
+{
+	if (buf[0] == ((DP_APPLE_OUI >> 16) & 0xff) &&
+	    buf[1] == ((DP_APPLE_OUI >> 8) & 0xff) &&
+	    buf[2] == ((DP_APPLE_OUI & 0xff)))
+		return true;
+	return false;
+}
+
+static inline bool drm_dp_apple_has_load_detect(const u8 buf[8])
+{
+	if (!memcmp((const char *)buf, "mVGAa", 5))
+		return true;
+	return false;
+}
 #endif /* _DRM_DP_HELPER_H_ */
