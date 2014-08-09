@@ -91,6 +91,25 @@ static const struct file_operations reset_ops = {
 	.llseek = noop_llseek,
 };
 
+static ssize_t wake_queues_write(struct file *file, const char __user *user_buf,
+				 size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+
+	rtnl_lock();
+	ieee80211_wake_queues_by_reason(&local->hw,
+					IEEE80211_QUEUE_STOP_REASON_PS);
+	rtnl_unlock();
+
+	return count;
+}
+
+static const struct file_operations wake_queues_ops = {
+	.write = wake_queues_write,
+	.open = simple_open,
+	.llseek = noop_llseek,
+};
+
 static ssize_t channel_type_read(struct file *file, char __user *user_buf,
 		       size_t count, loff_t *ppos)
 {
@@ -277,6 +296,7 @@ void debugfs_hw_add(struct ieee80211_local *local)
 	DEBUGFS_ADD(wep_iv);
 	DEBUGFS_ADD(queues);
 	DEBUGFS_ADD_MODE(reset, 0200);
+	DEBUGFS_ADD_MODE(wake_queues, 0200);
 	DEBUGFS_ADD(channel_type);
 	DEBUGFS_ADD(hwflags);
 	DEBUGFS_ADD(user_power);
