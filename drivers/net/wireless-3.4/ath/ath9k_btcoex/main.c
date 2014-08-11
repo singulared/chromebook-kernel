@@ -368,13 +368,11 @@ static int ath_reset_internal(struct ath_softc *sc, struct ath9k_channel *hchan,
 	if (r) {
 		ath_err(common,
 			"Unable to reset channel, reset status %d\n", r);
-		goto out;
 	}
 
 	if (!ath_complete_reset(sc, true))
 		r = -EIO;
 
-out:
 	spin_unlock_bh(&sc->sc_pcu_lock);
 	return r;
 }
