@@ -135,7 +135,7 @@ KBASE_EXPORT_SYMBOL(kbase_create_context)
 
 static void kbase_reg_pending_dtor(struct kbase_va_region *reg)
 {
-	KBASE_LOG(2, reg->kctx->kbdev->dev, "Freeing pending unmapped region\n");
+	dev_dbg(reg->kctx->kbdev->dev, "Freeing pending unmapped region\n");
 	kbase_mem_phy_alloc_put(reg->alloc);
 	kfree(reg);
 }
@@ -217,10 +217,6 @@ void kbase_destroy_context(kbase_context *kctx)
 
 	kbase_mem_allocator_term(&kctx->osalloc);
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
-
-	/* Purposely corrupt the traceback to see if someone keeps using it */
-	kctx->jctx.tb = (void *)0xe7;
-
 	vfree(kctx);
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context)

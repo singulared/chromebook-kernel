@@ -75,7 +75,8 @@
 static const kbasep_atom_req core_req_variants[] = {
 	{
 	 /* 0: Fragment variant */
-	 (JS_CORE_REQ_ALL_OTHERS | BASE_JD_REQ_FS | BASE_JD_REQ_COHERENT_GROUP),
+	 (JS_CORE_REQ_ALL_OTHERS | BASE_JD_REQ_FS | BASE_JD_REQ_FS_AFBC |
+						BASE_JD_REQ_COHERENT_GROUP),
 	 (JS_CTX_REQ_ALL_OTHERS),
 	 0},
 	{
@@ -391,7 +392,7 @@ STATIC void kbasep_js_debug_check(kbasep_js_policy_cfs *policy_info, kbase_conte
 
 		expect_queued = (check_flag & KBASEP_JS_CHECKFLAG_IS_QUEUED) ? MALI_TRUE : MALI_FALSE;
 
-		KBASE_DEBUG_ASSERT_MSG(expect_queued == is_queued, "Expected context %p to be %s but it was %s", kctx, (expect_queued) ? "queued" : "not queued", (is_queued) ? "queued" : "not queued");
+		KBASE_DEBUG_ASSERT_MSG(expect_queued == is_queued, "Expected context %p to be %s but it was %s\n", kctx, (expect_queued) ? "queued" : "not queued", (is_queued) ? "queued" : "not queued");
 
 	}
 
@@ -401,7 +402,7 @@ STATIC void kbasep_js_debug_check(kbasep_js_policy_cfs *policy_info, kbase_conte
 		is_scheduled = (kbasep_list_member_of(&policy_info->scheduled_ctxs_head, &kctx->jctx.sched_info.runpool.policy_ctx.cfs.list)) ? MALI_TRUE : MALI_FALSE;
 
 		expect_scheduled = (check_flag & KBASEP_JS_CHECKFLAG_IS_SCHEDULED) ? MALI_TRUE : MALI_FALSE;
-		KBASE_DEBUG_ASSERT_MSG(expect_scheduled == is_scheduled, "Expected context %p to be %s but it was %s", kctx, (expect_scheduled) ? "scheduled" : "not scheduled", (is_scheduled) ? "scheduled" : "not scheduled");
+		KBASE_DEBUG_ASSERT_MSG(expect_scheduled == is_scheduled, "Expected context %p to be %s but it was %s\n", kctx, (expect_scheduled) ? "scheduled" : "not scheduled", (is_scheduled) ? "scheduled" : "not scheduled");
 
 	}
 
@@ -476,7 +477,7 @@ STATIC void debug_check_core_req_variants(kbase_device *kbdev, kbasep_js_policy_
 		}
 
 		/* Early-out on any failure */
-		KBASE_DEBUG_ASSERT_MSG(found != MALI_FALSE, "Job slot %d features 0x%x not matched by core_req_variants. " "Rework core_req_variants and vairants_supported_<...>_state[] to match", j, job_core_req);
+		KBASE_DEBUG_ASSERT_MSG(found != MALI_FALSE, "Job slot %d features 0x%x not matched by core_req_variants. " "Rework core_req_variants and vairants_supported_<...>_state[] to match\n", j, job_core_req);
 	}
 }
 #endif
@@ -732,7 +733,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least js_devdata->soft_stop_ticks ticks.
 					 * Soft stop the slot so we can run other jobs.
 					 */
-					KBASE_LOG(1, kbdev->dev, "Soft-stop");
+					dev_dbg(kbdev->dev, "Soft-stop");
 
 #if KBASE_DISABLE_SCHEDULING_SOFT_STOPS == 0
 					kbase_job_slot_softstop(kbdev, s, atom);
@@ -759,7 +760,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least js_devdata->soft_stop_ticks.
 					 * We do not soft-stop during CINSTR_DUMPING_ENABLED, however.
 					 */
-					KBASE_LOG(1, kbdev->dev, "Soft-stop");
+					dev_dbg(kbdev->dev, "Soft-stop");
 				} else if (ticks == js_devdata->hard_stop_ticks_nss) {
 					/* Job has been scheduled for at least js_devdata->hard_stop_ticks_nss ticks.
 					 * Hard stop the slot.

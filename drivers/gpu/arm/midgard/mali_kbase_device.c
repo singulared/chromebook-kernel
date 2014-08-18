@@ -23,7 +23,6 @@
  */
 
 #include <linux/debugfs.h>
-#include <linux/delay.h>
 #include <linux/seq_file.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -285,31 +284,6 @@ void kbase_device_trace_register_access(kbase_context *kctx, kbase_reg_access_ty
 {
 	unsigned long flags;
 	spin_lock_irqsave(&kctx->jctx.tb_lock, flags);
-
-	/*
-	 * We've seen corruption of the low bits when tb is supposed to be
-	 * NULL.  Collect some data, print and warning, and then fix it up.
-	 *
-	 * Note that delays / barriers below are just throwing things at the
-	 * wall to see what sticks--we don't know that any of them will do
-	 * anything useful.
-	 */
-	if (kctx->jctx.tb && (u32)kctx->jctx.tb < 0x100) {
-		void *tb1, *tb2, *tb3, *tb4;
-
-		tb1 = kctx->jctx.tb;
-		dsb();
-		tb2 = kctx->jctx.tb;
-		udelay(5);
-		tb3 = ((volatile kbase_context *)kctx)->jctx.tb;
-		flush_cache_all();
-		tb4 = kctx->jctx.tb;
-
-		WARN(1, "tb failure: %p %p %p %p\n", tb1, tb2, tb3, tb4);
-
-		kctx->jctx.tb = NULL;
-	}
-
 	if (kctx->jctx.tb) {
 		u16 wrap_count;
 		u16 write_offset;
@@ -352,7 +326,7 @@ void kbase_reg_write(kbase_device *kbdev, u16 offset, u32 value, kbase_context *
 	KBASE_DEBUG_ASSERT(kbdev->pm.gpu_powered);
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
 	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
-	KBASE_LOG(4, kbdev->dev, "w: reg %04x val %08x", offset, value);
+	dev_dbg(kbdev->dev, "w: reg %04x val %08x", offset, value);
 	kbase_os_reg_write(kbdev, offset, value);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_WRITE, offset, value);
@@ -367,7 +341,7 @@ u32 kbase_reg_read(kbase_device *kbdev, u16 offset, kbase_context *kctx)
 	KBASE_DEBUG_ASSERT(kctx == NULL || kctx->as_nr != KBASEP_AS_NR_INVALID);
 	KBASE_DEBUG_ASSERT(kbdev->dev != NULL);
 	val = kbase_os_reg_read(kbdev, offset);
-	KBASE_LOG(4, kbdev->dev, "r: reg %04x val %08x", offset, val);
+	dev_dbg(kbdev->dev, "r: reg %04x val %08x", offset, val);
 	if (kctx && kctx->jctx.tb)
 		kbase_device_trace_register_access(kctx, REG_READ, offset, val);
 	return val;
@@ -516,7 +490,7 @@ void kbasep_trace_dump_msg(kbase_device *kbdev, kbase_trace *trace_msg)
 	char buffer[DEBUG_MESSAGE_SIZE];
 
 	kbasep_trace_format_msg(trace_msg, buffer, DEBUG_MESSAGE_SIZE);
-	KBASE_LOG(1, kbdev->dev, "%s", buffer);
+	dev_dbg(kbdev->dev, "%s", buffer);
 }
 
 void kbasep_trace_add(kbase_device *kbdev, kbase_trace_code code, void *ctx, kbase_jd_atom *katom, u64 gpu_addr, u8 flags, int refcount, int jobslot, unsigned long info_val)
@@ -576,7 +550,7 @@ void kbasep_trace_dump(kbase_device *kbdev)
 	u32 start;
 	u32 end;
 
-	KBASE_LOG(1, kbdev->dev, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
+	dev_dbg(kbdev->dev, "Dumping trace:\nsecs,nthread,cpu,code,ctx,katom,gpu_addr,jobslot,refcount,info_val");
 	spin_lock_irqsave(&kbdev->trace_lock, flags);
 	start = kbdev->trace_first_out;
 	end = kbdev->trace_next_in;
@@ -587,7 +561,7 @@ void kbasep_trace_dump(kbase_device *kbdev)
 
 		start = (start + 1) & KBASE_TRACE_MASK;
 	}
-	KBASE_LOG(1, kbdev->dev, "TRACE_END");
+	dev_dbg(kbdev->dev, "TRACE_END");
 
 	spin_unlock_irqrestore(&kbdev->trace_lock, flags);
 

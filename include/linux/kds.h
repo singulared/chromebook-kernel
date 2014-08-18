@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -12,6 +12,8 @@
  * Boston, MA  02110-1301, USA.
  *
  */
+
+
 
 
 

@@ -30,7 +30,7 @@
 
 #include "mali_kbase_jm.h"
 
-#define beenthere(kctx, f, a...)  KBASE_LOG(1, kctx->kbdev->dev, "%s:" f, __func__, ##a)
+#define beenthere(kctx, f, a...)  dev_dbg(kctx->kbdev->dev, "%s:" f, __func__, ##a)
 
 #ifdef CONFIG_MALI_DEBUG_SHADER_SPLIT_FS
 u64 mali_js0_affinity_mask = 0xFFFFFFFFFFFFFFFFULL;
@@ -122,7 +122,7 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 	katom->start_timestamp = ktime_get();
 
 	/* GO ! */
-	KBASE_LOG(2, kbdev->dev, "JS: Submitting atom %p from ctx %p to js[%d] with head=0x%llx, affinity=0x%llx", katom, kctx, js, jc_head, katom->affinity);
+	dev_dbg(kbdev->dev, "JS: Submitting atom %p from ctx %p to js[%d] with head=0x%llx, affinity=0x%llx", katom, kctx, js, jc_head, katom->affinity);
 
 	KBASE_TRACE_ADD_SLOT_INFO(kbdev, JM_SUBMIT, kctx, katom, jc_head, js, (u32) katom->affinity);
 
@@ -146,10 +146,30 @@ static void kbase_job_hw_submit(kbase_device *kbdev, kbase_jd_atom *katom, int j
 void kbase_job_submit_nolock(kbase_device *kbdev, kbase_jd_atom *katom, int js)
 {
 	kbase_jm_slot *jm_slots;
+	base_jd_core_req core_req;
 
 	KBASE_DEBUG_ASSERT(kbdev);
+	KBASE_DEBUG_ASSERT(katom);
 
 	jm_slots = kbdev->jm_slots;
+
+	core_req = katom->core_req;
+	if (core_req & BASE_JD_REQ_ONLY_COMPUTE) {
+		unsigned long flags;
+		int device_nr = (core_req & BASE_JD_REQ_SPECIFIC_COHERENT_GROUP) ? katom->device_nr : 0;
+		KBASE_DEBUG_ASSERT(device_nr < 2);
+		spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
+		kbasep_pm_record_job_status(kbdev);
+		kbdev->pm.metrics.active_cl_ctx[device_nr]++;
+		spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
+	} else {
+		unsigned long flags;
+
+		spin_lock_irqsave(&kbdev->pm.metrics.lock, flags);
+		kbasep_pm_record_job_status(kbdev);
+		kbdev->pm.metrics.active_gl_ctx++;
+		spin_unlock_irqrestore(&kbdev->pm.metrics.lock, flags);
+	}
 
 	/*
 	 * We can have:
@@ -212,7 +232,7 @@ void kbase_job_done_slot(kbase_device *kbdev, int s, u32 completion_code, u64 jo
 	if (katom->event_code != BASE_JD_EVENT_JOB_CANCELLED)
 		katom->event_code = (base_jd_event_code) completion_code;
 
-	if (kctx && kctx->jctx.tb) kbase_device_trace_register_access(kctx, REG_WRITE, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 1 << s);
+	kbase_device_trace_register_access(kctx, REG_WRITE, JOB_CONTROL_REG(JOB_IRQ_CLEAR), 1 << s);
 
 	/* Complete the job, and start new ones
 	 *
@@ -375,7 +395,7 @@ void kbase_job_done(kbase_device *kbdev, u32 done)
 				}
 			}
 
-			KBASE_LOG(2, kbdev->dev, "Job ended with status 0x%08X\n", completion_code);
+			dev_dbg(kbdev->dev, "Job ended with status 0x%08X\n", completion_code);
 
 			nr_done = kbasep_jm_nr_jobs_submitted(slot);
 			nr_done -= (active >> i) & 1;
@@ -471,7 +491,7 @@ static void kbasep_job_slot_soft_or_hard_stop_do_action(kbase_device *kbdev, int
 		mali_bool soft_stop_allowed = kbasep_soft_stop_allowed(kbdev, core_reqs);
 		if (!soft_stop_allowed) {
 #ifdef CONFIG_MALI_DEBUG
-			KBASE_LOG(2, kbdev->dev, "Attempt made to soft-stop a job that cannot be soft-stopped. core_reqs = 0x%X", (unsigned int)core_reqs);
+			dev_dbg(kbdev->dev, "Attempt made to soft-stop a job that cannot be soft-stopped. core_reqs = 0x%X", (unsigned int)core_reqs);
 #endif				/* CONFIG_MALI_DEBUG */
 			return;
 		}
@@ -844,7 +864,7 @@ void kbase_job_zap_context(kbase_context *kctx)
 	mutex_lock(&js_kctx_info->ctx.jsctx_mutex);
 	js_kctx_info->ctx.is_dying = MALI_TRUE;
 
-	KBASE_LOG(1, kbdev->dev, "Zap: Try Evict Ctx %p", kctx);
+	dev_dbg(kbdev->dev, "Zap: Try Evict Ctx %p", kctx);
 	mutex_lock(&js_devdata->queue_mutex);
 	evict_success = kbasep_js_policy_try_evict_ctx(&js_devdata->policy, kctx);
 	mutex_unlock(&js_devdata->queue_mutex);
@@ -897,7 +917,7 @@ void kbase_job_zap_context(kbase_context *kctx)
 
 		KBASE_TRACE_ADD(kbdev, JM_ZAP_NON_SCHEDULED, kctx, NULL, 0u, js_kctx_info->ctx.is_scheduled);
 
-		KBASE_LOG(2, kbdev->dev, "Zap: Ctx %p evict_success=%d, scheduled=%d", kctx, evict_success, js_kctx_info->ctx.is_scheduled);
+		dev_dbg(kbdev->dev, "Zap: Ctx %p evict_success=%d, scheduled=%d", kctx, evict_success, js_kctx_info->ctx.is_scheduled);
 
 		if (evict_success != MALI_FALSE) {
 			/* Only cancel jobs when we evicted from the policy queue. No Power
@@ -912,7 +932,7 @@ void kbase_job_zap_context(kbase_context *kctx)
 		mali_bool was_retained;
 		/* Case c: didn't evict, but it is scheduled - it's in the Run Pool */
 		KBASE_TRACE_ADD(kbdev, JM_ZAP_SCHEDULED, kctx, NULL, 0u, js_kctx_info->ctx.is_scheduled);
-		KBASE_LOG(2, kbdev->dev, "Zap: Ctx %p is in RunPool", kctx);
+		dev_dbg(kbdev->dev, "Zap: Ctx %p is in RunPool", kctx);
 
 		/* Disable the ctx from submitting any more jobs */
 		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
@@ -925,7 +945,7 @@ void kbase_job_zap_context(kbase_context *kctx)
 		/* Since it's scheduled and we have the jsctx_mutex, it must be retained successfully */
 		KBASE_DEBUG_ASSERT(was_retained != MALI_FALSE);
 
-		KBASE_LOG(2, kbdev->dev, "Zap: Ctx %p Kill Any Running jobs", kctx);
+		dev_dbg(kbdev->dev, "Zap: Ctx %p Kill Any Running jobs", kctx);
 		/* Cancel any remaining running jobs for this kctx - if any. Submit is disallowed
 		 * which takes effect immediately, so no more new jobs will appear after we do this.  */
 		for (i = 0; i < kbdev->gpu_props.num_job_slots; i++)
@@ -934,7 +954,7 @@ void kbase_job_zap_context(kbase_context *kctx)
 		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
 		mutex_unlock(&js_kctx_info->ctx.jsctx_mutex);
 
-		KBASE_LOG(2, kbdev->dev, "Zap: Ctx %p Release (may or may not schedule out immediately)", kctx);
+		dev_dbg(kbdev->dev, "Zap: Ctx %p Release (may or may not schedule out immediately)", kctx);
 		kbasep_js_runpool_release_ctx(kbdev, kctx);
 	}
 	KBASE_TRACE_ADD(kbdev, JM_ZAP_DONE, kctx, NULL, 0u, 0u);

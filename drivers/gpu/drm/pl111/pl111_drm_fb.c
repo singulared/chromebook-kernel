@@ -179,7 +179,7 @@ struct drm_framebuffer *pl111_fb_create(struct drm_device *dev,
 	 */
 	if (!((fb->bits_per_pixel == 16) ||
 		  (fb->bits_per_pixel == 32 && fb->depth == 24))) {
-		DRM_ERROR("unsupported pixel format bpp=%d, depth=%d\n", fb->bits_per_pixel, fb->depth);
+		DRM_DEBUG_KMS("unsupported pixel format bpp=%d, depth=%d\n", fb->bits_per_pixel, fb->depth);
 		drm_framebuffer_cleanup(fb);
 		kfree(fb);
 		fb = NULL;

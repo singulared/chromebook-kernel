@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2013 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -15,6 +15,8 @@
 
 
 
+
+
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
@@ -25,6 +27,7 @@
 #include <linux/workqueue.h>
 #include <linux/kds.h>
 
+#include <asm/atomic.h>
 
 #define KDS_LINK_TRIGGERED (1u << 0)
 #define KDS_LINK_EXCLUSIVE (1u << 1)
@@ -41,6 +44,7 @@ struct kds_resource_set
 	void                 *callback_extra_parameter;
 	struct list_head      callback_link;
 	struct work_struct    callback_work;
+	atomic_t              cb_queued;
 
 	/* This is only initted when kds_waitall() is called. */
 	wait_queue_head_t     wake;
@@ -97,6 +101,8 @@ static void kds_queued_callback(struct work_struct *work)
 	struct kds_resource_set *rset;
 	rset = container_of(work, struct kds_resource_set, callback_work);
 
+	atomic_dec(&rset->cb_queued);
+
 	kds_do_user_callback(rset);
 }
 
@@ -107,6 +113,9 @@ static void kds_callback_perform(struct kds_resource_set *rset)
 	else
 	{
 		int result;
+
+		atomic_inc(&rset->cb_queued);
+
 		result = queue_work(rset->cb->wq, &rset->callback_work);
 		/* if we got a 0 return it means we've triggered the same rset twice! */
 		WARN_ON(!result);
@@ -172,6 +181,7 @@ int kds_async_waitall(
 	rset->callback_extra_parameter = callback_extra_parameter;
 	INIT_LIST_HEAD(&rset->callback_link);
 	INIT_WORK(&rset->callback_work, kds_queued_callback);
+	atomic_set(&rset->cb_queued, 0);
 
 	for (i = 0; i < number_resources; i++)
 	{
@@ -280,6 +290,7 @@ struct kds_resource_set *kds_waitall(
 	init_waitqueue_head(&rset->wake);
 	INIT_LIST_HEAD(&rset->callback_link);
 	INIT_WORK(&rset->callback_work, kds_queued_callback);
+	atomic_set(&rset->cb_queued, 0);
 
 	spin_lock_irqsave(&kds_lock, lflags);
 
@@ -478,6 +489,7 @@ static void __kds_resource_set_release_common(struct kds_resource_set *rset)
 void kds_resource_set_release(struct kds_resource_set **pprset)
 {
 	struct kds_resource_set *rset;
+	int queued;
 
 	rset = cmpxchg(pprset,*pprset,NULL);
 
@@ -494,7 +506,8 @@ void kds_resource_set_release(struct kds_resource_set **pprset)
 	 * Caller is responsible for guaranteeing that callback work is not
 	 * pending (i.e. its running or completed) prior to calling release.
 	 */
-	BUG_ON(work_pending(&rset->callback_work));
+	queued = atomic_read(&rset->cb_queued);
+	BUG_ON(queued);
 
 	/* free the resource set */
 	kfree(rset);

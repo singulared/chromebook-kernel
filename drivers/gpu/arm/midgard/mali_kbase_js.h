@@ -671,7 +671,7 @@ static INLINE void kbasep_js_set_submit_allowed(kbasep_js_device_data *js_devdat
 
 	set_bit = (u16) (1u << kctx->as_nr);
 
-	KBASE_LOG(3, kctx->kbdev->dev, "JS: Setting Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	dev_dbg(kctx->kbdev->dev, "JS: Setting Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed |= set_bit;
 }
@@ -696,7 +696,7 @@ static INLINE void kbasep_js_clear_submit_allowed(kbasep_js_device_data *js_devd
 	clear_bit = (u16) (1u << kctx->as_nr);
 	clear_mask = ~clear_bit;
 
-	KBASE_LOG(3, kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	dev_dbg(kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed &= clear_mask;
 }
@@ -752,6 +752,7 @@ static INLINE void kbasep_js_atom_retained_state_copy(kbasep_js_atom_retained_st
 	retained_state->event_code = katom->event_code;
 	retained_state->core_req = katom->core_req;
 	retained_state->retry_submit_on_slot = katom->retry_submit_on_slot;
+	retained_state->device_nr = katom->device_nr;
 }
 
 /**

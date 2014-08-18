@@ -24,7 +24,7 @@
 
 #ifdef CONFIG_SYNC
 
-#include <linux/sync.h>
+#include "sync.h"
 #include <mali_kbase.h>
 
 struct mali_sync_timeline {
