@@ -44,7 +44,11 @@ extern int mali_debug_level;
  * @param level debug level for the message    
  * @param ... Arguments you would normally pass to dev_dbg()
  */
-#define KBASE_LOG(level, ...) if ((level) <= mali_debug_level) dev_dbg(__VA_ARGS__)
+#define KBASE_LOG(level, ...) \
+	do { \
+		if ((level) <= mali_debug_level) \
+			dev_dbg(__VA_ARGS__); \
+	} while (MALI_FALSE)
 
 /** @brief If equals to 0, a trace containing the file, line, and function will be displayed before each message. */
 #define KBASE_DEBUG_SKIP_TRACE 0

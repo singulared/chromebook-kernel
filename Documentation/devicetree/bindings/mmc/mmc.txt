@@ -27,6 +27,7 @@ Optional properties:
 - cap-mmc-highspeed: MMC high-speed timing is supported
 - cap-power-off-card: powering off the card is safe
 - cap-sdio-irq: enable SDIO IRQ signalling on this interface
+- full-pwr-cycle: full power cycle of the card is supported
 
 Optional SDIO properties:
 - keep-power-in-suspend: Preserves card power during a suspend/resume cycle
