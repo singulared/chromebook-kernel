@@ -1922,6 +1922,12 @@ int anx7808_set_property(struct drm_connector *connector,
 	if (property != mode_config->content_protection_property)
 		return 0;
 
+	if (val == DRM_MODE_CONTENT_PROTECTION_ENABLED)
+		return -EINVAL;
+
+	if (val == DRM_MODE_CONTENT_PROTECTION_DESIRED && anx7808->hdcp_desired)
+		return -EALREADY;
+
 	anx7808->hdcp_desired = val;
 
 	ret |= anx7808->encoder->funcs->set_property(anx7808->encoder,
