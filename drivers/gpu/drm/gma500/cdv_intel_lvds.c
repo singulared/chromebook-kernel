@@ -455,8 +455,10 @@ static void cdv_intel_lvds_destroy(struct drm_connector *connector)
 }
 
 static int cdv_intel_lvds_set_property(struct drm_connector *connector,
+				       struct drm_atomic_state *state,
 				       struct drm_property *property,
-				       uint64_t value)
+				       uint64_t value,
+				       void *blob_data)
 {
 	struct drm_encoder *encoder = connector->encoder;
 
@@ -488,8 +490,9 @@ static int cdv_intel_lvds_set_property(struct drm_connector *connector,
 			return 0;
 
 		if (drm_object_property_set_value(&connector->base,
+							&connector->propvals,
 							property,
-							value))
+							value, blob_data))
 			return -1;
 
 		if (crtc->saved_mode.hdisplay != 0 &&
@@ -503,8 +506,9 @@ static int cdv_intel_lvds_set_property(struct drm_connector *connector,
 		}
 	} else if (!strcmp(property->name, "backlight") && encoder) {
 		if (drm_object_property_set_value(&connector->base,
+							&connector->propvals,
 							property,
-							value))
+							value, blob_data))
 			return -1;
 		else
                         gma_backlight_set(encoder->dev, value);

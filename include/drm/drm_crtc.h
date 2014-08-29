@@ -33,6 +33,7 @@
 #include <drm/drm_mode.h>
 
 #include <drm/drm_fourcc.h>
+#include <drm/drm_modeset_lock.h>
 
 struct drm_device;
 struct drm_mode_set;
@@ -40,6 +41,7 @@ struct drm_framebuffer;
 struct drm_object_properties;
 struct drm_file;
 struct drm_clip_rect;
+struct drm_object_property_values;
 
 #define DRM_MODE_OBJECT_CRTC 0xcccccccc
 #define DRM_MODE_OBJECT_CONNECTOR 0xc0c0c0c0
@@ -50,17 +52,22 @@ struct drm_clip_rect;
 #define DRM_MODE_OBJECT_BLOB 0xbbbbbbbb
 #define DRM_MODE_OBJECT_PLANE 0xeeeeeeee
 #define DRM_MODE_OBJECT_BRIDGE 0xbdbdbdbd
+#define DRM_MODE_OBJECT_ANY 0
 
 struct drm_mode_object {
 	uint32_t id;
 	uint32_t type;
 	struct drm_object_properties *properties;
+	struct drm_object_property_values *propvals;
 };
 
 #define DRM_OBJECT_MAX_PROPERTY 24
 struct drm_object_properties {
 	int count;
 	uint32_t ids[DRM_OBJECT_MAX_PROPERTY];
+};
+
+struct drm_object_property_values {
 	uint64_t values[DRM_OBJECT_MAX_PROPERTY];
 };
 
@@ -112,6 +119,15 @@ enum drm_mode_status {
     MODE_BAD = -2,	/* unspecified reason */
     MODE_ERROR	= -1	/* error condition */
 };
+
+static inline int64_t U642I64(uint64_t val)
+{
+	return (int64_t)*((int64_t *)&val);
+}
+static inline uint64_t I642U64(int64_t val)
+{
+	return (uint64_t)*((uint64_t *)&val);
+}
 
 #define DRM_MODE_TYPE_CLOCK_CRTC_C (DRM_MODE_TYPE_CLOCK_C | \
 				    DRM_MODE_TYPE_CRTC_C)
@@ -297,9 +313,14 @@ struct drm_property {
 	char name[DRM_PROP_NAME_LEN];
 	uint32_t num_values;
 	uint64_t *values;
+	struct drm_device *dev;
 
 	struct list_head enum_blob_list;
 };
+
+void drm_modeset_lock_all(struct drm_device *dev);
+void drm_modeset_unlock_all(struct drm_device *dev);
+void drm_warn_on_modeset_not_all_locked(struct drm_device *dev);
 
 struct drm_crtc;
 struct drm_connector;
@@ -307,6 +328,8 @@ struct drm_encoder;
 struct drm_pending_vblank_event;
 struct drm_plane;
 struct drm_bridge;
+struct drm_atomic_state;
+struct drm_atomic_funcs;
 
 /**
  * drm_crtc_funcs - control CRTCs for a given device
@@ -366,13 +389,16 @@ struct drm_crtc_funcs {
 			 uint32_t flags);
 
 	int (*set_property)(struct drm_crtc *crtc,
-			    struct drm_property *property, uint64_t val);
+			    struct drm_atomic_state *state,
+			    struct drm_property *property, uint64_t val,
+			    void *blob_data);
 };
 
 /**
  * drm_crtc - central CRTC control structure
  * @dev: parent DRM device
  * @head: list management
+ * @mutex: per-CRTC locking
  * @base: base KMS object for ID tracking etc.
  * @primary: primary plane for this CRTC
  * @cursor: cursor plane for this CRTC
@@ -407,7 +433,7 @@ struct drm_crtc {
 	 * state, ...) and a write lock for everything which can be update
 	 * without a full modeset (fb, cursor data, ...)
 	 */
-	struct mutex mutex;
+	struct drm_modeset_lock mutex;
 
 	struct drm_mode_object base;
 
@@ -445,6 +471,7 @@ struct drm_crtc {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+	struct drm_object_property_values propvals;
 };
 
 
@@ -479,8 +506,9 @@ struct drm_connector_funcs {
 	enum drm_connector_status (*detect)(struct drm_connector *connector,
 					    bool force);
 	int (*fill_modes)(struct drm_connector *connector, uint32_t max_width, uint32_t max_height);
-	int (*set_property)(struct drm_connector *connector, struct drm_property *property,
-			     uint64_t val);
+	int (*set_property)(struct drm_connector *connector,
+			struct drm_atomic_state *state,
+			struct drm_property *property, uint64_t val, void *blob_data);
 	void (*destroy)(struct drm_connector *connector);
 	void (*force)(struct drm_connector *connector);
 };
@@ -496,7 +524,8 @@ struct drm_connector_funcs {
 struct drm_encoder_funcs {
 	void (*reset)(struct drm_encoder *encoder);
 	int (*set_property)(struct drm_encoder *encoder,
-			    struct drm_property *property, uint64_t val);
+			    struct drm_atomic_state *state,
+			    struct drm_property *property, uint64_t val, void *blob_data);
 	void (*destroy)(struct drm_encoder *encoder);
 };
 
@@ -534,6 +563,7 @@ struct drm_encoder {
 	struct drm_bridge *bridge;
 	const struct drm_encoder_funcs *funcs;
 	struct drm_object_properties properties;
+	struct drm_object_property_values propvals;
 	void *helper_private;
 };
 
@@ -618,6 +648,9 @@ struct drm_connector {
 	struct list_head user_modes;
 	struct drm_property_blob *edid_blob_ptr;
 	struct drm_object_properties properties;
+	struct drm_object_property_values propvals;
+
+	struct drm_property_blob *path_blob_ptr;
 
 	uint8_t polled; /* DRM_CONNECTOR_POLL_* */
 
@@ -659,14 +692,61 @@ struct drm_plane_funcs {
 	int (*disable_plane)(struct drm_plane *plane);
 	void (*destroy)(struct drm_plane *plane);
 
+	struct drm_plane_state *(*create_state)(struct drm_plane *plane);
+	void (*destroy_state)(struct drm_plane *plane,
+			    struct drm_plane_state *pstate);
 	int (*set_property)(struct drm_plane *plane,
-			    struct drm_property *property, uint64_t val);
+			    struct drm_atomic_state *state,
+			    struct drm_property *property, uint64_t val,
+			    void *blob_data);
 };
 
 enum drm_plane_type {
 	DRM_PLANE_TYPE_OVERLAY,
 	DRM_PLANE_TYPE_PRIMARY,
 	DRM_PLANE_TYPE_CURSOR,
+};
+
+/**
+ * drm_plane_state - mutable plane state
+ * @update_plane: if full update_plane() is needed (vs pageflip)
+ * @new_fb: has the fb been changed
+ * @crtc: currently bound CRTC
+ * @fb: currently bound fb
+ * @crtc_x: left position of visible portion of plane on crtc
+ * @crtc_y: upper position of visible portion of plane on crtc
+ * @crtc_w: width of visible portion of plane on crtc
+ * @crtc_h: height of visible portion of plane on crtc
+ * @src_x: left position of visible portion of plane within
+ *   plane (in 16.16)
+ * @src_y: upper position of visible portion of plane within
+ *   plane (in 16.16)
+ * @src_w: width of visible portion of plane (in 16.16)
+ * @src_h: height of visible portion of plane (in 16.16)
+ * @propvals: property values
+ * @state: current global/toplevel state object (for atomic) while an
+ *    update is in progress, NULL otherwise.
+ */
+struct drm_plane_state {
+	bool update_plane      : 1;
+	bool new_fb            : 1;
+
+	struct drm_crtc *crtc;
+	struct drm_framebuffer *fb;
+
+	/* Signed dest location allows it to be partially off screen */
+	int32_t crtc_x, crtc_y;
+	uint32_t crtc_w, crtc_h;
+
+	/* Source values are 16.16 fixed point */
+	uint32_t src_x, src_y;
+	uint32_t src_h, src_w;
+
+	bool enabled;
+
+	struct drm_object_property_values propvals;
+
+	struct drm_atomic_state *state;
 };
 
 /**
@@ -682,6 +762,8 @@ enum drm_plane_type {
  * @gamma_size: size of gamma table
  * @gamma_store: gamma correction table
  * @enabled: enabled flag
+ * @index: plane number, 0..n
+ * @state: the mutable state
  * @funcs: helper functions
  * @helper_private: storage for drver layer
  * @properties: property tracking for this plane
@@ -705,6 +787,13 @@ struct drm_plane {
 	uint16_t *gamma_store;
 
 	bool enabled;
+	int index;
+
+	/*
+	 * State that can be updated from userspace, and atomically
+	 * commited or rolled back:
+	 */
+	struct drm_plane_state *state;
 
 	const struct drm_plane_funcs *funcs;
 	void *helper_private;
@@ -853,6 +942,8 @@ struct drm_mode_group {
  */
 struct drm_mode_config {
 	struct mutex mutex; /* protects configuration (mode lists etc.) */
+	struct drm_modeset_lock connection_mutex; /* protects connector->encoder and encoder->crtc links */
+	struct drm_modeset_acquire_ctx *acquire_ctx; /* for legacy _lock_all() / _unlock_all() */
 	struct mutex idr_mutex; /* for IDR management */
 	struct idr crtc_idr; /* use this idr for all IDs, fb, crtc, connector, modes - just makes life easier */
 	/* this is limited to one for now */
@@ -900,11 +991,24 @@ struct drm_mode_config {
 	bool poll_running;
 	struct delayed_work output_poll_work;
 
-	/* pointers to standard properties */
+	/* just so blob properties can always be in a list: */
 	struct list_head property_blob_list;
+
+	/* pointers to standard properties */
+	struct drm_property *prop_src_x;
+	struct drm_property *prop_src_y;
+	struct drm_property *prop_src_w;
+	struct drm_property *prop_src_h;
+	struct drm_property *prop_crtc_x;
+	struct drm_property *prop_crtc_y;
+	struct drm_property *prop_crtc_w;
+	struct drm_property *prop_crtc_h;
+	struct drm_property *prop_fb_id;
+	struct drm_property *prop_crtc_id;
 	struct drm_property *edid_property;
 	struct drm_property *dpms_property;
 	struct drm_property *content_protection_property;
+	struct drm_property *path_property;
 	struct drm_property *plane_type_property;
 
 	/* DVI-I properties */
@@ -951,10 +1055,6 @@ struct drm_prop_enum_list {
 	int type;
 	char *name;
 };
-
-extern void drm_modeset_lock_all(struct drm_device *dev);
-extern void drm_modeset_unlock_all(struct drm_device *dev);
-extern void drm_warn_on_modeset_not_all_locked(struct drm_device *dev);
 
 extern int drm_crtc_init_with_planes(struct drm_device *dev,
 				     struct drm_crtc *crtc,
@@ -1011,11 +1111,20 @@ extern int drm_plane_init(struct drm_device *dev,
 			  const uint32_t *formats, uint32_t format_count,
 			  bool is_primary);
 extern void drm_plane_cleanup(struct drm_plane *plane);
-extern void drm_plane_force_disable(struct drm_plane *plane);
+extern void drm_plane_force_disable(struct drm_plane *plane,
+		struct drm_atomic_state *state);
 extern int drm_crtc_check_viewport(const struct drm_crtc *crtc,
 				   int x, int y,
 				   const struct drm_display_mode *mode,
 				   const struct drm_framebuffer *fb);
+extern int drm_plane_check_state(struct drm_plane *plane,
+		struct drm_plane_state *state);
+extern void drm_plane_commit_state(struct drm_plane *plane,
+		struct drm_plane_state *state);
+extern int drm_plane_set_property(struct drm_plane *plane,
+		struct drm_plane_state *state,
+		struct drm_property *property,
+		uint64_t value, void *blob_data);
 
 extern void drm_encoder_cleanup(struct drm_encoder *encoder);
 
@@ -1068,17 +1177,49 @@ extern int drm_mode_vrefresh(const struct drm_display_mode *mode);
 extern void drm_mode_set_crtcinfo(struct drm_display_mode *p,
 				  int adjust_flags);
 extern void drm_mode_connector_list_update(struct drm_connector *connector);
+
+extern int drm_mode_connector_set_path_property(struct drm_connector *connector,
+						char *path);
 extern int drm_mode_connector_update_edid_property(struct drm_connector *connector,
 						struct edid *edid);
+
+static inline bool drm_property_type_is(struct drm_property *property,
+		uint32_t type)
+{
+	/* instanceof for props.. handles extended type vs original types: */
+	if (property->flags & DRM_MODE_PROP_EXTENDED_TYPE)
+		return (property->flags & DRM_MODE_PROP_EXTENDED_TYPE) == type;
+	return property->flags & type;
+}
+
+static inline bool drm_property_type_valid(struct drm_property *property)
+{
+	if (property->flags & DRM_MODE_PROP_EXTENDED_TYPE)
+		return !(property->flags & DRM_MODE_PROP_LEGACY_TYPE);
+	return !!(property->flags & DRM_MODE_PROP_LEGACY_TYPE);
+}
+
 extern int drm_object_property_set_value(struct drm_mode_object *obj,
+					 struct drm_object_property_values *propvals,
 					 struct drm_property *property,
-					 uint64_t val);
+					 uint64_t val, void *blob_data);
 extern int drm_object_property_get_value(struct drm_mode_object *obj,
 					 struct drm_property *property,
 					 uint64_t *value);
 extern struct drm_display_mode *drm_crtc_mode_create(struct drm_device *dev);
 extern void drm_framebuffer_set_object(struct drm_device *dev,
 				       unsigned long handle);
+
+int drm_mode_connector_set_obj_prop(struct drm_connector *connector,
+					   struct drm_atomic_state *state, struct drm_property *property,
+					   uint64_t value, void *blob_data);
+int drm_mode_crtc_set_obj_prop(struct drm_crtc *crtc,
+				      struct drm_atomic_state *state, struct drm_property *property,
+				      uint64_t value, void *blob_data);
+int drm_mode_plane_set_obj_prop(struct drm_plane *plane,
+				      struct drm_atomic_state *state, struct drm_property *property,
+				      uint64_t value, void *blob_data);
+
 extern int drm_framebuffer_init(struct drm_device *dev,
 				struct drm_framebuffer *fb,
 				const struct drm_framebuffer_funcs *funcs);
@@ -1110,6 +1251,11 @@ struct drm_property *drm_property_create_bitmask(struct drm_device *dev,
 struct drm_property *drm_property_create_range(struct drm_device *dev, int flags,
 					 const char *name,
 					 uint64_t min, uint64_t max);
+struct drm_property *drm_property_create_signed_range(struct drm_device *dev,
+					 int flags, const char *name,
+					 int64_t min, int64_t max);
+struct drm_property *drm_property_create_object(struct drm_device *dev,
+					 int flags, const char *name, uint32_t type);
 extern void drm_property_destroy(struct drm_device *dev, struct drm_property *property);
 extern int drm_property_add_enum(struct drm_property *property, int index,
 				 uint64_t value, const char *name);
@@ -1129,6 +1275,7 @@ extern int drm_mode_crtc_set_gamma_size(struct drm_crtc *crtc,
 					 int gamma_size);
 extern struct drm_mode_object *drm_mode_object_find(struct drm_device *dev,
 		uint32_t id, uint32_t type);
+
 /* IOCTLs */
 extern int drm_mode_getresources(struct drm_device *dev,
 				 void *data, struct drm_file *file_priv);
@@ -1235,6 +1382,15 @@ extern int drm_format_vert_chroma_subsampling(uint32_t format);
 		if (plane->type == DRM_PLANE_TYPE_OVERLAY)
 
 /* Helpers */
+
+static inline struct drm_plane *drm_plane_find(struct drm_device *dev,
+		uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_PLANE);
+	return mo ? obj_to_plane(mo) : NULL;
+}
+
 static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
 	uint32_t id)
 {
@@ -1249,6 +1405,50 @@ static inline struct drm_encoder *drm_encoder_find(struct drm_device *dev,
 	struct drm_mode_object *mo;
 	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_ENCODER);
 	return mo ? obj_to_encoder(mo) : NULL;
+}
+
+static inline struct drm_connector *drm_connector_find(struct drm_device *dev,
+		uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_CONNECTOR);
+	return mo ? obj_to_connector(mo) : NULL;
+}
+
+static inline struct drm_property *drm_property_find(struct drm_device *dev,
+		uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_PROPERTY);
+	return mo ? obj_to_property(mo) : NULL;
+}
+
+static inline struct drm_property_blob *
+drm_property_blob_find(struct drm_device *dev, uint32_t id)
+{
+	struct drm_mode_object *mo;
+	mo = drm_mode_object_find(dev, id, DRM_MODE_OBJECT_BLOB);
+	return mo ? obj_to_blob(mo) : NULL;
+}
+
+static inline struct drm_plane_state *
+drm_plane_create_state(struct drm_plane *plane)
+{
+	if (plane->funcs->create_state)
+		return plane->funcs->create_state(plane);
+	return kzalloc(sizeof(struct drm_plane_state), GFP_KERNEL);
+}
+
+static inline void
+drm_plane_destroy_state(struct drm_plane *plane,
+		struct drm_plane_state *pstate)
+{
+	if (pstate->fb)
+		drm_framebuffer_unreference(pstate->fb);
+	if (plane->funcs->destroy_state)
+		plane->funcs->destroy_state(plane, pstate);
+	else
+		kfree(pstate);
 }
 
 #endif /* __DRM_CRTC_H__ */

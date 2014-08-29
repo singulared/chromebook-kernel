@@ -969,7 +969,7 @@ static void ironlake_panel_vdd_off_sync(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 pp;
 
-	WARN_ON(!mutex_is_locked(&dev->mode_config.mutex));
+	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 
 	if (!intel_dp->want_panel_vdd && ironlake_edp_have_panel_vdd(intel_dp)) {
 		pp = ironlake_get_pp_control(dev_priv);
@@ -991,9 +991,9 @@ static void ironlake_panel_vdd_work(struct work_struct *__work)
 						 struct intel_dp, panel_vdd_work);
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 
-	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 	ironlake_panel_vdd_off_sync(intel_dp);
-	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_unlock(&dev->mode_config.connection_mutex);
 }
 
 void ironlake_edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
@@ -2055,6 +2055,7 @@ intel_dp_check_link_status(struct intel_dp *intel_dp)
 	u8 sink_irq_vector;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
+	/* FIXME: This access isn't protected by any locks. */
 	if (!intel_encoder->connectors_active)
 		return;
 
@@ -2347,8 +2348,10 @@ intel_dp_detect_audio(struct drm_connector *connector)
 
 static int
 intel_dp_set_property(struct drm_connector *connector,
+		      struct drm_atomic_state *state,
 		      struct drm_property *property,
-		      uint64_t val)
+		      uint64_t val,
+		      void *blob_data)
 {
 	struct drm_i915_private *dev_priv = connector->dev->dev_private;
 	struct intel_connector *intel_connector = to_intel_connector(connector);
@@ -2356,7 +2359,8 @@ intel_dp_set_property(struct drm_connector *connector,
 	struct intel_dp *intel_dp = enc_to_intel_dp(&intel_encoder->base);
 	int ret;
 
-	ret = drm_object_property_set_value(&connector->base, property, val);
+	ret = drm_object_property_set_value(&connector->base,
+			&connector->propvals, property, val, blob_data);
 	if (ret)
 		return ret;
 
@@ -2456,12 +2460,15 @@ void intel_dp_encoder_destroy(struct drm_encoder *encoder)
 {
 	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
 	struct intel_dp *intel_dp = &intel_dig_port->dp;
+	struct drm_device *dev = intel_dp_to_dev(intel_dp);
 
 	i2c_del_adapter(&intel_dp->adapter);
 	drm_encoder_cleanup(encoder);
 	if (is_edp(intel_dp)) {
 		cancel_delayed_work_sync(&intel_dp->panel_vdd_work);
+		drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 		ironlake_panel_vdd_off_sync(intel_dp);
+		drm_modeset_unlock(&dev->mode_config.connection_mutex);
 	}
 	kfree(intel_dig_port);
 }

@@ -39,6 +39,7 @@
 #include <linux/of_address.h>
 
 #include <drm/exynos_drm.h>
+#include <drm/drm_atomic.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_mixer.h"
@@ -1421,7 +1422,9 @@ static int hdcp_update_drm_property(struct hdmi_context *hdata, int value)
 	WARN_ON(!mutex_is_locked(&mode_config->mutex));
 
 	return drm_object_property_set_value(hdata->hdcp_object,
-			mode_config->content_protection_property, value);
+			hdata->hdcp_object->propvals,
+			mode_config->content_protection_property, value,
+			NULL);
 }
 
 static void hdcp_disable(struct hdmi_context *hdata)
@@ -1654,8 +1657,8 @@ static int set_property(struct hdmi_context *hdata, struct drm_mode_object *obj,
 	return ret;
 }
 
-static int hdmi_connector_set_property(struct drm_connector *connector,
-		struct drm_property *property, uint64_t val)
+static int hdmi_connector_set_property(struct drm_connector *connector, struct drm_atomic_state *a_state,
+		struct drm_property *property, uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
 	int ret;
@@ -1664,7 +1667,9 @@ static int hdmi_connector_set_property(struct drm_connector *connector,
 	if (ret)
 		return ret;
 
-	return drm_object_property_set_value(&connector->base, property, val);
+	return drm_object_property_set_value(&connector->base,
+			&connector->propvals,
+			property, val, NULL);
 }
 
 static struct drm_connector_funcs hdmi_connector_funcs = {
@@ -2924,7 +2929,8 @@ static const struct drm_encoder_helper_funcs hdmi_encoder_helper_funcs = {
 };
 
 static int hdmi_encoder_set_property(struct drm_encoder *encoder,
-		struct drm_property *property, uint64_t val)
+		struct drm_atomic_state *state, struct drm_property *property,
+		uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_encoder(encoder);
 

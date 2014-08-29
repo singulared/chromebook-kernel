@@ -153,11 +153,9 @@ static void psb_lastclose(struct drm_device *dev)
 	struct drm_psb_private *dev_priv = dev->dev_private;
 	struct psb_fbdev *fbdev = dev_priv->fbdev;
 
-	drm_modeset_lock_all(dev);
-	ret = drm_fb_helper_restore_fbdev_mode(&fbdev->psb_fb_helper);
+	ret = drm_fb_helper_restore_fbdev_mode_unlocked(&fbdev->psb_fb_helper);
 	if (ret)
 		DRM_DEBUG("failed to restore crtc mode\n");
-	drm_modeset_unlock_all(dev);
 
 	return;
 }
@@ -645,6 +643,13 @@ static struct drm_driver driver = {
 	.postclose = psb_driver_close,
 
 	.gem_init_object = psb_gem_init_object,
+	.atomic_begin     = drm_atomic_begin,
+	.atomic_set_event = drm_atomic_set_event,
+	.atomic_check     = drm_atomic_check,
+	.atomic_commit    = drm_atomic_commit,
+	.atomic_end       = drm_atomic_end,
+	.atomic_funcs     = &drm_atomic_funcs,
+
 	.gem_free_object = psb_gem_free_object,
 	.gem_vm_ops = &psb_gem_vm_ops,
 	.dumb_create = psb_gem_dumb_create,

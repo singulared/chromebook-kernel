@@ -243,10 +243,12 @@ nouveau_connector_set_encoder(struct drm_connector *connector,
 
 	if (nv_connector->type == DCB_CONNECTOR_DVI_I) {
 		drm_object_property_set_value(&connector->base,
+			&connector->propvals,
 			dev->mode_config.dvi_i_subconnector_property,
 			nv_encoder->dcb->type == DCB_OUTPUT_TMDS ?
 			DRM_MODE_SUBCONNECTOR_DVID :
-			DRM_MODE_SUBCONNECTOR_DVIA);
+			DRM_MODE_SUBCONNECTOR_DVIA,
+			NULL);
 	}
 }
 
@@ -447,7 +449,8 @@ nouveau_connector_force(struct drm_connector *connector)
 
 static int
 nouveau_connector_set_property(struct drm_connector *connector,
-			       struct drm_property *property, uint64_t value)
+		struct drm_atomic_state *state, struct drm_property *property,
+		uint64_t value, void *blob_data)
 {
 	struct nouveau_display *disp = nouveau_display(connector->dev);
 	struct nouveau_connector *nv_connector = nouveau_connector(connector);

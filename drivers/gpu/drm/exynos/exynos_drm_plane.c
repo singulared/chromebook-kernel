@@ -10,6 +10,7 @@
  */
 
 #include <drm/drmP.h>
+#include <drm/drm_atomic.h>
 
 #if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 #include <linux/dma-buf.h>

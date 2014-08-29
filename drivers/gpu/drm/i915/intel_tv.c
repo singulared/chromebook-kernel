@@ -1290,7 +1290,8 @@ static void intel_tv_find_better_format(struct drm_connector *connector)
 
 	intel_tv->tv_format = tv_mode->name;
 	drm_object_property_set_value(&connector->base,
-		connector->dev->mode_config.tv_mode_property, i);
+		&connector->propvals,
+		connector->dev->mode_config.tv_mode_property, i, NULL);
 }
 
 /**
@@ -1310,10 +1311,11 @@ intel_tv_detect(struct drm_connector *connector, bool force)
 
 	if (force) {
 		struct intel_load_detect_pipe tmp;
+		struct drm_modeset_acquire_ctx ctx;
 
-		if (intel_get_load_detect_pipe(connector, &mode, &tmp)) {
+		if (intel_get_load_detect_pipe(connector, &mode, &tmp, &ctx)) {
 			type = intel_tv_detect_type(intel_tv, connector);
-			intel_release_load_detect_pipe(connector, &tmp);
+			intel_release_load_detect_pipe(connector, &tmp, &ctx);
 		} else
 			return connector_status_unknown;
 	} else
@@ -1434,8 +1436,10 @@ intel_tv_destroy(struct drm_connector *connector)
 
 
 static int
-intel_tv_set_property(struct drm_connector *connector, struct drm_property *property,
-		      uint64_t val)
+intel_tv_set_property(struct drm_connector *connector,
+		      struct drm_atomic_state *state,
+		      struct drm_property *property,
+		      uint64_t val, void *blob_data)
 {
 	struct drm_device *dev = connector->dev;
 	struct intel_tv *intel_tv = intel_attached_tv(connector);
@@ -1443,7 +1447,8 @@ intel_tv_set_property(struct drm_connector *connector, struct drm_property *prop
 	int ret = 0;
 	bool changed = false;
 
-	ret = drm_object_property_set_value(&connector->base, property, val);
+	ret = drm_object_property_set_value(&connector->base,
+			 &connector->propvals, property, val, blob_data);
 	if (ret < 0)
 		goto out;
 

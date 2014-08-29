@@ -440,12 +440,14 @@ static void dev_lastclose(struct drm_device *dev)
 		 */
 		for (i = 0; i < priv->num_crtcs; i++) {
 			drm_object_property_set_value(&priv->crtcs[i]->base,
-					priv->rotation_prop, 0);
+					&priv->crtcs[i]->propvals,
+					priv->rotation_prop, 0, NULL);
 		}
 
 		for (i = 0; i < priv->num_planes; i++) {
 			drm_object_property_set_value(&priv->planes[i]->base,
-					priv->rotation_prop, 0);
+					&priv->planes[i]->propvals,
+					priv->rotation_prop, 0, NULL);
 		}
 	}
 
@@ -515,6 +517,12 @@ static struct drm_driver omap_drm_driver = {
 		.dumb_create = omap_gem_dumb_create,
 		.dumb_map_offset = omap_gem_dumb_map_offset,
 		.dumb_destroy = omap_gem_dumb_destroy,
+		.atomic_begin     = drm_atomic_begin,
+		.atomic_set_event = drm_atomic_set_event,
+		.atomic_check     = drm_atomic_check,
+		.atomic_commit    = drm_atomic_commit,
+		.atomic_end       = drm_atomic_end,
+		.atomic_funcs     = &drm_atomic_funcs,
 		.ioctls = ioctls,
 		.num_ioctls = DRM_OMAP_NUM_IOCTLS,
 		.fops = &omapdriver_fops,

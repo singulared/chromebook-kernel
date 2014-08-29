@@ -268,22 +268,18 @@ void intel_fbdev_set_suspend(struct drm_device *dev, int state)
 
 MODULE_LICENSE("GPL and additional rights");
 
-void intel_fb_output_poll_changed(struct drm_device *dev)
+void intel_fbdev_output_poll_changed(struct drm_device *dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	drm_fb_helper_hotplug_event(&dev_priv->fbdev->helper);
 }
 
-void intel_fb_restore_mode(struct drm_device *dev)
+void intel_fbdev_restore_mode(struct drm_device *dev)
 {
 	int ret;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
-	drm_modeset_lock_all(dev);
-
-	ret = drm_fb_helper_restore_fbdev_mode(&dev_priv->fbdev->helper);
+	ret = drm_fb_helper_restore_fbdev_mode_unlocked(&dev_priv->fbdev->helper);
 	if (ret)
 		DRM_DEBUG("failed to restore crtc mode\n");
-
-	drm_modeset_unlock_all(dev);
 }

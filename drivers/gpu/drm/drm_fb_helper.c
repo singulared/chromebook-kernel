@@ -239,26 +239,33 @@ int drm_fb_helper_debug_leave(struct fb_info *info)
 }
 EXPORT_SYMBOL(drm_fb_helper_debug_leave);
 
-/**
- * drm_fb_helper_restore_fbdev_mode - restore fbdev configuration
- * @fb_helper: fbcon to restore
- *
- * This should be called from driver's drm->lastclose callback when implementing
- * an fbcon on top of kms using this helper. This ensures that the user isn't
- * greeted with a black screen when e.g. X dies.
- */
-bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
+static bool restore_fbdev_mode(struct drm_fb_helper *fb_helper,
+		bool lockless)
 {
 	struct drm_device *dev = fb_helper->dev;
 	struct drm_plane *plane;
 	bool error = false;
+	void *state;
 	int i;
 
-	drm_warn_on_modeset_not_all_locked(dev);
+	state = dev->driver->atomic_begin(dev, lockless ?
+			DRM_MODE_ATOMIC_NOLOCK : 0);
+	if (IS_ERR(state)) {
+		DRM_ERROR("failed to restore fbdev mode\n");
+		return true;
+	}
 
 	list_for_each_entry(plane, &dev->mode_config.plane_list, head)
 		if (plane->type != DRM_PLANE_TYPE_PRIMARY)
-			drm_plane_force_disable(plane);
+			drm_plane_force_disable(plane, state);
+
+	/* just disabling stuff shouldn't fail, hopefully: */
+	if(dev->driver->atomic_check(dev, state))
+		DRM_ERROR("failed to restore fbdev mode\n");
+	else
+		dev->driver->atomic_commit(dev, state);
+
+	dev->driver->atomic_end(dev, state);
 
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		struct drm_mode_set *mode_set = &fb_helper->crtc_info[i].mode_set;
@@ -277,7 +284,35 @@ bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
 	}
 	return error;
 }
-EXPORT_SYMBOL(drm_fb_helper_restore_fbdev_mode);
+/**
+ * drm_fb_helper_restore_fbdev_mode - restore fbdev configuration
+ * @fb_helper: fbcon to restore
+ *
+ * This should be called from driver's drm ->lastclose callback
+ * when implementing an fbcon on top of kms using this helper. This ensures that
+ * the user isn't greeted with a black screen when e.g. X dies.
+ *
+ * Use this variant if you need to bypass locking (panic), or already
+ * hold all modeset locks.  Otherwise use drm_fb_helper_restore_fbdev_mode_unlocked()
+ */
+static bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
+{
+	return restore_fbdev_mode(fb_helper, true);
+}
+
+/**
+ * drm_fb_helper_restore_fbdev_mode_unlocked - restore fbdev configuration
+ * @fb_helper: fbcon to restore
+ *
+ * This should be called from driver's drm ->lastclose callback
+ * when implementing an fbcon on top of kms using this helper. This ensures that
+ * the user isn't greeted with a black screen when e.g. X dies.
+ */
+bool drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper)
+{
+	return restore_fbdev_mode(fb_helper, false);
+}
+EXPORT_SYMBOL(drm_fb_helper_restore_fbdev_mode_unlocked);
 
 static bool drm_fb_helper_force_kernel_mode(void)
 {
@@ -398,7 +433,8 @@ static void drm_fb_helper_dpms(struct fb_info *info, int dpms_mode)
 			connector = fb_helper->connector_info[j]->connector;
 			connector->funcs->dpms(connector, dpms_mode);
 			drm_object_property_set_value(&connector->base,
-				dev->mode_config.dpms_property, dpms_mode);
+				&connector->propvals,
+				dev->mode_config.dpms_property, dpms_mode, NULL);
 		}
 	}
 	drm_modeset_unlock_all(dev);
@@ -710,25 +746,14 @@ EXPORT_SYMBOL(drm_fb_helper_check_var);
 int drm_fb_helper_set_par(struct fb_info *info)
 {
 	struct drm_fb_helper *fb_helper = info->par;
-	struct drm_device *dev = fb_helper->dev;
 	struct fb_var_screeninfo *var = &info->var;
-	int ret;
-	int i;
 
 	if (var->pixclock != 0) {
 		DRM_ERROR("PIXEL CLOCK SET\n");
 		return -EINVAL;
 	}
 
-	drm_modeset_lock_all(dev);
-	for (i = 0; i < fb_helper->crtc_count; i++) {
-		ret = drm_mode_set_config_internal(&fb_helper->crtc_info[i].mode_set);
-		if (ret) {
-			drm_modeset_unlock_all(dev);
-			return ret;
-		}
-	}
-	drm_modeset_unlock_all(dev);
+	drm_fb_helper_restore_fbdev_mode_unlocked(fb_helper);
 
 	if (fb_helper->delayed_hotplug) {
 		fb_helper->delayed_hotplug = false;

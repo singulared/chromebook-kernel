@@ -30,6 +30,7 @@
 #include "i915_drv.h"
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_atomic.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_dp_helper.h>
 
@@ -257,6 +258,8 @@ struct intel_crtc {
 	bool cursor_visible;
 
 	struct intel_crtc_config config;
+	struct intel_crtc_config *new_config;
+	bool new_enabled;
 
 	/* We can share PLLs across outputs if the timings match */
 	struct intel_pch_pll *pch_pll;
@@ -551,6 +554,7 @@ extern enum drm_connector_status intel_panel_detect(struct drm_device *dev);
 struct intel_set_config {
 	struct drm_encoder **save_connector_encoders;
 	struct drm_crtc **save_encoder_crtcs;
+	bool *save_crtc_enabled;
 
 	bool fb_changed;
 	bool mode_changed;
@@ -626,9 +630,11 @@ struct intel_load_detect_pipe {
 };
 extern bool intel_get_load_detect_pipe(struct drm_connector *connector,
 				       struct drm_display_mode *mode,
-				       struct intel_load_detect_pipe *old);
+				       struct intel_load_detect_pipe *old,
+				       struct drm_modeset_acquire_ctx *ctx);
 extern void intel_release_load_detect_pipe(struct drm_connector *connector,
-					   struct intel_load_detect_pipe *old);
+				           struct intel_load_detect_pipe *old,
+				           struct drm_modeset_acquire_ctx *ctx);
 
 extern void intelfb_restore(void);
 extern void intel_crtc_fb_gamma_set(struct drm_crtc *crtc, u16 red, u16 green,
@@ -668,6 +674,38 @@ extern void assert_pipe(struct drm_i915_private *dev_priv, enum pipe pipe,
 			bool state);
 #define assert_pipe_enabled(d, p) assert_pipe(d, p, true)
 #define assert_pipe_disabled(d, p) assert_pipe(d, p, false)
+
+/* legacy fbdev emulation in intel_fbdev.c */
+#ifdef CONFIG_DRM_I915_FBDEV
+extern int intel_fbdev_init(struct drm_device *dev);
+extern void intel_fbdev_initial_config(struct drm_device *dev);
+extern void intel_fbdev_fini(struct drm_device *dev);
+extern void intel_fbdev_set_suspend(struct drm_device *dev, int state);
+extern void intel_fbdev_output_poll_changed(struct drm_device *dev);
+extern void intel_fbdev_restore_mode(struct drm_device *dev);
+#else
+static inline int intel_fbdev_init(struct drm_device *dev)
+{
+	return 0;
+}
+
+static inline void intel_fbdev_initial_config(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_fini(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_set_suspend(struct drm_device *dev, int state)
+{
+}
+
+static inline void intel_fbdev_restore_mode(struct drm_device *dev)
+{
+}
+#endif
+
 
 extern void intel_init_clock_gating(struct drm_device *dev);
 extern void intel_write_eld(struct drm_encoder *encoder,

@@ -1684,8 +1684,10 @@ static bool psb_intel_sdvo_detect_hdmi_audio(struct drm_connector *connector)
 
 static int
 psb_intel_sdvo_set_property(struct drm_connector *connector,
+			struct drm_atomic_state *state,
 			struct drm_property *property,
-			uint64_t val)
+			uint64_t val,
+			void *blob_data)
 {
 	struct psb_intel_sdvo *psb_intel_sdvo = intel_attached_sdvo(connector);
 	struct psb_intel_sdvo_connector *psb_intel_sdvo_connector = to_psb_intel_sdvo_connector(connector);
@@ -1694,7 +1696,8 @@ psb_intel_sdvo_set_property(struct drm_connector *connector,
 	uint8_t cmd;
 	int ret;
 
-	ret = drm_object_property_set_value(&connector->base, property, val);
+	ret = drm_object_property_set_value(&connector->base,
+			&connector->propvals, property, val, blob_data);
 	if (ret)
 		return ret;
 
@@ -1750,7 +1753,9 @@ psb_intel_sdvo_set_property(struct drm_connector *connector,
 		temp_value = val;
 		if (psb_intel_sdvo_connector->left == property) {
 			drm_object_property_set_value(&connector->base,
-							 psb_intel_sdvo_connector->right, val);
+							 &connector->propvals,
+							 psb_intel_sdvo_connector->right,
+							 val, blob_data);
 			if (psb_intel_sdvo_connector->left_margin == temp_value)
 				return 0;
 
@@ -1762,7 +1767,9 @@ psb_intel_sdvo_set_property(struct drm_connector *connector,
 			goto set_value;
 		} else if (psb_intel_sdvo_connector->right == property) {
 			drm_object_property_set_value(&connector->base,
-							 psb_intel_sdvo_connector->left, val);
+							 &connector->propvals,
+							 psb_intel_sdvo_connector->left,
+							 val, blob_data);
 			if (psb_intel_sdvo_connector->right_margin == temp_value)
 				return 0;
 
@@ -1774,7 +1781,9 @@ psb_intel_sdvo_set_property(struct drm_connector *connector,
 			goto set_value;
 		} else if (psb_intel_sdvo_connector->top == property) {
 			drm_object_property_set_value(&connector->base,
-							 psb_intel_sdvo_connector->bottom, val);
+							 &connector->propvals,
+							 psb_intel_sdvo_connector->bottom,
+							 val, blob_data);
 			if (psb_intel_sdvo_connector->top_margin == temp_value)
 				return 0;
 
@@ -1786,7 +1795,9 @@ psb_intel_sdvo_set_property(struct drm_connector *connector,
 			goto set_value;
 		} else if (psb_intel_sdvo_connector->bottom == property) {
 			drm_object_property_set_value(&connector->base,
-							 psb_intel_sdvo_connector->top, val);
+							 &connector->propvals,
+							 psb_intel_sdvo_connector->top,
+							 val, blob_data);
 			if (psb_intel_sdvo_connector->bottom_margin == temp_value)
 				return 0;
 

@@ -161,8 +161,10 @@ static enum drm_connector_status cdv_hdmi_detect(
 }
 
 static int cdv_hdmi_set_property(struct drm_connector *connector,
+				       struct drm_atomic_state *state,
 				       struct drm_property *property,
-				       uint64_t value)
+				       uint64_t value,
+				       void *blob_data)
 {
 	struct drm_encoder *encoder = connector->encoder;
 
@@ -193,7 +195,8 @@ static int cdv_hdmi_set_property(struct drm_connector *connector,
 			return 0;
 
 		if (drm_object_property_set_value(&connector->base,
-							property, value))
+							&connector->propvals,
+							property, value, blob_data))
 			return -1;
 
 		centre = (curValue == DRM_MODE_SCALE_NO_SCALE) ||

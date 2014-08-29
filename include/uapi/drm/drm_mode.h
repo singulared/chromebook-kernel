@@ -237,6 +237,21 @@ struct drm_mode_get_connector {
 #define DRM_MODE_PROP_BLOB	(1<<4)
 #define DRM_MODE_PROP_BITMASK	(1<<5) /* bitmask of enumerated types */
 
+/* non-extended types: legacy bitmask, one bit per type: */
+#define DRM_MODE_PROP_LEGACY_TYPE  ( \
+		DRM_MODE_PROP_RANGE | \
+		DRM_MODE_PROP_ENUM | \
+		DRM_MODE_PROP_BLOB | \
+		DRM_MODE_PROP_BITMASK)
+
+/* extended-types: rather than continue to consume a bit per type,
+ * grab a chunk of the bits to use as integer type id.
+ */
+#define DRM_MODE_PROP_EXTENDED_TYPE	0x0000ffc0
+#define DRM_MODE_PROP_TYPE(n)		((n) << 6)
+#define DRM_MODE_PROP_OBJECT		DRM_MODE_PROP_TYPE(1)
+#define DRM_MODE_PROP_SIGNED_RANGE	DRM_MODE_PROP_TYPE(2)
+
 struct drm_mode_property_enum {
 	__u64 value;
 	char name[DRM_PROP_NAME_LEN];
@@ -468,5 +483,8 @@ struct drm_mode_map_dumb {
 struct drm_mode_destroy_dumb {
 	uint32_t handle;
 };
+
+#define DRM_MODE_ATOMIC_NONBLOCK  0x0200
+#define DRM_MODE_ATOMIC_NOLOCK    0x8000  /* only used internally */
 
 #endif

@@ -26,6 +26,7 @@
 #include <linux/list.h>
 #include <drm/drmP.h>
 #include <drm/drm_rect.h>
+#include <drm/drm_atomic.h>
 
 #define SUBPIXEL_MASK 0xffff
 
@@ -53,6 +54,13 @@ static int get_connectors_for_crtc(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct drm_connector *connector;
 	int count = 0;
+
+	/*
+	 * Note: Once we change the plane hooks to more fine-grained locking we
+	 * need to grab the connection_mutex here to be able to make these
+	 * checks.
+	 */
+	WARN_ON(!drm_modeset_is_locked(&dev->mode_config.connection_mutex));
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head)
 		if (connector->encoder && connector->encoder->crtc == crtc) {
@@ -135,12 +143,6 @@ int drm_primary_helper_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	/* Disallow subpixel positioning */
 	if ((src_x | src_y | src_w | src_h) & SUBPIXEL_MASK) {
 		DRM_DEBUG_KMS("Primary plane does not support subpixel positioning\n");
-		return -EINVAL;
-	}
-
-	/* Primary planes are locked to their owning CRTC */
-	if (plane->possible_crtcs != drm_crtc_mask(crtc)) {
-		DRM_DEBUG_KMS("Cannot change primary plane CRTC\n");
 		return -EINVAL;
 	}
 
@@ -268,6 +270,7 @@ EXPORT_SYMBOL(drm_primary_helper_destroy);
 const struct drm_plane_funcs drm_primary_helper_funcs = {
 	.update_plane = drm_primary_helper_update,
 	.disable_plane = drm_primary_helper_disable,
+	.set_property = drm_atomic_plane_set_property,
 	.destroy = drm_primary_helper_destroy,
 };
 EXPORT_SYMBOL(drm_primary_helper_funcs);

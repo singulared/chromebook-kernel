@@ -935,8 +935,10 @@ typedef struct drm_i915_private {
 
 	unsigned long last_gpu_reset;
 
+#ifdef CONFIG_DRM_I915_FBDEV
 	/* list of fbdev register on this device */
 	struct intel_fbdev *fbdev;
+#endif
 
 	/*
 	 * The console may be contended at resume, but we don't

@@ -55,6 +55,7 @@ void radeon_connector_hotplug(struct drm_connector *connector)
 	radeon_hpd_set_polarity(rdev, radeon_connector->hpd.hpd);
 
 	/* if the connector is already off, don't turn it back on */
+	/* FIXME: This access isn't protected by any locks. */
 	if (connector->dpms != DRM_MODE_DPMS_ON)
 		return;
 
@@ -366,8 +367,9 @@ static void radeon_add_common_modes(struct drm_encoder *encoder, struct drm_conn
 	}
 }
 
-static int radeon_connector_set_property(struct drm_connector *connector, struct drm_property *property,
-				  uint64_t val)
+static int radeon_connector_set_property(struct drm_connector *connector,
+		struct drm_atomic_state *state, struct drm_property *property,
+		uint64_t val, void *blob_data)
 {
 	struct drm_device *dev = connector->dev;
 	struct radeon_device *rdev = dev->dev_private;
@@ -652,8 +654,10 @@ static void radeon_connector_destroy(struct drm_connector *connector)
 }
 
 static int radeon_lvds_set_property(struct drm_connector *connector,
+				    struct drm_atomic_state *state,
 				    struct drm_property *property,
-				    uint64_t value)
+				    uint64_t value,
+				    void *blob_data)
 {
 	struct drm_device *dev = connector->dev;
 	struct radeon_encoder *radeon_encoder;
