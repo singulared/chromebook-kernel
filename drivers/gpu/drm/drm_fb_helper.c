@@ -310,7 +310,12 @@ static bool drm_fb_helper_restore_fbdev_mode(struct drm_fb_helper *fb_helper)
  */
 bool drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper)
 {
-	return restore_fbdev_mode(fb_helper, false);
+	struct drm_device *dev = fb_helper->dev;
+	bool ret;
+	drm_modeset_lock_all(dev);
+	ret = restore_fbdev_mode(fb_helper, true);
+	drm_modeset_unlock_all(dev);
+	return ret;
 }
 EXPORT_SYMBOL(drm_fb_helper_restore_fbdev_mode_unlocked);
 
@@ -1429,7 +1434,9 @@ bool drm_fb_helper_initial_config(struct drm_fb_helper *fb_helper, int bpp_sel)
 	int count = 0;
 
 	/* disable all the possible outputs/crtcs before entering KMS mode */
+	drm_modeset_lock_all(dev);
 	drm_helper_disable_unused_functions(fb_helper->dev);
+	drm_modeset_unlock_all(dev);
 
 	drm_fb_helper_parse_command_line(fb_helper);
 
