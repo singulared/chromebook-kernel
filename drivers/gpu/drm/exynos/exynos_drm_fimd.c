@@ -27,6 +27,7 @@
 #include <drm/exynos_drm.h>
 
 #include "exynos_dp_core.h"
+#include "exynos_drm_cursor.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_fbdev.h"
@@ -104,6 +105,7 @@ struct fimd_context {
 	struct device			*dev;
 	struct drm_device		*drm_dev;
 	struct drm_crtc			crtc;
+	struct exynos_drm_cursor	cursor;
 	struct exynos_drm_plane		planes[FIMD_WIN_NR];
 	struct clk			*sclk_mout_fimd;
 	struct clk			*fimd_mux_clk;
@@ -115,6 +117,7 @@ struct fimd_context {
 	void __iomem			*regs_timing;
 	struct fimd_mode_data		mode;
 	unsigned int			default_win;
+	unsigned int			cursor_win;
 	u32				vidcon0;
 	u32				vidcon1;
 	bool				suspended;
@@ -990,10 +993,28 @@ static void fimd_crtc_destroy(struct drm_crtc *crtc)
 {
 }
 
+static int fimd_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file,
+		uint32_t handle, uint32_t width, uint32_t height)
+{
+	struct fimd_context *ctx = to_fimd_ctx(crtc);
+	struct exynos_drm_plane *plane = &ctx->planes[ctx->cursor_win];
+	return exynos_crtc_cursor_set(crtc, file, handle, width, height,
+			&ctx->cursor, &plane->base);
+}
+
+static int fimd_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
+{
+	struct fimd_context *ctx = to_fimd_ctx(crtc);
+	struct exynos_drm_plane *plane = &ctx->planes[ctx->cursor_win];
+	return exynos_crtc_cursor_move(crtc, x, y, &ctx->cursor, &plane->base);
+}
+
 static const struct drm_crtc_funcs fimd_crtc_funcs = {
 	.set_config	= fimd_crtc_set_config,
 	.page_flip	= fimd_crtc_page_flip,
 	.destroy	= fimd_crtc_destroy,
+	.cursor_set	= fimd_crtc_cursor_set,
+	.cursor_move	= fimd_crtc_cursor_move,
 };
 
 int fimd_get_crtc_id(struct drm_device *dev)
@@ -1028,17 +1049,27 @@ static int fimd_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 	if (is_drm_iommu_supported(drm_dev))
 		drm_iommu_attach_device(drm_dev, dev);
 
+	ret = exynos_drm_cursor_init(drm_dev, &ctx->cursor);
+	if (ret) {
+		DRM_ERROR("Init cursor failed (ret=%d)\n", ret);
+		goto err_iommu_cleanup;
+	}
+
 	for (i = 0; i < FIMD_WIN_NR; i++) {
 		struct exynos_drm_plane *exynos_plane = &ctx->planes[i];
-
+		enum drm_plane_type plane_type;
+		if (i == ctx->default_win)
+			plane_type = DRM_PLANE_TYPE_PRIMARY;
+		else if (i == ctx->cursor_win)
+			plane_type = DRM_PLANE_TYPE_CURSOR;
+		else
+			plane_type = DRM_PLANE_TYPE_OVERLAY;
 		ret = drm_universal_plane_init(drm_dev, &exynos_plane->base,
 			1 << ctx->pipe, &fimd_plane_funcs, plane_formats,
-			ARRAY_SIZE(plane_formats),
-			i == ctx->default_win ? DRM_PLANE_TYPE_PRIMARY :
-				DRM_PLANE_TYPE_OVERLAY);
+			ARRAY_SIZE(plane_formats), plane_type);
 		if (ret) {
 			DRM_ERROR("Init plane %d failed (ret=%d)\n", i, ret);
-			goto err;
+			goto err_plane_cleanup;
 		}
 
 		exynos_plane->ctx = ctx;
@@ -1051,7 +1082,7 @@ static int fimd_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 		&ctx->planes[ctx->default_win].base, NULL, &fimd_crtc_funcs);
 	if (ret) {
 		DRM_ERROR("Init crtc failed (ret=%d)\n", ret);
-		goto err;
+		goto err_plane_cleanup;
 	}
 
 	drm_crtc_helper_add(&ctx->crtc, &fimd_crtc_helper_funcs);
@@ -1059,10 +1090,12 @@ static int fimd_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
 	priv->fimd_crtc = &ctx->crtc;
 
 	return 0;
-err:
+err_plane_cleanup:
 	for (i--; i >= 0; i--)
 		drm_plane_cleanup(&ctx->planes[i].base);
+	exynos_drm_cursor_fini(&ctx->cursor);
 
+err_iommu_cleanup:
 	if (is_drm_iommu_supported(drm_dev))
 		drm_iommu_detach_device(drm_dev, dev);
 
@@ -1073,6 +1106,8 @@ static void fimd_subdrv_remove(struct drm_device *drm_dev, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct fimd_context *ctx = platform_get_drvdata(pdev);
+
+	exynos_drm_cursor_fini(&ctx->cursor);
 
 	fimd_crtc_dpms(&ctx->crtc, DRM_MODE_DPMS_OFF);
 
@@ -1237,6 +1272,14 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
 	ctx->dev = dev;
+
+	/* reserve the first non-default plane for cursor */
+	for (win = 0; win < FIMD_WIN_NR; win++) {
+		if (win != ctx->default_win) {
+			ctx->cursor_win = win;
+			break;
+		}
+	}
 
 	ctx->dither_mode = pdata->dither_mode;
 	if (ctx->dither_mode == USE_FIMD_DITHERING) {
