@@ -669,7 +669,7 @@
 /*AUX channel*/
 
 #define AUX_DPCD 0x08
-#define AUX_DDC 0x00
+#define AUX_DDC 0x04
 
 /***************************************************************/
 /*Definition of DPCD*/
