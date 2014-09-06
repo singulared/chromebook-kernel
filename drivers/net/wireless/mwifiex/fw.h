@@ -79,12 +79,21 @@ enum KEY_TYPE_ID {
 	KEY_TYPE_ID_WAPI,
 	KEY_TYPE_ID_AES_CMAC,
 };
+
+#define WPA_PN_SIZE		8
+#define KEY_PARAMS_FIXED_LEN	10
+#define KEY_INDEX_MASK		0xf
+#define FW_KEY_API_VER_MAJOR_V2	2
+
 #define KEY_MCAST	BIT(0)
 #define KEY_UNICAST	BIT(1)
 #define KEY_ENABLED	BIT(2)
+#define KEY_DEFAULT	BIT(3)
+#define KEY_TX_KEY	BIT(4)
+#define KEY_RX_KEY	BIT(5)
 #define KEY_IGTK	BIT(10)
 
-#define WAPI_KEY_LEN			50
+#define WAPI_KEY_LEN			(WLAN_KEY_LEN_SMS4 + PN_LEN + 2)
 
 #define MAX_POLL_TRIES			100
 
@@ -161,6 +170,9 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define TLV_TYPE_UAP_PS_AO_TIMER    (PROPRIETARY_TLV_BASE_ID + 123)
 #define TLV_TYPE_PWK_CIPHER         (PROPRIETARY_TLV_BASE_ID + 145)
 #define TLV_TYPE_GWK_CIPHER         (PROPRIETARY_TLV_BASE_ID + 146)
+#define TLV_TYPE_KEY_PARAM_V2       (PROPRIETARY_TLV_BASE_ID + 156)
+#define TLV_TYPE_TDLS_IDLE_TIMEOUT  (PROPRIETARY_TLV_BASE_ID + 194)
+#define TLV_TYPE_FW_API_REV         (PROPRIETARY_TLV_BASE_ID + 199)
 
 #define MWIFIEX_TX_DATA_BUF_SIZE_2K        2048
 
@@ -183,6 +195,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define MWIFIEX_TX_DATA_BUF_SIZE_8K        8192
 
 #define ISSUPP_11NENABLED(FwCapInfo) (FwCapInfo & BIT(11))
+#define ISSUPP_TDLS_ENABLED(FwCapInfo) (FwCapInfo & BIT(14))
 
 #define MWIFIEX_DEF_HT_CAP	(IEEE80211_HT_CAP_DSSSCCK40 | \
 				 (1 << IEEE80211_HT_CAP_RX_STBC_SHIFT) | \
@@ -214,7 +227,11 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define ISENABLED_40MHZ_INTOLERANT(Dot11nDevCap) (Dot11nDevCap & BIT(8))
 #define ISSUPP_RXLDPC(Dot11nDevCap) (Dot11nDevCap & BIT(22))
 #define ISSUPP_BEAMFORMING(Dot11nDevCap) (Dot11nDevCap & BIT(30))
+#define ISALLOWED_CHANWIDTH40(ht_param) (ht_param & BIT(2))
 
+#define ISSUPP_TDLS_WIDE_BAND(sta_ptr)\
+		  (sta_ptr->tdls_cap.extcap.ext_capab[7] & \
+		   WLAN_EXT_CAPA8_TDLS_WIDE_BW_ENABLED)
 /* httxcfg bitmap
  * 0		reserved
  * 1		20/40 Mhz enable(1)/disable(0)
@@ -296,6 +313,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define HostCmd_CMD_UAP_SYS_CONFIG                    0x00b0
 #define HostCmd_CMD_UAP_BSS_START                     0x00b1
 #define HostCmd_CMD_UAP_BSS_STOP                      0x00b2
+#define HostCmd_CMD_UAP_STA_DEAUTH                    0x00b5
 #define HostCmd_CMD_11N_CFG                           0x00cd
 #define HostCmd_CMD_11N_ADDBA_REQ                     0x00ce
 #define HostCmd_CMD_11N_ADDBA_RSP                     0x00cf
@@ -314,6 +332,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define HostCmd_CMD_MGMT_FRAME_REG                    0x010c
 #define HostCmd_CMD_REMAIN_ON_CHAN                    0x010d
 #define HostCmd_CMD_11AC_CFG			      0x0112
+#define HostCmd_CMD_TDLS_OPER                         0x0122
 
 #define PROTOCOL_NO_SECURITY        0x01
 #define PROTOCOL_STATIC_WEP         0x02
@@ -451,6 +470,7 @@ enum P2P_MODES {
 #define EVENT_UAP_MIC_COUNTERMEASURES   0x0000004c
 #define EVENT_HOSTWAKE_STAIE		0x0000004d
 #define EVENT_CHANNEL_SWITCH_ANN        0x00000050
+#define EVENT_TDLS_GENERIC_EVENT        0x00000052
 #define EVENT_EXT_SCAN_REPORT           0x00000058
 #define EVENT_REMAIN_ON_CHAN_EXPIRED    0x0000005f
 
@@ -465,6 +485,11 @@ enum P2P_MODES {
 
 #define MWIFIEX_FW_V15		   15
 
+#define ACT_TDLS_DELETE            0x00
+#define ACT_TDLS_CREATE            0x01
+#define ACT_TDLS_CONFIG            0x02
+#define TDLS_EVENT_LINK_TEAR_DOWN  3
+
 struct mwifiex_ie_types_header {
 	__le16 type;
 	__le16 len;
@@ -477,6 +502,8 @@ struct mwifiex_ie_types_data {
 
 #define MWIFIEX_TxPD_POWER_MGMT_NULL_PACKET 0x01
 #define MWIFIEX_TxPD_POWER_MGMT_LAST_PACKET 0x08
+#define MWIFIEX_TXPD_FLAGS_TDLS_PACKET      0x10
+#define MWIFIEX_RXPD_FLAGS_TDLS_PACKET       0x1
 
 struct txpd {
 	u8 bss_type;
@@ -519,7 +546,7 @@ struct rxpd {
 	 * [Bit 7] Reserved
 	 */
 	u8 ht_info;
-	u8 reserved;
+	u8 flags;
 } __packed;
 
 struct uap_txpd {
@@ -655,6 +682,13 @@ struct mwifiex_ie_types_rsn_param_set {
 	u8 rsn_ie[1];
 } __packed;
 
+#define MWIFIEX_TDLS_IDLE_TIMEOUT_IN_SEC	60
+
+struct mwifiex_ie_types_tdls_idle_timeout {
+	struct mwifiex_ie_types_header header;
+	__le16    value;
+} __packed;
+
 #define KEYPARAMSET_FIXED_LEN 6
 
 struct mwifiex_ie_type_key_param_set {
@@ -671,6 +705,56 @@ struct mwifiex_ie_type_key_param_set {
 struct mwifiex_cmac_param {
 	u8 ipn[IGTK_PN_LEN];
 	u8 key[WLAN_KEY_LEN_AES_CMAC];
+} __packed;
+
+struct mwifiex_wep_param {
+	__le16 key_len;
+	u8 key[WLAN_KEY_LEN_WEP104];
+} __packed;
+
+struct mwifiex_tkip_param {
+	u8 pn[WPA_PN_SIZE];
+	__le16 key_len;
+	u8 key[WLAN_KEY_LEN_TKIP];
+} __packed;
+
+struct mwifiex_aes_param {
+	u8 pn[WPA_PN_SIZE];
+	__le16 key_len;
+	u8 key[WLAN_KEY_LEN_CCMP];
+} __packed;
+
+struct mwifiex_wapi_param {
+	u8 pn[PN_LEN];
+	__le16 key_len;
+	u8 key[WLAN_KEY_LEN_SMS4];
+} __packed;
+
+struct mwifiex_cmac_aes_param {
+	u8 ipn[IGTK_PN_LEN];
+	__le16 key_len;
+	u8 key[WLAN_KEY_LEN_AES_CMAC];
+} __packed;
+
+struct mwifiex_ie_type_key_param_set_v2 {
+	__le16 type;
+	__le16 len;
+	u8 mac_addr[ETH_ALEN];
+	u8 key_idx;
+	u8 key_type;
+	__le16 key_info;
+	union {
+		struct mwifiex_wep_param wep;
+		struct mwifiex_tkip_param tkip;
+		struct mwifiex_aes_param aes;
+		struct mwifiex_wapi_param wapi;
+		struct mwifiex_cmac_aes_param cmac_aes;
+	} key_params;
+} __packed;
+
+struct host_cmd_ds_802_11_key_material_v2 {
+	__le16 action;
+	struct mwifiex_ie_type_key_param_set_v2 key_param_set;
 } __packed;
 
 struct host_cmd_ds_802_11_key_material {
@@ -724,6 +808,17 @@ struct host_cmd_ds_802_11_ps_mode_enh {
 	} params;
 } __packed;
 
+enum FW_API_VER_ID {
+	KEY_API_VER_ID = 1,
+};
+
+struct hw_spec_fw_api_rev {
+	struct mwifiex_ie_types_header header;
+	__le16 api_id;
+	u8 major_ver;
+	u8 minor_ver;
+} __packed;
+
 struct host_cmd_ds_get_hw_spec {
 	__le16 hw_if_version;
 	__le16 version;
@@ -745,6 +840,7 @@ struct host_cmd_ds_get_hw_spec {
 	__le32 reserved_6;
 	__le32 dot_11ac_dev_cap;
 	__le32 dot_11ac_mcs_support;
+	u8 tlvs[0];
 } __packed;
 
 struct host_cmd_ds_802_11_rssi_info {
@@ -1242,6 +1338,11 @@ struct mwifiex_ie_types_local_pwr_constraint {
 	u8 constraint;
 };
 
+struct host_cmd_ds_sta_deauth {
+	u8 mac[ETH_ALEN];
+	__le16 reason;
+} __packed;
+
 struct mwifiex_ie_types_wmm_param_set {
 	struct mwifiex_ie_types_header header;
 	u8 wmm_ie[1];
@@ -1319,6 +1420,11 @@ struct mwifiex_ie_types_vhtcap {
 	struct ieee80211_vht_cap vht_cap;
 } __packed;
 
+struct mwifiex_ie_types_aid {
+	struct mwifiex_ie_types_header header;
+	__le16 aid;
+} __packed;
+
 struct mwifiex_ie_types_oper_mode_ntf {
 	struct mwifiex_ie_types_header header;
 	u8 oper_mode;
@@ -1351,7 +1457,12 @@ struct mwifiex_ie_types_2040bssco {
 
 struct mwifiex_ie_types_extcap {
 	struct mwifiex_ie_types_header header;
-	u8 ext_cap;
+	u8 ext_capab[0];
+} __packed;
+
+struct mwifiex_ie_types_qos_info {
+	struct mwifiex_ie_types_header header;
+	u8 qos_info;
 } __packed;
 
 struct host_cmd_ds_mac_reg_access {
@@ -1596,6 +1707,15 @@ struct host_cmd_ds_802_11_subsc_evt {
 	__le16 events;
 } __packed;
 
+struct mwifiex_tdls_generic_event {
+	__le16 type;
+	u8 peer_mac[ETH_ALEN];
+	union {
+		__le16 reason_code;
+		__le16 reserved;
+	} u;
+} __packed;
+
 struct mwifiex_ie {
 	__le16 ie_index;
 	__le16 mgmt_subtype_mask;
@@ -1608,6 +1728,12 @@ struct mwifiex_ie_list {
 	__le16 type;
 	__le16 len;
 	struct mwifiex_ie ie_list[MAX_MGMT_IE_INDEX];
+} __packed;
+
+struct host_cmd_ds_tdls_oper {
+	__le16 tdls_action;
+	__le16 reason;
+	u8 peer_mac[ETH_ALEN];
 } __packed;
 
 struct host_cmd_ds_command {
@@ -1653,6 +1779,7 @@ struct host_cmd_ds_command {
 		struct host_cmd_ds_11n_cfg htcfg;
 		struct host_cmd_ds_wmm_get_status get_wmm_status;
 		struct host_cmd_ds_802_11_key_material key_material;
+		struct host_cmd_ds_802_11_key_material_v2 key_material_v2;
 		struct host_cmd_ds_version_ext verext;
 		struct host_cmd_ds_mgmt_frame_reg reg_mask;
 		struct host_cmd_ds_remain_on_chan roc_cfg;
@@ -1667,7 +1794,9 @@ struct host_cmd_ds_command {
 		struct host_cmd_ds_802_11_eeprom_access eeprom;
 		struct host_cmd_ds_802_11_subsc_evt subsc_evt;
 		struct host_cmd_ds_sys_config uap_sys_config;
+		struct host_cmd_ds_sta_deauth sta_deauth;
 		struct host_cmd_11ac_vht_cfg vht_cfg;
+		struct host_cmd_ds_tdls_oper tdls_oper;
 	} params;
 } __packed;
 

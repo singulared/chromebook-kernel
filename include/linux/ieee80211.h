@@ -1610,6 +1610,10 @@ enum ieee80211_eid {
 	WLAN_EID_EPAC_POLICY = 182,
 	WLAN_EID_CLISTER_TIME_OFF = 183,
 	WLAN_EID_ANTENNA_SECTOR_ID_PATTERN = 190,
+	WLAN_EID_EXTENDED_BSS_LOAD = 193,
+	WLAN_EID_VHT_TX_POWER_ENVELOPE = 195,
+	WLAN_EID_AID = 197,
+	WLAN_EID_QUIET_CHANNEL = 198,
 };
 
 /* Action category code */
@@ -1687,6 +1691,7 @@ enum ieee80211_key_len {
 	WLAN_KEY_LEN_CCMP = 16,
 	WLAN_KEY_LEN_TKIP = 32,
 	WLAN_KEY_LEN_AES_CMAC = 16,
+	WLAN_KEY_LEN_SMS4 = 32,
 };
 
 /* Public action codes */
@@ -1715,6 +1720,8 @@ enum ieee80211_tdls_actioncode {
  */
 #define WLAN_EXT_CAPA5_TDLS_ENABLED	BIT(5)
 #define WLAN_EXT_CAPA5_TDLS_PROHIBITED	BIT(6)
+
+#define WLAN_EXT_CAPA8_TDLS_WIDE_BW_ENABLED	BIT(7)
 
 /* TDLS specific payload type in the LLC/SNAP header */
 #define WLAN_TDLS_SNAP_RFTYPE	0x2

@@ -44,14 +44,17 @@ int mwifiex_process_rx_packet(struct mwifiex_private *priv,
 	int ret;
 	struct rx_packet_hdr *rx_pkt_hdr;
 	struct rxpd *local_rx_pd;
+	u16 rx_pkt_off, rx_pkt_len;
+	u8 *offset;
 	int hdr_chop;
 	struct ethhdr *eth_hdr;
 	u8 rfc1042_eth_hdr[ETH_ALEN] = { 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
 
 	local_rx_pd = (struct rxpd *) (skb->data);
 
-	rx_pkt_hdr = (void *)local_rx_pd +
-		     le16_to_cpu(local_rx_pd->rx_pkt_offset);
+	rx_pkt_off = le16_to_cpu(local_rx_pd->rx_pkt_offset);
+	rx_pkt_len = le16_to_cpu(local_rx_pd->rx_pkt_length);
+	rx_pkt_hdr = (void *)local_rx_pd + rx_pkt_off;
 
 	if (!memcmp(&rx_pkt_hdr->rfc1042_hdr,
 		    rfc1042_eth_hdr, sizeof(rfc1042_eth_hdr))) {
@@ -90,6 +93,12 @@ int mwifiex_process_rx_packet(struct mwifiex_private *priv,
 	   either the reconstructed EthII frame or the 802.2/llc/snap frame */
 	skb_pull(skb, hdr_chop);
 
+	if (ISSUPP_TDLS_ENABLED(priv->adapter->fw_cap_info) &&
+	    ntohs(rx_pkt_hdr->eth803_hdr.h_proto) == ETH_P_TDLS) {
+		offset = (u8 *)local_rx_pd + rx_pkt_off;
+		mwifiex_process_tdls_action_frame(priv, offset, rx_pkt_len);
+	}
+
 	priv->rxpd_rate = local_rx_pd->rx_rate;
 
 	priv->rxpd_htinfo = local_rx_pd->ht_info;
@@ -122,6 +131,7 @@ int mwifiex_process_sta_rx_packet(struct mwifiex_private *priv,
 	struct rx_packet_hdr *rx_pkt_hdr;
 	u8 ta[ETH_ALEN];
 	u16 rx_pkt_type, rx_pkt_offset, rx_pkt_length, seq_num;
+	struct mwifiex_sta_node *sta_ptr;
 
 	local_rx_pd = (struct rxpd *) (skb->data);
 	rx_pkt_type = le16_to_cpu(local_rx_pd->rx_pkt_type);
@@ -157,14 +167,25 @@ int mwifiex_process_sta_rx_packet(struct mwifiex_private *priv,
 	 * If the packet is not an unicast packet then send the packet
 	 * directly to os. Don't pass thru rx reordering
 	 */
-	if (!IS_11N_ENABLED(priv) ||
+	if ((!IS_11N_ENABLED(priv) &&
+	     !(ISSUPP_TDLS_ENABLED(priv->adapter->fw_cap_info) &&
+	       !(local_rx_pd->flags & MWIFIEX_RXPD_FLAGS_TDLS_PACKET))) ||
 	    memcmp(priv->curr_addr, rx_pkt_hdr->eth803_hdr.h_dest, ETH_ALEN)) {
 		mwifiex_process_rx_packet(priv, skb);
 		return ret;
 	}
 
-	if (mwifiex_queuing_ra_based(priv)) {
+	if (mwifiex_queuing_ra_based(priv) ||
+	    (ISSUPP_TDLS_ENABLED(priv->adapter->fw_cap_info) &&
+	     local_rx_pd->flags & MWIFIEX_RXPD_FLAGS_TDLS_PACKET)) {
 		memcpy(ta, rx_pkt_hdr->eth803_hdr.h_source, ETH_ALEN);
+		if (local_rx_pd->flags & MWIFIEX_RXPD_FLAGS_TDLS_PACKET &&
+		    local_rx_pd->priority < MAX_NUM_TID) {
+			sta_ptr = mwifiex_get_sta_entry(priv, ta);
+			if (sta_ptr)
+				sta_ptr->rx_seq[local_rx_pd->priority] =
+							   local_rx_pd->seq_num;
+		}
 	} else {
 		if (rx_pkt_type != PKT_TYPE_BAR)
 			priv->rx_seq[local_rx_pd->priority] = seq_num;

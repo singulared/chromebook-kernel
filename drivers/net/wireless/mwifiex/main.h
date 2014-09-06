@@ -207,11 +207,12 @@ struct mwifiex_ra_list_tbl {
 	struct list_head list;
 	struct sk_buff_head skb_head;
 	u8 ra[ETH_ALEN];
-	u32 total_pkts_size;
 	u32 is_11n_enabled;
 	u16 max_amsdu;
-	u16 pkt_count;
+	u16 ba_pkt_count;
 	u8 ba_packet_thr;
+	u16 total_pkt_count;
+	bool tdls_link;
 };
 
 struct mwifiex_tid_tbl {
@@ -263,6 +264,31 @@ struct ieee_types_vendor_specific {
 struct ieee_types_generic {
 	struct ieee_types_header ieee_hdr;
 	u8 data[IEEE_MAX_IE_SIZE - sizeof(struct ieee_types_header)];
+} __packed;
+
+struct ieee_types_bss_co_2040 {
+	struct ieee_types_header ieee_hdr;
+	u8 bss_2040co;
+} __packed;
+
+struct ieee_types_extcap {
+	struct ieee_types_header ieee_hdr;
+	u8 ext_capab[8];
+} __packed;
+
+struct ieee_types_vht_cap {
+	struct ieee_types_header ieee_hdr;
+	struct ieee80211_vht_cap vhtcap;
+} __packed;
+
+struct ieee_types_vht_oper {
+	struct ieee_types_header ieee_hdr;
+	struct ieee80211_vht_operation vhtoper;
+} __packed;
+
+struct ieee_types_aid {
+	struct ieee_types_header ieee_hdr;
+	u16 aid;
 } __packed;
 
 struct mwifiex_bssdescriptor {
@@ -446,6 +472,7 @@ struct mwifiex_private {
 	u8 wpa_ie_len;
 	u8 wpa_is_gtk_set;
 	struct host_cmd_ds_802_11_key_material aes_key;
+	struct host_cmd_ds_802_11_key_material_v2 aes_key_v2;
 	u8 wapi_ie[256];
 	u8 wapi_ie_len;
 	u8 *wps_ie;
@@ -464,6 +491,7 @@ struct mwifiex_private {
 	struct mwifiex_tx_aggr aggr_prio_tbl[MAX_NUM_TID];
 	struct mwifiex_add_ba_param add_ba_param;
 	u16 rx_seq[MAX_NUM_TID];
+	u8 tos_to_tid_inv[MAX_NUM_TID];
 	struct list_head rx_reorder_tbl_ptr;
 	/* spin lock for rx_reorder_tbl_ptr queue */
 	spinlock_t rx_reorder_tbl_lock;
@@ -520,6 +548,8 @@ struct mwifiex_private {
 	bool scan_aborting;
 	u8 csa_chan;
 	unsigned long csa_expire_time;
+	struct station_parameters *sta_params;
+	struct sk_buff_head tdls_txq;
 };
 
 enum mwifiex_ba_status {
@@ -588,17 +618,35 @@ struct mwifiex_bss_priv {
 	u64 fw_tsf;
 };
 
-/* This is AP specific structure which stores information
- * about associated STA
+struct mwifiex_tdls_capab {
+	__le16 capab;
+	u8 rates[32];
+	u8 rates_len;
+	u8 qos_info;
+	u8 coex_2040;
+	u16 aid;
+	struct ieee80211_ht_cap ht_capb;
+	struct ieee80211_ht_operation ht_oper;
+	struct ieee_types_extcap extcap;
+	struct ieee_types_generic rsn_ie;
+	struct ieee80211_vht_cap vhtcap;
+	struct ieee80211_vht_operation vhtoper;
+};
+
+/* This is AP/TDLS specific structure which stores information
+ * about associated/peer STA
  */
 struct mwifiex_sta_node {
 	struct list_head list;
 	u8 mac_addr[ETH_ALEN];
 	u8 is_wmm_enabled;
 	u8 is_11n_enabled;
+	u8 is_11ac_enabled;
 	u8 ampdu_sta[MAX_NUM_TID];
 	u16 rx_seq[MAX_NUM_TID];
 	u16 max_amsdu;
+	u8 tdls_status;
+	struct mwifiex_tdls_capab tdls_cap;
 };
 
 struct mwifiex_if_ops {
@@ -761,6 +809,7 @@ struct mwifiex_adapter {
 	bool ext_scan;
 	u8 fw_api_ver;
 	struct work_struct iface_work;
+	u8 fw_key_api_major_ver, fw_key_api_minor_ver;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
@@ -1160,6 +1209,34 @@ int mwifiex_11h_handle_event_chanswann(struct mwifiex_private *priv);
 int mwifiex_dnld_dt_cfgdata(struct mwifiex_private *priv,
 			    struct device_node *node, const char *prefix);
 void mwifiex_dnld_txpwr_table(struct mwifiex_private *priv);
+
+void mwifiex_del_all_sta_list(struct mwifiex_private *priv);
+void mwifiex_del_sta_entry(struct mwifiex_private *priv, u8 *mac);
+void
+mwifiex_set_sta_ht_cap(struct mwifiex_private *priv, const u8 *ies,
+		       int ies_len, struct mwifiex_sta_node *node);
+struct mwifiex_sta_node *
+mwifiex_add_sta_entry(struct mwifiex_private *priv, u8 *mac);
+struct mwifiex_sta_node *
+mwifiex_get_sta_entry(struct mwifiex_private *priv, u8 *mac);
+int mwifiex_send_tdls_data_frame(struct mwifiex_private *priv, u8 *peer,
+				 u8 action_code, u8 dialog_token,
+				 u16 status_code, const u8 *extra_ies,
+				 size_t extra_ies_len);
+int mwifiex_send_tdls_action_frame(struct mwifiex_private *priv,
+				 u8 *peer, u8 action_code, u8 dialog_token,
+				 u16 status_code, const u8 *extra_ies,
+				 size_t extra_ies_len);
+void mwifiex_process_tdls_action_frame(struct mwifiex_private *priv,
+				       u8 *buf, int len);
+int mwifiex_tdls_oper(struct mwifiex_private *priv, u8 *peer, u8 action);
+int mwifiex_get_tdls_link_status(struct mwifiex_private *priv, u8 *mac);
+void mwifiex_disable_all_tdls_links(struct mwifiex_private *priv);
+bool mwifiex_is_bss_in_11ac_mode(struct mwifiex_private *priv);
+u8 mwifiex_get_center_freq_index(struct mwifiex_private *priv, u8 band,
+				 u32 pri_chan, u8 chan_bw);
+void mwifiex_uap_del_sta_data(struct mwifiex_private *priv,
+			      struct mwifiex_sta_node *node);
 
 #ifdef CONFIG_DEBUG_FS
 void mwifiex_debugfs_init(void);

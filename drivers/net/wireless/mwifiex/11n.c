@@ -34,22 +34,26 @@
  *
  * RD responder bit to set to clear in the extended capability header.
  */
-void
-mwifiex_fill_cap_info(struct mwifiex_private *priv, u8 radio_type,
-		      struct mwifiex_ie_types_htcap *ht_cap)
+int mwifiex_fill_cap_info(struct mwifiex_private *priv, u8 radio_type,
+			  struct ieee80211_ht_cap *ht_cap)
 {
-	uint16_t ht_ext_cap = le16_to_cpu(ht_cap->ht_cap.extended_ht_cap_info);
+	uint16_t ht_ext_cap = le16_to_cpu(ht_cap->extended_ht_cap_info);
 	struct ieee80211_supported_band *sband =
 					priv->wdev->wiphy->bands[radio_type];
 
-	ht_cap->ht_cap.ampdu_params_info =
+	if (WARN_ON_ONCE(!sband)) {
+		dev_err(priv->adapter->dev, "Invalid radio type!\n");
+		return -EINVAL;
+	}
+
+	ht_cap->ampdu_params_info =
 		(sband->ht_cap.ampdu_factor &
 		 IEEE80211_HT_AMPDU_PARM_FACTOR) |
 		((sband->ht_cap.ampdu_density <<
 		 IEEE80211_HT_AMPDU_PARM_DENSITY_SHIFT) &
 		 IEEE80211_HT_AMPDU_PARM_DENSITY);
 
-	memcpy((u8 *) &ht_cap->ht_cap.mcs, &sband->ht_cap.mcs,
+	memcpy((u8 *)&ht_cap->mcs, &sband->ht_cap.mcs,
 	       sizeof(sband->ht_cap.mcs));
 
 	if (priv->bss_mode == NL80211_IFTYPE_STATION ||
@@ -57,17 +61,18 @@ mwifiex_fill_cap_info(struct mwifiex_private *priv, u8 radio_type,
 	     (priv->adapter->sec_chan_offset !=
 					IEEE80211_HT_PARAM_CHA_SEC_NONE)))
 		/* Set MCS32 for infra mode or ad-hoc mode with 40MHz support */
-		SETHT_MCS32(ht_cap->ht_cap.mcs.rx_mask);
+		SETHT_MCS32(ht_cap->mcs.rx_mask);
 
 	/* Clear RD responder bit */
 	ht_ext_cap &= ~IEEE80211_HT_EXT_CAP_RD_RESPONDER;
 
-	ht_cap->ht_cap.cap_info = cpu_to_le16(sband->ht_cap.cap);
-	ht_cap->ht_cap.extended_ht_cap_info = cpu_to_le16(ht_ext_cap);
+	ht_cap->cap_info = cpu_to_le16(sband->ht_cap.cap);
+	ht_cap->extended_ht_cap_info = cpu_to_le16(ht_ext_cap);
 
 	if (ISSUPP_BEAMFORMING(priv->adapter->hw_dot_11n_dev_cap))
-		ht_cap->ht_cap.tx_BF_cap_info =
-				cpu_to_le32(MWIFIEX_DEF_11N_TX_BF_CAP);
+		ht_cap->tx_BF_cap_info = cpu_to_le32(MWIFIEX_DEF_11N_TX_BF_CAP);
+
+	return 0;
 }
 
 /*
@@ -302,6 +307,7 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 	struct mwifiex_ie_types_extcap *ext_cap;
 	int ret_len = 0;
 	struct ieee80211_supported_band *sband;
+	struct ieee_types_header *hdr;
 	u8 radio_type;
 
 	if (!buffer || !*buffer)
@@ -320,7 +326,7 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 		       (u8 *)bss_desc->bcn_ht_cap,
 		       le16_to_cpu(ht_cap->header.len));
 
-		mwifiex_fill_cap_info(priv, radio_type, ht_cap);
+		mwifiex_fill_cap_info(priv, radio_type, &ht_cap->ht_cap);
 
 		*buffer += sizeof(struct mwifiex_ie_types_htcap);
 		ret_len += sizeof(struct mwifiex_ie_types_htcap);
@@ -396,17 +402,18 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 	}
 
 	if (bss_desc->bcn_ext_cap) {
+		hdr = (void *)bss_desc->bcn_ext_cap;
 		ext_cap = (struct mwifiex_ie_types_extcap *) *buffer;
 		memset(ext_cap, 0, sizeof(struct mwifiex_ie_types_extcap));
 		ext_cap->header.type = cpu_to_le16(WLAN_EID_EXT_CAPABILITY);
-		ext_cap->header.len = cpu_to_le16(sizeof(ext_cap->ext_cap));
+		ext_cap->header.len = cpu_to_le16(hdr->len);
 
-		memcpy((u8 *)ext_cap + sizeof(struct mwifiex_ie_types_header),
+		memcpy((u8 *)ext_cap->ext_capab,
 		       bss_desc->bcn_ext_cap + sizeof(struct ieee_types_header),
 		       le16_to_cpu(ext_cap->header.len));
 
-		*buffer += sizeof(struct mwifiex_ie_types_extcap);
-		ret_len += sizeof(struct mwifiex_ie_types_extcap);
+		*buffer += sizeof(struct mwifiex_ie_types_extcap) + hdr->len;
+		ret_len += sizeof(struct mwifiex_ie_types_extcap) + hdr->len;
 	}
 
 	return ret_len;
@@ -529,14 +536,31 @@ int mwifiex_send_addba(struct mwifiex_private *priv, int tid, u8 *peer_mac)
 {
 	struct host_cmd_ds_11n_addba_req add_ba_req;
 	static u8 dialog_tok;
+	u32 tx_win_size = priv->add_ba_param.tx_win_size;
 	int ret;
 	u16 block_ack_param_set;
 
 	dev_dbg(priv->adapter->dev, "cmd: %s: tid %d\n", __func__, tid);
 
+	if ((GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_STA) &&
+	    ISSUPP_TDLS_ENABLED(priv->adapter->fw_cap_info) &&
+	    priv->adapter->is_hw_11ac_capable &&
+	    memcmp(priv->cfg_bssid, peer_mac, ETH_ALEN)) {
+		struct mwifiex_sta_node *sta_ptr;
+
+		sta_ptr = mwifiex_get_sta_entry(priv, peer_mac);
+		if (!sta_ptr) {
+			dev_warn(priv->adapter->dev,
+				 "BA setup with unknown TDLS peer %pM!\n",
+				peer_mac);
+			return -1;
+		}
+		if (sta_ptr->is_11ac_enabled)
+			tx_win_size = MWIFIEX_11AC_STA_AMPDU_DEF_TXWINSIZE;
+	}
+
 	block_ack_param_set = (u16)((tid << BLOCKACKPARAM_TID_POS) |
-				    (priv->add_ba_param.tx_win_size <<
-				     BLOCKACKPARAM_WINSIZE_POS) |
+				    (tx_win_size << BLOCKACKPARAM_WINSIZE_POS) |
 				    IMMEDIATE_BLOCK_ACK);
 
 	/* enable AMSDU inside AMPDU */
@@ -720,3 +744,4 @@ void mwifiex_set_ba_params(struct mwifiex_private *priv)
 
 	return;
 }
+

@@ -1259,6 +1259,51 @@ static int mwifiex_cfg80211_change_beacon(struct wiphy *wiphy,
 	return 0;
 }
 
+/* cfg80211 operation handler for del_station.
+ * Function deauthenticates station which value is provided in mac parameter.
+ * If mac is NULL/broadcast, all stations in associated station list are
+ * deauthenticated. If bss is not started or there are no stations in
+ * associated stations list, no action is taken.
+ */
+static int
+mwifiex_cfg80211_del_station(struct wiphy *wiphy, struct net_device *dev,
+			     u8 *mac)
+{
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+	struct mwifiex_sta_node *sta_node;
+	unsigned long flags;
+
+	if (list_empty(&priv->sta_list) || !priv->bss_started)
+		return 0;
+
+	if (!mac || is_broadcast_ether_addr(mac)) {
+		wiphy_dbg(wiphy, "%s: NULL/broadcast mac address\n", __func__);
+		list_for_each_entry(sta_node, &priv->sta_list, list) {
+			if (mwifiex_send_cmd(priv,
+					     HostCmd_CMD_UAP_STA_DEAUTH,
+					     HostCmd_ACT_GEN_SET, 0,
+					     sta_node->mac_addr, true))
+				return -1;
+			mwifiex_uap_del_sta_data(priv, sta_node);
+		}
+	} else {
+		wiphy_dbg(wiphy, "%s: mac address %pM\n", __func__, mac);
+		spin_lock_irqsave(&priv->sta_list_spinlock, flags);
+		sta_node = mwifiex_get_sta_entry(priv, mac);
+		spin_unlock_irqrestore(&priv->sta_list_spinlock, flags);
+		if (sta_node) {
+			if (mwifiex_send_cmd(priv,
+					     HostCmd_CMD_UAP_STA_DEAUTH,
+					     HostCmd_ACT_GEN_SET, 0,
+					     sta_node->mac_addr, true))
+				return -1;
+			mwifiex_uap_del_sta_data(priv, sta_node);
+		}
+	}
+
+	return 0;
+}
+
 static int
 mwifiex_cfg80211_set_antenna(struct wiphy *wiphy, u32 tx_ant, u32 rx_ant)
 {
@@ -2277,6 +2322,170 @@ int mwifiex_del_virtual_intf(struct wiphy *wiphy, struct wireless_dev *wdev)
 }
 EXPORT_SYMBOL_GPL(mwifiex_del_virtual_intf);
 
+/* cfg80211 ops handler for tdls_mgmt.
+ * Function prepares TDLS action frame packets and forwards them to FW
+ */
+static int
+mwifiex_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
+			   u8 *peer, u8 action_code, u8 dialog_token,
+			   u16 status_code, const u8 *extra_ies,
+			   size_t extra_ies_len)
+{
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+	int ret;
+
+	if (!(wiphy->flags & WIPHY_FLAG_SUPPORTS_TDLS))
+		return -ENOTSUPP;
+
+	/* make sure we are in station mode and connected */
+	if (!(priv->bss_type == MWIFIEX_BSS_TYPE_STA && priv->media_connected))
+		return -ENOTSUPP;
+
+	switch (action_code) {
+	case WLAN_TDLS_SETUP_REQUEST:
+		dev_dbg(priv->adapter->dev,
+			"Send TDLS Setup Request to %pM status_code=%d\n", peer,
+			 status_code);
+		ret = mwifiex_send_tdls_data_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	case WLAN_TDLS_SETUP_RESPONSE:
+		dev_dbg(priv->adapter->dev,
+			"Send TDLS Setup Response to %pM status_code=%d\n",
+			peer, status_code);
+		ret = mwifiex_send_tdls_data_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	case WLAN_TDLS_SETUP_CONFIRM:
+		dev_dbg(priv->adapter->dev,
+			"Send TDLS Confirm to %pM status_code=%d\n", peer,
+			status_code);
+		ret = mwifiex_send_tdls_data_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	case WLAN_TDLS_TEARDOWN:
+		dev_dbg(priv->adapter->dev, "Send TDLS Tear down to %pM\n",
+			peer);
+		ret = mwifiex_send_tdls_data_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	case WLAN_TDLS_DISCOVERY_REQUEST:
+		dev_dbg(priv->adapter->dev,
+			"Send TDLS Discovery Request to %pM\n", peer);
+		ret = mwifiex_send_tdls_data_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	case WLAN_PUB_ACTION_TDLS_DISCOVER_RES:
+		dev_dbg(priv->adapter->dev,
+			"Send TDLS Discovery Response to %pM\n", peer);
+		ret = mwifiex_send_tdls_action_frame(priv, peer, action_code,
+						   dialog_token, status_code,
+						   extra_ies, extra_ies_len);
+		break;
+	default:
+		dev_warn(priv->adapter->dev,
+			 "Unknown TDLS mgmt/action frame %pM\n", peer);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int
+mwifiex_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
+			   u8 *peer, enum nl80211_tdls_operation action)
+{
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+
+	if (!(wiphy->flags & WIPHY_FLAG_SUPPORTS_TDLS) ||
+	    !(wiphy->flags & WIPHY_FLAG_TDLS_EXTERNAL_SETUP))
+		return -ENOTSUPP;
+
+	/* make sure we are in station mode and connected */
+	if (!(priv->bss_type == MWIFIEX_BSS_TYPE_STA && priv->media_connected))
+		return -ENOTSUPP;
+
+	dev_dbg(priv->adapter->dev,
+		"TDLS peer=%pM, oper=%d\n", peer, action);
+
+	switch (action) {
+	case NL80211_TDLS_ENABLE_LINK:
+		action = MWIFIEX_TDLS_ENABLE_LINK;
+		break;
+	case NL80211_TDLS_DISABLE_LINK:
+		action = MWIFIEX_TDLS_DISABLE_LINK;
+		break;
+	case NL80211_TDLS_TEARDOWN:
+		/* shouldn't happen!*/
+		dev_warn(priv->adapter->dev,
+			 "tdls_oper: teardown from driver not supported\n");
+		return -EINVAL;
+	case NL80211_TDLS_SETUP:
+		/* shouldn't happen!*/
+		dev_warn(priv->adapter->dev,
+			 "tdls_oper: setup from driver not supported\n");
+		return -EINVAL;
+	case NL80211_TDLS_DISCOVERY_REQ:
+		/* shouldn't happen!*/
+		dev_warn(priv->adapter->dev,
+			 "tdls_oper: discovery from driver not supported\n");
+		return -EINVAL;
+	default:
+		dev_err(priv->adapter->dev,
+			"tdls_oper: operation not supported\n");
+		return -ENOTSUPP;
+	}
+
+	return mwifiex_tdls_oper(priv, peer, action);
+}
+
+static int
+mwifiex_cfg80211_add_station(struct wiphy *wiphy,
+			     struct net_device *dev,
+			     u8 *mac, struct station_parameters *params)
+{
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+
+	if (!(params->sta_flags_set & BIT(NL80211_STA_FLAG_TDLS_PEER)))
+		return -ENOTSUPP;
+
+	/* make sure we are in station mode and connected */
+	if ((priv->bss_type != MWIFIEX_BSS_TYPE_STA) || !priv->media_connected)
+		return -ENOTSUPP;
+
+	return mwifiex_tdls_oper(priv, mac, MWIFIEX_TDLS_CREATE_LINK);
+}
+
+static int
+mwifiex_cfg80211_change_station(struct wiphy *wiphy,
+				struct net_device *dev,
+				u8 *mac, struct station_parameters *params)
+{
+	int ret;
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+
+	/* we support change_station handler only for TDLS peers*/
+	if (!(params->sta_flags_set & BIT(NL80211_STA_FLAG_TDLS_PEER)))
+		return -ENOTSUPP;
+
+	/* make sure we are in station mode and connected */
+	if ((priv->bss_type != MWIFIEX_BSS_TYPE_STA) || !priv->media_connected)
+		return -ENOTSUPP;
+
+	priv->sta_params = params;
+
+	ret = mwifiex_tdls_oper(priv, mac, MWIFIEX_TDLS_CONFIG_LINK);
+	priv->sta_params = NULL;
+
+	return ret;
+}
+
 /* station cfg80211 operations */
 static struct cfg80211_ops mwifiex_cfg80211_ops = {
 	.add_virtual_intf = mwifiex_add_virtual_intf,
@@ -2305,6 +2514,11 @@ static struct cfg80211_ops mwifiex_cfg80211_ops = {
 	.change_beacon = mwifiex_cfg80211_change_beacon,
 	.set_cqm_rssi_config = mwifiex_cfg80211_set_cqm_rssi_config,
 	.set_antenna = mwifiex_cfg80211_set_antenna,
+	.tdls_mgmt = mwifiex_cfg80211_tdls_mgmt,
+	.tdls_oper = mwifiex_cfg80211_tdls_oper,
+	.add_station = mwifiex_cfg80211_add_station,
+	.change_station = mwifiex_cfg80211_change_station,
+	.del_station = mwifiex_cfg80211_del_station,
 };
 
 /*
@@ -2360,6 +2574,10 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			WIPHY_FLAG_AP_UAPSD |
 			WIPHY_FLAG_CUSTOM_REGULATORY |
 			WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
+
+	if (ISSUPP_TDLS_ENABLED(adapter->fw_cap_info))
+		wiphy->flags |= WIPHY_FLAG_SUPPORTS_TDLS |
+				WIPHY_FLAG_TDLS_EXTERNAL_SETUP;
 
 	wiphy_apply_custom_regulatory(wiphy, &mwifiex_world_regdom_custom);
 
