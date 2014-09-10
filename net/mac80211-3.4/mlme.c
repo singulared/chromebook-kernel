@@ -1939,6 +1939,13 @@ ieee80211_rx_mgmt_deauth(struct ieee80211_sub_if_data *sdata,
 	printk(KERN_DEBUG "%s: deauthenticated from %pM (Reason: %u)\n",
 			sdata->name, bssid, reason_code);
 
+	/* Wake up queues if they were stopped due to channel switch */
+	if (ifmgd->flags & IEEE80211_STA_CSA_RECEIVED) {
+		ifmgd->flags &= ~IEEE80211_STA_CSA_RECEIVED;
+		ieee80211_wake_queues_by_reason(&sdata->local->hw,
+				IEEE80211_QUEUE_STOP_REASON_CSA);
+	}
+
 	ieee80211_set_disassoc(sdata, 0, 0, false, NULL);
 
 	mutex_lock(&sdata->local->mtx);
@@ -3504,6 +3511,13 @@ int ieee80211_mgd_deauth(struct ieee80211_sub_if_data *sdata,
 	printk(KERN_DEBUG
 	       "%s: deauthenticating from %pM by local choice (reason=%d)\n",
 	       sdata->name, req->bssid, req->reason_code);
+
+	/* Wake up queues if they were stopped due to channel switch */
+	if (ifmgd->flags & IEEE80211_STA_CSA_RECEIVED) {
+		ifmgd->flags &= ~IEEE80211_STA_CSA_RECEIVED;
+		ieee80211_wake_queues_by_reason(&sdata->local->hw,
+				IEEE80211_QUEUE_STOP_REASON_CSA);
+	}
 
 	if (ifmgd->associated &&
 	    compare_ether_addr(ifmgd->associated->bssid, req->bssid) == 0)
