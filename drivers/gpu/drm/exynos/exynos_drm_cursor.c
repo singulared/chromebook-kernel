@@ -168,17 +168,16 @@ int exynos_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file,
 		uint32_t handle, uint32_t width, uint32_t height,
 		struct exynos_drm_cursor *cursor, struct drm_plane *plane)
 {
-	/* Currently we only support 64x64 cursors */
-	if (width != CURSORW_USER || height != CURSORH_USER) {
-		DRM_ERROR("we currently only support %dx%d cursors\n",
-				CURSORW_USER, CURSORH_USER);
-		return -EINVAL;
-	}
-
 	if (handle) {
-		struct drm_gem_object *obj = drm_gem_object_lookup(
-				crtc->dev, file, handle);
+		struct drm_gem_object *obj;
 		int err;
+		/* Currently we only support 64x64 cursors */
+		if (width != CURSORW_USER || height != CURSORH_USER) {
+			DRM_ERROR("we currently only support %dx%d cursors\n",
+					CURSORW_USER, CURSORH_USER);
+			return -EINVAL;
+		}
+		obj = drm_gem_object_lookup(crtc->dev, file, handle);
 		if (!obj) {
 			DRM_ERROR("failed to lookup gem object.\n");
 			return -EINVAL;
