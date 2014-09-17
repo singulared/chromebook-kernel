@@ -28,6 +28,7 @@
 #include "drmP.h"
 #include "drm_crtc.h"
 #include "drm_crtc_helper.h"
+#include "drm_dp_helper.h"
 #include "anx7808regs.h"
 #include "drm_atomic.h"
 
@@ -315,8 +316,8 @@ static void anx7808_tx_initialization(struct anx7808_data *anx7808)
 	anx7808_set_bits(anx7808, SP_TX_LINK_DEBUG_REG, M_VID_DEBUG);
 	anx7808_set_bits(anx7808, SP_TX_DEBUG_REG1,
 			 FORCE_HPD | FORCE_PLL_LOCK | POLLING_EN);
-	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL11, AUX_TERM_50OHM);
-	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL6,
+	anx7808_set_bits(anx7808, SP_TX_PLL_FILTER_CTRL1, AUX_TERM_50OHM);
+	anx7808_clear_bits(anx7808, SP_TX_PLL_FILTER_CTRL5,
 			   P5V_PROTECT_PD | SHORT_PROTECT_PD);
 	anx7808_set_bits(anx7808, SP_TX_ANALOG_DEBUG_REG2, POWERON_TIME_1P5MS);
 	anx7808_set_bits(anx7808, SP_TX_HDCP_CTRL0_REG,
@@ -641,10 +642,10 @@ static int anx7808_check_dp_link(struct anx7808_data *anx7808)
 	int err;
 	uint8_t status;
 
-	err = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &status);
+	err = anx7808_aux_dpcd_read(anx7808, DP_LANE0_1_STATUS, 1, &status);
 	if (err)
 		return err;
-	if ((status & LANE0_1_STATUS_SUCCESS) != LANE0_1_STATUS_SUCCESS) {
+	if ((status & DP_CHANNEL_EQ_BITS) != DP_CHANNEL_EQ_BITS) {
 		DRM_INFO("Waiting for DP Lane 0 to train: %02x\n", status);
 		return -EAGAIN;
 	}
@@ -657,7 +658,7 @@ static int anx7808_dp_link_training(struct anx7808_data *anx7808)
 	int err;
 	uint8_t dp_bw;
 
-	err = anx7808_aux_dpcd_read(anx7808, MAX_LINK_RATE, 1, &dp_bw);
+	err = anx7808_aux_dpcd_read(anx7808, DP_MAX_LINK_RATE, 1, &dp_bw);
 	if (err)
 		return err;
 	switch ((enum dp_link_bw)dp_bw) {
@@ -764,23 +765,24 @@ static int anx7808_get_downstream_info(struct anx7808_data *anx7808)
 	int ret;
 	uint8_t val;
 
-	ret = anx7808_aux_dpcd_read(anx7808, SINK_COUNT, 1, &val);
+	ret = anx7808_aux_dpcd_read(anx7808, DP_SINK_COUNT, 1, &val);
 	if (ret) {
 		DRM_ERROR("Get sink count failed %d\n", ret);
 		return ret;
 	}
-	if (!(val & SINK_COUNT_MASK)) {
+	if (!(DP_GET_SINK_COUNT(val))) {
 		anx7808->ds_type = DOWNSTREAM_DISCONNECTED;
 		return 0;
 	}
 
-	ret = anx7808_aux_dpcd_read(anx7808, DOWNSTREAMPORT_PRESENT , 1, &val);
+	ret = anx7808_aux_dpcd_read(anx7808, DP_DOWNSTREAMPORT_PRESENT,
+				    1, &val);
 	if (ret) {
 		DRM_ERROR("Failed to get DPCD downstream present %d\n", ret);
 		return ret;
 	}
 
-	switch (val & DOWNSTREAMPORT_TYPE) {
+	switch (val & DP_DWN_STRM_PORT_TYPE_MASK) {
 	case DOWNSTREAMPORT_DP:
 		anx7808->ds_type = DOWNSTREAM_DP;
 		break;
@@ -1100,12 +1102,12 @@ static void anx7808_attempt_downstream_retrain(struct anx7808_data *anx7808)
 		return;
 
 	/* Only retrain if downstream link is not up */
-	ret = anx7808_aux_dpcd_read(anx7808, LANE0_1_STATUS, 1, &val);
+	ret = anx7808_aux_dpcd_read(anx7808, DP_LANE0_1_STATUS, 1, &val);
 	if (ret) {
 		DRM_ERROR("Failed to read DPCD lane status %d\n", ret);
 		return;
 	}
-	if ((val & LANE0_1_STATUS_SUCCESS) == LANE0_1_STATUS_SUCCESS)
+	if ((val & DP_CHANNEL_EQ_BITS) == DP_CHANNEL_EQ_BITS)
 		return;
 
 	/* Only retrain if downstream is terminated (ie active input) */
@@ -1182,20 +1184,20 @@ static bool anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 	int ret;
 	uint8_t reg_value;
 
-	ret = anx7808_aux_dpcd_read(anx7808, DEVICE_SERVICE_IRQ_VECTOR, 1,
+	ret = anx7808_aux_dpcd_read(anx7808, DP_DEVICE_SERVICE_IRQ_VECTOR, 1,
 			&irq);
 	if (ret) {
 		DRM_ERROR("Failed to read DPCD irq %d\n", ret);
 		return false;
 	}
-	ret = anx7808_aux_dpcd_write(anx7808, DEVICE_SERVICE_IRQ_VECTOR, 1,
+	ret = anx7808_aux_dpcd_write(anx7808, DP_DEVICE_SERVICE_IRQ_VECTOR, 1,
 			&irq);
 	if (ret) {
 		DRM_ERROR("Failed to write DPCD irq %d\n", ret);
 		return false;
 	}
 
-	if (irq & CP_IRQ) {
+	if (irq & DP_CP_IRQ) {
 		ret = anx7808_aux_dpcd_read(anx7808, BSTATUS, 1, &reg_value);
 		if (ret) {
 			DRM_ERROR("Failed to read DPCD HDCP BSTATUS\n");
@@ -1206,7 +1208,7 @@ static bool anx7808_handle_dpcd_int(struct anx7808_data *anx7808)
 		}
 	}
 
-	if (irq & SINK_SPECIFIC_IRQ)
+	if (irq & DP_SINK_SPECIFIC_IRQ)
 		return anx7808_handle_sink_specific_int(anx7808);
 
 	return false;
@@ -1493,8 +1495,8 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_REG(SP_TX_VID_CTRL5_REG);
 	DUMP_REG(SP_TX_VID_CTRL6_REG);
 	DUMP_REG(SP_TX_ANALOG_DEBUG_REG2);
-	DUMP_REG(SP_TX_PLL_FILTER_CTRL11);
-	DUMP_REG(SP_TX_PLL_FILTER_CTRL6);
+	DUMP_REG(SP_TX_PLL_FILTER_CTRL1);
+	DUMP_REG(SP_TX_PLL_FILTER_CTRL5);
 	DUMP_REG(SP_TX_ANALOG_CTRL);
 	DUMP_REG(SP_TX_INT_STATUS1);
 	DUMP_REG(SP_COMMON_INT_MASK1);
@@ -1556,18 +1558,18 @@ static int anx7808_show_regs(struct seq_file *s, void *data)
 	DUMP_REG(HDMI_RX_CEC_SPEED_CTRL_REG);
 	DUMP_REG(HDMI_RX_CHIP_CTRL_REG);
 
-	DUMP_DPCD(DPCD_REV);
+	DUMP_DPCD(DP_DPCD_REV);
 	DUMP_DPCD(DP_PWR_VOLTAGE_CAP);
-	DUMP_DPCD(DOWNSTREAMPORT_PRESENT);
+	DUMP_DPCD(DP_DOWNSTREAMPORT_PRESENT);
 	DUMP_DPCD(RECEIVE_PORT0_CAP_0);
 	DUMP_DPCD(RECEIVE_PORT0_CAP_1);
 	DUMP_DPCD(RECEIVE_PORT1_CAP_0);
 	DUMP_DPCD(RECEIVE_PORT1_CAP_1);
-	DUMP_DPCD(LINK_BW_SET);
-	DUMP_DPCD(LANE_COUNT_SET);
-	DUMP_DPCD(SINK_COUNT);
-	DUMP_DPCD(LANE0_1_STATUS);
-	DUMP_DPCD(SINK_STATUS);
+	DUMP_DPCD(DP_LINK_BW_SET);
+	DUMP_DPCD(DP_LANE_COUNT_SET);
+	DUMP_DPCD(DP_SINK_COUNT);
+	DUMP_DPCD(DP_LANE0_1_STATUS);
+	DUMP_DPCD(DP_SINK_STATUS);
 	DUMP_DPCD(DOWN_STREAM_STATUS_1);
 	DUMP_DPCD(DOWN_STREAM_STATUS_2);
 	DUMP_DPCD(HPD_DP_PWR_STATUS);
