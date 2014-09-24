@@ -21,11 +21,9 @@ static unsigned long arch_timer_read_counter_long(void)
 	return arch_timer_read_counter();
 }
 
-static u32 sched_clock_mult __read_mostly;
-
-static unsigned long long notrace arch_timer_sched_clock(void)
+static u32 arch_timer_read_counter_u32(void)
 {
-	return arch_timer_read_counter() * sched_clock_mult;
+	return arch_timer_read_counter();
 }
 
 static struct delay_timer arch_delay_timer;
@@ -47,11 +45,8 @@ int __init arch_timer_arch_init(void)
 
 	arch_timer_delay_timer_register();
 
-	/* Cache the sched_clock multiplier to save a divide in the hot path. */
-	sched_clock_mult = NSEC_PER_SEC / arch_timer_rate;
-	sched_clock_func = arch_timer_sched_clock;
-	pr_info("sched_clock: ARM arch timer >56 bits at %ukHz, resolution %uns\n",
-		arch_timer_rate / 1000, sched_clock_mult);
+	/* set the arch timer up as a 32 bit sched clock */
+	setup_sched_clock(arch_timer_read_counter_u32, 32, arch_timer_rate);
 
 	return 0;
 }

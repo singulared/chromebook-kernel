@@ -72,15 +72,6 @@
 		interrupts = <1 9 0xf04>;
 	};
 
-	timer {
-		compatible = "arm,cortex-a15-timer", "arm,armv7-timer";
-		interrupts = <1 13 0xff08>,
-			     <1 14 0xff08>,
-			     <1 11 0xff08>,
-			     <1 10 0xff08>;
-		clock-frequency = <24000000>;
-	};
-
 	mct@101C0000 {
 		compatible = "samsung,exynos4210-mct";
 		reg = <0x101C0000 0xb00>;

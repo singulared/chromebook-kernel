@@ -59,6 +59,7 @@ config CLKSRC_DBX500_PRCMU_SCHED_CLOCK
 
 config CLKSRC_EXYNOS_MCT
 	def_bool y if ARCH_EXYNOS
+	depends on !ARM64
 	select HAVE_SCHED_CLOCK
 	help
 	  Support for Multi Core Timer controller on Exynos SoCs.
