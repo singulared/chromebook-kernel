@@ -31,6 +31,7 @@
 #include "drm_dp_helper.h"
 #include "anx7808regs.h"
 #include "drm_atomic.h"
+#include "drm_edid.h"
 
 /*
  * _wait_for - magic (register) wait macro
@@ -1776,6 +1777,7 @@ int anx7808_get_modes(struct drm_connector *connector)
 	u8 *edid;
 	int ret, num_modes;
 	bool power_cycle;
+	uint8_t edidofs = 0;
 
 	anx7808 = container_of(connector, struct anx7808_data, connector);
 
@@ -1811,6 +1813,12 @@ int anx7808_get_modes(struct drm_connector *connector)
 		num_modes = 0;
 		goto out;
 	}
+
+	/* Command 4 used for reading EDID is more reliable but puts ANX in
+	 * a state where enabling HDCP fails. Write using command 0 to DDC to
+	 * fix the state of the chip after reading EDID.
+	 */
+	anx7808_aux_write(anx7808, DDC_ADDR, 0, 1, &edidofs);
 
 	drm_mode_connector_update_edid_property(connector, (struct edid *)edid);
 
