@@ -401,16 +401,10 @@ static struct drm_mode_object *_object_find(struct drm_device *dev,
 struct drm_mode_object *drm_mode_object_find(struct drm_device *dev,
 		uint32_t id, uint32_t type)
 {
-	struct drm_mode_object *obj = NULL;
-
 	/* Framebuffers are reference counted and need their own lookup
 	 * function.*/
 	WARN_ON(type == DRM_MODE_OBJECT_FB);
-	obj = _object_find(dev, id, type);
-	/* don't leak out unref'd fb's */
-	if (obj && (obj->type == DRM_MODE_OBJECT_FB))
-		obj = NULL;
-	return obj;
+	return _object_find(dev, id, type);
 }
 EXPORT_SYMBOL(drm_mode_object_find);
 
