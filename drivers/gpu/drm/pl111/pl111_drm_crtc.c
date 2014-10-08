@@ -325,19 +325,23 @@ void pl111_crtc_helper_commit(struct drm_crtc *crtc)
 }
 
 bool pl111_crtc_helper_mode_fixup(struct drm_crtc *crtc,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
+				const struct drm_display_mode *mode,
+#else
 				struct drm_display_mode *mode,
+#endif
 				struct drm_display_mode *adjusted_mode)
 {
 	DRM_DEBUG_KMS("DRM %s on crtc=%p\n", __func__, crtc);
 
 #ifdef CONFIG_ARCH_VEXPRESS
 	/*
-	 * 1024x768 with more than 16 bits per pixel does not work correctly
-	 * on Versatile Express
+	 * 1024x768 with more than 16 bits per pixel may not work 
+	 * correctly on Versatile Express due to bandwidth issues
 	 */
 	if (mode->hdisplay == 1024 && mode->vdisplay == 768 &&
 			crtc->fb->bits_per_pixel > 16) {
-		return false;
+		DRM_INFO("*WARNING* 1024x768 at > 16 bpp may suffer corruption\n");
 	}
 #endif
 
@@ -351,8 +355,7 @@ void pl111_crtc_helper_disable(struct drm_crtc *crtc)
 	DRM_DEBUG_KMS("DRM %s on crtc=%p\n", __func__, crtc);
 
 	/* don't disable crtc until no flips in flight as irq will be disabled */
-	ret = wait_event_interruptible(priv.wait_for_flips,
-			atomic_read(&priv.nr_flips_in_flight) == 0);
+	ret = wait_event_killable(priv.wait_for_flips, atomic_read(&priv.nr_flips_in_flight) == 0);
 	if(ret) {
 		pr_err("pl111_crtc_helper_disable failed\n");
 		return;

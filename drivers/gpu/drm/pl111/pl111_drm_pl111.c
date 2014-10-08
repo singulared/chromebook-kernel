@@ -208,7 +208,6 @@ show_framebuffer_on_crtc_cb_internal(struct pl111_drm_flip_resource *flip_res,
 		pl111_crtc->new_mode = NULL;
 	}
 
-	BUG_ON(pl111_crtc->new_mode);
 	BUG_ON(!pl111_crtc->current_mode);
 
 	/*

@@ -93,8 +93,8 @@ int kbase_platform_get_default_voltage(struct device *dev, int *vol);
 int kbase_platform_get_voltage(struct device *dev, int *vol);
 #if defined CONFIG_MALI_MIDGARD_DVFS
 static int kbase_platform_set_voltage(struct device *dev, int vol);
-static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq);
-static void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level);
+static void kbase_platform_dvfs_set_clock(struct kbase_device *kbdev, int freq);
+static void kbase_platform_dvfs_set_level(struct kbase_device *kbdev, int level);
 static int kbase_platform_dvfs_get_level(int freq);
 #endif
 
@@ -192,7 +192,7 @@ static struct mali_dvfs_info mali_dvfs_infotbl_exynos5422[MALI_DVFS_STEP] = {
 #endif
 };
 
-int kbase_platform_dvfs_init(kbase_device *kbdev);
+int kbase_platform_dvfs_init(struct kbase_device *kbdev);
 void kbase_platform_dvfs_term(void);
 int kbase_platform_dvfs_get_control_status(void);
 int kbase_platform_dvfs_get_utilisation(void);
@@ -317,7 +317,7 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control);
 void kbase_platform_remove_sysfs_file(struct device *dev);
 mali_error kbase_platform_init(struct kbase_device *kbdev);
 void kbase_platform_term(struct kbase_device *kbdev);
-static void kbase_platform_dvfs_set_max(kbase_device *kbdev);
+static void kbase_platform_dvfs_set_max(struct kbase_device *kbdev);
 
 #ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 static int kbase_platform_create_sysfs_file(struct device *dev);
@@ -359,7 +359,7 @@ int get_cpu_clock_speed(u32* cpu_clock)
 /**
  * Power Management callback - power ON
  */
-static int pm_callback_power_on(kbase_device *kbdev)
+static int pm_callback_power_on(struct kbase_device *kbdev)
 {
 #ifdef CONFIG_PM_RUNTIME
 	pm_runtime_resume(kbdev->dev);
@@ -370,7 +370,7 @@ static int pm_callback_power_on(kbase_device *kbdev)
 /**
  * Power Management callback - power OFF
  */
-static void pm_callback_power_off(kbase_device *kbdev)
+static void pm_callback_power_off(struct kbase_device *kbdev)
 {
 #ifdef CONFIG_PM_RUNTIME
 	pm_schedule_suspend(kbdev->dev, RUNTIME_PM_DELAY_TIME);
@@ -380,12 +380,12 @@ static void pm_callback_power_off(kbase_device *kbdev)
 /**
  * Power Management callback - suspend
  */
-static void pm_callback_suspend(kbase_device *kbdev)
+static void pm_callback_suspend(struct kbase_device *kbdev)
 {
 	kbase_platform_dvfs_set_max(kbdev);
 }
 
-static kbase_pm_callback_conf pm_callbacks =
+static struct kbase_pm_callback_conf pm_callbacks =
 {
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
@@ -396,7 +396,7 @@ static kbase_pm_callback_conf pm_callbacks =
 /**
  * Exynos5 hardware specific initialization
  */
-mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
+mali_bool kbase_platform_exynos5_init(struct kbase_device *kbdev)
 {
 	if(MALI_ERROR_NONE == kbase_platform_init(kbdev))
 	{
@@ -415,7 +415,7 @@ mali_bool kbase_platform_exynos5_init(kbase_device *kbdev)
 /**
  * Exynos5 hardware specific termination
  */
-void kbase_platform_exynos5_term(kbase_device *kbdev)
+void kbase_platform_exynos5_term(struct kbase_device *kbdev)
 {
 #ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	kbase_platform_remove_sysfs_file(kbdev->dev);
@@ -423,13 +423,13 @@ void kbase_platform_exynos5_term(kbase_device *kbdev)
 	kbase_platform_term(kbdev);
 }
 
-kbase_platform_funcs_conf platform_funcs =
+struct kbase_platform_funcs_conf platform_funcs =
 {
 	.platform_init_func = &kbase_platform_exynos5_init,
 	.platform_term_func = &kbase_platform_exynos5_term,
 };
 
-const kbase_attribute config_attributes_exynos5250[] = {
+const struct kbase_attribute config_attributes_exynos5250[] = {
 	{
 		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
 		(uintptr_t)&pm_callbacks
@@ -444,15 +444,6 @@ const kbase_attribute config_attributes_exynos5250[] = {
 		KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
 		(uintptr_t)&platform_funcs
 	},
-
-	{
-		KBASE_CONFIG_ATTR_GPU_FREQ_KHZ_MAX,
-		533000
-	},
-	{
-		KBASE_CONFIG_ATTR_GPU_FREQ_KHZ_MIN,
-		100000
-	},
 	{
 		KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS,
 		500 /* 500ms before cancelling stuck jobs */
@@ -467,7 +458,7 @@ const kbase_attribute config_attributes_exynos5250[] = {
 	}
 };
 
-const kbase_attribute config_attributes_exynos5420[] = {
+const struct kbase_attribute config_attributes_exynos5420[] = {
 	{
 		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
 		(uintptr_t)&pm_callbacks
@@ -482,15 +473,6 @@ const kbase_attribute config_attributes_exynos5420[] = {
 		KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
 		(uintptr_t)&platform_funcs
 	},
-
-	{
-		KBASE_CONFIG_ATTR_GPU_FREQ_KHZ_MAX,
-		533000
-	},
-	{
-		KBASE_CONFIG_ATTR_GPU_FREQ_KHZ_MIN,
-		100000
-	},
 	{
 		KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS,
 		500 /* 500ms before cancelling stuck jobs */
@@ -505,16 +487,15 @@ const kbase_attribute config_attributes_exynos5420[] = {
 	}
 };
 
-kbase_platform_config platform_config;
+struct kbase_platform_config platform_config;
 
-kbase_platform_config *kbase_get_platform_config(void)
+struct kbase_platform_config *kbase_get_platform_config(void)
 {
 	if (soc_is_exynos5250())
 		platform_config.attributes = config_attributes_exynos5250;
 	else if (soc_is_exynos542x())
 		platform_config.attributes = config_attributes_exynos5420;
 
-	platform_config.midgard_type = KBASE_MALI_T604;
 	return &platform_config;
 }
 
@@ -523,7 +504,7 @@ static struct clk *clk_g3d = NULL;
 /**
  * Initialize GPU clocks
  */
-static int kbase_platform_power_clock_init(kbase_device *kbdev)
+static int kbase_platform_power_clock_init(struct kbase_device *kbdev)
 {
 	struct device *dev =  kbdev->dev;
 	int timeout;
@@ -1222,7 +1203,7 @@ void kbase_platform_remove_sysfs_file(struct device *dev)
 }
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
-mali_error kbase_platform_init(kbase_device *kbdev)
+mali_error kbase_platform_init(struct kbase_device *kbdev)
 {
 	struct exynos_context *platform;
 
@@ -1277,7 +1258,7 @@ clock_init_fail:
 	return MALI_ERROR_FUNCTION_FAILED;
 }
 
-void kbase_platform_term(kbase_device *kbdev)
+void kbase_platform_term(struct kbase_device *kbdev)
 {
 	struct exynos_context *platform;
 
@@ -1335,7 +1316,7 @@ enum asv_update_val {
 #endif /* MALI_DVFS_ASV_ENABLE */
 
 struct mali_dvfs_status {
-	kbase_device *kbdev;
+	struct kbase_device *kbdev;
 	int step;
 	int utilisation;
 	uint nsamples;
@@ -1478,7 +1459,7 @@ int kbase_platform_dvfs_get_control_status(void)
 }
 
 
-static void mali_dvfs_infotbl_init_exynos542x(kbase_device *kbdev)
+static void mali_dvfs_infotbl_init_exynos542x(struct kbase_device *kbdev)
 {
 	int i;
 
@@ -1500,7 +1481,7 @@ static void mali_dvfs_infotbl_init_exynos542x(kbase_device *kbdev)
 	}
 }
 
-int kbase_platform_dvfs_init(kbase_device *kbdev)
+int kbase_platform_dvfs_init(struct kbase_device *kbdev)
 {
 	unsigned long irqflags;
 
@@ -1551,7 +1532,8 @@ void kbase_platform_dvfs_term(void)
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 
-int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
+int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
+		u32 util_gl_share, u32 util_cl_share[2])
 {
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 	unsigned long irqflags;
@@ -1678,7 +1660,7 @@ static int kbase_platform_set_voltage(struct device *dev, int vol)
 	return 0;
 }
 
-static void kbase_platform_dvfs_set_clock(kbase_device *kbdev, int freq)
+static void kbase_platform_dvfs_set_clock(struct kbase_device *kbdev, int freq)
 {
 	static struct clk * mout_gpll = NULL;
 	static struct clk * fin_gpll = NULL;
@@ -1774,7 +1756,7 @@ static int kbase_platform_dvfs_get_level(int freq)
 	return -ENOENT;
 }
 
-static void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
+static void kbase_platform_dvfs_set_level(struct kbase_device *kbdev, int level)
 {
 	static int level_prev = -1;
 
@@ -1795,7 +1777,7 @@ static void kbase_platform_dvfs_set_level(kbase_device *kbdev, int level)
 	level_prev = level;
 }
 
-static void kbase_platform_dvfs_set_max(kbase_device *kbdev)
+static void kbase_platform_dvfs_set_max(struct kbase_device *kbdev)
 {
 	int i, level;
 
@@ -2108,10 +2090,10 @@ struct mali_hwcounter_state {
 	struct workqueue_struct *wq;		/* collection context */
 	struct kbase_context *ctx;		/* kbase device context */
 	void *buf;				/* counter data buffer */
-	kbase_uk_hwcnt_setup setup;		/* hwcounter setup block */
+	struct kbase_uk_hwcnt_setup setup;		/* hwcounter setup block */
 	bool active;				/* collecting data */
 	u32 last_read[MALI_HWC_TOTAL];		/* last counter value read */
-	kbase_hwc_dma_mapping handle;		/* counter data buffer handle */
+	struct kbase_hwc_dma_mapping handle;		/* counter data buffer handle */
 };
 static struct mali_hwcounter_state mali_hwcs;
 static struct mutex mali_hwcounter_mutex;

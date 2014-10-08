@@ -393,7 +393,7 @@ static void __kds_resource_set_release_common(struct kds_resource_set *rset)
 		/* were we the head of the list? (head if prev is a resource) */
 		if (it->parent != KDS_RESOURCE)
 		{
-			if ((it->state & KDS_LINK_TRIGGERED) && !(it->state & KDS_LINK_EXCLUSIVE) )
+			if ((it->state & KDS_LINK_TRIGGERED) && !(it->state & KDS_LINK_EXCLUSIVE))
 			{
 				/*
 				 * previous was triggered and not exclusive, so we
@@ -411,7 +411,7 @@ static void __kds_resource_set_release_common(struct kds_resource_set *rset)
 
 					it->state |= KDS_LINK_TRIGGERED;
 					/* a parent to update? */
-					if ( it->parent != KDS_RESOURCE )
+					if (it->parent != KDS_RESOURCE)
 					{
 						if (0 == --it->parent->pending)
 						{
@@ -479,7 +479,7 @@ void kds_resource_set_release(struct kds_resource_set **pprset)
 {
 	struct kds_resource_set *rset;
 
-	rset = cmpxchg(pprset,*pprset,NULL);
+	rset = cmpxchg(pprset, *pprset, NULL);
 
 	if (!rset)
 	{
@@ -505,7 +505,7 @@ void kds_resource_set_release_sync(struct kds_resource_set **pprset)
 {
 	struct kds_resource_set *rset;
 
-	rset = cmpxchg(pprset,*pprset,NULL);
+	rset = cmpxchg(pprset, *pprset, NULL);
 	if (!rset)
 	{
 		/* caught a race between a cancelation
