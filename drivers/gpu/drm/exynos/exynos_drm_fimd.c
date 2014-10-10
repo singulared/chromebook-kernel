@@ -25,6 +25,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/exynos_drm.h>
+#include <drm/drm_atomic.h>
 
 #include "exynos_dp_core.h"
 #include "exynos_drm_cursor.h"
@@ -464,10 +465,12 @@ int fimd_plane_helper_update_plane(struct drm_plane *plane,
 		crtc_w, crtc_h, src_x, src_y, src_w, src_h);
 }
 
+
 static const struct drm_plane_funcs fimd_plane_funcs = {
 	.update_plane = fimd_plane_helper_update_plane,
 	.disable_plane = exynos_plane_helper_disable_plane,
 	.destroy = drm_plane_cleanup,
+	.set_property = drm_atomic_plane_set_property,
 };
 
 static u32 fimd_calc_clkdiv(struct fimd_context *ctx,
@@ -1015,6 +1018,7 @@ static const struct drm_crtc_funcs fimd_crtc_funcs = {
 	.destroy	= fimd_crtc_destroy,
 	.cursor_set	= fimd_crtc_cursor_set,
 	.cursor_move	= fimd_crtc_cursor_move,
+	.set_property   = drm_atomic_crtc_set_property,
 };
 
 int fimd_get_crtc_id(struct drm_device *dev)

@@ -34,6 +34,7 @@
 #include <linux/regulator/consumer.h>
 
 #include <drm/exynos_drm.h>
+#include <drm/drm_atomic.h>
 
 #include "exynos_drm_cursor.h"
 #include "exynos_drm_drv.h"
@@ -1041,10 +1042,12 @@ static const struct exynos_plane_helper_funcs mixer_plane_helper_funcs = {
 	.disable_plane = mixer_plane_helper_disable,
 };
 
+
 static const struct drm_plane_funcs mixer_plane_funcs = {
 	.update_plane = mixer_plane_update_plane,
 	.disable_plane = exynos_plane_helper_disable_plane,
 	.destroy = drm_plane_cleanup,
+	.set_property = drm_atomic_plane_set_property,
 };
 
 static void mixer_disable_planes(struct mixer_context *ctx)
@@ -1410,6 +1413,7 @@ static const struct drm_crtc_funcs mixer_crtc_funcs = {
 	.destroy	= mixer_crtc_destroy,
 	.cursor_set	= mixer_crtc_cursor_set,
 	.cursor_move	= mixer_crtc_cursor_move,
+	.set_property   = drm_atomic_crtc_set_property,
 };
 
 struct drm_crtc *mixer_get_crtc_from_dev(struct drm_device *dev)
