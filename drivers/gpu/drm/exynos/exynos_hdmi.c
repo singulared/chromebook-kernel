@@ -2975,6 +2975,10 @@ static int hdmi_subdrv_probe(struct drm_device *dev,
 		return ret;
 	}
 
+	drm_object_attach_property(&encoder->base,
+			hdata->drm_dev->mode_config.content_protection_property,
+			DRM_MODE_CONTENT_PROTECTION_OFF);
+
 	drm_encoder_helper_add(encoder, &hdmi_encoder_helper_funcs);
 
 	/* Only initialize the connector if there's no bridge downstream */
