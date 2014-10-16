@@ -28,7 +28,6 @@
 #include <linux/dma-attrs.h>
 #include <linux/dma-mapping.h>
 #endif
-#include <asm/cacheflush.h>
 
 struct dma_buf_te_alloc {
 	/* the real alloc */
@@ -142,16 +141,6 @@ static void dma_buf_te_unmap(struct dma_buf_attachment *attachment,
 	sg_free_table(sg);
 	kfree(sg);
 
-#ifdef CONFIG_ARM64
-	/* TODO (MID64-78): The latest version of the Linux kernel (3.11 as of
-	 * this writing) assumes full hardware cache coherency on ARM64 and thus
-	 * won't explicitly flush any CPU caches as part of DMA unmap. Our test
-	 * platform, however, is not cache coherent. We call flush_cache_all() as a
-	 * workaround until non-coherent DMA is supported in the ARM64 kernel.
-	 */
-	flush_cache_all();
-#endif
-
 	mutex_lock(&attachment->dmabuf->lock);
 	alloc->nr_device_mappings--;
 	mutex_unlock(&attachment->dmabuf->lock);
@@ -256,7 +245,6 @@ static int dma_buf_te_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 #endif
 	vma->vm_ops = &dma_buf_te_vm_ops;
 	vma->vm_private_data = dmabuf;
-	vma->vm_page_prot =  pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 
 	/*  we fault in the pages on access */
 
@@ -373,19 +361,11 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 		}
 	} else {
 		for (i = 0; i < alloc->nr_pages; i++) {
-#ifdef CONFIG_OUTER_CACHE
-			unsigned long pfn;
-#endif
 			alloc->pages[i] = alloc_page(GFP_KERNEL);
 			if (NULL == alloc->pages[i]) {
 				dev_err(te_device.this_device, "%s: couldn't alloc page", __func__);
 				goto no_page;
 			}
-			flush_dcache_page(alloc->pages[i]);
-#ifdef CONFIG_OUTER_CACHE
-			pfn = page_to_pfn(alloc->pages[i]);
-			outer_flush_range(pfn << PAGE_SHIFT, (pfn + 1) << PAGE_SHIFT);
-#endif
 		}
 	}
 
