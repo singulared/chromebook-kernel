@@ -1,16 +1,6 @@
 menu "Android"
 
-config ANDROID
-	bool "Android Drivers"
-	default N
-	---help---
-	  Enable support for various drivers needed on the Android platform
-
 if ANDROID
-
-config ANDROID_BINDER_IPC
-	bool "Android Binder IPC Driver"
-	default n
 
 config ASHMEM
 	bool "Enable the Anonymous Shared Memory Subsystem"
