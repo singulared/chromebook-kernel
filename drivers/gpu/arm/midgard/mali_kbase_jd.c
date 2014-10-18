@@ -727,8 +727,8 @@ STATIC INLINE void jd_resolve_dep(struct list_head *out_list, kbase_jd_atom *kat
 		} else if (!dep_atom->dep_atom[other_d]) {
 #if defined(CONFIG_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 			if (dep_atom->dep_satisfied)
-				list_add_tail(&dep_atom->dep_item[0], out_list);
 #endif				/* CONFIG_KDS or CONFIG_DRM_DMA_SYNC */
+				list_add_tail(&dep_atom->dep_item[0], out_list);
 		}
 	}
 }
