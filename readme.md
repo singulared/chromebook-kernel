@@ -2,8 +2,8 @@
 This is fork of [Google Chromeos kernel](https://chromium.googlesource.com/chromiumos/third_party/kernel/) with some small patches like as enabled swap partition. In chromeos's kernel this function was disabled.
 
 ###Branches:
- * chromeos-3.8 - Google chromeos main branch
- * chromeos-3.8-mali - Google chromeos-3.8 branch with latest mali patches for [mali-t6xx-gpu userspace blobs](http://malideveloper.arm.com/develop-for-mali/features/mali-t6xx-gpu-user-space-drivers/). 
+ * [chromeos-3.8](https://github.com/singulared/chromebook-kernel/tree/chromeos-3.8-mali) - Google chromeos main branch
+ * [chromeos-3.8-mali](https://github.com/singulared/chromebook-kernel/tree/chromeos-3.8-mali) - Google chromeos-3.8 branch with latest mali patches for [mali-t6xx-gpu userspace blobs](http://malideveloper.arm.com/develop-for-mali/features/mali-t6xx-gpu-user-space-drivers/). 
 
 ###Building signed chromeos image:
     make -j2 zImage dtbs modules
