@@ -456,6 +456,10 @@ struct mxt_data {
 
 	bool lid_handler_registered;
 	struct input_handler lid_handler;
+
+	/* Orientation of the touchscreen */
+	bool orientation_invert_x;
+	bool orientation_invert_y;
 };
 
 /* global root node of the atmel_mxt_ts debugfs directory. */
@@ -467,6 +471,7 @@ static void mxt_free_object_table(struct mxt_data *data);
 static int mxt_initialize(struct mxt_data *data);
 static int mxt_input_dev_create(struct mxt_data *data);
 static int get_touch_major_pixels(struct mxt_data *data, int touch_channels);
+static int get_touch_angle(struct mxt_data *data, int vector1, int vector2);
 
 static void lid_event_register_handler(struct mxt_data *data);
 static void lid_event_unregister_handler(struct mxt_data *data);
@@ -979,6 +984,7 @@ static void mxt_input_touchevent(struct mxt_data *data, u8 *message, int id)
 	int pressure;
 	int touch_major;
 	int vector1, vector2;
+	int touch_angle;
 
 	x = (payload[1] << 4) | ((payload[3] >> 4) & 0xf);
 	y = (payload[2] << 4) | ((payload[3] & 0xf));
@@ -994,6 +1000,9 @@ static void mxt_input_touchevent(struct mxt_data *data, u8 *message, int id)
 	/* The two vector components are 4-bit signed ints (2s complement) */
 	vector1 = (signed)((signed char)payload[6]) >> 4;
 	vector2 = (signed)((signed char)(payload[6] << 4)) >> 4;
+
+	touch_angle = get_touch_angle(data, vector1, vector2);
+
 
 	dev_dbg(dev,
 		"[%u] %c%c%c%c%c%c%c%c x: %5u y: %5u area: %3u amp: %3u vector: [%d,%d]\n",
@@ -1018,10 +1027,45 @@ static void mxt_input_touchevent(struct mxt_data *data, u8 *message, int id)
 		input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
 		input_report_abs(input_dev, ABS_MT_PRESSURE, pressure);
 		input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, touch_major);
-		/* TODO: Use vector to report ORIENTATION & TOUCH_MINOR */
+		input_report_abs(input_dev, ABS_MT_ORIENTATION, touch_angle);
 	}
 }
 
+/*
+ * The direction of the touch is an integer number in [-3,+4]
+ * which is computed based on vector1 and vector2.
+ * Vector1<0 indicates that the touch angle is in the range (0,90)
+ * or (180,270) degree.
+ * Vector1=0 if the touch angle is equal to 0, 90, 180, or 270 degree.
+ * Vector1>0 indicates that the touch angle is in the range (90,180)
+ * or (270,390) degree.
+ * Vector2>0 indicates that the touch angle is in the range (45,135)
+ * or (225,315) degree.
+ * Vector2=0 if the touch angle is equal to 45, 135, 225, or 315 degree.
+ * Vector2<0 indicates that the touch angle is in the range (0,45),
+ * (135,225), or (315,360).
+ */
+static int get_touch_angle(struct mxt_data *data, int vector1, int vector2)
+{
+	int direction_table[3][3] = {
+		{3, 2, 1},
+		{4, -4, 0},
+		{-3, -2, -1}
+	};
+
+	int index_1 = (vector1 <= 0) ? (vector1 == 0 ? 1 : 0) : 2;
+	int index_2 = (vector2 <= 0) ? (vector2 == 0 ? 1 : 0) : 2;
+	int touch_angle = direction_table[index_1][index_2];
+
+	if (touch_angle != 4 && data->orientation_invert_x)
+		touch_angle = -touch_angle;
+	if (touch_angle != 4 && data->orientation_invert_y)
+		touch_angle = -touch_angle;
+	if (touch_angle == -4)
+		dev_err(&data->client->dev, "Undefined touch angle");
+	return touch_angle;
+
+}
 static void mxt_input_touchevent_T100(struct mxt_data *data, u8 *message)
 {
 	struct device *dev = &data->client->dev;
@@ -1827,6 +1871,18 @@ static int mxt_calc_resolution_T9(struct mxt_data *data)
 
 	data->max_area_pixels = max_x * max_y;
 	data->max_area_channels = xylines[0] * xylines[1];
+
+	/*
+	 * Store the orientation data.
+	 * It is used for the detection of the Angles
+	 */
+	data->orientation_invert_x =
+		data->orientation_invert_y = false;
+
+	if (orient & MXT_X_INVERT)
+		data->orientation_invert_x = true;
+	if (orient & MXT_Y_INVERT)
+		data->orientation_invert_y = true;
 
 	dev_info(&client->dev,
 		 "T9 Config: XSIZE %u, YSIZE %u, XLINE %u, YLINE %u",
@@ -3117,7 +3173,6 @@ static int mxt_input_dev_create(struct mxt_data *data)
 			     0, 255, 0, 0);
 	input_abs_set_res(input_dev, ABS_X, MXT_PIXELS_PER_MM);
 	input_abs_set_res(input_dev, ABS_Y, MXT_PIXELS_PER_MM);
-
 	/* For multi touch */
 	error = input_mt_init_slots(input_dev, data->num_touchids, 0);
 	if (error)
@@ -3133,6 +3188,8 @@ static int mxt_input_dev_create(struct mxt_data *data)
 			     0, data->max_y, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_PRESSURE,
 			     0, 255, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_ORIENTATION,
+			     -3, 4, 0, 0);
 	input_abs_set_res(input_dev, ABS_MT_POSITION_X, MXT_PIXELS_PER_MM);
 	input_abs_set_res(input_dev, ABS_MT_POSITION_Y, MXT_PIXELS_PER_MM);
 
