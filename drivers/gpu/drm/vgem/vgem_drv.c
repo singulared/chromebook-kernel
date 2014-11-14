@@ -92,6 +92,11 @@ static void vgem_gem_free_object(struct drm_gem_object *obj)
 	if (obj->map_list.map)
 		drm_gem_free_mmap_offset(obj);
 
+	if (obj->import_attach) {
+		drm_prime_gem_destroy(obj, vgem_obj->sg);
+		vgem_obj->pages = NULL;
+	}
+
 	drm_gem_object_release(obj);
 
 	if (vgem_obj->pages)

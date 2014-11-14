@@ -95,7 +95,7 @@ struct dma_buf *vgem_gem_prime_export(struct drm_device *dev,
 				      struct drm_gem_object *obj,
 				      int flags)
 {
-	return dma_buf_export(obj, &vgem_dmabuf_ops,
+	return dma_buf_export(to_vgem_bo(obj), &vgem_dmabuf_ops,
 			      obj->size,
 			      VGEM_FD_PERMS,
 			      NULL);
@@ -129,6 +129,9 @@ struct drm_gem_object *vgem_gem_prime_import(struct drm_device *dev,
 		ret = -ENOMEM;
 		goto fail_unmap;
 	}
+
+	obj->base.import_attach = attach;
+	obj->sg = sg;
 
 	/* As a result of this mmap will not work -yet- */
 	ret = drm_gem_object_init(dev, &obj->base, dma_buf->size);
