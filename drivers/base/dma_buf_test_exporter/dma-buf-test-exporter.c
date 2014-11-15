@@ -28,10 +28,8 @@
 #include <linux/dma-attrs.h>
 #include <linux/dma-mapping.h>
 #endif
-#include <asm/cacheflush.h>
 
-struct dma_buf_te_alloc
-{
+struct dma_buf_te_alloc {
 	/* the real alloc */
 	int nr_pages;
 	struct page **pages;
@@ -45,7 +43,7 @@ struct dma_buf_te_alloc
 	int fail_attach;
 	int fail_map;
 	int fail_mmap;
-	
+
 	bool contiguous;
 	dma_addr_t contig_dma_addr;
 	void *contig_cpu_addr;
@@ -71,7 +69,7 @@ static void dma_buf_te_detach(struct dma_buf *buf, struct dma_buf_attachment *at
 	struct dma_buf_te_alloc *alloc;
 	alloc = buf->priv;
 	/* dma_buf is externally locked during call */
-	
+
 	alloc->nr_attached_devices--;
 }
 
@@ -94,7 +92,7 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 		return ERR_PTR(-EINVAL);
 #endif
 
-	sg = (struct sg_table*)kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	sg = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (!sg)
 		return ERR_PTR(-ENOMEM);
 
@@ -113,12 +111,11 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 
 	if (alloc->contiguous) {
 		sg_dma_len(sg->sgl) = alloc->nr_pages * PAGE_SIZE;
-		sg_set_page(sg->sgl, pfn_to_page(PFN_DOWN(alloc->contig_dma_addr)),
-		            alloc->nr_pages * PAGE_SIZE, 0);
+		sg_set_page(sg->sgl, pfn_to_page(PFN_DOWN(alloc->contig_dma_addr)), alloc->nr_pages * PAGE_SIZE, 0);
 		sg_dma_address(sg->sgl) = alloc->contig_dma_addr;
 	} else {
 		for_each_sg(sg->sgl, iter, alloc->nr_pages, i)
-		            sg_set_page(iter, alloc->pages[i], PAGE_SIZE, 0);
+			sg_set_page(iter, alloc->pages[i], PAGE_SIZE, 0);
 	}
 
 	if (!dma_map_sg(attachment->dev, sg->sgl, sg->nents, direction)) {
@@ -134,7 +131,7 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 }
 
 static void dma_buf_te_unmap(struct dma_buf_attachment *attachment,
-                             struct sg_table *sg, enum dma_data_direction direction)
+							 struct sg_table *sg, enum dma_data_direction direction)
 {
 	struct dma_buf_te_alloc *alloc;
 
@@ -143,16 +140,6 @@ static void dma_buf_te_unmap(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, sg->sgl, sg->nents, direction);
 	sg_free_table(sg);
 	kfree(sg);
-
-#ifdef CONFIG_ARM64
-	/* TODO (MID64-78): The latest version of the Linux kernel (3.11 as of
-	 * this writing) assumes full hardware cache coherency on ARM64 and thus
-	 * won't explicitly flush any CPU caches as part of DMA unmap. Our test
-	 * platform, however, is not cache coherent. We call flush_cache_all() as a
-	 * workaround until non-coherent DMA is supported in the ARM64 kernel.
-	 */
-	flush_cache_all();
-#endif
 
 	mutex_lock(&attachment->dmabuf->lock);
 	alloc->nr_device_mappings--;
@@ -174,17 +161,16 @@ static void dma_buf_te_release(struct dma_buf *buf)
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
 		dma_free_attrs(te_device.this_device,
-		               alloc->nr_pages * PAGE_SIZE,
-		               alloc->contig_cpu_addr, alloc->contig_dma_addr, &attrs);
+						alloc->nr_pages * PAGE_SIZE,
+						alloc->contig_cpu_addr, alloc->contig_dma_addr, &attrs);
 #else
 		dma_free_writecombine(te_device.this_device,
-		                      alloc->nr_pages * PAGE_SIZE,
-		                      alloc->contig_cpu_addr, alloc->contig_dma_addr);
+								alloc->nr_pages * PAGE_SIZE,
+								alloc->contig_cpu_addr, alloc->contig_dma_addr);
 #endif
 	} else {
-		for (i = 0; i < alloc->nr_pages; i++) {
+		for (i = 0; i < alloc->nr_pages; i++)
 			__free_page(alloc->pages[i]);
-		}
 	}
 	kfree(alloc->pages);
 	kfree(alloc);
@@ -238,8 +224,7 @@ static int dma_buf_te_mmap_fault(struct vm_area_struct *vma, struct vm_fault *vm
 	return 0;
 }
 
-struct vm_operations_struct dma_buf_te_vm_ops =
-{
+struct vm_operations_struct dma_buf_te_vm_ops = {
 	.open = dma_buf_te_mmap_open,
 	.close = dma_buf_te_mmap_close,
 	.fault = dma_buf_te_mmap_fault
@@ -253,14 +238,13 @@ static int dma_buf_te_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 	if (alloc->fail_mmap)
 		return -ENOMEM;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0))
 	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
 #else
 	vma->vm_flags |= VM_RESERVED | VM_IO | VM_DONTEXPAND;
 #endif
 	vma->vm_ops = &dma_buf_te_vm_ops;
 	vma->vm_private_data = dmabuf;
-	vma->vm_page_prot =  pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 
 	/*  we fault in the pages on access */
 
@@ -282,8 +266,7 @@ static void *dma_buf_te_kmap(struct dma_buf *buf, unsigned long page_num)
 	return NULL;
 }
 
-static struct dma_buf_ops dma_buf_te_ops =
-{
+static struct dma_buf_ops dma_buf_te_ops = {
 	/* real handlers */
 	.attach = dma_buf_te_attach,
 	.detach = dma_buf_te_detach,
@@ -326,32 +309,29 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 	int fd;
 
 	if (copy_from_user(&alloc_req, buf, sizeof(alloc_req))) {
-		dev_err(te_device.this_device, "%s: couldn't get user data",
-		        __func__);
+		dev_err(te_device.this_device, "%s: couldn't get user data", __func__);
 		goto no_input;
 	}
 
 	if (!alloc_req.size) {
-		dev_err(te_device.this_device,"%s: no size specified",
-		        __func__);
+		dev_err(te_device.this_device, "%s: no size specified", __func__);
 		goto zero_size;
 	}
 
-	alloc = (struct dma_buf_te_alloc*)kzalloc(sizeof(struct dma_buf_te_alloc), GFP_KERNEL);
+	alloc = kzalloc(sizeof(struct dma_buf_te_alloc), GFP_KERNEL);
 	if (NULL == alloc) {
-		dev_err(te_device.this_device, "%s: couldn't alloc object",
-		        __func__);
+		dev_err(te_device.this_device, "%s: couldn't alloc object", __func__);
 		goto no_alloc_object;
 	}
 
 	alloc->nr_pages = alloc_req.size;
 	alloc->contiguous = contiguous;
 
-	alloc->pages = (struct page**)kzalloc(sizeof(struct page*) * alloc->nr_pages, GFP_KERNEL);
+	alloc->pages = kzalloc(sizeof(struct page *) * alloc->nr_pages, GFP_KERNEL);
 	if (!alloc->pages) {
 		dev_err(te_device.this_device,
-		        "%s: couldn't alloc %d page structures", __func__,
-		         alloc->nr_pages);
+				"%s: couldn't alloc %d page structures", __func__,
+				alloc->nr_pages);
 		goto free_alloc_object;
 	}
 
@@ -363,17 +343,15 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
 		alloc->contig_cpu_addr = dma_alloc_attrs(te_device.this_device,
-		                                         alloc->nr_pages * PAGE_SIZE,
-		                                         &alloc->contig_dma_addr, GFP_KERNEL, &attrs);
+												alloc->nr_pages * PAGE_SIZE,
+												&alloc->contig_dma_addr, GFP_KERNEL, &attrs);
 #else
 		alloc->contig_cpu_addr = dma_alloc_writecombine(te_device.this_device,
-		                alloc->nr_pages * PAGE_SIZE,
-		                &alloc->contig_dma_addr, GFP_KERNEL);
+														alloc->nr_pages * PAGE_SIZE,
+														&alloc->contig_dma_addr, GFP_KERNEL);
 #endif
 		if (!alloc->contig_cpu_addr) {
-			dev_err(te_device.this_device,
-			        "%s: couldn't alloc contiguous buffer %d pages",
-			        __func__, alloc->nr_pages);
+			dev_err(te_device.this_device, "%s: couldn't alloc contiguous buffer %d pages", __func__, alloc->nr_pages);
 			goto free_page_struct;
 		}
 		dma_aux = alloc->contig_dma_addr;
@@ -383,20 +361,11 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 		}
 	} else {
 		for (i = 0; i < alloc->nr_pages; i++) {
-#ifdef CONFIG_OUTER_CACHE
-			unsigned long pfn;
-#endif
 			alloc->pages[i] = alloc_page(GFP_KERNEL);
 			if (NULL == alloc->pages[i]) {
-				dev_err(te_device.this_device,
-				        "%s: couldn't alloc page", __func__);
+				dev_err(te_device.this_device, "%s: couldn't alloc page", __func__);
 				goto no_page;
 			}
-			flush_dcache_page(alloc->pages[i]);
-#ifdef CONFIG_OUTER_CACHE
-			pfn = page_to_pfn(alloc->pages[i]);
-			outer_flush_range(pfn << PAGE_SHIFT, (pfn + 1) << PAGE_SHIFT);
-#endif
 		}
 	}
 
@@ -404,8 +373,7 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 	dma_buf = dma_buf_export(alloc, &dma_buf_te_ops, alloc->nr_pages << PAGE_SHIFT, O_CLOEXEC|O_RDWR);
 
 	if (IS_ERR_OR_NULL(dma_buf)) {
-		dev_err(te_device.this_device, "%s: couldn't export dma_buf",
-		        __func__);
+		dev_err(te_device.this_device, "%s: couldn't export dma_buf", __func__);
 		goto no_export;
 	}
 
@@ -413,8 +381,7 @@ static int do_dma_buf_te_ioctl_alloc(struct dma_buf_te_ioctl_alloc __user *buf, 
 	fd = dma_buf_fd(dma_buf, O_CLOEXEC);
 
 	if (fd < 0) {
-		dev_err(te_device.this_device,
-		        "%s: couldn't get fd from dma_buf", __func__);
+		dev_err(te_device.this_device, "%s: couldn't get fd from dma_buf", __func__);
 		goto no_fd;
 	}
 
@@ -431,12 +398,12 @@ no_page:
 
 		dma_set_attr(DMA_ATTR_WRITE_COMBINE, &attrs);
 		dma_free_attrs(te_device.this_device,
-                alloc->nr_pages * PAGE_SIZE,
-                alloc->contig_cpu_addr, alloc->contig_dma_addr, &attrs);
+						alloc->nr_pages * PAGE_SIZE,
+						alloc->contig_cpu_addr, alloc->contig_dma_addr, &attrs);
 #else
 		dma_free_writecombine(te_device.this_device,
-		                      alloc->nr_pages * PAGE_SIZE,
-		                      alloc->contig_cpu_addr, alloc->contig_dma_addr);
+								alloc->nr_pages * PAGE_SIZE,
+								alloc->contig_cpu_addr, alloc->contig_dma_addr);
 #endif
 	} else {
 		while (i-- > 0)
@@ -495,7 +462,7 @@ static int do_dma_buf_te_ioctl_set_failing(struct dma_buf_te_ioctl_set_failing _
 {
 	struct dma_buf *dmabuf;
 	struct dma_buf_te_ioctl_set_failing f;
-	struct dma_buf_te_alloc * alloc;
+	struct dma_buf_te_alloc *alloc;
 	int res = -EINVAL;
 
 	if (copy_from_user(&f, arg, sizeof(f)))
@@ -526,9 +493,9 @@ err_have_dmabuf:
 	return res;
 }
 
-static u32 dma_te_buf_fill(struct dma_buf *dma_buf, unsigned int value) 
+static u32 dma_te_buf_fill(struct dma_buf *dma_buf, unsigned int value)
 {
-	struct dma_buf_attachment * attachment;
+	struct dma_buf_attachment *attachment;
 	struct sg_table *sgt;
 	struct scatterlist *sg;
 	unsigned int count;
@@ -537,9 +504,8 @@ static u32 dma_te_buf_fill(struct dma_buf *dma_buf, unsigned int value)
 	int i;
 
 	attachment = dma_buf_attach(dma_buf, te_device.this_device);
-	if (IS_ERR_OR_NULL(attachment)) {
+	if (IS_ERR_OR_NULL(attachment))
 		return -EBUSY;
-	}
 
 	sgt = dma_buf_map_attachment(attachment, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(sgt)) {
@@ -552,7 +518,15 @@ static u32 dma_te_buf_fill(struct dma_buf *dma_buf, unsigned int value)
 		if (ret)
 			goto no_cpu_access;
 		for (i = 0; i < sg_dma_len(sg); i = i + PAGE_SIZE) {
-			void *addr = dma_buf_kmap(dma_buf, i >> PAGE_SHIFT);
+			void *addr;
+
+			addr = dma_buf_kmap(dma_buf, i >> PAGE_SHIFT);
+			if (!addr) {
+				/* dma_buf_kmap is unimplemented in exynos and returns NULL */
+				dma_buf_end_cpu_access(dma_buf, offset, sg_dma_len(sg), DMA_BIDIRECTIONAL);
+				ret = -EPERM;
+				goto no_cpu_access;
+			}
 			memset(addr, value, PAGE_SIZE);
 			dma_buf_kunmap(dma_buf, i >> PAGE_SHIFT, addr);
 		}
@@ -567,7 +541,8 @@ no_import:
 	return ret;
 }
 
-static int do_dma_buf_te_ioctl_fill(struct dma_buf_te_ioctl_fill __user *arg){
+static int do_dma_buf_te_ioctl_fill(struct dma_buf_te_ioctl_fill __user *arg)
+{
 
 	struct dma_buf *dmabuf;
 	struct dma_buf_te_ioctl_fill f;
@@ -577,9 +552,8 @@ static int do_dma_buf_te_ioctl_fill(struct dma_buf_te_ioctl_fill __user *arg){
 		return -EFAULT;
 
 	dmabuf = dma_buf_get(f.fd);
-	if (IS_ERR_OR_NULL(dmabuf)) {
+	if (IS_ERR_OR_NULL(dmabuf))
 		return -EINVAL;
-	}
 
 	ret = dma_te_buf_fill(dmabuf, f.value);
 	dma_buf_put(dmabuf);
@@ -607,8 +581,7 @@ static long dma_buf_te_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	}
 }
 
-static struct file_operations dma_buf_te_fops =
-{
+static const struct file_operations dma_buf_te_fops = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = dma_buf_te_ioctl,
 	.compat_ioctl = dma_buf_te_ioctl,
@@ -623,7 +596,7 @@ static int __init dma_buf_te_init(void)
 
 	res = misc_register(&te_device);
 	if (res) {
-		printk("Misc device registration failed of 'dma_buf_te'\n");
+		printk(KERN_WARNING"Misc device registration failed of 'dma_buf_te'\n");
 		return res;
 	}
 	te_device.this_device->coherent_dma_mask = DMA_BIT_MASK(32);

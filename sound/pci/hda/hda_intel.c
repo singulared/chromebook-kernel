@@ -2876,10 +2876,14 @@ static int azx_suspend(struct device *dev)
 {
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 	struct azx_pcm *p;
 
-	if (chip->disabled)
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
+	if (chip->disabled || chip->init_failed || !chip->running)
 		return 0;
 
 	snd_power_change_state(card, SNDRV_CTL_POWER_D3hot);
@@ -2906,9 +2910,13 @@ static int azx_resume(struct device *dev)
 {
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 
-	if (chip->disabled)
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
+	if (chip->disabled || chip->init_failed || !chip->running)
 		return 0;
 
 	pci_set_power_state(pci, PCI_D0);
@@ -2939,7 +2947,14 @@ static int azx_resume(struct device *dev)
 static int azx_runtime_suspend(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
+
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
+	if (chip->disabled || chip->init_failed || !chip->running)
+		return 0;
 
 	/* enable controller wake up event */
 	azx_writew(chip, WAKEEN, azx_readw(chip, WAKEEN) |
@@ -2954,10 +2969,17 @@ static int azx_runtime_suspend(struct device *dev)
 static int azx_runtime_resume(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
 	struct hda_bus *bus;
 	struct hda_codec *codec;
 	int status;
+
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
+	if (chip->disabled || chip->init_failed || !chip->running)
+		return 0;
 
 	/* Read STATESTS before controller reset */
 	status = azx_readw(chip, STATESTS);
@@ -2983,7 +3005,14 @@ static int azx_runtime_resume(struct device *dev)
 static int azx_runtime_idle(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
-	struct azx *chip = card->private_data;
+	struct azx *chip;
+
+	if (!card)
+		return 0;
+
+	chip = card->private_data;
+	if (chip->disabled || chip->init_failed || !chip->running)
+		return 0;
 
 	if (!power_save_controller ||
 	    !(chip->driver_caps & AZX_DCAPS_PM_RUNTIME))
