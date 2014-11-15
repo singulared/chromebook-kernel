@@ -296,7 +296,7 @@ struct s5p_mfc_hw_ops {
 	int (*init_encode)(struct s5p_mfc_ctx *ctx);
 	int (*init_enc_buffers)(struct s5p_mfc_ctx *ctx);
 	int (*encode_one_frame)(struct s5p_mfc_ctx *ctx);
-	void (*try_run)(struct s5p_mfc_dev *dev);
+	int (*run)(struct s5p_mfc_ctx *ctx);
 	void (*cleanup_queue)(struct list_head *lh,
 			struct vb2_queue *vq);
 	void (*clear_int_flags)(struct s5p_mfc_dev *dev);
@@ -340,6 +340,6 @@ void s5p_mfc_init_hw_ctrls(struct s5p_mfc_dev *dev);
 int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
 				size_t size, bool needs_cpu_access);
 void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b);
-
+void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
 
 #endif /* S5P_MFC_OPR_H_ */

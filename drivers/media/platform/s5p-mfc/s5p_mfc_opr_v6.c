@@ -1460,30 +1460,6 @@ static int s5p_mfc_encode_one_frame_v6(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
-static inline int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
-{
-	unsigned long flags;
-	int new_ctx;
-	int cnt;
-
-	spin_lock_irqsave(&dev->condlock, flags);
-	mfc_debug(2, "Previos context: %d (bits %08lx)\n", dev->curr_ctx,
-							dev->ctx_work_bits);
-	new_ctx = (dev->curr_ctx + 1) % MFC_NUM_CONTEXTS;
-	cnt = 0;
-	while (!test_bit(new_ctx, &dev->ctx_work_bits)) {
-		new_ctx = (new_ctx + 1) % MFC_NUM_CONTEXTS;
-		cnt++;
-		if (cnt > MFC_NUM_CONTEXTS) {
-			/* No contexts to run */
-			spin_unlock_irqrestore(&dev->condlock, flags);
-			return -EAGAIN;
-		}
-	}
-	spin_unlock_irqrestore(&dev->condlock, flags);
-	return new_ctx;
-}
-
 static inline void s5p_mfc_run_dec_last_frames(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -1744,141 +1720,68 @@ static int s5p_mfc_init_enc_buffers_cmd(struct s5p_mfc_ctx *ctx)
 	return ret;
 }
 
-/* Try running an operation on hardware */
-static void s5p_mfc_try_run_v6(struct s5p_mfc_dev *dev)
+static int s5p_mfc_run_v6(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_ctx *ctx;
-	int new_ctx;
-	unsigned int ret = 0;
-
-	mfc_debug(1, "Try run dev: %p\n", dev);
-
-	if (test_bit(0, &dev->enter_suspend)) {
-		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-		return;
-	}
-
-	/* Check whether hardware is not running */
-	if (test_and_set_bit(0, &dev->hw_lock) != 0) {
-		/* This is perfectly ok, the scheduled ctx should wait */
-		mfc_debug(1, "Couldn't lock HW.\n");
-		return;
-	}
-
-	/* Choose the context to run */
-	new_ctx = s5p_mfc_get_new_ctx(dev);
-	if (new_ctx < 0) {
-		/* No contexts to run */
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
-			mfc_err("Failed to unlock hardware.\n");
-			return;
-		}
-
-		mfc_debug(1, "No ctx is scheduled to be run.\n");
-		return;
-	}
-
-	mfc_debug(1, "New context: %d\n", new_ctx);
-	ctx = dev->ctx[new_ctx];
-	mfc_debug(1, "Seting new context to %p\n", ctx);
-	/* Got context to run in ctx */
-	mfc_debug(1, "ctx->dst_queue_cnt=%d ctx->dpb_count=%d ctx->src_queue_cnt=%d\n",
-		ctx->dst_queue_cnt, ctx->dpb_count, ctx->src_queue_cnt);
-	mfc_debug(1, "ctx->state=%d\n", ctx->state);
-	/* Last frame has already been sent to MFC
-	 * Now obtaining frames from MFC buffer */
-
-	if (test_and_set_bit(0, &dev->clk_flag) == 0)
-		s5p_mfc_clock_on(dev);
-
-	s5p_mfc_clean_ctx_int_flags(ctx);
+	struct s5p_mfc_dev *dev = ctx->dev;
 
 	if (ctx->type == MFCINST_DECODER) {
 		switch (ctx->state) {
 		case MFCINST_FINISHING:
 			s5p_mfc_run_dec_last_frames(ctx);
-			break;
+			return 0;
 		case MFCINST_RUNNING:
-			ret = s5p_mfc_run_dec_frame(ctx);
-			break;
+			return s5p_mfc_run_dec_frame(ctx);
 		case MFCINST_INIT:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, open_inst_cmd,
-					ctx);
-			break;
+			return s5p_mfc_hw_call(
+				dev->mfc_cmds, open_inst_cmd, ctx);
 		case MFCINST_RETURN_INST:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, close_inst_cmd,
-					ctx);
-			break;
+			return s5p_mfc_hw_call(
+				dev->mfc_cmds, close_inst_cmd, ctx);
 		case MFCINST_GOT_INST:
-			ret = s5p_mfc_run_init_dec(ctx);
-			break;
+			return s5p_mfc_run_init_dec(ctx);
 		case MFCINST_HEAD_PARSED:
-			ret = s5p_mfc_run_init_dec_buffers(ctx);
-			break;
+			return s5p_mfc_run_init_dec_buffers(ctx);
 		case MFCINST_FLUSH:
 			s5p_mfc_set_flush(ctx, ctx->dpb_flush_flag);
-			break;
+			return 0;
 		case MFCINST_RES_CHANGE_INIT:
 			s5p_mfc_run_dec_last_frames(ctx);
-			break;
+			return 0;
 		case MFCINST_RES_CHANGE_FLUSH:
 			s5p_mfc_run_dec_last_frames(ctx);
-			break;
+			return 0;
 		case MFCINST_RES_CHANGE_END:
 			mfc_debug(2, "Finished remaining frames after resolution change.\n");
 			ctx->capture_state = QUEUE_FREE;
 			mfc_debug(2, "Will re-init the codec`.\n");
-			ret = s5p_mfc_run_init_dec(ctx);
-			break;
+			return s5p_mfc_run_init_dec(ctx);
 		default:
-			ret = -EAGAIN;
+			return -EAGAIN;
 		}
 	} else if (ctx->type == MFCINST_ENCODER) {
 		switch (ctx->state) {
 		case MFCINST_FINISHING:
 		case MFCINST_RUNNING:
-			ret = s5p_mfc_run_enc_frame(ctx);
-			break;
+			return s5p_mfc_run_enc_frame(ctx);
 		case MFCINST_INIT:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, open_inst_cmd,
-					ctx);
-			break;
+			return s5p_mfc_hw_call(
+				dev->mfc_cmds, open_inst_cmd, ctx);
 		case MFCINST_RETURN_INST:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, close_inst_cmd,
-					ctx);
-			break;
+			return s5p_mfc_hw_call(
+				dev->mfc_cmds, close_inst_cmd, ctx);
 		case MFCINST_GOT_INST:
 			s5p_mfc_run_init_enc(ctx);
-			break;
+			return 0;
 		case MFCINST_HEAD_PARSED:
-			ret = s5p_mfc_init_enc_buffers_cmd(ctx);
-			break;
+			return s5p_mfc_init_enc_buffers_cmd(ctx);
 		default:
-			ret = -EAGAIN;
+			return -EAGAIN;
 		}
 	} else {
 		mfc_err("invalid context type: %d\n", ctx->type);
-		ret = -EAGAIN;
-	}
-
-	if (ret) {
-		/* Free hardware lock */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-			mfc_err("Failed to unlock hardware.\n");
-
-		/* This is in deed imporant, as no operation has been
-		 * scheduled, reduce the clock count as no one will
-		 * ever do this, because no interrupt related to this try_run
-		 * will ever come from hardware. */
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
+		return -EAGAIN;
 	}
 }
-
 
 static void s5p_mfc_cleanup_queue_v6(struct list_head *lh, struct vb2_queue *vq)
 {
@@ -2334,7 +2237,7 @@ static struct s5p_mfc_hw_ops s5p_mfc_ops_v6 = {
 	.init_encode = s5p_mfc_init_encode_v6,
 	.init_enc_buffers = s5p_mfc_alloc_enc_buffers_v6,
 	.encode_one_frame = s5p_mfc_encode_one_frame_v6,
-	.try_run = s5p_mfc_try_run_v6,
+	.run = s5p_mfc_run_v6,
 	.cleanup_queue = s5p_mfc_cleanup_queue_v6,
 	.clear_int_flags = s5p_mfc_clear_int_flags_v6,
 	.write_info = s5p_mfc_write_info_v6,
