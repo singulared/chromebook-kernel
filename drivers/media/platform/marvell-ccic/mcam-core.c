@@ -920,6 +920,8 @@ static int mcam_vb_queue_setup(struct vb2_queue *vq,
 		*nbufs = minbufs;
 	if (cam->buffer_mode == B_DMA_contig)
 		alloc_ctxs[0] = cam->vb_alloc_ctx;
+	else if (cam->buffer_mode == B_DMA_sg)
+		alloc_ctxs[0] = cam->vb_alloc_ctx_sg;
 	return 0;
 }
 
@@ -1117,6 +1119,9 @@ static int mcam_setup_vb2(struct mcam_camera *cam)
 		vq->io_modes = VB2_MMAP | VB2_USERPTR;
 		cam->dma_setup = mcam_ctlr_dma_contig;
 		cam->frame_complete = mcam_dma_contig_done;
+		cam->vb_alloc_ctx = vb2_dma_contig_init_ctx(cam->dev);
+		if (IS_ERR(cam->vb_alloc_ctx))
+			return PTR_ERR(cam->vb_alloc_ctx);
 #endif
 		break;
 	case B_DMA_sg:
@@ -1126,6 +1131,9 @@ static int mcam_setup_vb2(struct mcam_camera *cam)
 		vq->io_modes = VB2_MMAP | VB2_USERPTR;
 		cam->dma_setup = mcam_ctlr_dma_sg;
 		cam->frame_complete = mcam_dma_sg_done;
+		cam->vb_alloc_ctx_sg = vb2_dma_sg_init_ctx(cam->dev);
+		if (IS_ERR(cam->vb_alloc_ctx_sg))
+			return PTR_ERR(cam->vb_alloc_ctx_sg);
 #endif
 		break;
 	case B_vmalloc:
@@ -1150,6 +1158,10 @@ static void mcam_cleanup_vb2(struct mcam_camera *cam)
 #ifdef MCAM_MODE_DMA_CONTIG
 	if (cam->buffer_mode == B_DMA_contig)
 		vb2_dma_contig_cleanup_ctx(cam->vb_alloc_ctx);
+#endif
+#ifdef MCAM_MODE_DMA_SG
+	if (cam->buffer_mode == B_DMA_sg)
+		vb2_dma_sg_cleanup_ctx(cam->vb_alloc_ctx_sg);
 #endif
 }
 
