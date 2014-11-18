@@ -1104,9 +1104,6 @@ mwifiex_cfg80211_assoc(struct mwifiex_private *priv, size_t ssid_len, u8 *ssid,
 		return -EINVAL;
 	}
 
-	/* disconnect before try to associate */
-	mwifiex_deauthenticate(priv, NULL);
-
 	if (channel)
 		ret = mwifiex_set_rf_channel(priv, channel,
 						priv->adapter->channel_type);
@@ -1244,6 +1241,11 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		wiphy_err(wiphy, "received infra assoc request "
 				"when station is in ibss mode\n");
 		goto done;
+	}
+
+	if (priv->wdev && priv->wdev->current_bss) {
+		wiphy_warn(wiphy, "%s: already connected\n", dev->name);
+		return -EALREADY;
 	}
 
 	wiphy_dbg(wiphy, "info: Trying to associate to %s and bssid %pM\n",
