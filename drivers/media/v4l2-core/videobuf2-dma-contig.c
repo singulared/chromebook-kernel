@@ -471,12 +471,22 @@ static void vb2_dc_put_userptr(void *buf_priv)
 	struct vb2_dc_buf *buf = buf_priv;
 	struct sg_table *sgt = buf->dma_sgt;
 
-	dma_unmap_sg(buf->dev, sgt->sgl, sgt->orig_nents, buf->dma_dir);
-	if (!vma_is_io(buf->vma))
-		vb2_dc_sgt_foreach_page(sgt, vb2_dc_put_dirty_page);
+	if (sgt) {
+		DEFINE_DMA_ATTRS(attrs);
 
-	sg_free_table(sgt);
-	kfree(sgt);
+		dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
+		/*
+		 * No need to sync to CPU, it's already synced to the CPU
+		 * since the finish() memop will have been called before this.
+		 */
+		dma_unmap_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
+				   buf->dma_dir, &attrs);
+		if (!vma_is_io(buf->vma))
+			vb2_dc_sgt_foreach_page(sgt, vb2_dc_put_dirty_page);
+
+		sg_free_table(sgt);
+		kfree(sgt);
+	}
 	vb2_put_vma(buf->vma);
 	kfree(buf);
 }
@@ -496,6 +506,9 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	struct sg_table *sgt;
 	unsigned long contig_size;
 	unsigned long dma_align = dma_get_cache_alignment();
+	DEFINE_DMA_ATTRS(attrs);
+
+	dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
 
 	/* Only cache aligned DMA transfers are reliable */
 	if (!IS_ALIGNED(vaddr | size, dma_align)) {
@@ -574,8 +587,12 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	kfree(pages);
 	pages = NULL;
 
-	sgt->nents = dma_map_sg(buf->dev, sgt->sgl, sgt->orig_nents,
-		buf->dma_dir);
+	/*
+	 * No need to sync to the device, this will happen later when the
+	 * prepare() memop is called.
+	 */
+	sgt->nents = dma_map_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
+				      buf->dma_dir, &attrs);
 	if (sgt->nents <= 0) {
 		pr_err("failed to map scatterlist\n");
 		ret = -EIO;
@@ -597,7 +614,8 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	return buf;
 
 fail_map_sg:
-	dma_unmap_sg(buf->dev, sgt->sgl, sgt->orig_nents, buf->dma_dir);
+	dma_unmap_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
+			   buf->dma_dir, &attrs);
 
 fail_sgt_init:
 	if (!vma_is_io(buf->vma))
