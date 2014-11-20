@@ -135,7 +135,7 @@ int udl_gem_init_object(struct drm_gem_object *obj)
 	return 0;
 }
 
-static int udl_gem_get_pages(struct udl_gem_object *obj, gfp_t gfpmask)
+int udl_gem_get_pages(struct udl_gem_object *obj, gfp_t gfpmask)
 {
 	int page_count, i;
 	struct page *page;
@@ -171,7 +171,7 @@ err_pages:
 	return PTR_ERR(page);
 }
 
-static void udl_gem_put_pages(struct udl_gem_object *obj)
+void udl_gem_put_pages(struct udl_gem_object *obj)
 {
 	int page_count = obj->base.size / PAGE_SIZE;
 	int i;
