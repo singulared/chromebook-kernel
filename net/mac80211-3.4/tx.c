@@ -2356,6 +2356,14 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 			if (beacon->tail)
 				memcpy(skb_put(skb, beacon->tail_len),
 				       beacon->tail, beacon->tail_len);
+#ifdef CONFIG_MAC80211_BEACON_FOOTER
+			if (local->hw.conf.beacon_footer_length) {
+				int len = local->hw.conf.beacon_footer_length;
+				memcpy(skb_put(skb, len),
+				       local->hw.conf.beacon_footer_buffer,
+				       len);
+			}
+#endif
 		} else
 			goto out;
 	} else if (sdata->vif.type == NL80211_IFTYPE_ADHOC) {

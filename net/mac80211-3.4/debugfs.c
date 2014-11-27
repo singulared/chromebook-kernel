@@ -281,6 +281,49 @@ DEBUGFS_DEVSTATS_FILE(dot11RTSFailureCount);
 DEBUGFS_DEVSTATS_FILE(dot11FCSErrorCount);
 DEBUGFS_DEVSTATS_FILE(dot11RTSSuccessCount);
 
+#ifdef CONFIG_MAC80211_BEACON_FOOTER
+static ssize_t beacon_footer_read(struct file *file, char __user *userbuf,
+				  size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+	return simple_read_from_buffer(userbuf, count, ppos,
+				       local->hw.conf.beacon_footer_buffer,
+				       local->hw.conf.beacon_footer_length);
+}
+
+static ssize_t beacon_footer_write(struct file *file,
+				   const char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+	size_t copy_leftover;
+	if (count > sizeof(local->hw.conf.beacon_footer_buffer))
+		return -EINVAL;
+	copy_leftover = copy_from_user(local->hw.conf.beacon_footer_buffer,
+				       user_buf, count);
+	if (copy_leftover == count)
+		return -EFAULT;
+	count -= copy_leftover;
+	local->hw.conf.beacon_footer_length = count;
+	return count;
+}
+
+static int beacon_footer_open(struct inode *inode, struct file *file)
+{
+	struct ieee80211_local *local = inode->i_private;
+	if (file->f_flags & O_TRUNC)
+		local->hw.conf.beacon_footer_length = 0;
+	return simple_open(inode, file);
+}
+
+static const struct file_operations beacon_footer_ops = {
+	.read = beacon_footer_read,
+	.write = beacon_footer_write,
+	.open = beacon_footer_open,
+	.llseek = noop_llseek,
+};
+#endif
+
 void debugfs_hw_add(struct ieee80211_local *local)
 {
 	struct dentry *phyd = local->hw.wiphy->debugfsdir;
@@ -301,6 +344,9 @@ void debugfs_hw_add(struct ieee80211_local *local)
 	DEBUGFS_ADD(hwflags);
 	DEBUGFS_ADD(user_power);
 	DEBUGFS_ADD(power);
+#ifdef CONFIG_MAC80211_BEACON_FOOTER
+	DEBUGFS_ADD(beacon_footer);
+#endif
 
 	statsd = debugfs_create_dir("statistics", phyd);
 

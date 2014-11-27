@@ -833,6 +833,10 @@ struct ieee80211_conf {
 	struct ieee80211_channel *channel;
 	enum nl80211_channel_type channel_type;
 	enum ieee80211_smps_mode smps_mode;
+#ifdef CONFIG_MAC80211_BEACON_FOOTER
+	unsigned char beacon_footer_buffer[256];
+	u8 beacon_footer_length;
+#endif
 };
 
 /**
