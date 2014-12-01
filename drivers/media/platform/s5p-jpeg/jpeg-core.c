@@ -2510,40 +2510,12 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		goto m2m_init_rollback;
 	}
 
-	/* JPEG encoder /dev/videoX node */
-	jpeg->vfd_encoder = video_device_alloc();
-	if (!jpeg->vfd_encoder) {
-		v4l2_err(&jpeg->v4l2_dev, "Failed to allocate video device\n");
-		ret = -ENOMEM;
-		goto vb2_allocator_rollback;
-	}
-	snprintf(jpeg->vfd_encoder->name, sizeof(jpeg->vfd_encoder->name),
-				"%s-enc", S5P_JPEG_M2M_NAME);
-	jpeg->vfd_encoder->fops		= &s5p_jpeg_fops;
-	jpeg->vfd_encoder->ioctl_ops	= &s5p_jpeg_ioctl_ops;
-	jpeg->vfd_encoder->minor	= -1;
-	jpeg->vfd_encoder->release	= video_device_release;
-	jpeg->vfd_encoder->lock		= &jpeg->lock;
-	jpeg->vfd_encoder->v4l2_dev	= &jpeg->v4l2_dev;
-	jpeg->vfd_encoder->vfl_dir	= VFL_DIR_M2M;
-
-	ret = video_register_device(jpeg->vfd_encoder, VFL_TYPE_GRABBER, -1);
-	if (ret) {
-		v4l2_err(&jpeg->v4l2_dev, "Failed to register video device\n");
-		goto enc_vdev_alloc_rollback;
-	}
-
-	video_set_drvdata(jpeg->vfd_encoder, jpeg);
-	v4l2_info(&jpeg->v4l2_dev,
-		  "encoder device registered as /dev/video%d\n",
-		  jpeg->vfd_encoder->num);
-
 	/* JPEG decoder /dev/videoX node */
 	jpeg->vfd_decoder = video_device_alloc();
 	if (!jpeg->vfd_decoder) {
 		v4l2_err(&jpeg->v4l2_dev, "Failed to allocate video device\n");
 		ret = -ENOMEM;
-		goto enc_vdev_register_rollback;
+		goto vb2_allocator_rollback;
 	}
 	snprintf(jpeg->vfd_decoder->name, sizeof(jpeg->vfd_decoder->name),
 				"%s-dec", S5P_JPEG_M2M_NAME);
@@ -2578,12 +2550,6 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 dec_vdev_alloc_rollback:
 	video_device_release(jpeg->vfd_decoder);
 
-enc_vdev_register_rollback:
-	video_unregister_device(jpeg->vfd_encoder);
-
-enc_vdev_alloc_rollback:
-	video_device_release(jpeg->vfd_encoder);
-
 vb2_allocator_rollback:
 	vb2_dma_contig_cleanup_ctx(jpeg->alloc_ctx);
 
@@ -2609,8 +2575,6 @@ static int s5p_jpeg_remove(struct platform_device *pdev)
 
 	video_unregister_device(jpeg->vfd_decoder);
 	video_device_release(jpeg->vfd_decoder);
-	video_unregister_device(jpeg->vfd_encoder);
-	video_device_release(jpeg->vfd_encoder);
 	vb2_dma_contig_cleanup_ctx(jpeg->alloc_ctx);
 	v4l2_m2m_release(jpeg->m2m_dev);
 	v4l2_device_unregister(&jpeg->v4l2_dev);

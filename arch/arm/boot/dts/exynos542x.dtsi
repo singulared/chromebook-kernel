@@ -1006,4 +1006,22 @@
 		clock-names = "watchdog";
 		samsung,syscon-phandle = <&pmu_syscon>;
         };
+
+	jpeg_codec@11F50000 {
+		compatible = "samsung,exynos3250-jpeg";
+		reg = <0x11F50000 0x1000>;
+		interrupts = <0 89 0>;
+		clocks = <&clock 451>;
+		clock-names = "jpeg";
+		status = "ok";
+	};
+
+	jpeg_codec@11F60000 {
+		compatible = "samsung,exynos3250-jpeg";
+		reg = <0x11F60000 0x1000>;
+		interrupts = <0 168 0>;
+		clocks = <&clock 452>;
+		clock-names = "jpeg";
+		status = "ok";
+	};
 };
