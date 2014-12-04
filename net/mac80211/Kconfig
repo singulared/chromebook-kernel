@@ -280,3 +280,12 @@ config MAC80211_DEBUG_COUNTERS
 	  and show them in debugfs.
 
 	  If unsure, say N.
+
+config MAC80211_BEACON_FOOTER
+	bool "User-space configurable beaconf ooter"
+	---help---
+	  Say Y, if you want to allow user-space to configure arbitrary
+	  (unvalidated) data at the end of the beacon information elements.
+	  This is used to test client handling of broken beacons.
+
+	  If unsure, say N.
