@@ -191,7 +191,7 @@ static int exynos_drm_suspend(struct drm_device *dev, pm_message_t state)
 
 	DRM_DEBUG_DRIVER("pm_event:%d\n", state.event);
 
-	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock_all(dev);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		int old_dpms = connector->dpms;
 
@@ -201,7 +201,7 @@ static int exynos_drm_suspend(struct drm_device *dev, pm_message_t state)
 		/* Set the old mode back to the connector for resume */
 		connector->dpms = old_dpms;
 	}
-	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_unlock_all(dev);
 
 	return 0;
 }
@@ -214,7 +214,7 @@ static int exynos_drm_resume(struct drm_device *dev)
 
 	DRM_DEBUG_DRIVER("\n");
 
-	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock_all(dev);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		int desired_mode = connector->dpms;
 
@@ -240,7 +240,7 @@ static int exynos_drm_resume(struct drm_device *dev)
 	}
 
 	drm_helper_resume_force_mode(dev);
-	mutex_unlock(&dev->mode_config.mutex);
+	drm_modeset_unlock_all(dev);
 
 	if (changed)
 		drm_kms_helper_hotplug_event(dev);
