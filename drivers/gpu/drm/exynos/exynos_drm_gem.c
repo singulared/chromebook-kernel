@@ -685,7 +685,7 @@ static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 	struct exynos_drm_gem_obj *exynos_gem_obj,
 	bool exclusive)
 {
-	struct fence *fence = 0;
+	struct fence *fence;
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct reservation_object *resv = exynos_gem_obj->base.dma_buf->resv;
 	int ret = 0;
@@ -700,7 +700,7 @@ static int exynos_drm_gem_cpu_sync(struct drm_device *dev,
 		return ret;
 	}
 	ww_mutex_lock(&resv->lock, NULL);
-	if (!exynos_gem_obj->acquire_exclusive) {
+	if (!exclusive) {
 		ret = reservation_object_reserve_shared(resv);
 		if (ret < 0) {
 			DRM_ERROR("Failed to reserve space for shared fence %d.\n",
@@ -765,12 +765,6 @@ int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void *data,
 	DRM_DEBUG_KMS("[BO:%u] flags: 0x%x\n", args->handle, args->flags);
 
 	mutex_lock(&dev->struct_mutex);
-
-	if (!(dev->driver->driver_features & DRIVER_GEM)) {
-		DRM_ERROR("does not support GEM.\n");
-		ret = -ENODEV;
-		goto unlock;
-	}
 
 	obj = drm_gem_object_lookup(dev, file, args->handle);
 	if (!obj) {
@@ -851,6 +845,12 @@ release_rset:
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	kds_resource_set_release_sync(&rset);
 #endif
+#ifdef CONFIG_DRM_DMA_SYNC
+	BUG_ON(!exynos_gem_obj->acquire_fence);
+	if (atomic_sub_and_test(1,
+			&exynos_gem_obj->acquire_shared_count))
+		drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
+#endif
 unref_obj:
 	drm_gem_object_unreference(obj);
 
@@ -872,12 +872,6 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 	DRM_DEBUG_KMS("[BO:%u]\n", args->handle);
 
 	mutex_lock(&dev->struct_mutex);
-
-	if (!(dev->driver->driver_features & DRIVER_GEM)) {
-		DRM_ERROR("does not support GEM.\n");
-		ret = -ENODEV;
-		goto unlock;
-	}
 
 	obj = drm_gem_object_lookup(dev, file, args->handle);
 	if (!obj) {
@@ -915,13 +909,9 @@ int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
 #endif
 #ifdef CONFIG_DRM_DMA_SYNC
 	BUG_ON(!exynos_gem_obj->acquire_fence);
-	if (exynos_gem_obj->acquire_exclusive) {
+	if (atomic_sub_and_test(1,
+			&exynos_gem_obj->acquire_shared_count))
 		drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
-	} else {
-		if (atomic_sub_and_test(1,
-				&exynos_gem_obj->acquire_shared_count))
-			drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
-	}
 #endif
 
 	list_del(cur);
