@@ -254,6 +254,8 @@ struct drm_gem_object *cirrus_gem_prime_import_sg_table(struct drm_device *dev,
 							struct sg_table *sg);
 int cirrus_gem_prime_pin(struct drm_gem_object *obj);
 void cirrus_gem_prime_unpin(struct drm_gem_object *obj);
+int cirrus_gem_prime_mmap(struct drm_gem_object *obj,
+			  struct vm_area_struct *vma);
 
 
 #endif				/* __CIRRUS_DRV_H__ */
