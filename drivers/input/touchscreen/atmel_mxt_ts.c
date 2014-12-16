@@ -1044,12 +1044,14 @@ static void mxt_input_touchevent(struct mxt_data *data, u8 *message, int id)
  * Vector2=0 if the touch angle is equal to 45, 135, 225, or 315 degree.
  * Vector2<0 indicates that the touch angle is in the range (0,45),
  * (135,225), or (315,360).
+ * Vector1=Vector2=0 indicates that no touch angle is reported. In this
+ * case zero is sent as touch angle.
  */
 static int get_touch_angle(struct mxt_data *data, int vector1, int vector2)
 {
 	int direction_table[3][3] = {
 		{3, 2, 1},
-		{4, -4, 0},
+		{4, 0, 0},
 		{-3, -2, -1}
 	};
 
@@ -1061,8 +1063,6 @@ static int get_touch_angle(struct mxt_data *data, int vector1, int vector2)
 		touch_angle = -touch_angle;
 	if (touch_angle != 4 && data->orientation_invert_y)
 		touch_angle = -touch_angle;
-	if (touch_angle == -4)
-		dev_err(&data->client->dev, "Undefined touch angle");
 	return touch_angle;
 
 }
