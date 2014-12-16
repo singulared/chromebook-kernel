@@ -36,7 +36,7 @@ gpu@0xfc010000 {
 	compatible = "arm,malit602", "arm,malit60x", "arm,malit6xx", "arm,mali-midgard";
 	reg = <0xfc010000 0x4000>;
 	interrupts = <0 36 4>, <0 37 4>, <0 38 4>;
-	interrupt-names = "JOB", "MMU", "GPU;
+	interrupt-names = "JOB", "MMU", "GPU";
 
 	clocks = <&pclk_mali>;
 	clock-names = "clk_mali";
