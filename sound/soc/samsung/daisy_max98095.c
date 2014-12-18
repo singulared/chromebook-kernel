@@ -353,9 +353,28 @@ static const struct snd_soc_dapm_route daisy_audio_map[] = {
 	{"MIC2", "NULL", "Mic Jack"},
 };
 
+static const struct snd_soc_dapm_route max98089_audio_map[] = {
+	{"Mic Jack", "NULL", "MICBIAS"},
+	{"MIC2", "NULL", "Mic Jack"},
+};
+
 static const struct snd_soc_dapm_route max98090_audio_map[] = {
 	{"Mic Jack", "NULL", "MICBIAS"},
 	{"MIC2", "NULL", "Mic Jack"},
+	/*
+	 * On max98090, DMIC enable register can not be safely toggled when
+	 * shutdown bit is 1. This causes a short audio drop in playback
+	 * whenever a capture stream starts. To overcome this problem,
+	 * turn on DMIC enable bit during all audio playback cases.
+	 * Captured audio is not sent outside of codec because SDOEN is not
+	 * enabled.
+	 */
+	{"HPL", NULL, "DMICL_ENA"},
+	{"HPR", NULL, "DMICR_ENA"},
+	{"SPKL", NULL, "DMICL_ENA"},
+	{"SPKR", NULL, "DMICR_ENA"},
+	{"RCVL", NULL, "DMICL_ENA"},
+	{"RCVR", NULL, "DMICR_ENA"},
 };
 
 static const struct snd_soc_dapm_widget daisy_dapm_widgets[] = {
@@ -666,8 +685,12 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 	}
 
 	if (of_device_is_compatible(codec_node, "maxim,max98091") ||
-	    of_device_is_compatible(codec_node, "maxim,max98090") ||
 	    of_device_is_compatible(codec_node, "maxim,max98089")) {
+		card->dapm_routes = max98089_audio_map;
+		card->num_dapm_routes = ARRAY_SIZE(max98089_audio_map);
+	}
+
+	if (of_device_is_compatible(codec_node, "maxim,max98090")) {
 		card->dapm_routes = max98090_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(max98090_audio_map);
 	}
