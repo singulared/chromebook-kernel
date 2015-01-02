@@ -446,7 +446,7 @@
 #define MAX_CPB_SIZE		(4 * SZ_1M)	/* 4MB */
 #define MAX_FW_SIZE		(384 * SZ_1K)
 
-#define MFC_VERSION_V5		0x51
+#define MFC_VERSION		0x51
 #define MFC_NUM_PORTS		2
 
 #define S5P_FIMV_SHARED_FRAME_PACK_SEI_AVAIL    0x16C

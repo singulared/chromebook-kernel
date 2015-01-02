@@ -1480,7 +1480,7 @@ static u32 mfc_def_fmt_v5[4] = {
 };
 
 static struct s5p_mfc_variant mfc_drvdata_v5 = {
-	.version	= MFC_VERSION_V5,
+	.version	= MFC_VERSION,
 	.port_num	= MFC_NUM_PORTS,
 	.buf_size	= &buf_size_v5,
 	.buf_align	= &mfc_buf_align_v5,
