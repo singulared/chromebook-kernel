@@ -879,6 +879,7 @@
 		samsung,fimd-vidout-rgb;
 		samsung,fimd-inv-vclk;
 		samsung,default-window = <0>;
+		samsung,cursor-window = <4>;
 		samsung,fimd-win-bpp = <32>;
 		samsung,fimd-src-clk-rate = <70500000>;
 		samsung,use-fimd-dithering;
