@@ -763,6 +763,7 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 #define MFC_V5_BIT	BIT(0)
 #define MFC_V6_BIT	BIT(1)
 #define MFC_V7_BIT	BIT(2)
+#define MFC_V8_BIT	BIT(3)
 
 
 #endif /* S5P_MFC_COMMON_H_ */
