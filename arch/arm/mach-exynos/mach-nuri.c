@@ -229,6 +229,7 @@ static struct exynos_drm_fimd_pdata drm_fimd_pdata = {
 			  VIDCON0_CLKSEL_LCD,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
 	.default_win	= 3,
+	.cursor_win	= 4,
 	.bpp		= 32,
 };
 

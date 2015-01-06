@@ -836,6 +836,7 @@ static struct exynos_drm_fimd_pdata drm_fimd_pdata = {
 	.vidcon1	= VIDCON1_INV_VCLK | VIDCON1_INV_VDEN
 			  | VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
 	.default_win	= 3,
+	.cursor_win	= 4,
 	.bpp		= 32,
 };
 #else
