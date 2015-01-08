@@ -108,15 +108,13 @@ void show_mem(unsigned int filter)
 	for_each_bank (i, mi) {
 		struct membank *bank = &mi->bank[i];
 		unsigned int pfn1, pfn2;
-		struct page *page, *end;
+		struct page *page;
 
 		pfn1 = bank_pfn_start(bank);
 		pfn2 = bank_pfn_end(bank);
 
-		page = pfn_to_page(pfn1);
-		end  = pfn_to_page(pfn2 - 1) + 1;
-
-		do {
+		while (pfn1 < pfn2) {
+			page =  pfn_to_page(pfn1);
 			total++;
 			if (PageReserved(page))
 				reserved++;
@@ -128,8 +126,8 @@ void show_mem(unsigned int filter)
 				free++;
 			else
 				shared += page_count(page) - 1;
-			page++;
-		} while (page < end);
+			pfn1++;
+		}
 	}
 
 	printk("%d pages of RAM\n", total);
