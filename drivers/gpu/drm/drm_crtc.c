@@ -815,6 +815,10 @@ static int remove_connector(struct drm_crtc *ocrtc,
 	memcpy(&new_connector_ids[idx],
 			&ostate->connector_ids[idx + 1], b);
 
+	/* if there are no connectors left, disable crtc */
+	if (a + b == 0)
+		drm_plane_force_disable(ocrtc->primary, state);
+
 	return drm_mode_crtc_set_obj_prop(ocrtc, state,
 		config->prop_connector_ids, a + b,
 		new_connector_ids);
