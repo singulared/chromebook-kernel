@@ -50,13 +50,20 @@ module_param(debug, int, 0644);
 static int __vb2_buf_mem_alloc(struct vb2_buffer *vb)
 {
 	struct vb2_queue *q = vb->vb2_queue;
+	enum dma_data_direction dma_dir =
+		V4L2_TYPE_IS_OUTPUT(q->type) ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	void *mem_priv;
 	int plane;
 
-	/* Allocate memory for all planes in this buffer */
+	/*
+	 * Allocate memory for all planes in this buffer
+	 * NOTE: mmapped areas should be page aligned
+	 */
 	for (plane = 0; plane < vb->num_planes; ++plane) {
+		unsigned long size = PAGE_ALIGN(q->plane_sizes[plane]);
+
 		mem_priv = call_memop(q, alloc, q->alloc_ctx[plane],
-				      q->plane_sizes[plane]);
+				      size, dma_dir, q->gfp_flags);
 		if (IS_ERR_OR_NULL(mem_priv))
 			goto free;
 
@@ -931,7 +938,8 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	void *mem_priv;
 	unsigned int plane;
 	int ret;
-	int write = !V4L2_TYPE_IS_OUTPUT(q->type);
+	enum dma_data_direction dma_dir =
+		V4L2_TYPE_IS_OUTPUT(q->type) ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
 	/* Copy relevant information provided by the userspace */
 	__fill_vb2_buffer(vb, b, planes);
@@ -949,7 +957,7 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		/* Acquire each plane's memory */
 		mem_priv = call_memop(q, get_userptr, q->alloc_ctx[plane],
 				      planes[plane].m.userptr,
-				      planes[plane].length, write);
+				      planes[plane].length, dma_dir);
 		if (IS_ERR_OR_NULL(mem_priv)) {
 			dprintk(1, "qbuf: failed acquiring userspace "
 						"memory for plane %d\n", plane);
@@ -1009,7 +1017,8 @@ static int __qbuf_dmabuf(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	void *mem_priv;
 	unsigned int plane;
 	int ret;
-	int write = !V4L2_TYPE_IS_OUTPUT(q->type);
+	enum dma_data_direction dma_dir =
+		V4L2_TYPE_IS_OUTPUT(q->type) ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
 	/* Verify and copy relevant information provided by the userspace */
 	__fill_vb2_buffer(vb, b, planes);
@@ -1048,7 +1057,7 @@ static int __qbuf_dmabuf(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 
 		/* Acquire each plane's memory */
 		mem_priv = call_memop(q, attach_dmabuf, q->alloc_ctx[plane],
-			dbuf, planes[plane].length, write);
+			dbuf, planes[plane].length, dma_dir);
 		if (IS_ERR(mem_priv)) {
 			dprintk(1, "qbuf: failed to attach dmabuf\n");
 			ret = PTR_ERR(mem_priv);
@@ -1823,6 +1832,7 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 	struct vb2_buffer *vb;
 	unsigned int buffer, plane;
 	int ret;
+	unsigned long length;
 
 	if (q->memory != V4L2_MEMORY_MMAP) {
 		dprintk(1, "Queue is not currently set up for mmap\n");
@@ -1856,6 +1866,18 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 		return ret;
 
 	vb = q->bufs[buffer];
+
+	/*
+	 * MMAP requires page_aligned buffers.
+	 * The buffer length was page_aligned at __vb2_buf_mem_alloc(),
+	 * so, we need to do the same here.
+	 */
+	length = PAGE_ALIGN(vb->v4l2_planes[plane].length);
+	if (length < (vma->vm_end - vma->vm_start)) {
+		dprintk(1,
+			"MMAP invalid, as it would overflow buffer length\n");
+		return -EINVAL;
+	}
 
 	ret = call_memop(q, mmap, vb->planes[plane].mem_priv, vma);
 	if (ret)

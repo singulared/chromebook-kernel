@@ -152,7 +152,8 @@ static void vb2_dc_put(void *buf_priv)
 	kfree(buf);
 }
 
-static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size)
+static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size,
+			  enum dma_data_direction dma_dir, gfp_t gfp_flags)
 {
 	struct vb2_dc_conf *conf = alloc_ctx;
 	struct device *dev = conf->dev;
@@ -162,10 +163,8 @@ static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size)
 	if (!buf)
 		return ERR_PTR(-ENOMEM);
 
-	/* align image size to PAGE_SIZE */
-	size = PAGE_ALIGN(size);
-
-	buf->vaddr = dma_alloc_coherent(dev, size, &buf->dma_addr, GFP_KERNEL);
+	buf->vaddr = dma_alloc_coherent(dev, size, &buf->dma_addr,
+						GFP_KERNEL | gfp_flags);
 	if (!buf->vaddr) {
 		dev_err(dev, "dma_alloc_coherent of size %ld failed\n", size);
 		kfree(buf);
@@ -175,6 +174,7 @@ static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size)
 	/* Prevent the device from being released while the buffer is used */
 	buf->dev = get_device(dev);
 	buf->size = size;
+	buf->dma_dir = dma_dir;
 
 	buf->handler.refcount = &buf->refcount;
 	buf->handler.put = vb2_dc_put;
@@ -228,7 +228,7 @@ static int vb2_dc_mmap(void *buf_priv, struct vm_area_struct *vma)
 
 struct vb2_dc_attachment {
 	struct sg_table sgt;
-	enum dma_data_direction dir;
+	enum dma_data_direction dma_dir;
 };
 
 static int vb2_dc_dmabuf_ops_attach(struct dma_buf *dbuf, struct device *dev,
@@ -263,7 +263,7 @@ static int vb2_dc_dmabuf_ops_attach(struct dma_buf *dbuf, struct device *dev,
 		wr = sg_next(wr);
 	}
 
-	attach->dir = DMA_NONE;
+	attach->dma_dir = DMA_NONE;
 	dbuf_attach->priv = attach;
 
 	return 0;
@@ -281,16 +281,16 @@ static void vb2_dc_dmabuf_ops_detach(struct dma_buf *dbuf,
 	sgt = &attach->sgt;
 
 	/* release the scatterlist cache */
-	if (attach->dir != DMA_NONE)
+	if (attach->dma_dir != DMA_NONE)
 		dma_unmap_sg(db_attach->dev, sgt->sgl, sgt->orig_nents,
-			attach->dir);
+			attach->dma_dir);
 	sg_free_table(sgt);
 	kfree(attach);
 	db_attach->priv = NULL;
 }
 
 static struct sg_table *vb2_dc_dmabuf_ops_map(
-	struct dma_buf_attachment *db_attach, enum dma_data_direction dir)
+	struct dma_buf_attachment *db_attach, enum dma_data_direction dma_dir)
 {
 	struct vb2_dc_attachment *attach = db_attach->priv;
 	/* stealing dmabuf mutex to serialize map/unmap operations */
@@ -302,27 +302,27 @@ static struct sg_table *vb2_dc_dmabuf_ops_map(
 
 	sgt = &attach->sgt;
 	/* return previously mapped sg table */
-	if (attach->dir == dir) {
+	if (attach->dma_dir == dma_dir) {
 		mutex_unlock(lock);
 		return sgt;
 	}
 
 	/* release any previous cache */
-	if (attach->dir != DMA_NONE) {
+	if (attach->dma_dir != DMA_NONE) {
 		dma_unmap_sg(db_attach->dev, sgt->sgl, sgt->orig_nents,
-			attach->dir);
-		attach->dir = DMA_NONE;
+			attach->dma_dir);
+		attach->dma_dir = DMA_NONE;
 	}
 
 	/* mapping to the client with new direction */
-	ret = dma_map_sg(db_attach->dev, sgt->sgl, sgt->orig_nents, dir);
+	ret = dma_map_sg(db_attach->dev, sgt->sgl, sgt->orig_nents, dma_dir);
 	if (ret <= 0) {
 		pr_err("failed to map scatterlist\n");
 		mutex_unlock(lock);
 		return ERR_PTR(-EIO);
 	}
 
-	attach->dir = dir;
+	attach->dma_dir = dma_dir;
 
 	mutex_unlock(lock);
 
@@ -330,7 +330,7 @@ static struct sg_table *vb2_dc_dmabuf_ops_map(
 }
 
 static void vb2_dc_dmabuf_ops_unmap(struct dma_buf_attachment *db_attach,
-	struct sg_table *sgt, enum dma_data_direction dir)
+	struct sg_table *sgt, enum dma_data_direction dma_dir)
 {
 	/* nothing to be done here */
 }
@@ -426,7 +426,8 @@ static inline int vma_is_io(struct vm_area_struct *vma)
 }
 
 static int vb2_dc_get_user_pages(unsigned long start, struct page **pages,
-	int n_pages, struct vm_area_struct *vma, int write)
+	int n_pages, struct vm_area_struct *vma,
+	enum dma_data_direction dma_dir)
 {
 	if (vma_is_io(vma)) {
 		unsigned int i;
@@ -445,7 +446,7 @@ static int vb2_dc_get_user_pages(unsigned long start, struct page **pages,
 		int n;
 
 		n = get_user_pages(current, current->mm, start & PAGE_MASK,
-			n_pages, write, 1, pages, NULL);
+			n_pages, dma_dir == DMA_FROM_DEVICE, 1, pages, NULL);
 		/* negative error means that no page was pinned */
 		n = max(n, 0);
 		if (n != n_pages) {
@@ -469,22 +470,29 @@ static void vb2_dc_put_userptr(void *buf_priv)
 {
 	struct vb2_dc_buf *buf = buf_priv;
 	struct sg_table *sgt = buf->dma_sgt;
-	DEFINE_DMA_ATTRS(attrs);
-	dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
 
-	dma_unmap_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
-				buf->dma_dir, &attrs);
-	if (!vma_is_io(buf->vma))
-		vb2_dc_sgt_foreach_page(sgt, vb2_dc_put_dirty_page);
+	if (sgt) {
+		DEFINE_DMA_ATTRS(attrs);
 
-	sg_free_table(sgt);
-	kfree(sgt);
+		dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
+		/*
+		 * No need to sync to CPU, it's already synced to the CPU
+		 * since the finish() memop will have been called before this.
+		 */
+		dma_unmap_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
+				   buf->dma_dir, &attrs);
+		if (!vma_is_io(buf->vma))
+			vb2_dc_sgt_foreach_page(sgt, vb2_dc_put_dirty_page);
+
+		sg_free_table(sgt);
+		kfree(sgt);
+	}
 	vb2_put_vma(buf->vma);
 	kfree(buf);
 }
 
 static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
-	unsigned long size, int write)
+	unsigned long size, enum dma_data_direction dma_dir)
 {
 	struct vb2_dc_conf *conf = alloc_ctx;
 	struct vb2_dc_buf *buf;
@@ -497,9 +505,10 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	struct vm_area_struct *vma;
 	struct sg_table *sgt;
 	unsigned long contig_size;
+	unsigned long dma_align = dma_get_cache_alignment();
 	DEFINE_DMA_ATTRS(attrs);
 
-	unsigned long dma_align = dma_get_cache_alignment();
+	dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
 
 	/* Only cache aligned DMA transfers are reliable */
 	if (!IS_ALIGNED(vaddr | size, dma_align)) {
@@ -517,7 +526,7 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 		return ERR_PTR(-ENOMEM);
 
 	buf->dev = conf->dev;
-	buf->dma_dir = write ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	buf->dma_dir = dma_dir;
 
 	start = vaddr & PAGE_MASK;
 	offset = vaddr & ~PAGE_MASK;
@@ -553,7 +562,8 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	}
 
 	/* extract page list from userspace mapping */
-	ret = vb2_dc_get_user_pages(start, pages, n_pages, vma, write);
+	ret = vb2_dc_get_user_pages(start, pages, n_pages, vma,
+				    dma_dir == DMA_FROM_DEVICE);
 	if (ret) {
 		pr_err("failed to get user pages\n");
 		goto fail_vma;
@@ -577,9 +587,12 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 	kfree(pages);
 	pages = NULL;
 
-	dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
+	/*
+	 * No need to sync to the device, this will happen later when the
+	 * prepare() memop is called.
+	 */
 	sgt->nents = dma_map_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
-		buf->dma_dir, &attrs);
+				      buf->dma_dir, &attrs);
 	if (sgt->nents <= 0) {
 		pr_err("failed to map scatterlist\n");
 		ret = -EIO;
@@ -602,7 +615,7 @@ static void *vb2_dc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 
 fail_map_sg:
 	dma_unmap_sg_attrs(buf->dev, sgt->sgl, sgt->orig_nents,
-				buf->dma_dir, &attrs);
+			   buf->dma_dir, &attrs);
 
 fail_sgt_init:
 	if (!vma_is_io(buf->vma))
@@ -706,7 +719,7 @@ static void vb2_dc_detach_dmabuf(void *mem_priv)
 }
 
 static void *vb2_dc_attach_dmabuf(void *alloc_ctx, struct dma_buf *dbuf,
-	unsigned long size, int write)
+	unsigned long size, enum dma_data_direction dma_dir)
 {
 	struct vb2_dc_conf *conf = alloc_ctx;
 	struct vb2_dc_buf *buf;
@@ -728,7 +741,7 @@ static void *vb2_dc_attach_dmabuf(void *alloc_ctx, struct dma_buf *dbuf,
 		return dba;
 	}
 
-	buf->dma_dir = write ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	buf->dma_dir = dma_dir;
 	buf->size = size;
 	buf->db_attach = dba;
 
@@ -774,7 +787,8 @@ EXPORT_SYMBOL_GPL(vb2_dma_contig_init_ctx);
 
 void vb2_dma_contig_cleanup_ctx(void *alloc_ctx)
 {
-	kfree(alloc_ctx);
+	if (!IS_ERR_OR_NULL(alloc_ctx))
+		kfree(alloc_ctx);
 }
 EXPORT_SYMBOL_GPL(vb2_dma_contig_cleanup_ctx);
 

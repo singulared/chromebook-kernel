@@ -27,7 +27,9 @@ struct vb2_fileio_data;
  *		return NULL on failure or a pointer to allocator private,
  *		per-buffer data on success; the returned private structure
  *		will then be passed as buf_priv argument to other ops in this
- *		structure
+ *		structure. Additional gfp_flags to use when allocating the
+ *		are also passed to this operation. These flags are from the
+ *		gfp_flags field of vb2_queue.
  * @put:	inform the allocator that the buffer will no longer be used;
  *		usually will result in the allocator freeing the buffer (if
  *		no other users of this buffer are present); the buf_priv
@@ -79,19 +81,23 @@ struct vb2_fileio_data;
  *				  unmap_dmabuf.
  */
 struct vb2_mem_ops {
-	void		*(*alloc)(void *alloc_ctx, unsigned long size);
+	void		*(*alloc)(void *alloc_ctx, unsigned long size,
+				  enum dma_data_direction dma_dir,
+				  gfp_t gfp_flags);
 	void		(*put)(void *buf_priv);
 	struct dma_buf *(*get_dmabuf)(void *buf_priv, unsigned long flags);
 
 	void		*(*get_userptr)(void *alloc_ctx, unsigned long vaddr,
-					unsigned long size, int write);
+					unsigned long size,
+					enum dma_data_direction dma_dir);
 	void		(*put_userptr)(void *buf_priv);
 
 	void		(*prepare)(void *buf_priv);
 	void		(*finish)(void *buf_priv);
 
 	void		*(*attach_dmabuf)(void *alloc_ctx, struct dma_buf *dbuf,
-				unsigned long size, int write);
+					  unsigned long size,
+					  enum dma_data_direction dma_dir);
 	void		(*detach_dmabuf)(void *buf_priv);
 	int		(*map_dmabuf)(void *buf_priv);
 	void		(*unmap_dmabuf)(void *buf_priv);
@@ -302,6 +308,9 @@ struct v4l2_fh;
  * @buf_struct_size: size of the driver-specific buffer structure;
  *		"0" indicates the driver doesn't want to use a custom buffer
  *		structure type, so sizeof(struct vb2_buffer) will is used
+ * @gfp_flags:	additional gfp flags used when allocating the buffers.
+ *		Typically this is 0, but it may be e.g. GFP_DMA or __GFP_DMA32
+ *		to force the buffer allocation to a specific memory zone.
  *
  * @memory:	current memory type used
  * @bufs:	videobuf buffer structures
@@ -326,6 +335,7 @@ struct vb2_queue {
 	const struct vb2_mem_ops	*mem_ops;
 	void				*drv_priv;
 	unsigned int			buf_struct_size;
+	gfp_t				gfp_flags;
 
 /* private: internal use only */
 	enum v4l2_memory		memory;

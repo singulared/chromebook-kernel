@@ -267,6 +267,7 @@ enum s5p_mfc_fmt_idx {
 struct s5p_mfc_variant {
 	unsigned int version;
 	unsigned int port_num;
+	u32 version_bit;
 	struct s5p_mfc_buf_size *buf_size;
 	struct s5p_mfc_buf_align *buf_align;
 	u32	*def_fmt;
@@ -702,8 +703,6 @@ struct s5p_mfc_ctx {
 /*
  * struct s5p_mfc_fmt -	structure used to store information about pixelformats
  *			used by the MFC
- * @min_version:	minimum FW version supporting given format
- * @max_version:	maximum FW version supporting given format
  */
 struct s5p_mfc_fmt {
 	char *name;
@@ -711,8 +710,7 @@ struct s5p_mfc_fmt {
 	u32 codec_mode;
 	enum s5p_mfc_fmt_type type;
 	u32 num_planes;
-	u16 min_version;
-	u16 max_version;
+	u32 versions;
 };
 
 /**
@@ -752,22 +750,20 @@ void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 
 #define HAS_VARIANT(dev) ((dev) && ((dev)->variant))
-#define HAS_PORTNUM(dev) (HAS_VARIANT(dev) && ((dev)->variant->port_num))
-#define IS_TWOPORT(dev)	(HAS_PORTNUM(dev) && ((dev)->variant->port_num == 2))
-
-#define IS_MFCVX(dev, x) (HAS_VARIANT(dev) && ((dev)->variant->version >= (x)))
-#define IS_MFCV6(dev)	IS_MFCVX(dev, 0x60)
-#define IS_MFCV7(dev)	IS_MFCVX(dev, 0x70)
-#define IS_MFCV8(dev)	IS_MFCVX(dev, 0x80)
-#define IS_MFCV_RANGE(dev, min, max) (HAS_VARIANT(dev) \
-					&& ((dev)->variant->version >= (min)) \
-					&& ((dev)->variant->version <= (max)))
-#define IS_FMT_SUPPORTED(dev, fmt) \
-	((fmt) && IS_MFCV_RANGE(dev, (fmt)->min_version, (fmt)->max_version))
-
+#define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
+				(dev->variant->port_num ? 1 : 0) : 0) : 0)
+#define IS_TWOPORT(dev)		(dev->variant->port_num == 2 ? 1 : 0)
+#define IS_MFCV6(dev)		(dev->variant->version >= 0x60 ? 1 : 0)
+#define IS_MFCV7(dev)		(dev->variant->version >= 0x70 ? 1 : 0)
+#define IS_MFCV8(dev)		(dev->variant->version >= 0x80 ? 1 : 0)
 #define HAS_MFC_DEF_FMT(dev) ((HAS_VARIANT(dev)) && ((dev)->variant->def_fmt))
 #define GET_MFC_DEF_FMT(dev, fmt_idx) \
 	((HAS_MFC_DEF_FMT(dev)) ? ((dev)->variant->def_fmt[fmt_idx]) : -1)
-#define MFC_VERSION_MAX  0xffff
+
+#define MFC_V5_BIT	BIT(0)
+#define MFC_V6_BIT	BIT(1)
+#define MFC_V7_BIT	BIT(2)
+#define MFC_V8_BIT	BIT(3)
+
 
 #endif /* S5P_MFC_COMMON_H_ */
