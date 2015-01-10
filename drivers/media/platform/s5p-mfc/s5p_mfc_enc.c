@@ -1680,7 +1680,7 @@ static int vidioc_g_parm(struct file *file, void *priv,
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 
-	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		a->parm.output.timeperframe.denominator =
 			ctx->enc_params.codec.runtime.rc_framerate_num;
 		a->parm.output.timeperframe.numerator =
@@ -1697,7 +1697,7 @@ static int vidioc_g_crop(struct file *file, void *priv, struct v4l2_crop *a)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
 
-	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		a->c.left = p->crop_left_offset;
 		a->c.top = p->crop_top_offset;
 		a->c.width = ctx->img_width -
@@ -1717,7 +1717,7 @@ static int vidioc_s_crop(struct file *file, void *priv,
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
 
-	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		int left, right, top, bottom;
 		left = round_down(a->c.left, 16);
 		right = ctx->img_width - (left + a->c.width);
