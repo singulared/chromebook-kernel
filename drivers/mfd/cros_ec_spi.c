@@ -297,8 +297,10 @@ static int cros_ec_cmd_xfer_spi(struct cros_ec_device *ec_dev,
 			ec_msg->command);
 		goto exit;
 	default:
+		ret = -EBADMSG;
 		dev_dbg(ec_dev->dev, "command 0x%02x returned %d\n",
 			ec_msg->command, ec_msg->result);
+		goto exit;
 	}
 
 	len = ptr[1];
