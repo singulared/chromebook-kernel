@@ -41,6 +41,7 @@ enum dither_mode {
  *
  * @panel: default panel info for initializing
  * @default_win: default window layer number to be used for UI.
+ * @cursor_win: window layer number to be used for cursor plane.
  * @bpp: default bit per pixel.
  */
 struct exynos_drm_fimd_pdata {
@@ -48,6 +49,7 @@ struct exynos_drm_fimd_pdata {
 	u32				vidcon0;
 	u32				vidcon1;
 	unsigned int			default_win;
+	unsigned int			cursor_win;
 	unsigned int			bpp;
 	unsigned int			src_clk_rate;
 	enum dither_mode		dither_mode;

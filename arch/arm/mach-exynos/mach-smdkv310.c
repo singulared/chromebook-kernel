@@ -176,6 +176,7 @@ static struct exynos_drm_fimd_pdata drm_fimd_pdata = {
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC,
 	.default_win	= 0,
+	.cursor_win	= 4,
 	.bpp		= 32,
 };
 #else

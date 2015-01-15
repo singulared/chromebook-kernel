@@ -976,6 +976,7 @@
 		samsung,fimd-vidout-rgb;
 		samsung,fimd-inv-vclk;
 		samsung,default-window = <0>;
+		samsung,cursor-window = <4>;
 		samsung,fimd-win-bpp = <32>;
 	};
 

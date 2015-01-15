@@ -21,8 +21,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "asix.h"
@@ -35,6 +34,7 @@ struct ax88172a_private {
 	u16 phy_addr;
 	u16 oldmode;
 	int use_embdphy;
+	struct asix_rx_fixup_info rx_fixup_info;
 };
 
 /* MDIO read and write wrappers for phylib */
@@ -81,7 +81,7 @@ static void ax88172a_adjust_link(struct net_device *netdev)
 	}
 
 	if (mode != priv->oldmode) {
-		asix_write_medium_mode(dev, mode);
+		asix_write_medium_mode(dev, mode, 0);
 		priv->oldmode = mode;
 		netdev_dbg(netdev, "speed %u duplex %d, setting mode to 0x%04x\n",
 			   phydev->speed, phydev->duplex, mode);
@@ -204,18 +204,19 @@ static int ax88172a_reset_phy(struct usbnet *dev, int embd_phy)
 {
 	int ret;
 
-	ret = asix_sw_reset(dev, AX_SWRESET_IPPD);
+	ret = asix_sw_reset(dev, AX_SWRESET_IPPD, 0);
 	if (ret < 0)
 		goto err;
 
 	msleep(150);
-	ret = asix_sw_reset(dev, AX_SWRESET_CLEAR);
+	ret = asix_sw_reset(dev, AX_SWRESET_CLEAR, 0);
 	if (ret < 0)
 		goto err;
 
 	msleep(150);
 
-	ret = asix_sw_reset(dev, embd_phy ? AX_SWRESET_IPRL : AX_SWRESET_IPPD);
+	ret = asix_sw_reset(dev, embd_phy ? AX_SWRESET_IPRL : AX_SWRESET_IPPD,
+			    0);
 	if (ret < 0)
 		goto err;
 
@@ -242,7 +243,7 @@ static int ax88172a_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->driver_priv = priv;
 
 	/* Get the MAC address */
-	ret = asix_read_cmd(dev, AX_CMD_READ_NODE_ID, 0, 0, ETH_ALEN, buf);
+	ret = asix_read_cmd(dev, AX_CMD_READ_NODE_ID, 0, 0, ETH_ALEN, buf, 0);
 	if (ret < 0) {
 		netdev_err(dev->net, "Failed to read MAC address: %d\n", ret);
 		goto free;
@@ -253,7 +254,7 @@ static int ax88172a_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->net->ethtool_ops = &ax88172a_ethtool_ops;
 
 	/* are we using the internal or the external phy? */
-	ret = asix_read_cmd(dev, AX_CMD_SW_PHY_STATUS, 0, 0, 1, buf);
+	ret = asix_read_cmd(dev, AX_CMD_SW_PHY_STATUS, 0, 0, 1, buf, 0);
 	if (ret < 0) {
 		netdev_err(dev->net, "Failed to read software interface selection register: %d\n",
 			   ret);
@@ -332,20 +333,20 @@ static int ax88172a_reset(struct usbnet *dev)
 	ax88172a_reset_phy(dev, priv->use_embdphy);
 
 	msleep(150);
-	rx_ctl = asix_read_rx_ctl(dev);
+	rx_ctl = asix_read_rx_ctl(dev, 0);
 	netdev_dbg(dev->net, "RX_CTL is 0x%04x after software reset\n", rx_ctl);
-	ret = asix_write_rx_ctl(dev, 0x0000);
+	ret = asix_write_rx_ctl(dev, 0x0000, 0);
 	if (ret < 0)
 		goto out;
 
-	rx_ctl = asix_read_rx_ctl(dev);
+	rx_ctl = asix_read_rx_ctl(dev, 0);
 	netdev_dbg(dev->net, "RX_CTL is 0x%04x setting to 0x0000\n", rx_ctl);
 
 	msleep(150);
 
 	ret = asix_write_cmd(dev, AX_CMD_WRITE_IPG0,
 			     AX88772_IPG0_DEFAULT | AX88772_IPG1_DEFAULT,
-			     AX88772_IPG2_DEFAULT, 0, NULL);
+			     AX88772_IPG2_DEFAULT, 0, NULL, 0);
 	if (ret < 0) {
 		netdev_err(dev->net, "Write IPG,IPG1,IPG2 failed: %d\n", ret);
 		goto out;
@@ -354,20 +355,20 @@ static int ax88172a_reset(struct usbnet *dev)
 	/* Rewrite MAC address */
 	memcpy(data->mac_addr, dev->net->dev_addr, ETH_ALEN);
 	ret = asix_write_cmd(dev, AX_CMD_WRITE_NODE_ID, 0, 0, ETH_ALEN,
-			     data->mac_addr);
+			     data->mac_addr, 0);
 	if (ret < 0)
 		goto out;
 
 	/* Set RX_CTL to default values with 2k buffer, and enable cactus */
-	ret = asix_write_rx_ctl(dev, AX_DEFAULT_RX_CTL);
+	ret = asix_write_rx_ctl(dev, AX_DEFAULT_RX_CTL, 0);
 	if (ret < 0)
 		goto out;
 
-	rx_ctl = asix_read_rx_ctl(dev);
+	rx_ctl = asix_read_rx_ctl(dev, 0);
 	netdev_dbg(dev->net, "RX_CTL is 0x%04x after all initializations\n",
 		   rx_ctl);
 
-	rx_ctl = asix_read_medium_status(dev);
+	rx_ctl = asix_read_medium_status(dev, 0);
 	netdev_dbg(dev->net, "Medium Status is 0x%04x after all initializations\n",
 		   rx_ctl);
 
@@ -400,6 +401,14 @@ out:
 
 }
 
+static int ax88172a_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
+{
+	struct ax88172a_private *dp = dev->driver_priv;
+	struct asix_rx_fixup_info *rx = &dp->rx_fixup_info;
+
+	return asix_rx_fixup_internal(dev, skb, rx);
+}
+
 const struct driver_info ax88172a_info = {
 	.description = "ASIX AX88172A USB 2.0 Ethernet",
 	.bind = ax88172a_bind,
@@ -409,6 +418,6 @@ const struct driver_info ax88172a_info = {
 	.status = ax88172a_status,
 	.flags = FLAG_ETHER | FLAG_FRAMING_AX | FLAG_LINK_INTR |
 		 FLAG_MULTI_PACKET,
-	.rx_fixup = asix_rx_fixup,
+	.rx_fixup = ax88172a_rx_fixup,
 	.tx_fixup = asix_tx_fixup,
 };

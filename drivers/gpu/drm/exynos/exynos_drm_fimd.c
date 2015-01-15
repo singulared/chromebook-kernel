@@ -1172,6 +1172,8 @@ static struct exynos_drm_fimd_pdata *drm_fimd_dt_parse_pdata(struct device *dev)
 
 	of_property_read_u32(np, "samsung,default-window", &pd->default_win);
 
+	of_property_read_u32(np, "samsung,cursor-window", &pd->cursor_win);
+
 	of_property_read_u32(np, "samsung,fimd-win-bpp", &pd->bpp);
 
 	of_property_read_u32(np, "samsung,fimd-src-clk-rate",
@@ -1275,15 +1277,8 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->vidcon0 = pdata->vidcon0;
 	ctx->vidcon1 = pdata->vidcon1;
 	ctx->default_win = pdata->default_win;
+	ctx->cursor_win = pdata->cursor_win;
 	ctx->dev = dev;
-
-	/* reserve the first non-default plane for cursor */
-	for (win = 0; win < FIMD_WIN_NR; win++) {
-		if (win != ctx->default_win) {
-			ctx->cursor_win = win;
-			break;
-		}
-	}
 
 	ctx->dither_mode = pdata->dither_mode;
 	if (ctx->dither_mode == USE_FIMD_DITHERING) {
