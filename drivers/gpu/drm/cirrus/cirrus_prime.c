@@ -79,3 +79,15 @@ void cirrus_gem_prime_unpin(struct drm_gem_object *obj)
 	cirrus_bo_unpin(cirrusbo);
 	cirrus_bo_unreserve(cirrusbo);
 }
+
+int cirrus_gem_prime_mmap(struct drm_gem_object *obj,
+			  struct vm_area_struct *vma)
+{
+	struct cirrus_bo *cirrusbo = gem_to_cirrus_bo(obj);
+	int ret = 0;
+
+	ret = ttm_fbdev_mmap(vma, &cirrusbo->bo);
+	vma->vm_pgoff = cirrusbo->bo.vm_node->start;
+
+	return ret;
+}

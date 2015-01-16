@@ -33,7 +33,7 @@ int drm_get_usb_dev(struct usb_interface *interface,
 	if (ret)
 		goto err_g1;
 
-	if (drm_core_check_feature(dev, DRIVER_RENDER) && drm_rnodes) {
+	if (drm_core_check_feature(dev, DRIVER_RENDER)) {
 		ret = drm_get_minor(dev, &dev->render, DRM_MINOR_RENDER);
 		if (ret)
 			goto err_g11;
