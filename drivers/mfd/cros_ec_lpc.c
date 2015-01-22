@@ -102,8 +102,10 @@ static int cros_ec_cmd_xfer_lpc(struct cros_ec_device *ec,
 			msg->command);
 		goto done;
 	default:
+		ret = -EBADMSG;
 		dev_dbg(ec->dev, "command 0x%02x returned %d\n",
 			msg->command, msg->result);
+		goto done;
 	}
 
 	/* Read back args */
