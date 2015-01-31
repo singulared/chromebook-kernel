@@ -138,6 +138,7 @@ struct tpm_chip {
 	struct list_head list;
 	void (*release) (struct device *);
 	struct notifier_block shutdown_nb;
+	void (*shutdown_callback)(struct tpm_chip *);
 };
 
 #define to_tpm_chip(n) container_of(n, struct tpm_chip, vendor)
@@ -335,6 +336,7 @@ extern int tpm_pm_suspend(struct device *);
 extern int tpm_pm_resume(struct device *);
 extern int wait_for_tpm_stat(struct tpm_chip *, u8, unsigned long,
 			     wait_queue_head_t *);
+extern void tpm_savestate_best_effort(struct tpm_chip *);
 
 #ifdef CONFIG_ACPI
 extern int tpm_add_ppi(struct kobject *);

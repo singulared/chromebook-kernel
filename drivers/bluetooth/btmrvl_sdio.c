@@ -771,6 +771,9 @@ static void btmrvl_sdio_interrupt(struct sdio_func *func)
 
 	priv = card->priv;
 
+	if (priv->surprise_removed)
+		return;
+
 	if (card->reg->int_read_to_clear)
 		ret = btmrvl_sdio_read_to_clear(card, &ireg);
 	else
@@ -1141,12 +1144,6 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 		goto disable_host_int;
 	}
 
-	priv->btmrvl_dev.psmode = 1;
-	btmrvl_enable_ps(priv);
-
-	priv->btmrvl_dev.gpio_gap = 0xffff;
-	btmrvl_send_hscfg_cmd(priv);
-
 	return 0;
 
 disable_host_int:
@@ -1172,6 +1169,7 @@ static void btmrvl_sdio_remove(struct sdio_func *func)
 				btmrvl_sdio_disable_host_int(card);
 			}
 			BT_DBG("unregester dev");
+			card->priv->surprise_removed = true;
 			btmrvl_sdio_unregister_dev(card);
 			btmrvl_remove_card(card->priv);
 		}

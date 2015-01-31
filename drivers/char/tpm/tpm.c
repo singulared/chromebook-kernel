@@ -1397,6 +1397,21 @@ int tpm_pm_suspend(struct device *dev)
 EXPORT_SYMBOL_GPL(tpm_pm_suspend);
 
 /*
+ * Try to send a savestate command, but ignore the return value.  This is
+ * called at shutdown by the Infineon SLB9835 to make the TPM account for the
+ * time elapsed since the last command, in an attempt to be more aggressive
+ * about resetting Dictionary Attack counters.
+ */
+void tpm_savestate_best_effort(struct tpm_chip *chip)
+{
+	struct tpm_cmd_t cmd;
+	cmd.header.in = savestate_header;
+	(void) transmit_cmd(chip, &cmd, SAVESTATE_RESULT_SIZE, NULL);
+}
+EXPORT_SYMBOL_GPL(tpm_savestate_best_effort);
+
+
+/*
  * Resume from a power safe. The BIOS already restored
  * the TPM state.
  */
@@ -1499,10 +1514,13 @@ static void tpm_dev_release(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(tpm_dev_release);
 
+
 static int tpm_shutdown_notify(struct notifier_block *nb,
 				unsigned long unused, void *unused2)
 {
 	struct tpm_chip *chip = container_of(nb, struct tpm_chip, shutdown_nb);
+	if (chip->shutdown_callback)
+		chip->shutdown_callback(chip);
 	dev_dbg(chip->dev, "acquiring shutdown lock\n");
 	mutex_lock(&chip->tpm_mutex);
 	dev_dbg(chip->dev, "acquired shutdown lock\n");

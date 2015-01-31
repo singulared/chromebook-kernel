@@ -563,6 +563,7 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 
 	u32 tlv_idx;
 	u32 total_scan_time;
+	bool done_early = false;
 
 	if (!scan_cfg_out || !chan_tlv_out || !scan_chan_list) {
 		dev_dbg(priv->adapter->dev,
@@ -589,6 +590,7 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 		total_scan_time = 0;
 		chan_tlv_out->header.len = 0;
 		start_chan = tmp_chan_list;
+		done_early = false;
 
 		if (tmp_chan_list->chan_number == priv->csa_chan) {
 			tmp_chan_list++;
@@ -604,7 +606,9 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 		 *   - done_early is set (controlling individual scanning of
 		 *     1,6,11)
 		 */
-		if (tlv_idx < max_chan_per_scan) {
+		while (tlv_idx < max_chan_per_scan &&
+		       tmp_chan_list->chan_number && !done_early) {
+
 			dev_dbg(priv->adapter->dev,
 				"info: Scan: Chan(%3d), Radio(%d),"
 				" Mode(%d, %d), Dur(%d)\n",
@@ -651,9 +655,34 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 			total_scan_time +=
 				le16_to_cpu(tmp_chan_list->max_scan_time);
 
+			done_early = false;
+
+			/* Stop the loop if the *current* channel is in the
+			 1,6,11 set and we are not filtering on a BSSID
+			 or SSID.
+			*/
+
+			if (!filtered_scan &&
+			    (tmp_chan_list->chan_number == 1 ||
+			     tmp_chan_list->chan_number == 6 ||
+			     tmp_chan_list->chan_number == 11))
+				done_early = true;
+
 			/* Increment the tmp pointer to the next channel to
 			   be scanned */
 			tmp_chan_list++;
+
+			/* Stop the loop if the *next* channel is in the 1,6,11
+			   set.  This will cause it to be the only channel
+			   scanned on the next interation
+			*/
+			if (!filtered_scan &&
+			    (tmp_chan_list->chan_number == 1 ||
+			     tmp_chan_list->chan_number == 6 ||
+			     tmp_chan_list->chan_number == 11))
+
+				done_early = true;
+
 		}
 
 		/* The total scan time should be less than scan command timeout

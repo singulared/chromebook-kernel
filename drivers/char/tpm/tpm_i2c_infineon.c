@@ -670,6 +670,8 @@ static int tpm_tis_i2c_init(struct device *dev)
 		tpm_dev.powered_while_suspended = true;
 	}
 
+	chip->shutdown_callback = tpm_savestate_best_effort;
+
 	return 0;
 
 out_release:
