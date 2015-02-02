@@ -1562,6 +1562,7 @@ struct cfg80211_wowlan_trig_pkt_pattern {
  * @eap_identity_req: wake up on EAP identity request packet
  * @four_way_handshake: wake up on 4-way handshake
  * @rfkill_release: wake up when rfkill is released
+ * @nd_config: configuration for the scan to be used for net detect wake.
  */
 struct cfg80211_wowlan {
 	bool any, disconnect, magic_pkt, gtk_rekey_failure,
@@ -1569,6 +1570,64 @@ struct cfg80211_wowlan {
 	     rfkill_release;
 	struct cfg80211_wowlan_trig_pkt_pattern *patterns;
 	int n_patterns;
+	struct cfg80211_sched_scan_request *nd_config;
+};
+
+/**
+ * struct cfg80211_wowlan_nd_match - information about the match
+ *
+ * @ssid: SSID of the match that triggered the wake up
+ * @n_channels: Number of channels where the match occurred.  This
+ *	value may be zero if the driver can't report the channels.
+ * @channels: center frequencies of the channels where a match
+ *	occurred (in MHz)
+ */
+struct cfg80211_wowlan_nd_match {
+	struct cfg80211_ssid ssid;
+	int n_channels;
+	u32 channels[];
+};
+
+/**
+ * struct cfg80211_wowlan_nd_info - net detect wake up information
+ *
+ * @n_matches: Number of match information instances provided in
+ *	@matches.  This value may be zero if the driver can't provide
+ *	match information.
+ * @matches: Array of pointers to matches containing information about
+ *	the matches that triggered the wake up.
+ */
+struct cfg80211_wowlan_nd_info {
+	int n_matches;
+	struct cfg80211_wowlan_nd_match *matches[];
+};
+
+/**
+ * struct cfg80211_wowlan_wakeup - wakeup report
+ * @disconnect: woke up by getting disconnected
+ * @magic_pkt: woke up by receiving magic packet
+ * @gtk_rekey_failure: woke up by GTK rekey failure
+ * @eap_identity_req: woke up by EAP identity request packet
+ * @four_way_handshake: woke up by 4-way handshake
+ * @rfkill_release: woke up by rfkill being released
+ * @pattern_idx: pattern that caused wakeup, -1 if not due to pattern
+ * @packet_present_len: copied wakeup packet data
+ * @packet_len: original wakeup packet length
+ * @packet: The packet causing the wakeup, if any.
+ * @packet_80211:  For pattern match, magic packet and other data
+ *	frame triggers an 802.3 frame should be reported, for
+ *	disconnect due to deauth 802.11 frame. This indicates which
+ *	it is.
+ * @net_detect: if not %NULL, woke up because of net detect
+ */
+struct cfg80211_wowlan_wakeup {
+	bool disconnect, magic_pkt, gtk_rekey_failure,
+	     eap_identity_req, four_way_handshake,
+	     rfkill_release, packet_80211;
+	s32 pattern_idx;
+	u32 packet_present_len, packet_len;
+	const void *packet;
+	struct cfg80211_wowlan_nd_info *net_detect;
 };
 
 /**
@@ -2223,6 +2282,7 @@ struct ieee80211_txrx_stypes {
  * @WIPHY_WOWLAN_EAP_IDENTITY_REQ: supports wakeup on EAP identity request
  * @WIPHY_WOWLAN_4WAY_HANDSHAKE: supports wakeup on 4-way handshake failure
  * @WIPHY_WOWLAN_RFKILL_RELEASE: supports wakeup on RF-kill release
+ * @WIPHY_WOWLAN_NET_DETECT: supports wakeup on network detection
  */
 enum wiphy_wowlan_support_flags {
 	WIPHY_WOWLAN_ANY		= BIT(0),
@@ -2233,6 +2293,7 @@ enum wiphy_wowlan_support_flags {
 	WIPHY_WOWLAN_EAP_IDENTITY_REQ	= BIT(5),
 	WIPHY_WOWLAN_4WAY_HANDSHAKE	= BIT(6),
 	WIPHY_WOWLAN_RFKILL_RELEASE	= BIT(7),
+	WIPHY_WOWLAN_NET_DETECT		= BIT(8),
 };
 
 /**
@@ -2242,12 +2303,18 @@ enum wiphy_wowlan_support_flags {
  *	(see nl80211.h for the pattern definition)
  * @pattern_max_len: maximum length of each pattern
  * @pattern_min_len: minimum length of each pattern
+ * @max_nd_match_sets: maximum number of matchsets for net-detect,
+ *	similar, but not necessarily identical, to max_match_sets for
+ *	scheduled scans.
+ *	See &struct cfg80211_sched_scan_request.@match_sets for more
+ *	details.
  */
 struct wiphy_wowlan_support {
 	u32 flags;
 	int n_patterns;
 	int pattern_max_len;
 	int pattern_min_len;
+	int max_nd_match_sets;
 };
 
 /**
@@ -2340,6 +2407,9 @@ struct wiphy_wowlan_support {
  *	may request, if implemented.
  *
  * @wowlan: WoWLAN support information
+ * @wowlan_config: current WoWLAN configuration; this should usually not be
+ *	used since access to it is necessarily racy, use the parameter passed
+ *	to the suspend() operation instead.
  *
  * @ap_sme_capa: AP SME capabilities, flags from &enum nl80211_ap_sme_features.
  * @ht_capa_mod_mask:  Specify what ht_cap values can be over-ridden.
@@ -2407,6 +2477,7 @@ struct wiphy {
 
 #ifdef CONFIG_PM
 	struct wiphy_wowlan_support wowlan;
+	struct cfg80211_wowlan *wowlan_config;
 #endif
 
 	u16 max_remain_on_channel_duration;
@@ -3860,6 +3931,21 @@ void cfg80211_shutdown_all_interfaces(struct wiphy *wiphy);
  */
 void cfg80211_stop_iface(struct wiphy *wiphy, struct wireless_dev *wdev,
 			 gfp_t gfp);
+
+/**
+ * cfg80211_report_wowlan_wakeup - report wakeup from WoWLAN
+ * @wdev: the wireless device reporting the wakeup
+ * @wakeup: the wakeup report
+ * @gfp: allocation flags
+ *
+ * This function reports that the given device woke up. If it
+ * caused the wakeup, report the reason(s), otherwise you may
+ * pass %NULL as the @wakeup parameter to advertise that something
+ * else caused the wakeup.
+ */
+void cfg80211_report_wowlan_wakeup(struct wireless_dev *wdev,
+				   struct cfg80211_wowlan_wakeup *wakeup,
+				   gfp_t gfp);
 
 /* Logging, debugging and troubleshooting/diagnostic helpers. */
 

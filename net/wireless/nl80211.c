@@ -218,7 +218,7 @@ cfg80211_get_dev_from_info(struct net *netns, struct genl_info *info)
 }
 
 /* policy for the attributes */
-static const struct nla_policy nl80211_policy[NL80211_ATTR_MAX+1] = {
+static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_WIPHY] = { .type = NLA_U32 },
 	[NL80211_ATTR_WIPHY_NAME] = { .type = NLA_NUL_STRING,
 				      .len = 20-1 },
@@ -400,6 +400,7 @@ nl80211_wowlan_policy[NUM_NL80211_WOWLAN_TRIG] = {
 	[NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST] = { .type = NLA_FLAG },
 	[NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE] = { .type = NLA_FLAG },
 	[NL80211_WOWLAN_TRIG_RFKILL_RELEASE] = { .type = NLA_FLAG },
+	[NL80211_WOWLAN_TRIG_NET_DETECT] = { .type = NLA_NESTED },
 };
 
 /* policy for GTK rekey offload attributes */
@@ -1243,6 +1244,11 @@ static int nl80211_send_wiphy(struct sk_buff *msg, u32 portid, u32 seq, int flag
 				    sizeof(pat), &pat))
 				goto nla_put_failure;
 		}
+
+	if ((dev->wiphy.wowlan.flags & WIPHY_WOWLAN_NET_DETECT) &&
+	    nla_put_u32(msg, NL80211_WOWLAN_TRIG_NET_DETECT,
+			dev->wiphy.wowlan.max_nd_match_sets))
+		return -ENOBUFS;
 
 		nla_nest_end(msg, nl_wowlan);
 	}
@@ -4619,41 +4625,33 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
-static int nl80211_start_sched_scan(struct sk_buff *skb,
-				    struct genl_info *info)
+static struct cfg80211_sched_scan_request *
+nl80211_parse_sched_scan(struct wiphy *wiphy,
+			 struct nlattr **attrs)
 {
 	struct cfg80211_sched_scan_request *request;
-	struct cfg80211_registered_device *rdev = info->user_ptr[0];
-	struct net_device *dev = info->user_ptr[1];
 	struct nlattr *attr;
-	struct wiphy *wiphy;
 	int err, tmp, n_ssids = 0, n_match_sets = 0, n_channels, i;
 	u32 interval;
 	enum ieee80211_band band;
 	size_t ie_len;
 	struct nlattr *tb[NL80211_SCHED_SCAN_MATCH_ATTR_MAX + 1];
 
-	if (!(rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_SCHED_SCAN) ||
-	    !rdev->ops->sched_scan_start)
-		return -EOPNOTSUPP;
+	if (!is_valid_ie_attr(attrs[NL80211_ATTR_IE]))
+		return ERR_PTR(-EINVAL);
 
-	if (!is_valid_ie_attr(info->attrs[NL80211_ATTR_IE]))
-		return -EINVAL;
+	if (!attrs[NL80211_ATTR_SCHED_SCAN_INTERVAL])
+		return ERR_PTR(-EINVAL);
 
-	if (!info->attrs[NL80211_ATTR_SCHED_SCAN_INTERVAL])
-		return -EINVAL;
-
-	interval = nla_get_u32(info->attrs[NL80211_ATTR_SCHED_SCAN_INTERVAL]);
+	interval = nla_get_u32(attrs[NL80211_ATTR_SCHED_SCAN_INTERVAL]);
 	if (interval == 0)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
-	wiphy = &rdev->wiphy;
-
-	if (info->attrs[NL80211_ATTR_SCAN_FREQUENCIES]) {
+	if (attrs[NL80211_ATTR_SCAN_FREQUENCIES]) {
 		n_channels = validate_scan_freqs(
-				info->attrs[NL80211_ATTR_SCAN_FREQUENCIES]);
+				attrs[NL80211_ATTR_SCAN_FREQUENCIES]);
 		if (!n_channels)
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 	} else {
 		n_channels = 0;
 
@@ -4662,47 +4660,38 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 				n_channels += wiphy->bands[band]->n_channels;
 	}
 
-	if (info->attrs[NL80211_ATTR_SCAN_SSIDS])
-		nla_for_each_nested(attr, info->attrs[NL80211_ATTR_SCAN_SSIDS],
+	if (attrs[NL80211_ATTR_SCAN_SSIDS])
+		nla_for_each_nested(attr, attrs[NL80211_ATTR_SCAN_SSIDS],
 				    tmp)
 			n_ssids++;
 
 	if (n_ssids > wiphy->max_sched_scan_ssids)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
-	if (info->attrs[NL80211_ATTR_SCHED_SCAN_MATCH])
+	if (attrs[NL80211_ATTR_SCHED_SCAN_MATCH])
 		nla_for_each_nested(attr,
-				    info->attrs[NL80211_ATTR_SCHED_SCAN_MATCH],
+				    attrs[NL80211_ATTR_SCHED_SCAN_MATCH],
 				    tmp)
 			n_match_sets++;
 
 	if (n_match_sets > wiphy->max_match_sets)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
-	if (info->attrs[NL80211_ATTR_IE])
-		ie_len = nla_len(info->attrs[NL80211_ATTR_IE]);
+	if (attrs[NL80211_ATTR_IE])
+		ie_len = nla_len(attrs[NL80211_ATTR_IE]);
 	else
 		ie_len = 0;
 
 	if (ie_len > wiphy->max_sched_scan_ie_len)
-		return -EINVAL;
-
-	mutex_lock(&rdev->sched_scan_mtx);
-
-	if (rdev->sched_scan_req) {
-		err = -EINPROGRESS;
-		goto out;
-	}
+		return ERR_PTR(-EINVAL);
 
 	request = kzalloc(sizeof(*request)
 			+ sizeof(*request->ssids) * n_ssids
 			+ sizeof(*request->match_sets) * n_match_sets
 			+ sizeof(*request->channels) * n_channels
 			+ ie_len, GFP_KERNEL);
-	if (!request) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!request)
+		return ERR_PTR(-ENOMEM);
 
 	if (n_ssids)
 		request->ssids = (void *)&request->channels[n_channels];
@@ -4727,10 +4716,10 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 	request->n_match_sets = n_match_sets;
 
 	i = 0;
-	if (info->attrs[NL80211_ATTR_SCAN_FREQUENCIES]) {
+	if (attrs[NL80211_ATTR_SCAN_FREQUENCIES]) {
 		/* user specified, bail out if channel not found */
 		nla_for_each_nested(attr,
-				    info->attrs[NL80211_ATTR_SCAN_FREQUENCIES],
+				    attrs[NL80211_ATTR_SCAN_FREQUENCIES],
 				    tmp) {
 			struct ieee80211_channel *chan;
 
@@ -4776,8 +4765,8 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 	request->n_channels = i;
 
 	i = 0;
-	if (info->attrs[NL80211_ATTR_SCAN_SSIDS]) {
-		nla_for_each_nested(attr, info->attrs[NL80211_ATTR_SCAN_SSIDS],
+	if (attrs[NL80211_ATTR_SCAN_SSIDS]) {
+		nla_for_each_nested(attr, attrs[NL80211_ATTR_SCAN_SSIDS],
 				    tmp) {
 			if (nla_len(attr) > IEEE80211_MAX_SSID_LEN) {
 				err = -EINVAL;
@@ -4791,9 +4780,9 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 	}
 
 	i = 0;
-	if (info->attrs[NL80211_ATTR_SCHED_SCAN_MATCH]) {
+	if (attrs[NL80211_ATTR_SCHED_SCAN_MATCH]) {
 		nla_for_each_nested(attr,
-				    info->attrs[NL80211_ATTR_SCHED_SCAN_MATCH],
+				    attrs[NL80211_ATTR_SCHED_SCAN_MATCH],
 				    tmp) {
 			struct nlattr *ssid, *rssi;
 
@@ -4821,16 +4810,16 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 		}
 	}
 
-	if (info->attrs[NL80211_ATTR_IE]) {
-		request->ie_len = nla_len(info->attrs[NL80211_ATTR_IE]);
+	if (attrs[NL80211_ATTR_IE]) {
+		request->ie_len = nla_len(attrs[NL80211_ATTR_IE]);
 		memcpy((void *)request->ie,
-		       nla_data(info->attrs[NL80211_ATTR_IE]),
+		       nla_data(attrs[NL80211_ATTR_IE]),
 		       request->ie_len);
 	}
 
-	if (info->attrs[NL80211_ATTR_SCAN_FLAGS]) {
+	if (attrs[NL80211_ATTR_SCAN_FLAGS]) {
 		request->flags = nla_get_u32(
-			info->attrs[NL80211_ATTR_SCAN_FLAGS]);
+			attrs[NL80211_ATTR_SCAN_FLAGS]);
 		if (((request->flags & NL80211_SCAN_FLAG_LOW_PRIORITY) &&
 		     !(wiphy->features & NL80211_FEATURE_LOW_PRIORITY_SCAN)) ||
 		    ((request->flags & NL80211_SCAN_FLAG_FLUSH) &&
@@ -4840,23 +4829,52 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 		}
 	}
 
-	request->dev = dev;
-	request->wiphy = &rdev->wiphy;
 	request->interval = interval;
 	request->scan_start = jiffies;
 
-	err = rdev_sched_scan_start(rdev, dev, request);
-	if (!err) {
-		rdev->sched_scan_req = request;
-		nl80211_send_sched_scan(rdev, dev,
-					NL80211_CMD_START_SCHED_SCAN);
-		goto out;
-	}
+	return request;
 
 out_free:
 	kfree(request);
-out:
-	mutex_unlock(&rdev->sched_scan_mtx);
+	return ERR_PTR(err);
+}
+
+static int nl80211_start_sched_scan(struct sk_buff *skb,
+				    struct genl_info *info)
+{
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	struct net_device *dev = info->user_ptr[1];
+	int err;
+
+	if (!(rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_SCHED_SCAN) ||
+	    !rdev->ops->sched_scan_start)
+		return -EOPNOTSUPP;
+
+	if (rdev->sched_scan_req)
+		return -EINPROGRESS;
+
+	rdev->sched_scan_req = nl80211_parse_sched_scan(&rdev->wiphy,
+							info->attrs);
+	if (IS_ERR(rdev->sched_scan_req)) {
+		err = PTR_ERR(rdev->sched_scan_req);
+		goto out_err;
+	}
+
+	err = rdev_sched_scan_start(rdev, dev, rdev->sched_scan_req);
+	if (err)
+		goto out_free;
+
+	rdev->sched_scan_req->dev = dev;
+	rdev->sched_scan_req->wiphy = &rdev->wiphy;
+
+	nl80211_send_sched_scan(rdev, dev,
+				NL80211_CMD_START_SCHED_SCAN);
+	return 0;
+
+out_free:
+	kfree(rdev->sched_scan_req);
+out_err:
+	rdev->sched_scan_req = NULL;
 	return err;
 }
 
@@ -6778,6 +6796,48 @@ static int nl80211_leave_mesh(struct sk_buff *skb, struct genl_info *info)
 }
 
 #ifdef CONFIG_PM
+static int nl80211_send_wowlan_nd(struct sk_buff *msg,
+				  struct cfg80211_sched_scan_request *req)
+{
+	struct nlattr *nd, *freqs, *matches, *match;
+	int i;
+
+	if (!req)
+		return 0;
+
+	nd = nla_nest_start(msg, NL80211_WOWLAN_TRIG_NET_DETECT);
+	if (!nd)
+		return -ENOBUFS;
+
+	if (nla_put_u32(msg, NL80211_ATTR_SCHED_SCAN_INTERVAL, req->interval))
+		return -ENOBUFS;
+
+	freqs = nla_nest_start(msg, NL80211_ATTR_SCAN_FREQUENCIES);
+	if (!freqs)
+		return -ENOBUFS;
+
+	for (i = 0; i < req->n_channels; i++)
+		nla_put_u32(msg, i, req->channels[i]->center_freq);
+
+	nla_nest_end(msg, freqs);
+
+	if (req->n_match_sets) {
+		matches = nla_nest_start(msg, NL80211_ATTR_SCHED_SCAN_MATCH);
+		for (i = 0; i < req->n_match_sets; i++) {
+			match = nla_nest_start(msg, i);
+			nla_put(msg, NL80211_SCHED_SCAN_MATCH_ATTR_SSID,
+				req->match_sets[i].ssid.ssid_len,
+				req->match_sets[i].ssid.ssid);
+			nla_nest_end(msg, match);
+		}
+		nla_nest_end(msg, matches);
+	}
+
+	nla_nest_end(msg, nd);
+
+	return 0;
+}
+
 static int nl80211_get_wowlan(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -6796,29 +6856,29 @@ static int nl80211_get_wowlan(struct sk_buff *skb, struct genl_info *info)
 	if (!hdr)
 		goto nla_put_failure;
 
-	if (rdev->wowlan) {
+	if (rdev->wiphy.wowlan_config) {
 		struct nlattr *nl_wowlan;
 
 		nl_wowlan = nla_nest_start(msg, NL80211_ATTR_WOWLAN_TRIGGERS);
 		if (!nl_wowlan)
 			goto nla_put_failure;
 
-		if ((rdev->wowlan->any &&
+		if ((rdev->wiphy.wowlan_config->any &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_ANY)) ||
-		    (rdev->wowlan->disconnect &&
+		    (rdev->wiphy.wowlan_config->disconnect &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_DISCONNECT)) ||
-		    (rdev->wowlan->magic_pkt &&
+		    (rdev->wiphy.wowlan_config->magic_pkt &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_MAGIC_PKT)) ||
-		    (rdev->wowlan->gtk_rekey_failure &&
+		    (rdev->wiphy.wowlan_config->gtk_rekey_failure &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_GTK_REKEY_FAILURE)) ||
-		    (rdev->wowlan->eap_identity_req &&
+		    (rdev->wiphy.wowlan_config->eap_identity_req &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST)) ||
-		    (rdev->wowlan->four_way_handshake &&
+		    (rdev->wiphy.wowlan_config->four_way_handshake &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE)) ||
-		    (rdev->wowlan->rfkill_release &&
+		    (rdev->wiphy.wowlan_config->rfkill_release &&
 		     nla_put_flag(msg, NL80211_WOWLAN_TRIG_RFKILL_RELEASE)))
 			goto nla_put_failure;
-		if (rdev->wowlan->n_patterns) {
+		if (rdev->wiphy.wowlan_config->n_patterns) {
 			struct nlattr *nl_pats, *nl_pat;
 			int i, pat_len;
 
@@ -6827,22 +6887,27 @@ static int nl80211_get_wowlan(struct sk_buff *skb, struct genl_info *info)
 			if (!nl_pats)
 				goto nla_put_failure;
 
-			for (i = 0; i < rdev->wowlan->n_patterns; i++) {
+			for (i = 0; i < rdev->wiphy.wowlan_config->n_patterns; i++) {
 				nl_pat = nla_nest_start(msg, i + 1);
 				if (!nl_pat)
 					goto nla_put_failure;
-				pat_len = rdev->wowlan->patterns[i].pattern_len;
+				pat_len = rdev->wiphy.wowlan_config->patterns[i].pattern_len;
 				if (nla_put(msg, NL80211_WOWLAN_PKTPAT_MASK,
 					    DIV_ROUND_UP(pat_len, 8),
-					    rdev->wowlan->patterns[i].mask) ||
+					    rdev->wiphy.wowlan_config->patterns[i].mask) ||
 				    nla_put(msg, NL80211_WOWLAN_PKTPAT_PATTERN,
 					    pat_len,
-					    rdev->wowlan->patterns[i].pattern))
+					    rdev->wiphy.wowlan_config->patterns[i].pattern))
 					goto nla_put_failure;
 				nla_nest_end(msg, nl_pat);
 			}
 			nla_nest_end(msg, nl_pats);
 		}
+
+		if (nl80211_send_wowlan_nd(
+			    msg,
+			    rdev->wiphy.wowlan_config->nd_config))
+			goto nla_put_failure;
 
 		nla_nest_end(msg, nl_wowlan);
 	}
@@ -6855,6 +6920,40 @@ nla_put_failure:
 	return -ENOBUFS;
 }
 
+static int nl80211_parse_wowlan_nd(struct cfg80211_registered_device *rdev,
+				   const struct wiphy_wowlan_support *wowlan,
+				   struct nlattr *attr,
+				   struct cfg80211_wowlan *trig)
+{
+	struct nlattr **tb;
+	int err;
+
+	tb = kzalloc(NUM_NL80211_ATTR * sizeof(*tb), GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
+
+	if (!(wowlan->flags & WIPHY_WOWLAN_NET_DETECT)) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
+
+	err = nla_parse(tb, NL80211_ATTR_MAX,
+			nla_data(attr), nla_len(attr),
+			nl80211_policy);
+	if (err)
+		goto out;
+
+	trig->nd_config = nl80211_parse_sched_scan(&rdev->wiphy, tb);
+	if (IS_ERR(trig->nd_config)) {
+		err = PTR_ERR(trig->nd_config);
+		trig->nd_config = NULL;
+	}
+
+out:
+	kfree(tb);
+	return err;
+}
+
 static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -6863,14 +6962,14 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 	struct cfg80211_wowlan *ntrig;
 	struct wiphy_wowlan_support *wowlan = &rdev->wiphy.wowlan;
 	int err, i;
-	bool prev_enabled = rdev->wowlan;
+	bool prev_enabled = rdev->wiphy.wowlan_config;
 
 	if (!rdev->wiphy.wowlan.flags && !rdev->wiphy.wowlan.n_patterns)
 		return -EOPNOTSUPP;
 
 	if (!info->attrs[NL80211_ATTR_WOWLAN_TRIGGERS]) {
 		cfg80211_rdev_free_wowlan(rdev);
-		rdev->wowlan = NULL;
+		rdev->wiphy.wowlan_config = NULL;
 		goto set_wakeup;
 	}
 
@@ -6983,17 +7082,26 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
+	if (tb[NL80211_WOWLAN_TRIG_NET_DETECT]) {
+		err = nl80211_parse_wowlan_nd(
+			rdev, wowlan, tb[NL80211_WOWLAN_TRIG_NET_DETECT],
+			&new_triggers);
+		if (err)
+			goto error;
+	}
+
 	ntrig = kmemdup(&new_triggers, sizeof(new_triggers), GFP_KERNEL);
 	if (!ntrig) {
 		err = -ENOMEM;
 		goto error;
 	}
 	cfg80211_rdev_free_wowlan(rdev);
-	rdev->wowlan = ntrig;
+	rdev->wiphy.wowlan_config = ntrig;
 
  set_wakeup:
-	if (rdev->ops->set_wakeup && prev_enabled != !!rdev->wowlan)
-		rdev_set_wakeup(rdev, rdev->wowlan);
+	if (rdev->ops->set_wakeup &&
+	    prev_enabled != !!rdev->wiphy.wowlan_config)
+		rdev_set_wakeup(rdev, rdev->wiphy.wowlan_config);
 
 	return 0;
  error:
@@ -9286,6 +9394,168 @@ void cfg80211_report_obss_beacon(struct wiphy *wiphy,
 	nlmsg_free(msg);
 }
 EXPORT_SYMBOL(cfg80211_report_obss_beacon);
+
+#ifdef CONFIG_PM
+static int cfg80211_net_detect_results(struct sk_buff *msg,
+				       struct cfg80211_wowlan_wakeup *wakeup)
+{
+	struct cfg80211_wowlan_nd_info *nd = wakeup->net_detect;
+	struct nlattr *nl_results, *nl_match, *nl_freqs;
+	int i, j;
+
+	nl_results = nla_nest_start(
+		msg, NL80211_WOWLAN_TRIG_NET_DETECT_RESULTS);
+	if (!nl_results)
+		return -EMSGSIZE;
+
+	for (i = 0; i < nd->n_matches; i++) {
+		struct cfg80211_wowlan_nd_match *match = nd->matches[i];
+
+		nl_match = nla_nest_start(msg, i);
+		if (!nl_match)
+			break;
+
+		/* The SSID attribute is optional in nl80211, but for
+		 * simplicity reasons it's always present in the
+		 * cfg80211 structure.  If a driver can't pass the
+		 * SSID, that needs to be changed.  A zero length SSID
+		 * is still a valid SSID (wildcard), so it cannot be
+		 * used for this purpose.
+		 */
+		if (nla_put(msg, NL80211_ATTR_SSID, match->ssid.ssid_len,
+			    match->ssid.ssid)) {
+			nla_nest_cancel(msg, nl_match);
+			goto out;
+		}
+
+		if (match->n_channels) {
+			nl_freqs = nla_nest_start(
+				msg, NL80211_ATTR_SCAN_FREQUENCIES);
+			if (!nl_freqs) {
+				nla_nest_cancel(msg, nl_match);
+				goto out;
+			}
+
+			for (j = 0; j < match->n_channels; j++) {
+				if (nla_put_u32(msg,
+						NL80211_ATTR_WIPHY_FREQ,
+						match->channels[j])) {
+					nla_nest_cancel(msg, nl_freqs);
+					nla_nest_cancel(msg, nl_match);
+					goto out;
+				}
+			}
+
+			nla_nest_end(msg, nl_freqs);
+		}
+
+		nla_nest_end(msg, nl_match);
+	}
+
+out:
+	nla_nest_end(msg, nl_results);
+	return 0;
+}
+
+void cfg80211_report_wowlan_wakeup(struct wireless_dev *wdev,
+				   struct cfg80211_wowlan_wakeup *wakeup,
+				   gfp_t gfp)
+{
+	struct cfg80211_registered_device *rdev = wiphy_to_dev(wdev->wiphy);
+	struct sk_buff *msg;
+	void *hdr;
+	int err, size = 200;
+
+	trace_cfg80211_report_wowlan_wakeup(wdev->wiphy, wdev, wakeup);
+
+	if (wakeup)
+		size += wakeup->packet_present_len;
+
+	msg = nlmsg_new(size, gfp);
+	if (!msg)
+		return;
+
+	hdr = nl80211hdr_put(msg, 0, 0, 0, NL80211_CMD_SET_WOWLAN);
+	if (!hdr)
+		goto free_msg;
+
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
+	    nla_put_u64(msg, NL80211_ATTR_WDEV, wdev_id(wdev)))
+		goto free_msg;
+
+	if (wdev->netdev && nla_put_u32(msg, NL80211_ATTR_IFINDEX,
+					wdev->netdev->ifindex))
+		goto free_msg;
+
+	if (wakeup) {
+		struct nlattr *reasons;
+
+		reasons = nla_nest_start(msg, NL80211_ATTR_WOWLAN_TRIGGERS);
+
+		if (wakeup->disconnect &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_DISCONNECT))
+			goto free_msg;
+		if (wakeup->magic_pkt &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_MAGIC_PKT))
+			goto free_msg;
+		if (wakeup->gtk_rekey_failure &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_GTK_REKEY_FAILURE))
+			goto free_msg;
+		if (wakeup->eap_identity_req &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST))
+			goto free_msg;
+		if (wakeup->four_way_handshake &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE))
+			goto free_msg;
+		if (wakeup->rfkill_release &&
+		    nla_put_flag(msg, NL80211_WOWLAN_TRIG_RFKILL_RELEASE))
+			goto free_msg;
+
+		if (wakeup->pattern_idx >= 0 &&
+		    nla_put_u32(msg, NL80211_WOWLAN_TRIG_PKT_PATTERN,
+				wakeup->pattern_idx))
+			goto free_msg;
+
+		if (wakeup->packet) {
+			u32 pkt_attr = NL80211_WOWLAN_TRIG_WAKEUP_PKT_80211;
+			u32 len_attr = NL80211_WOWLAN_TRIG_WAKEUP_PKT_80211_LEN;
+
+			if (!wakeup->packet_80211) {
+				pkt_attr =
+					NL80211_WOWLAN_TRIG_WAKEUP_PKT_8023;
+				len_attr =
+					NL80211_WOWLAN_TRIG_WAKEUP_PKT_8023_LEN;
+			}
+
+			if (wakeup->packet_len &&
+			    nla_put_u32(msg, len_attr, wakeup->packet_len))
+				goto free_msg;
+
+			if (nla_put(msg, pkt_attr, wakeup->packet_present_len,
+				    wakeup->packet))
+				goto free_msg;
+		}
+
+		if (wakeup->net_detect &&
+		    cfg80211_net_detect_results(msg, wakeup))
+				goto free_msg;
+
+		nla_nest_end(msg, reasons);
+	}
+
+	err = genlmsg_end(msg, hdr);
+	if (err < 0)
+		goto free_msg;
+
+	genlmsg_multicast_netns(wiphy_net(&rdev->wiphy), msg, 0,
+				nl80211_mlme_mcgrp.id, gfp);
+	return;
+
+ free_msg:
+	nlmsg_free(msg);
+}
+EXPORT_SYMBOL(cfg80211_report_wowlan_wakeup);
+#endif
 
 void cfg80211_tdls_oper_request(struct net_device *dev, const u8 *peer,
 				enum nl80211_tdls_operation oper,
