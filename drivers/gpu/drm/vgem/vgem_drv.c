@@ -114,15 +114,13 @@ int vgem_gem_get_pages(struct drm_vgem_gem_object *obj)
 	gfp_t gfpmask = GFP_KERNEL;
 	int num_pages, i, ret = 0;
 
-	num_pages = obj->base.size / PAGE_SIZE;
-
-	if (!obj->pages) {
-		obj->pages = drm_malloc_ab(num_pages, sizeof(struct page *));
-		if (obj->pages == NULL)
-			return -ENOMEM;
-	} else {
+	if (obj->pages || obj->use_dma_buf)
 		return 0;
-	}
+
+	num_pages = obj->base.size / PAGE_SIZE;
+	obj->pages = drm_malloc_ab(num_pages, sizeof(struct page *));
+	if (obj->pages == NULL)
+		return -ENOMEM;
 
 	mapping = obj->base.filp->f_path.dentry->d_inode->i_mapping;
 	gfpmask |= mapping_gfp_mask(mapping);
