@@ -1070,6 +1070,26 @@ static void mark_free(struct pl330_thread *thrd, int idx)
 {
 	struct _pl330_req *req = &thrd->req[idx];
 
+	/* debug for crbug.com/409221 */
+	if (!req->mc_cpu) {
+		printk(KERN_INFO "crbug.com/409221 dump:\n"
+		       "\t idx %d\n"
+		       "\t thrd %p\n", idx, thrd);
+		/* if thrd is NULL we'd crash here */
+		printk(KERN_INFO "\t thrd: id %d ev %d free %d lstenq %u"
+		       " req_running %d dmac %p\n",
+		       thrd->id, thrd->ev, thrd->free, thrd->lstenq,
+		       thrd->req_running, thrd->dmac);
+		/*
+		 * next print out the req
+		 * this is what is around the NULL ptr at req->mc_cpu
+		 */
+		printk(KERN_INFO "\t req: mc_bus 0x%x mc_len 0x%x r=%p\n",
+		       req->mc_bus, req->mc_len, req->r);
+		if (req->r)
+			printk(KERN_INFO "req->r: rqtype %d token %p xfer_cb %pF\n",
+			       req->r->rqtype, req->r->token, req->r->xfer_cb);
+	}
 	_emit_END(0, req->mc_cpu);
 	req->mc_len = 0;
 
