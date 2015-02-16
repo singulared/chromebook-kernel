@@ -826,6 +826,7 @@ struct mwifiex_adapter {
 	struct work_struct iface_work;
 	u8 key_api_major_ver, key_api_minor_ver;
 	struct sk_buff_head rx_data_q;
+	struct semaphore *card_sem;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
