@@ -85,6 +85,14 @@ enum {
 	HCI_QUIRK_RAW_DEVICE,
 	HCI_QUIRK_FIXUP_BUFFER_SIZE,
 	HCI_QUIRK_BROKEN_STORED_LINK_KEY,
+	/* When this quirk is set, the duplicate filtering during
+	 * scanning is based on Bluetooth devices addresses. To allow
+	 * RSSI based updates, restart scanning if needed.
+	 *
+	 * This quirk can be set before hci_register_dev is called or
+	 * during the hdev->setup vendor callback.
+	 */
+	HCI_QUIRK_STRICT_DUPLICATE_FILTER,
 };
 
 /* HCI device flags */

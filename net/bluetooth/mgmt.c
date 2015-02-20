@@ -3443,13 +3443,8 @@ static int start_discovery(struct sock *sk, struct hci_dev *hdev,
 		goto failed;
 	}
 
-	if (test_bit(HCI_PERIODIC_INQ, &hdev->dev_flags)) {
-		err = cmd_status(sk, hdev->id, MGMT_OP_START_DISCOVERY,
-				 MGMT_STATUS_BUSY);
-		goto failed;
-	}
-
-	if (hdev->discovery.state != DISCOVERY_STOPPED) {
+	if (hdev->discovery.state != DISCOVERY_STOPPED ||
+	    test_bit(HCI_PERIODIC_INQ, &hdev->dev_flags)) {
 		err = cmd_status(sk, hdev->id, MGMT_OP_START_DISCOVERY,
 				 MGMT_STATUS_BUSY);
 		goto failed;
@@ -3558,10 +3553,12 @@ static int start_discovery(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	err = hci_req_run(&req, start_discovery_complete);
-	if (err < 0)
+	if (err < 0) {
 		mgmt_pending_remove(cmd);
-	else
-		hci_discovery_set_state(hdev, DISCOVERY_STARTING);
+		goto failed;
+	}
+
+	hci_discovery_set_state(hdev, DISCOVERY_STARTING);
 
 failed:
 	hci_dev_unlock(hdev);
