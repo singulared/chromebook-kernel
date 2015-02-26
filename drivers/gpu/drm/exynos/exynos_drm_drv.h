@@ -103,6 +103,7 @@ struct exynos_drm_plane {
 	unsigned fence_context;
 	atomic_t fence_seqno;
 	struct fence *fence;
+	struct fence *pending_fence;
 #endif
 	const struct exynos_plane_helper_funcs *helper_funcs;
 };

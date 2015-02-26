@@ -109,6 +109,7 @@ struct sync_callback_cookie {
 	struct drm_framebuffer *fb;
 #ifdef CONFIG_DRM_DMA_SYNC
 	struct drm_reservation_cb rcb;
+	struct fence *fence;
 #endif
 };
 
@@ -159,7 +160,11 @@ void exynos_plane_helper_finish_update(struct drm_plane *plane,
 		kds_callback_term(&exynos_plane->kds_cb);
 #endif
 #ifdef CONFIG_DRM_DMA_SYNC
-	drm_fence_signal_and_put(&exynos_plane->fence);
+	if (update_fb || exynos_plane->pending_fence) {
+		drm_fence_signal_and_put(&exynos_plane->fence);
+		exynos_plane->fence = exynos_plane->pending_fence;
+		exynos_plane->pending_fence = NULL;
+	}
 #endif
 	if (update_fb)
 		exynos_plane->fb = exynos_plane->pending_fb;
@@ -188,6 +193,9 @@ static void exynos_plane_helper_commit_cb(void *cookie, void *unused)
 
 	drm_vblank_get(crtc->dev, exynos_drm_pipe_from_crtc(crtc));
 
+#ifdef CONFIG_DRM_DMA_SYNC
+	exynos_plane->pending_fence = sync_cookie->fence;
+#endif
 	ret = exynos_plane->helper_funcs->commit_plane(plane, crtc, fb);
 	if (ret)
 		goto err;
@@ -314,7 +322,7 @@ static int exynos_drm_plane_update_sync(struct reservation_object *resv,
 		ww_mutex_unlock(&resv->lock);
 		return ret;
 	}
-	exynos_plane->fence = fence;
+	cookie->fence = fence;
 	drm_reservation_cb_init(&cookie->rcb,
 				exynos_plane_reservation_cb,
 				cookie);
@@ -322,14 +330,14 @@ static int exynos_drm_plane_update_sync(struct reservation_object *resv,
 				     resv, false);
 	if (ret < 0) {
 		DRM_ERROR("Adding reservation to callback failed: %d.\n", ret);
-		fence_put(exynos_plane->fence);
-		exynos_plane->fence = NULL;
+		fence_put(cookie->fence);
+		cookie->fence = NULL;
 		ww_mutex_unlock(&resv->lock);
 		return ret;
 	}
 	drm_reservation_cb_done(&cookie->rcb);
 	reservation_object_add_shared_fence(resv,
-					exynos_plane->fence);
+					cookie->fence);
 	ww_mutex_unlock(&resv->lock);
 	return ret;
 }
@@ -418,7 +426,7 @@ err:
 
 	return ret;
 #elif defined(CONFIG_DRM_DMA_SYNC)
-	BUG_ON(exynos_plane->fence);
+	BUG_ON(exynos_plane->pending_fence);
 
 	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
 	if (!exynos_gem_obj->base.dma_buf) {
