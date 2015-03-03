@@ -597,8 +597,9 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	pix_mp = &f->fmt.pix_mp;
 	if (ret)
 		return ret;
-	if (ctx->vq_src.streaming || ctx->vq_dst.streaming) {
-		v4l2_err(&dev->v4l2_dev, "%s queue busy\n", __func__);
+	if (vb2_is_streaming(&ctx->vq_src) || vb2_is_streaming(&ctx->vq_dst)) {
+		v4l2_err(&dev->v4l2_dev, "%s queue already streaming\n",
+				__func__);
 		ret = -EBUSY;
 		goto out;
 	}
@@ -952,7 +953,7 @@ int vidioc_decoder_cmd(struct file *file, void *priv,
 		if (cmd->flags != 0)
 			return -EINVAL;
 
-		if (!ctx->vq_src.streaming)
+		if (!vb2_is_streaming(&ctx->vq_src))
 			return -EINVAL;
 
 		spin_lock_irqsave(&dev->irqlock, flags);
