@@ -604,12 +604,24 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		goto out;
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		if (vb2_is_busy(&ctx->vq_dst)) {
+			v4l2_err(&dev->v4l2_dev, "%s queue buffers already requested\n",
+					__func__);
+			ret = -EBUSY;
+			goto out;
+		}
 		/* dst_fmt is validated by call to vidioc_try_fmt */
 		ctx->dst_fmt = find_format(f->fmt.pix_mp.pixelformat,
 				MFC_FMT_RAW);
 		ret = 0;
 		goto out;
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (vb2_is_busy(&ctx->vq_src)) {
+			v4l2_err(&dev->v4l2_dev, "%s queue buffers already requested\n",
+					__func__);
+			ret = -EBUSY;
+			goto out;
+		}
 		/* src_fmt is validated by call to vidioc_try_fmt */
 		ctx->src_fmt = find_format(f->fmt.pix_mp.pixelformat,
 				MFC_FMT_DEC);
