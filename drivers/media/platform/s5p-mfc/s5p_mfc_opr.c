@@ -145,6 +145,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		mfc_debug(1, "No ctx is scheduled to be run.\n");
 		return;
 	}
+	dev->curr_ctx = new_ctx;
 
 	mfc_debug(1, "New context: %d\n", new_ctx);
 	ctx = dev->ctx[new_ctx];
