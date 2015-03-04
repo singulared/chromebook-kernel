@@ -516,10 +516,8 @@ struct s5p_mfc_enc_params {
  */
 struct s5p_mfc_codec_ops {
 	/* initialization routines */
-	int (*pre_seq_start) (struct s5p_mfc_ctx *ctx);
 	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
 	/* execution routines */
-	int (*pre_frame_start) (struct s5p_mfc_ctx *ctx);
 	int (*post_frame_start) (struct s5p_mfc_ctx *ctx);
 };
 

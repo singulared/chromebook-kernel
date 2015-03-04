@@ -775,23 +775,6 @@ static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
 	ctx->ref_queue_cnt = 0;
 }
 
-static int enc_pre_seq_start(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf *dst_mb;
-	unsigned long dst_addr;
-	unsigned int dst_size;
-
-	assert_spin_locked(&dev->irqlock);
-
-	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = vb2_dma_contig_plane_dma_addr(dst_mb->b, 0);
-	dst_size = vb2_plane_size(dst_mb->b, 0);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx, dst_addr,
-			dst_size);
-	return 0;
-}
-
 static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -820,31 +803,6 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 				get_enc_dpb_count, dev);
 		ctx->state = MFCINST_HEAD_PARSED;
 	}
-
-	return 0;
-}
-
-static int enc_pre_frame_start(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf *dst_mb;
-	struct s5p_mfc_buf *src_mb;
-	unsigned long src_y_addr, src_c_addr, dst_addr;
-	unsigned int dst_size;
-
-	assert_spin_locked(&dev->irqlock);
-
-	src_mb = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
-	src_y_addr = vb2_dma_contig_plane_dma_addr(src_mb->b, 0);
-	src_c_addr = vb2_dma_contig_plane_dma_addr(src_mb->b, 1);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_frame_buffer, ctx, src_y_addr,
-			src_c_addr);
-
-	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = vb2_dma_contig_plane_dma_addr(dst_mb->b, 0);
-	dst_size = vb2_plane_size(dst_mb->b, 0);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx, dst_addr,
-			dst_size);
 
 	return 0;
 }
@@ -931,9 +889,7 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 }
 
 static struct s5p_mfc_codec_ops encoder_codec_ops = {
-	.pre_seq_start		= enc_pre_seq_start,
 	.post_seq_start		= enc_post_seq_start,
-	.pre_frame_start	= enc_pre_frame_start,
 	.post_frame_start	= enc_post_frame_start,
 };
 
