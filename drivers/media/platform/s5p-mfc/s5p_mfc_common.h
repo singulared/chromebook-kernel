@@ -308,7 +308,8 @@ struct s5p_mfc_priv_buf {
  * @pm:			power management control
  * @variant:		MFC hardware variant information
  * @num_inst:		couter of active MFC instances
- * @irqlock:		lock for operations on videobuf2 queues
+ * @irqlock:		lock for operations on data shared with IRQ handler
+ *			(always acquired by IRQ handler)
  * @condlock:		lock for changing/checking if a context is ready to be
  *			processed
  * @mfc_mutex:		lock for video_device
@@ -511,6 +512,7 @@ struct s5p_mfc_enc_params {
 
 /**
  * struct s5p_mfc_codec_ops - codec ops, used by encoding
+ * (called with dev->irqlock acquired)
  */
 struct s5p_mfc_codec_ops {
 	/* initialization routines */
@@ -541,11 +543,16 @@ struct s5p_mfc_codec_ops {
  * @vq_src:		vb2 queue for source buffers
  * @vq_dst:		vb2 queue for destination buffers
  * @src_queue:		driver internal queue for source buffers
+ *			(needs to be accessed with dev->irqlock held)
  * @dst_queue:		driver internal queue for destination buffers
+ *			(needs to be accessed with dev->irqlock held)
  * @src_queue_cnt:	number of buffers queued on the source internal queue
+ *			(needs to be accessed with dev->irqlock held)
  * @dst_queue_cnt:	number of buffers queued on the dest internal queue
+ *			(needs to be accessed with dev->irqlock held)
  * @type:		type of the instance - decoder or encoder
  * @state:		state of the context
+ *			(needs to be accessed with dev->irqlock held)
  * @inst_no:		number of hw instance associated with the context
  * @img_width:		width of the image that is decoded or encoded
  * @img_height:		height of the image that is decoded or encoded

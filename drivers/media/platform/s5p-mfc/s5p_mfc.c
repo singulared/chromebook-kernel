@@ -206,6 +206,8 @@ static void s5p_mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *dst_buf;
 	struct s5p_mfc_dev *dev = ctx->dev;
 
+	assert_spin_locked(&dev->irqlock);
+
 	ctx->state = MFCINST_FINISHED;
 	ctx->sequence++;
 	while (!list_empty(&ctx->dst_queue)) {
@@ -236,6 +238,8 @@ static void s5p_mfc_handle_frame_copy_time(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf  *dst_buf, *src_buf;
 	size_t dec_y_addr;
 	unsigned int frame_type;
+
+	assert_spin_locked(&dev->irqlock);
 
 	/* Make sure we actually have a new frame before continuing. */
 	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_dec_frame_type, dev);
@@ -281,6 +285,8 @@ static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 	size_t dspl_y_addr;
 	unsigned int frame_type;
 	unsigned int index;
+
+	assert_spin_locked(&dev->irqlock);
 
 	dspl_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_y_adr, dev);
 	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_disp_frame_type, ctx);
@@ -331,11 +337,12 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	unsigned int dst_frame_status;
 	unsigned int dec_frame_status;
 	struct s5p_mfc_buf *src_buf;
-	unsigned long flags;
 	unsigned int res_change;
 	struct v4l2_event ev;
 
 	unsigned int index;
+
+	assert_spin_locked(&dev->irqlock);
 
 	dst_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status, dev)
 				& S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
@@ -355,7 +362,6 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	if (ctx->dpb_flush_flag)
 		ctx->dpb_flush_flag = 0;
 
-	spin_lock_irqsave(&dev->irqlock, flags);
 	/* All frames remaining in the buffer have been extracted  */
 	if (dst_frame_status == S5P_FIMV_DEC_STATUS_DECODING_EMPTY) {
 		if (ctx->state == MFCINST_RES_CHANGE_FLUSH) {
@@ -410,7 +416,6 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		}
 	}
 leave_handle_frame:
-	spin_unlock_irqrestore(&dev->irqlock, flags);
 	if ((ctx->src_queue_cnt == 0 && ctx->state != MFCINST_FINISHING)
 		|| (ctx->dst_queue_cnt < ctx->dpb_count
 		&& ctx->state != MFCINST_RES_CHANGE_END))
@@ -423,7 +428,7 @@ leave_handle_frame:
 static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
 				struct s5p_mfc_ctx *ctx)
 {
-	unsigned long flags;
+	assert_spin_locked(&dev->irqlock);
 
 	mfc_err("Got a fatal error, will clean up context if present.\n");
 
@@ -443,12 +448,10 @@ static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
 	case MFCINST_FINISHING:
 	case MFCINST_FINISHED:
 	case MFCINST_RUNNING:
-		spin_lock_irqsave(&dev->irqlock, flags);
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
 					&ctx->dst_queue, &ctx->vq_dst);
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
 					&ctx->src_queue, &ctx->vq_src);
-		spin_unlock_irqrestore(&dev->irqlock, flags);
 		break;
 	default:
 		break;
@@ -460,7 +463,8 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 {
 	struct s5p_mfc_buf *src_buf;
 	enum s5p_mfc_error decode_error;
-	unsigned long flags;
+
+	assert_spin_locked(&dev->irqlock);
 
 	mfc_err("Interrupt Error: %08x\n", err);
 
@@ -482,7 +486,6 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		/* Current source buffer did not have stream header information.
 		 * Return it to userspace and continue.
 		 */
-		spin_lock_irqsave(&dev->irqlock, flags);
 		if (!list_empty(&ctx->src_queue)) {
 			src_buf = list_entry(ctx->src_queue.next,
 				     struct s5p_mfc_buf, list);
@@ -491,7 +494,6 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 			vb2_buffer_done(src_buf->b,
 					VB2_BUF_STATE_DONE);
 		}
-		spin_unlock_irqrestore(&dev->irqlock, flags);
 		return 0;
 
 	case ERR_WARNING:
@@ -518,6 +520,9 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 	if (ctx == NULL)
 		return;
 	dev = ctx->dev;
+
+	assert_spin_locked(&dev->irqlock);
+
 	if (ctx->c_ops->post_seq_start) {
 		if (ctx->c_ops->post_seq_start(ctx))
 			mfc_err("post_seq_start() failed\n");
@@ -592,17 +597,16 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 					unsigned int err)
 {
 	struct s5p_mfc_buf *src_buf;
-	struct s5p_mfc_dev *dev;
-	unsigned long flags;
 
 	if (ctx == NULL)
 		return;
-	dev = ctx->dev;
+
+	assert_spin_locked(&ctx->dev->irqlock);
+
 	clear_work_bit(ctx);
 	if (err == 0) {
 		ctx->state = MFCINST_RUNNING;
 		if (!ctx->dpb_flush_flag && ctx->head_processed) {
-			spin_lock_irqsave(&dev->irqlock, flags);
 			if (!list_empty(&ctx->src_queue)) {
 				src_buf = list_entry(ctx->src_queue.next,
 					     struct s5p_mfc_buf, list);
@@ -611,7 +615,6 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 				vb2_buffer_done(src_buf->b,
 						VB2_BUF_STATE_DONE);
 			}
-			spin_unlock_irqrestore(&dev->irqlock, flags);
 		} else {
 			ctx->dpb_flush_flag = 0;
 		}
@@ -620,14 +623,14 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 
 static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
+
+	assert_spin_locked(&ctx->dev->irqlock);
 
 	mfc_debug(2, "Stream completed\n");
 
 	ctx->state = MFCINST_FINISHED;
 
-	spin_lock(&dev->irqlock);
 	if (!list_empty(&ctx->dst_queue)) {
 		mb_entry = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf,
 									list);
@@ -636,7 +639,6 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 		vb2_set_plane_payload(mb_entry->b, 0, 0);
 		vb2_buffer_done(mb_entry->b, VB2_BUF_STATE_DONE);
 	}
-	spin_unlock(&dev->irqlock);
 
 	clear_work_bit(ctx);
 }
@@ -646,10 +648,14 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 {
 	struct s5p_mfc_dev *dev = priv;
 	struct s5p_mfc_ctx *ctx;
+	unsigned long flags;
 	unsigned int reason;
 	unsigned int err;
 
 	mfc_debug_enter();
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+
 	/* Reset the timeout watchdog */
 	atomic_set(&dev->watchdog_cnt, 0);
 	ctx = dev->ctx[dev->curr_ctx];
@@ -704,6 +710,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		wake_up_dev(dev, reason, err);
 		clear_bit(0, &dev->hw_lock);
 		clear_bit(0, &dev->enter_suspend);
+		spin_unlock_irqrestore(&dev->irqlock, flags);
 		mfc_debug_leave();
 		return IRQ_HANDLED;
 
@@ -722,9 +729,12 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 	default:
 		mfc_debug(2, "Unknown int reason\n");
+		spin_unlock_irqrestore(&dev->irqlock, flags);
 		mfc_debug_leave();
 		return IRQ_HANDLED;
 	}
+
+	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	if (test_and_clear_bit(0, &dev->clk_flag))
 		s5p_mfc_clock_off(dev);
