@@ -330,7 +330,7 @@ static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 }
 
 /* Handle frame decoding interrupt */
-static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
+static void s5p_mfc_handle_frame_dec(struct s5p_mfc_ctx *ctx,
 					unsigned int reason, unsigned int err)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -425,6 +425,19 @@ leave_handle_frame:
 		wake_up_dev(dev, reason, err);
 }
 
+static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
+					unsigned int err)
+{
+	assert_spin_locked(&ctx->dev->irqlock);
+
+	if (ctx->c_ops->post_frame_start) {
+		if (ctx->c_ops->post_frame_start(ctx))
+			mfc_err("post_frame_start() failed\n");
+	} else {
+		s5p_mfc_handle_frame_dec(ctx, reason, err);
+	}
+}
+
 static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
 				struct s5p_mfc_ctx *ctx)
 {
@@ -458,7 +471,7 @@ static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
 	}
 }
 
-static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
+static void s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		struct s5p_mfc_ctx *ctx, unsigned int reason, unsigned int err)
 {
 	struct s5p_mfc_buf *src_buf;
@@ -477,8 +490,7 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		if (ctx->state != MFCINST_GOT_INST
 			&& ctx->state != MFCINST_RES_CHANGE_END) {
 			mfc_err("Invalid header error in unexpected state\n");
-			return 1;
-
+			break;
 		}
 
 		mfc_debug(2, "Stream header not found.\n");
@@ -494,13 +506,13 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 			vb2_buffer_done(src_buf->b,
 					VB2_BUF_STATE_DONE);
 		}
-		return 0;
+		return;
 
 	case ERR_WARNING:
 		if (ctx->state == MFCINST_RUNNING) {
 			mfc_debug(2, "Continuing with decode warning\n");
 			s5p_mfc_handle_frame(ctx, reason, err);
-			return 0;
+			return;
 		}
 		break;
 
@@ -509,7 +521,9 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 	}
 
 	/* Unrecoverable error. */
-	return 1;
+	s5p_mfc_fatal_error(dev, ctx);
+	wake_up_dev(dev, reason, err);
+	clear_bit(0, &dev->enter_suspend);
 }
 
 /* Header parsing interrupt handling */
@@ -643,6 +657,44 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 	clear_work_bit(ctx);
 }
 
+static void s5p_mfc_handle_open_instance(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+
+	assert_spin_locked(&ctx->dev->irqlock);
+
+	ctx->inst_no = s5p_mfc_hw_call(dev->mfc_ops, get_inst_no, dev);
+	ctx->state = MFCINST_GOT_INST;
+	clear_work_bit(ctx);
+}
+
+static void s5p_mfc_handle_close_instance(struct s5p_mfc_ctx *ctx)
+{
+	assert_spin_locked(&ctx->dev->irqlock);
+
+	ctx->inst_no = MFC_NO_INSTANCE_SET;
+	ctx->state = MFCINST_FREE;
+	clear_work_bit(ctx);
+}
+
+static void s5p_mfc_handle_dpb_flush(struct s5p_mfc_ctx *ctx)
+{
+	assert_spin_locked(&ctx->dev->irqlock);
+
+	ctx->state = MFCINST_RUNNING;
+	clear_work_bit(ctx);
+}
+
+static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
+		unsigned int reason, unsigned int err)
+{
+	assert_spin_locked(&dev->irqlock);
+
+	wake_up_dev(dev, reason, err);
+	clear_bit(0, &dev->hw_lock);
+	clear_bit(0, &dev->enter_suspend);
+}
+
 /* Interrupt processing */
 static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 {
@@ -666,23 +718,13 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	mfc_debug(1, "Int reason: %d (err: %08x)\n", reason, err);
 	switch (reason) {
 	case S5P_MFC_R2H_CMD_ERR_RET:
-		if (s5p_mfc_handle_irq_error(dev, ctx, reason, err)) {
-			/* Couldn't recover from this error. */
-			s5p_mfc_fatal_error(dev, ctx);
-			wake_up_dev(dev, reason, err);
-			clear_bit(0, &dev->enter_suspend);
-		}
+		s5p_mfc_handle_irq_error(dev, ctx, reason, err);
 		break;
 
 	case S5P_MFC_R2H_CMD_SLICE_DONE_RET:
 	case S5P_MFC_R2H_CMD_FIELD_DONE_RET:
 	case S5P_MFC_R2H_CMD_FRAME_DONE_RET:
-		if (ctx->c_ops->post_frame_start) {
-			if (ctx->c_ops->post_frame_start(ctx))
-				mfc_err("post_frame_start() failed\n");
-		} else {
-			s5p_mfc_handle_frame(ctx, reason, err);
-		}
+		s5p_mfc_handle_frame(ctx, reason, err);
 		break;
 
 	case S5P_MFC_R2H_CMD_SEQ_DONE_RET:
@@ -690,26 +732,18 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		break;
 
 	case S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET:
-		ctx->inst_no = s5p_mfc_hw_call(dev->mfc_ops, get_inst_no, dev);
-		ctx->state = MFCINST_GOT_INST;
-		clear_work_bit(ctx);
+		s5p_mfc_handle_open_instance(ctx);
 		break;
 
 	case S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET:
-		ctx->inst_no = MFC_NO_INSTANCE_SET;
-		ctx->state = MFCINST_FREE;
-		clear_work_bit(ctx);
+		s5p_mfc_handle_close_instance(ctx);
 		break;
 
 	case S5P_MFC_R2H_CMD_SYS_INIT_RET:
 	case S5P_MFC_R2H_CMD_FW_STATUS_RET:
 	case S5P_MFC_R2H_CMD_SLEEP_RET:
 	case S5P_MFC_R2H_CMD_WAKEUP_RET:
-		if (ctx)
-			clear_work_bit(ctx);
-		wake_up_dev(dev, reason, err);
-		clear_bit(0, &dev->hw_lock);
-		clear_bit(0, &dev->enter_suspend);
+		s5p_mfc_handle_sys_init(dev, reason, err);
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 		mfc_debug_leave();
 		return IRQ_HANDLED;
@@ -723,8 +757,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		break;
 
 	case S5P_MFC_R2H_CMD_DPB_FLUSH_RET:
-		clear_work_bit(ctx);
-		ctx->state = MFCINST_RUNNING;
+		s5p_mfc_handle_dpb_flush(ctx);
 		break;
 
 	default:
