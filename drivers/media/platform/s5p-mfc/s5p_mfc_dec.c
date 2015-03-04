@@ -395,35 +395,48 @@ static struct mfc_control controls[] = {
 #define NUM_CTRLS ARRAY_SIZE(controls)
 
 /* Check whether a context should be run on hardware */
-static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
+	switch (ctx->state) {
 	/* Context is to parse header */
-	if (ctx->src_queue_cnt >= 1 && ctx->state == MFCINST_GOT_INST)
-		return 1;
-	/* Context is to decode a frame */
-	if (ctx->src_queue_cnt >= 1 &&
-	    ctx->state == MFCINST_RUNNING &&
-	    ctx->dst_queue_cnt >= ctx->dpb_count)
-		return 1;
-	/* Context is to return last frame */
-	if (ctx->state == MFCINST_FINISHING &&
-	    ctx->dst_queue_cnt >= ctx->dpb_count)
-		return 1;
+	case MFCINST_GOT_INST:
+		if (ctx->src_queue_cnt >= 1)
+			return true;
+		break;
 	/* Context is to set buffers */
-	if (ctx->src_queue_cnt >= 1 &&
-	    ctx->state == MFCINST_HEAD_PARSED &&
-	    ctx->capture_state == QUEUE_BUFS_MMAPED)
-		return 1;
-	/* Resolution change */
-	if ((ctx->state == MFCINST_RES_CHANGE_INIT ||
-		ctx->state == MFCINST_RES_CHANGE_FLUSH) &&
-		ctx->dst_queue_cnt >= ctx->dpb_count)
-		return 1;
-	if (ctx->state == MFCINST_RES_CHANGE_END &&
-		ctx->src_queue_cnt >= 1)
-		return 1;
+	case MFCINST_HEAD_PARSED:
+		if (ctx->src_queue_cnt >= 1 &&
+		    ctx->capture_state == QUEUE_BUFS_MMAPED)
+			return true;
+		break;
+	/* Context is to decode a frame */
+	case MFCINST_RUNNING:
+		if (ctx->src_queue_cnt >= 1 &&
+		    ctx->dst_queue_cnt >= ctx->dpb_count)
+			return true;
+		break;
+	/* Context is to return last frame */
+	case MFCINST_FINISHING:
+		if (ctx->dst_queue_cnt >= ctx->dpb_count)
+			return true;
+		break;
+	/* Resolution change flush in progress */
+	case MFCINST_RES_CHANGE_INIT:
+	case MFCINST_RES_CHANGE_FLUSH:
+		if (ctx->dst_queue_cnt >= ctx->dpb_count)
+			return true;
+		break;
+	/* Resolution change flush finished */
+	case MFCINST_RES_CHANGE_END:
+		if (ctx->src_queue_cnt >= 1)
+			return true;
+		break;
+	default:
+		break;
+	}
+
 	mfc_debug(2, "ctx is not ready\n");
-	return 0;
+	return false;
 }
 
 static struct s5p_mfc_codec_ops decoder_codec_ops = {

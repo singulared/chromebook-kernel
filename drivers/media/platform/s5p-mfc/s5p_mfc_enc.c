@@ -724,24 +724,33 @@ static const char * const *mfc51_get_menu(u32 id)
 	return NULL;
 }
 
-static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
 	mfc_debug(2, "src=%d, dst=%d, state=%d\n",
 		  ctx->src_queue_cnt, ctx->dst_queue_cnt, ctx->state);
+	switch (ctx->state) {
 	/* context is ready to make header */
-	if (ctx->state == MFCINST_GOT_INST && ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_GOT_INST:
+		if (ctx->dst_queue_cnt >= 1)
+			return true;
+		break;
 	/* context is ready to encode a frame */
-	if ((ctx->state == MFCINST_RUNNING ||
-		ctx->state == MFCINST_HEAD_PARSED) &&
-		ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_HEAD_PARSED:
+	case MFCINST_RUNNING:
+		if (ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1)
+			return true;
+		break;
 	/* context is ready to encode remaining frames */
-	if (ctx->state == MFCINST_FINISHING &&
-		ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_FINISHING:
+		if (ctx->dst_queue_cnt >= 1)
+			return true;
+		break;
+	default:
+		break;
+	}
+
 	mfc_debug(2, "ctx is not ready\n");
-	return 0;
+	return false;
 }
 
 static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
