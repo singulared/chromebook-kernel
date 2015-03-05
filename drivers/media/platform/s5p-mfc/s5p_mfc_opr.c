@@ -85,6 +85,24 @@ void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b)
 	memset(b, 0, sizeof(*b));
 }
 
+void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
+{
+	assert_spin_locked(&dev->irqlock);
+
+	mfc_err("Got a fatal error, will clean up context if present.\n");
+
+	if (!ctx)
+		return;
+
+	clear_work_bit(ctx);
+	ctx->state = MFCINST_ERROR;
+
+	/*
+	 * All remaining clean up will happen in s5p_mfc_stop_streaming()
+	 * and/or s5p_mfc_release().
+	 */
+}
+
 static inline int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 {
 	unsigned long flags;
@@ -110,9 +128,10 @@ static inline int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 }
 
 /* Try running an operation on hardware */
-void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
+static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx;
+	unsigned long flags;
 	int new_ctx;
 
 	mfc_debug(1, "Try run dev: %p\n", dev);
@@ -121,14 +140,14 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
 		if (test_and_clear_bit(0, &dev->clk_flag))
 			s5p_mfc_clock_off(dev);
-		return;
+		return 0;
 	}
 
 	/* Check whether hardware is not running */
 	if (test_and_set_bit(0, &dev->hw_lock)) {
 		/* This is perfectly ok, the scheduled ctx should wait */
 		mfc_debug(1, "Couldn't lock HW.\n");
-		return;
+		return 0;
 	}
 
 	/* Choose the context to run */
@@ -139,11 +158,11 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 			s5p_mfc_clock_off(dev);
 		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
 			mfc_err("Failed to unlock hardware\n");
-			return;
+			return 0;
 		}
 
 		mfc_debug(1, "No ctx is scheduled to be run.\n");
-		return;
+		return 0;
 	}
 	dev->curr_ctx = new_ctx;
 
@@ -162,17 +181,37 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 
 	s5p_mfc_clean_ctx_int_flags(ctx);
 
-	if (s5p_mfc_hw_call(dev->mfc_ops, run, ctx)) {
-		/* Free hardware lock */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-			mfc_err("Failed to unlock hardware\n");
+	if (!s5p_mfc_hw_call(dev->mfc_ops, run, ctx))
+		return 0;
 
-		/* This is in deed imporant, as no operation has been
-		 * scheduled, reduce the clock count as no one will
-		 * ever do this, because no interrupt related to this try_run
-		 * will ever come from hardware */
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-	}
+	/*
+	 * Running this context failed.
+	 * We need to signal an error, recover and try another one.
+	 * We do it exactly the same as in case of hardware error interrupt.
+	 */
+	spin_lock_irqsave(&dev->irqlock, flags);
+	s5p_mfc_fatal_error(dev, ctx);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	/* Stop the clock in case we don't have more ready contexts left. */
+	if (test_and_clear_bit(0, &dev->clk_flag))
+		s5p_mfc_clock_off(dev);
+	/* Free hardware lock */
+	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
+		mfc_err("Failed to unlock hardware\n");
+
+	s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
+
+	return -EAGAIN;
+}
+
+/* Try running an operation on hardware */
+void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
+{
+	int ret;
+
+	do {
+		ret = s5p_mfc_try_once(dev);
+	} while (ret == -EAGAIN);
 }
 

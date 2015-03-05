@@ -340,6 +340,20 @@ void s5p_mfc_init_hw_ctrls(struct s5p_mfc_dev *dev);
 int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
 				size_t size, bool needs_cpu_access);
 void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b);
+
+/**
+ * s5p_mfc_fatal_error() - sanitize context state after fatal error
+ * @dev:	Device to which the context belongs.
+ * @ctx:	Context which failed.
+ *
+ * This function should be called after a fatal error happens during execution
+ * of context. It will mark the context as failed to prevent its futher
+ * execution and sanitize internal state.
+ *
+ * Needs to be called with dev->irqlock held.
+ */
+void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
+
 void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
 
 #endif /* S5P_MFC_OPR_H_ */

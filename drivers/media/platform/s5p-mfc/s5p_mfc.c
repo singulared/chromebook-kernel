@@ -190,39 +190,6 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		mfc_err("post_frame_start() failed\n");
 }
 
-static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
-				struct s5p_mfc_ctx *ctx)
-{
-	assert_spin_locked(&dev->irqlock);
-
-	mfc_err("Got a fatal error, will clean up context if present.\n");
-
-	if (!ctx)
-		return;
-
-	clear_work_bit(ctx);
-	ctx->state = MFCINST_ERROR;
-
-	/* If we are decoding, clean up queues and mark any outstanding
-	 * buffers as having an error.
-	 */
-	switch (ctx->state) {
-	case MFCINST_RES_CHANGE_INIT:
-	case MFCINST_RES_CHANGE_FLUSH:
-	case MFCINST_RES_CHANGE_END:
-	case MFCINST_FINISHING:
-	case MFCINST_FINISHED:
-	case MFCINST_RUNNING:
-		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
-					&ctx->dst_queue, &ctx->vq_dst);
-		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue,
-					&ctx->src_queue, &ctx->vq_src);
-		break;
-	default:
-		break;
-	}
-}
-
 static void s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		struct s5p_mfc_ctx *ctx, unsigned int reason, unsigned int err)
 {
