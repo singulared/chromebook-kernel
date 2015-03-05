@@ -356,4 +356,27 @@ void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
 
 void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
 
+/**
+ * s5p_mfc_try_ctx() - try to schedule the context
+ * @ctx:	Context to schedule.
+ *
+ * This function atomically checks if given context is ready, by calling
+ * .ctx_ready() codec op and if yes, it adds it to the list of ready contexts
+ * if its not already there. It also tries to kick the hardware, if not already
+ * running by calling s5p_mfc_try_run().
+ */
+void s5p_mfc_try_ctx(struct s5p_mfc_ctx *ctx);
+
+/**
+ * s5p_mfc_ctx_done_locked() - reconsider the context for further execution
+ * @ctx:	Context to reconsider.
+ *
+ * This function removes given context from ready context list, checks
+ * if its still ready after last run and puts it at the end of ready
+ * context list if so.
+ *
+ * Must be called with dev->irqlock held.
+ */
+void s5p_mfc_ctx_done_locked(struct s5p_mfc_ctx *ctx);
+
 #endif /* S5P_MFC_OPR_H_ */

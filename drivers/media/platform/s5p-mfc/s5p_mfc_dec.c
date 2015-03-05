@@ -397,7 +397,12 @@ static struct mfc_control controls[] = {
 /* Check whether a context should be run on hardware */
 static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
+	assert_spin_locked(&ctx->dev->irqlock);
+
 	switch (ctx->state) {
+	/* Context is to acquire instance ID */
+	case MFCINST_INIT:
+		return true;
 	/* Context is to parse header */
 	case MFCINST_GOT_INST:
 		if (ctx->src_queue_cnt >= 1)
@@ -420,6 +425,12 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		if (ctx->dst_queue_cnt >= ctx->dpb_count)
 			return true;
 		break;
+	/* Context is to free instance ID */
+	case MFCINST_RETURN_INST:
+		return true;
+	/* DPB flush in progress */
+	case MFCINST_FLUSH:
+		return true;
 	/* Resolution change flush in progress */
 	case MFCINST_RES_CHANGE_INIT:
 	case MFCINST_RES_CHANGE_FLUSH:
@@ -724,10 +735,6 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		}
 	}
 leave_handle_frame:
-	if ((ctx->src_queue_cnt == 0 && ctx->state != MFCINST_FINISHING)
-		|| (ctx->dst_queue_cnt < ctx->dpb_count
-		&& ctx->state != MFCINST_RES_CHANGE_END))
-		clear_work_bit(ctx);
 	/* if suspending, wake up device*/
 	if (test_bit(0, &dev->enter_suspend))
 		s5p_mfc_wake_up_dev(dev, reason, err);
@@ -738,6 +745,7 @@ leave_handle_frame:
 static struct s5p_mfc_codec_ops decoder_codec_ops = {
 	.post_seq_start		= s5p_mfc_handle_seq_done,
 	.post_frame_start	= s5p_mfc_handle_frame,
+	.ctx_ready		= s5p_mfc_ctx_ready,
 };
 
 /* Query capabilities of the device */
@@ -1038,9 +1046,7 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 		WARN_ON(ctx->dst_bufs_cnt != ctx->total_dpb_count);
 		ctx->capture_state = QUEUE_BUFS_MMAPED;
 
-		if (s5p_mfc_ctx_ready(ctx))
-			set_work_bit_irqsave(ctx);
-		s5p_mfc_try_run(dev);
+		s5p_mfc_try_ctx(ctx);
 		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_INIT_BUFFERS_RET,
 					  0);
 	} else {
@@ -1279,10 +1285,8 @@ int vidioc_decoder_cmd(struct file *file, void *priv,
 		if (list_empty(&ctx->src_queue)) {
 			mfc_err("EOS: empty src queue, entering finishing state");
 			ctx->state = MFCINST_FINISHING;
-			if (s5p_mfc_ctx_ready(ctx))
-				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 		} else {
 			mfc_err("EOS: marking last buffer of stream");
 			buf = list_entry(ctx->src_queue.prev,
@@ -1500,16 +1504,13 @@ static int s5p_mfc_buf_init(struct vb2_buffer *vb)
 static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
-	struct s5p_mfc_dev *dev = ctx->dev;
 
 	v4l2_ctrl_handler_setup(&ctx->ctrl_handler);
 	if (ctx->state == MFCINST_FINISHING ||
 		ctx->state == MFCINST_FINISHED)
 		ctx->state = MFCINST_RUNNING;
 	/* If context is ready then dev = work->data;schedule it to run */
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 	return 0;
 }
 
@@ -1539,8 +1540,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 		if (IS_MFCV6(dev) && (ctx->state == MFCINST_RUNNING)) {
 			ctx->state = MFCINST_FLUSH;
-			set_work_bit_irqsave(ctx);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 			if (s5p_mfc_wait_for_done_ctx(ctx,
 				S5P_MFC_R2H_CMD_DPB_FLUSH_RET, 0))
 				mfc_err("Err flushing buffers\n");
@@ -1587,9 +1587,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	} else {
 		mfc_err("Unsupported buffer type (%d)\n", vq->type);
 	}
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 }
 
 static struct vb2_ops s5p_mfc_dec_qops = {

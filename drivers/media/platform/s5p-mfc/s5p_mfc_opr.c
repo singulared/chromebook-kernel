@@ -94,7 +94,6 @@ void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 	if (!ctx)
 		return;
 
-	clear_work_bit(ctx);
 	ctx->state = MFCINST_ERROR;
 
 	/*
@@ -103,28 +102,45 @@ void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 	 */
 }
 
-static inline int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
+/**
+ * s5p_mfc_get_new_ctx() - check if we can proceed with running a context
+ * @dev: MFC device to run.
+ *
+ * This function tries to acquire hardware lock and select next context to
+ * run in a race-free fashion.
+ *
+ * Return:	Pointer to found context and hardware lock acquired
+ *		or NULL and hardware lock not acquired.
+ */
+static struct s5p_mfc_ctx *s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 {
+	struct s5p_mfc_ctx *ctx = NULL;
 	unsigned long flags;
-	int new_ctx;
-	int cnt;
 
-	spin_lock_irqsave(&dev->condlock, flags);
-	mfc_debug(2, "Previos context: %d (bits %08lx)\n", dev->curr_ctx,
-							dev->ctx_work_bits);
-	new_ctx = (dev->curr_ctx + 1) % MFC_NUM_CONTEXTS;
-	cnt = 0;
-	while (!test_bit(new_ctx, &dev->ctx_work_bits)) {
-		new_ctx = (new_ctx + 1) % MFC_NUM_CONTEXTS;
-		cnt++;
-		if (cnt > MFC_NUM_CONTEXTS) {
-			/* No contexts to run */
-			spin_unlock_irqrestore(&dev->condlock, flags);
-			return -EAGAIN;
-		}
+	if (test_bit(0, &dev->enter_suspend)) {
+		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
+		return NULL;
 	}
-	spin_unlock_irqrestore(&dev->condlock, flags);
-	return new_ctx;
+	spin_lock_irqsave(&dev->irqlock, flags);
+	mfc_debug(2, "Previous context: %d\n", dev->curr_ctx);
+	if (list_empty(&dev->ready_ctx_list)) {
+		mfc_debug(1, "No ctx is scheduled to be run\n");
+		goto done;
+	}
+	/* Check whether hardware is not running */
+	if (test_and_set_bit(0, &dev->hw_lock) != 0) {
+		/* This is perfectly ok, the scheduled ctx should wait */
+		mfc_debug(1, "Couldn't lock HW\n");
+		goto done;
+	}
+	ctx = list_first_entry(&dev->ready_ctx_list, struct s5p_mfc_ctx,
+				ready_ctx_list);
+	dev->curr_ctx = ctx->num;
+
+done:
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	return ctx;
 }
 
 /* Try running an operation on hardware */
@@ -132,42 +148,19 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx;
 	unsigned long flags;
-	int new_ctx;
 
 	mfc_debug(1, "Try run dev: %p\n", dev);
 
-	if (test_bit(0, &dev->enter_suspend)) {
-		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-		return 0;
-	}
-
-	/* Check whether hardware is not running */
-	if (test_and_set_bit(0, &dev->hw_lock)) {
-		/* This is perfectly ok, the scheduled ctx should wait */
-		mfc_debug(1, "Couldn't lock HW.\n");
-		return 0;
-	}
-
 	/* Choose the context to run */
-	new_ctx = s5p_mfc_get_new_ctx(dev);
-	if (new_ctx < 0) {
-		/* No contexts to run */
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
-			mfc_err("Failed to unlock hardware\n");
-			return 0;
-		}
-
-		mfc_debug(1, "No ctx is scheduled to be run.\n");
+	ctx = s5p_mfc_get_new_ctx(dev);
+	if (!ctx)
 		return 0;
-	}
-	dev->curr_ctx = new_ctx;
 
-	mfc_debug(1, "New context: %d\n", new_ctx);
-	ctx = dev->ctx[new_ctx];
+	/*
+	 * At this point we already hold hardware lock and has a context
+	 * to run. We can power on the hardware and program the operation.
+	 */
+	mfc_debug(1, "New context: %d\n", ctx->num);
 	mfc_debug(1, "Seting new context to %p\n", ctx);
 	/* Got context to run in ctx */
 	mfc_debug(1, "ctx->dst_queue_cnt=%d ctx->dpb_count=%d ctx->src_queue_cnt=%d\n",
@@ -191,6 +184,7 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	 */
 	spin_lock_irqsave(&dev->irqlock, flags);
 	s5p_mfc_fatal_error(dev, ctx);
+	s5p_mfc_ctx_done_locked(ctx);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/* Stop the clock in case we don't have more ready contexts left. */
@@ -215,3 +209,34 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	} while (ret == -EAGAIN);
 }
 
+static void s5p_mfc_try_ctx_locked(struct s5p_mfc_dev *dev,
+				   struct s5p_mfc_ctx *ctx)
+{
+	assert_spin_locked(&dev->irqlock);
+
+	if (list_empty(&ctx->ready_ctx_list)
+	    && s5p_mfc_hw_call(ctx->c_ops, ctx_ready, ctx))
+		list_add_tail(&ctx->ready_ctx_list, &dev->ready_ctx_list);
+}
+
+void s5p_mfc_try_ctx(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+	s5p_mfc_try_ctx_locked(dev, ctx);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	s5p_mfc_try_run(dev);
+}
+
+void s5p_mfc_ctx_done_locked(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+
+	assert_spin_locked(&dev->irqlock);
+
+	list_del_init(&ctx->ready_ctx_list);
+	s5p_mfc_try_ctx_locked(dev, ctx);
+}

@@ -726,9 +726,14 @@ static const char * const *mfc51_get_menu(u32 id)
 
 static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
+	assert_spin_locked(&ctx->dev->irqlock);
+
 	mfc_debug(2, "src=%d, dst=%d, state=%d\n",
 		  ctx->src_queue_cnt, ctx->dst_queue_cnt, ctx->state);
 	switch (ctx->state) {
+	/* Context is to acquire instance ID */
+	case MFCINST_INIT:
+		return true;
 	/* context is ready to make header */
 	case MFCINST_GOT_INST:
 		if (ctx->dst_queue_cnt >= 1)
@@ -745,6 +750,9 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		if (ctx->dst_queue_cnt >= 1)
 			return true;
 		break;
+	/* Context is to free instance ID */
+	case MFCINST_RETURN_INST:
+		return true;
 	default:
 		break;
 	}
@@ -884,14 +892,13 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		vb2_set_plane_payload(mb_entry->b, 0, strm_size);
 		vb2_buffer_done(mb_entry->b, VB2_BUF_STATE_DONE);
 	}
-	if ((ctx->src_queue_cnt == 0) || (ctx->dst_queue_cnt == 0))
-		clear_work_bit(ctx);
 	return 0;
 }
 
 static struct s5p_mfc_codec_ops encoder_codec_ops = {
 	.post_seq_start		= enc_post_seq_start,
 	.post_frame_start	= enc_post_frame_start,
+	.ctx_ready		= s5p_mfc_ctx_ready,
 };
 
 /* Query capabilities of the device */
@@ -1196,8 +1203,7 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 				vb2_reqbufs(&ctx->vq_src, reqbufs);
 				return -ENOMEM;
 			}
-			set_work_bit_irqsave(ctx);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 		}
 
 		ctx->output_state = QUEUE_BUFS_REQUESTED;
@@ -1799,10 +1805,8 @@ int vidioc_encoder_cmd(struct file *file, void *priv,
 		if (list_empty(&ctx->src_queue)) {
 			mfc_debug(2, "EOS: empty src queue, entering finishing state\n");
 			ctx->state = MFCINST_FINISHING;
-			if (s5p_mfc_ctx_ready(ctx))
-				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 		} else {
 			mfc_debug(2, "EOS: marking last buffer of stream\n");
 			buf = list_entry(ctx->src_queue.prev,
@@ -2051,12 +2055,9 @@ static int s5p_mfc_buf_prepare(struct vb2_buffer *vb)
 static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
-	struct s5p_mfc_dev *dev = ctx->dev;
 
 	/* If context is ready then dev = work->data;schedule it to run */
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		s5p_mfc_wait_for_done_ctx(ctx,
@@ -2141,9 +2142,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	} else {
 		mfc_err("unsupported buffer type (%d)\n", vq->type);
 	}
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 }
 
 static struct vb2_ops s5p_mfc_enc_qops = {

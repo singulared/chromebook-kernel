@@ -310,8 +310,6 @@ struct s5p_mfc_priv_buf {
  * @num_inst:		couter of active MFC instances
  * @irqlock:		lock for operations on data shared with IRQ handler
  *			(always acquired by IRQ handler)
- * @condlock:		lock for changing/checking if a context is ready to be
- *			processed
  * @mfc_mutex:		lock for video_device
  * @int_cond:		variable used by the waitqueue
  * @int_type:		type of last interrupt
@@ -324,7 +322,9 @@ struct s5p_mfc_priv_buf {
  * @hw_lock:		used for hardware locking
  * @ctx:		array of driver contexts
  * @curr_ctx:		number of the currently running context
- * @ctx_work_bits:	used to mark which contexts are waiting for hardware
+ *			(needs to be accessed with dev->irqlock held)
+ * @ready_ctx_list:	list of contexts that can be run
+ *			(needs to be accessed with dev->irqlock held)
  * @watchdog_cnt:	counter for the watchdog
  * @watchdog_workqueue:	workqueue for the watchdog
  * @watchdog_work:	worker for the watchdog
@@ -353,8 +353,6 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_variant	*variant;
 	int num_inst;
 	spinlock_t irqlock;	/* lock when operating on videobuf2 queues */
-	spinlock_t condlock;	/* lock when changing/checking if a context is
-					ready to be processed */
 	struct mutex mfc_mutex; /* video_device lock */
 	int int_cond;
 	int int_type;
@@ -367,7 +365,7 @@ struct s5p_mfc_dev {
 	unsigned long hw_lock;
 	struct s5p_mfc_ctx *ctx[MFC_NUM_CONTEXTS];
 	int curr_ctx;
-	unsigned long ctx_work_bits;
+	struct list_head ready_ctx_list;
 	atomic_t watchdog_cnt;
 	struct timer_list watchdog_timer;
 	struct workqueue_struct *watchdog_workqueue;
@@ -517,11 +515,14 @@ struct s5p_mfc_enc_params {
  * @post_frame_start:	Callback executed after receiving
  *			{SLICE,FIELD,FRAME}_DONE interrupt. Runs in atomic
  *			context with dev->irqlock held.
+ * @ctx_ready:		This callback shall check if given context is ready
+ *			for running. Runs with dev->irqlock held.
  */
 struct s5p_mfc_codec_ops {
 	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
 	int (*post_frame_start) (struct s5p_mfc_ctx *ctx, unsigned int reason,
 				 unsigned int err);
+	bool (*ctx_ready) (struct s5p_mfc_ctx *ctx);
 };
 
 /**
@@ -535,6 +536,8 @@ struct s5p_mfc_codec_ops {
  * @int_err:		error number received from MFC hw in the interrupt
  * @queue:		waitqueue that can be used to wait for this context to
  *			finish
+ * @ready_ctx_list:	list head to queue in ready context list
+ *			(needs to be accessed with dev->irqlock held)
  * @src_fmt:		source pixelformat information
  * @dst_fmt:		destination pixelformat information
  * @vq_src:		vb2 queue for source buffers
@@ -618,6 +621,7 @@ struct s5p_mfc_ctx {
 	int int_type;
 	unsigned int int_err;
 	wait_queue_head_t queue;
+	struct list_head ready_ctx_list;
 
 	struct s5p_mfc_fmt *src_fmt;
 	struct s5p_mfc_fmt *dst_fmt;
@@ -761,11 +765,6 @@ struct mfc_control {
 #define fh_to_ctx(__fh) container_of(__fh, struct s5p_mfc_ctx, fh)
 #define ctrl_to_ctx(__ctrl) \
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
-
-void clear_work_bit(struct s5p_mfc_ctx *ctx);
-void set_work_bit(struct s5p_mfc_ctx *ctx);
-void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
-void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 
 #define HAS_VARIANT(dev) ((dev) && ((dev)->variant))
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \

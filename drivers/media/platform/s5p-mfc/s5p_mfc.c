@@ -53,49 +53,6 @@ module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Debug level - higher value produces more verbose messages");
 
 /* Helper functions for interrupt processing */
-
-/* Remove from hw execution round robin */
-void clear_work_bit(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-
-	spin_lock(&dev->condlock);
-	__clear_bit(ctx->num, &dev->ctx_work_bits);
-	spin_unlock(&dev->condlock);
-}
-
-/* Add to hw execution round robin */
-void set_work_bit(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-
-	spin_lock(&dev->condlock);
-	__set_bit(ctx->num, &dev->ctx_work_bits);
-	spin_unlock(&dev->condlock);
-}
-
-/* Remove from hw execution round robin */
-void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->condlock, flags);
-	__clear_bit(ctx->num, &dev->ctx_work_bits);
-	spin_unlock_irqrestore(&dev->condlock, flags);
-}
-
-/* Add to hw execution round robin */
-void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->condlock, flags);
-	__set_bit(ctx->num, &dev->ctx_work_bits);
-	spin_unlock_irqrestore(&dev->condlock, flags);
-}
-
 static void s5p_mfc_watchdog(unsigned long arg)
 {
 	struct s5p_mfc_dev *dev = (struct s5p_mfc_dev *)arg;
@@ -146,7 +103,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 				&ctx->vq_dst);
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->src_queue,
 				&ctx->vq_src);
-		clear_work_bit(ctx);
+		s5p_mfc_ctx_done_locked(ctx);
 		s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
 	clear_bit(0, &dev->hw_lock);
@@ -255,7 +212,6 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 
 	if (s5p_mfc_hw_call(ctx->c_ops, post_seq_start, ctx))
 		mfc_err("post_seq_start() failed\n");
-	clear_work_bit(ctx);
 }
 
 /* Header parsing interrupt handling */
@@ -269,7 +225,6 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 
 	assert_spin_locked(&ctx->dev->irqlock);
 
-	clear_work_bit(ctx);
 	if (err == 0) {
 		ctx->state = MFCINST_RUNNING;
 		if (!ctx->dpb_flush_flag && ctx->head_processed) {
@@ -305,8 +260,6 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 		vb2_set_plane_payload(mb_entry->b, 0, 0);
 		vb2_buffer_done(mb_entry->b, VB2_BUF_STATE_DONE);
 	}
-
-	clear_work_bit(ctx);
 }
 
 static void s5p_mfc_handle_open_instance(struct s5p_mfc_ctx *ctx)
@@ -317,7 +270,6 @@ static void s5p_mfc_handle_open_instance(struct s5p_mfc_ctx *ctx)
 
 	ctx->inst_no = s5p_mfc_hw_call(dev->mfc_ops, get_inst_no, dev);
 	ctx->state = MFCINST_GOT_INST;
-	clear_work_bit(ctx);
 }
 
 static void s5p_mfc_handle_close_instance(struct s5p_mfc_ctx *ctx)
@@ -326,7 +278,6 @@ static void s5p_mfc_handle_close_instance(struct s5p_mfc_ctx *ctx)
 
 	ctx->inst_no = MFC_NO_INSTANCE_SET;
 	ctx->state = MFCINST_FREE;
-	clear_work_bit(ctx);
 }
 
 static void s5p_mfc_handle_dpb_flush(struct s5p_mfc_ctx *ctx)
@@ -334,7 +285,6 @@ static void s5p_mfc_handle_dpb_flush(struct s5p_mfc_ctx *ctx)
 	assert_spin_locked(&ctx->dev->irqlock);
 
 	ctx->state = MFCINST_RUNNING;
-	clear_work_bit(ctx);
 }
 
 static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
@@ -419,6 +369,9 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		return IRQ_HANDLED;
 	}
 
+	if (ctx)
+		s5p_mfc_ctx_done_locked(ctx);
+
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	if (test_and_clear_bit(0, &dev->clk_flag))
@@ -485,6 +438,7 @@ static int s5p_mfc_open(struct file *file)
 	ctx->dev = dev;
 	INIT_LIST_HEAD(&ctx->src_queue);
 	INIT_LIST_HEAD(&ctx->dst_queue);
+	INIT_LIST_HEAD(&ctx->ready_ctx_list);
 	ctx->src_queue_cnt = 0;
 	ctx->dst_queue_cnt = 0;
 	/* Get context number */
@@ -498,7 +452,6 @@ static int s5p_mfc_open(struct file *file)
 		}
 	}
 	/* Mark context as idle */
-	clear_work_bit_irqsave(ctx);
 	dev->ctx[ctx->num] = ctx;
 	if (node_type == MFCNODE_DECODER) {
 		ctx->type = MFCINST_DECODER;
@@ -598,8 +551,6 @@ static int s5p_mfc_release(struct file *file)
 	mutex_lock(&dev->mfc_mutex);
 	vb2_queue_release(&ctx->vq_src);
 	vb2_queue_release(&ctx->vq_dst);
-	/* Mark context as idle */
-	clear_work_bit_irqsave(ctx);
 	/* If instance was initialised and not yet freed,
 	 * return instance and free resources */
 	if (ctx->state != MFCINST_FREE && ctx->state != MFCINST_INIT) {
@@ -839,7 +790,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	}
 
 	spin_lock_init(&dev->irqlock);
-	spin_lock_init(&dev->condlock);
+	INIT_LIST_HEAD(&dev->ready_ctx_list);
 	dev->plat_dev = pdev;
 	if (!dev->plat_dev) {
 		dev_err(&pdev->dev, "No platform data specified\n");
