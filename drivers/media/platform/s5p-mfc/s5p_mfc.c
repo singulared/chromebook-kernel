@@ -79,7 +79,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	struct s5p_mfc_ctx *ctx;
 	unsigned long flags;
 	int mutex_locked;
-	int i, ret;
+	int ret;
 
 	dev = container_of(work, struct s5p_mfc_dev, watchdog_work);
 
@@ -94,10 +94,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	if (test_and_clear_bit(0, &dev->clk_flag))
 		s5p_mfc_clock_off(dev);
 
-	for (i = 0; i < MFC_NUM_CONTEXTS; i++) {
-		ctx = dev->ctx[i];
-		if (!ctx)
-			continue;
+	list_for_each_entry(ctx, &dev->ctx_list, ctx_list) {
 		ctx->state = MFCINST_ERROR;
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->dst_queue,
 				&ctx->vq_dst);
@@ -312,7 +309,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 	/* Reset the timeout watchdog */
 	atomic_set(&dev->watchdog_cnt, 0);
-	ctx = dev->ctx[dev->curr_ctx];
+	ctx = dev->curr_ctx;
 	/* Get the reason of interrupt and the error code */
 	reason = s5p_mfc_hw_call(dev->mfc_ops, get_int_reason, dev);
 	err = s5p_mfc_hw_call(dev->mfc_ops, get_int_err, dev);
@@ -414,6 +411,7 @@ static int s5p_mfc_open(struct file *file)
 	struct s5p_mfc_dev *dev = video_drvdata(file);
 	enum s5p_mfc_node_type node_type;
 	struct s5p_mfc_ctx *ctx = NULL;
+	unsigned long flags;
 	int ret = 0;
 
 	mfc_debug_enter();
@@ -424,6 +422,11 @@ static int s5p_mfc_open(struct file *file)
 
 	if (mutex_lock_interruptible(&dev->mfc_mutex))
 		return -ERESTARTSYS;
+	if (dev->num_inst == MFC_NUM_CONTEXTS) {
+		mfc_err("Too many open contexts\n");
+		ret = -EBUSY;
+		goto err_no_ctx;
+	}
 	dev->num_inst++;	/* It is guarded by mfc_mutex in vfd */
 	/* Allocate memory for context */
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -441,25 +444,14 @@ static int s5p_mfc_open(struct file *file)
 	INIT_LIST_HEAD(&ctx->ready_ctx_list);
 	ctx->src_queue_cnt = 0;
 	ctx->dst_queue_cnt = 0;
-	/* Get context number */
-	ctx->num = 0;
-	while (dev->ctx[ctx->num]) {
-		ctx->num++;
-		if (ctx->num >= MFC_NUM_CONTEXTS) {
-			mfc_err("Too many open contexts\n");
-			ret = -EBUSY;
-			goto err_no_ctx;
-		}
-	}
 	/* Mark context as idle */
-	dev->ctx[ctx->num] = ctx;
 	if (node_type == MFCNODE_DECODER) {
 		ctx->type = MFCINST_DECODER;
 		ctx->c_ops = get_dec_codec_ops();
 		ret = s5p_mfc_dec_init(ctx);
 		if (ret) {
 			mfc_err("Failed to init mfc decoder\n");
-			goto err_no_ctx;
+			goto err_fh_del;
 		}
 		/* Setup ctrl handler */
 		ret = s5p_mfc_dec_ctrls_setup(ctx);
@@ -476,7 +468,7 @@ static int s5p_mfc_open(struct file *file)
 		ret = s5p_mfc_enc_init(ctx);
 		if (ret) {
 			mfc_err("Failed to init mfc encoder\n");
-			goto err_no_ctx;
+			goto err_fh_del;
 		}
 		/* Setup ctrl handler */
 		ret = s5p_mfc_enc_ctrls_setup(ctx);
@@ -511,6 +503,11 @@ static int s5p_mfc_open(struct file *file)
 		goto err_queue_init;
 
 	init_waitqueue_head(&ctx->queue);
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+	list_add_tail(&ctx->ctx_list, &dev->ctx_list);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
 	mutex_unlock(&dev->mfc_mutex);
 	mfc_debug_leave();
 	return ret;
@@ -529,13 +526,13 @@ err_pwr_enable:
 	}
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);
-	dev->ctx[ctx->num] = NULL;
-err_no_ctx:
+err_fh_del:
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	kfree(ctx);
 err_alloc:
 	dev->num_inst--;
+err_no_ctx:
 	mutex_unlock(&dev->mfc_mutex);
 	mfc_debug_leave();
 	return ret;
@@ -546,6 +543,7 @@ static int s5p_mfc_release(struct file *file)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(file->private_data);
 	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned long flags;
 
 	mfc_debug_enter();
 	mutex_lock(&dev->mfc_mutex);
@@ -557,9 +555,20 @@ static int s5p_mfc_release(struct file *file)
 		mfc_debug(2, "Has to free instance\n");
 		s5p_mfc_close_mfc_inst(dev, ctx);
 	}
-	/* hardware locking scheme */
-	if (dev->curr_ctx == ctx->num)
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+	if (WARN_ON(dev->curr_ctx == ctx)) {
+		/*
+		 * This should not happen, but in case there is a bug still
+		 * hiding somewhere in the code let's try to keep the system
+		 * kind of running.
+		 */
 		clear_bit(0, &dev->hw_lock);
+		dev->curr_ctx = NULL;
+	}
+	list_del(&ctx->ctx_list);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
 	dev->num_inst--;
 	if (dev->num_inst == 0) {
 		mfc_debug(2, "Last instance\n");
@@ -569,7 +578,6 @@ static int s5p_mfc_release(struct file *file)
 			mfc_err("Power off failed\n");
 	}
 	mfc_debug(2, "Shutting down clock\n");
-	dev->ctx[ctx->num] = NULL;
 	s5p_mfc_dec_ctrls_delete(ctx);
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
@@ -791,6 +799,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	spin_lock_init(&dev->irqlock);
 	INIT_LIST_HEAD(&dev->ready_ctx_list);
+	INIT_LIST_HEAD(&dev->ctx_list);
 	dev->plat_dev = pdev;
 	if (!dev->plat_dev) {
 		dev_err(&pdev->dev, "No platform data specified\n");

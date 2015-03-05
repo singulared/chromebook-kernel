@@ -320,8 +320,9 @@ struct s5p_mfc_priv_buf {
  * @bank1:		address of the beginning of bank 1 memory
  * @bank2:		address of the beginning of bank 2 memory
  * @hw_lock:		used for hardware locking
- * @ctx:		array of driver contexts
- * @curr_ctx:		number of the currently running context
+ * @ctx_list:		list of all open instances
+ *			(needs to be accessed with dev->irqlock held)
+ * @curr_ctx:		currently running context
  *			(needs to be accessed with dev->irqlock held)
  * @ready_ctx_list:	list of contexts that can be run
  *			(needs to be accessed with dev->irqlock held)
@@ -363,8 +364,8 @@ struct s5p_mfc_dev {
 	dma_addr_t bank1;
 	dma_addr_t bank2;
 	unsigned long hw_lock;
-	struct s5p_mfc_ctx *ctx[MFC_NUM_CONTEXTS];
-	int curr_ctx;
+	struct list_head ctx_list;
+	struct s5p_mfc_ctx *curr_ctx;
 	struct list_head ready_ctx_list;
 	atomic_t watchdog_cnt;
 	struct timer_list watchdog_timer;
@@ -530,13 +531,14 @@ struct s5p_mfc_codec_ops {
  *
  * @dev:		pointer to the s5p_mfc_dev of the device
  * @fh:			struct v4l2_fh
- * @num:		number of the context that this structure describes
  * @int_cond:		variable used by the waitqueue
  * @int_type:		type of the last interrupt
  * @int_err:		error number received from MFC hw in the interrupt
  * @queue:		waitqueue that can be used to wait for this context to
  *			finish
  * @ready_ctx_list:	list head to queue in ready context list
+ *			(needs to be accessed with dev->irqlock held)
+ * @ctx_list:		list head to queue in list of all contexts
  *			(needs to be accessed with dev->irqlock held)
  * @src_fmt:		source pixelformat information
  * @dst_fmt:		destination pixelformat information
@@ -615,13 +617,12 @@ struct s5p_mfc_ctx {
 	struct s5p_mfc_dev *dev;
 	struct v4l2_fh fh;
 
-	int num;
-
 	int int_cond;
 	int int_type;
 	unsigned int int_err;
 	wait_queue_head_t queue;
 	struct list_head ready_ctx_list;
+	struct list_head ctx_list;
 
 	struct s5p_mfc_fmt *src_fmt;
 	struct s5p_mfc_fmt *dst_fmt;

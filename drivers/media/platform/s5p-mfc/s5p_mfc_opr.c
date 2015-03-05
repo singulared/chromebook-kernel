@@ -122,7 +122,6 @@ static struct s5p_mfc_ctx *s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 		return NULL;
 	}
 	spin_lock_irqsave(&dev->irqlock, flags);
-	mfc_debug(2, "Previous context: %d\n", dev->curr_ctx);
 	if (list_empty(&dev->ready_ctx_list)) {
 		mfc_debug(1, "No ctx is scheduled to be run\n");
 		goto done;
@@ -135,7 +134,7 @@ static struct s5p_mfc_ctx *s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 	}
 	ctx = list_first_entry(&dev->ready_ctx_list, struct s5p_mfc_ctx,
 				ready_ctx_list);
-	dev->curr_ctx = ctx->num;
+	dev->curr_ctx = ctx;
 
 done:
 	spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -160,7 +159,7 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	 * At this point we already hold hardware lock and has a context
 	 * to run. We can power on the hardware and program the operation.
 	 */
-	mfc_debug(1, "New context: %d\n", ctx->num);
+	mfc_debug(1, "New context: %p\n", ctx);
 	mfc_debug(1, "Seting new context to %p\n", ctx);
 	/* Got context to run in ctx */
 	mfc_debug(1, "ctx->dst_queue_cnt=%d ctx->dpb_count=%d ctx->src_queue_cnt=%d\n",
@@ -237,6 +236,7 @@ void s5p_mfc_ctx_done_locked(struct s5p_mfc_ctx *ctx)
 
 	assert_spin_locked(&dev->irqlock);
 
+	dev->curr_ctx = NULL;
 	list_del_init(&ctx->ready_ctx_list);
 	s5p_mfc_try_ctx_locked(dev, ctx);
 }

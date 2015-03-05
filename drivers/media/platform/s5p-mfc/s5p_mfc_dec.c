@@ -1523,7 +1523,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 
 	if ((ctx->state == MFCINST_FINISHING ||
 		ctx->state ==  MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx->num && dev->hw_lock) {
+		dev->curr_ctx == ctx && dev->hw_lock) {
 		ctx->state = MFCINST_ABORT;
 		s5p_mfc_wait_for_done_ctx(ctx,
 					S5P_MFC_R2H_CMD_FRAME_DONE_RET, 0);
