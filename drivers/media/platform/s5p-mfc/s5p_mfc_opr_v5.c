@@ -1359,7 +1359,6 @@ static int s5p_mfc_run_v5(struct s5p_mfc_ctx *ctx)
 			return 0;
 		case MFCINST_RES_CHANGE_END:
 			mfc_debug(2, "Finished remaining frames after resolution change\n");
-			ctx->capture_state = QUEUE_FREE;
 			mfc_debug(2, "Will re-init the codec\n");
 			s5p_mfc_run_init_dec(ctx);
 			return 0;

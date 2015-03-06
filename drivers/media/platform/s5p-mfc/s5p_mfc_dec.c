@@ -493,10 +493,20 @@ static int s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 
 	ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops, get_dpb_count, dev);
 	ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count, dev);
-	if (ctx->img_width == 0 || ctx->img_height == 0)
+	if (ctx->img_width == 0 || ctx->img_height == 0) {
 		ctx->state = MFCINST_ERROR;
-	else
+	} else {
+		if (ctx->state == MFCINST_RES_CHANGE_END) {
+			struct v4l2_event ev;
+
+			ctx->capture_state = QUEUE_FREE;
+
+			memset(&ev, 0, sizeof(struct v4l2_event));
+			ev.type = V4L2_EVENT_RESOLUTION_CHANGE;
+			v4l2_event_queue_fh(&ctx->fh, &ev);
+		}
 		ctx->state = MFCINST_HEAD_PARSED;
+	}
 
 	if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
 		ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC ||
@@ -656,7 +666,6 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 	unsigned int dec_frame_status;
 	struct s5p_mfc_buf *src_buf;
 	unsigned int res_change;
-	struct v4l2_event ev;
 
 	unsigned int index;
 
@@ -685,10 +694,6 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		if (ctx->state == MFCINST_RES_CHANGE_FLUSH) {
 			s5p_mfc_handle_frame_all_extracted(ctx);
 			ctx->state = MFCINST_RES_CHANGE_END;
-
-			memset(&ev, 0, sizeof(struct v4l2_event));
-			ev.type = V4L2_EVENT_RESOLUTION_CHANGE;
-			v4l2_event_queue_fh(&ctx->fh, &ev);
 
 			goto leave_handle_frame;
 		} else {
