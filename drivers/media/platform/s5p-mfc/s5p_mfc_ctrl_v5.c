@@ -101,7 +101,6 @@ static int s5p_mfc_init_hw_v5(struct s5p_mfc_dev *dev)
 	/* Lock the HW before releasing RISC reset */
 	set_bit(0, &dev->hw_lock);
 	/* 3. Release reset signal to the RISC */
-	s5p_mfc_clean_dev_int_flags(dev);
 	mfc_write(dev, 0x3ff, S5P_FIMV_SW_RESET);
 
 	ret = s5p_mfc_init_fw(dev);
@@ -138,7 +137,6 @@ static int s5p_mfc_wakeup_v5(struct s5p_mfc_dev *dev)
 	s5p_mfc_init_memctrl_v5(dev);
 	/* 2. Initialize registers of channel I/F */
 	s5p_mfc_clear_cmds(dev);
-	s5p_mfc_clean_dev_int_flags(dev);
 	/* Lock the HW before sending wake-up command */
 	set_bit(0, &dev->hw_lock);
 	/* 3. Send MFC wakeup command and wait for completion*/
@@ -152,21 +150,12 @@ static int s5p_mfc_wakeup_v5(struct s5p_mfc_dev *dev)
 	/* Release reset signal to the RISC */
 	mfc_write(dev, 0x3ff, S5P_FIMV_SW_RESET);
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to wakeup MFC\n");
 		s5p_mfc_clock_off(dev);
 		return -EIO;
 	}
 	s5p_mfc_clock_off(dev);
-
-	dev->int_cond = 0;
-	if (dev->int_err != 0 || dev->int_type !=
-						S5P_MFC_R2H_CMD_WAKEUP_RET) {
-		/* Failure. */
-		mfc_err("Failed to wakeup - error: %d int: %d\n", dev->int_err,
-								dev->int_type);
-		return -EIO;
-	}
 	mfc_debug_leave();
 	return 0;
 }

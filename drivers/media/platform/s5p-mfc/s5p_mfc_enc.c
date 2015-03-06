@@ -1665,8 +1665,7 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		/* Should wait for the header to be produced */
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
 		    ctx->state < MFCINST_ABORT) {
 			ctrl->val = ctx->dpb_count;
@@ -2061,8 +2060,7 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 	s5p_mfc_try_ctx(ctx);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		ret = s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		ret = s5p_mfc_wait_for_done_ctx(ctx);
 		if (ret) {
 			mfc_err("Hardware failed to initialize encoding\n");
 			return -EIO;
@@ -2082,8 +2080,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->state == MFCINST_RUNNING) &&
 		dev->curr_ctx == ctx && dev->hw_lock) {
 		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_FRAME_DONE_RET,
-					  0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 	}
 	ctx->state = MFCINST_FINISHED;
 	spin_lock_irqsave(&dev->irqlock, flags);

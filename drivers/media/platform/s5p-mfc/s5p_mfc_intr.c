@@ -21,96 +21,56 @@
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
 
-int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
+int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev)
 {
 	int ret;
 
-	ret = wait_event_interruptible_timeout(dev->queue,
-		(dev->int_cond && (dev->int_type == command
-		|| dev->int_type == S5P_MFC_R2H_CMD_ERR_RET))
-		|| test_bit(0, &dev->hw_error),
-		msecs_to_jiffies(MFC_INT_TIMEOUT));
-	if (ret == 0) {
-		mfc_err("Interrupt (dev->int_type:%d, command:%d) timed out\n",
-							dev->int_type, command);
-		return 1;
-	} else if (ret == -ERESTARTSYS) {
-		mfc_err("Interrupted by a signal\n");
-		return 1;
+	ret = wait_event_timeout(dev->queue, !test_bit(0, &dev->hw_lock),
+					msecs_to_jiffies(MFC_INT_TIMEOUT));
+	if (!ret || test_bit(0, &dev->hw_error)) {
+		mfc_err("Waiting for dev failed\n");
+		return -EIO;
 	}
-	mfc_debug(1, "Finished waiting (dev->int_type:%d, command: %d)\n",
-							dev->int_type, command);
-	if (dev->int_type == S5P_MFC_R2H_CMD_ERR_RET
-	    || test_bit(0, &dev->hw_error))
-		return 1;
+	mfc_debug(1, "Finished waiting for dev\n");
 	return 0;
 }
 
-void s5p_mfc_clean_dev_int_flags(struct s5p_mfc_dev *dev)
+static inline bool s5p_mfc_ctx_idle(struct s5p_mfc_ctx *ctx)
 {
-	dev->int_cond = 0;
-	dev->int_type = 0;
-	dev->int_err = 0;
+	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned long flags;
+	bool idle;
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+	idle = list_empty(&ctx->ready_ctx_list)
+		|| test_bit(0, &dev->hw_error);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	return idle;
 }
 
-int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
-				    int command, int interrupt)
+int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx)
 {
-	int ret;
+	struct s5p_mfc_dev *dev = ctx->dev;
+	bool error;
 
-	if (interrupt) {
-		ret = wait_event_interruptible_timeout(ctx->queue,
-				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET))
-			|| test_bit(0, &ctx->dev->hw_error),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
-	} else {
-		ret = wait_event_timeout(ctx->queue,
-				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET))
-			|| test_bit(0, &ctx->dev->hw_error),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
+	WARN_ON(!mutex_is_locked(&dev->mfc_mutex));
+
+	wait_event(dev->queue, s5p_mfc_ctx_idle(ctx));
+
+	error = ctx->state == MFCINST_ERROR
+		|| test_bit(0, &dev->hw_error);
+
+	if (error) {
+		mfc_err("Waiting for ctx %p ended with error\n", ctx);
+		return -EIO;
 	}
-	if (ret == 0) {
-		mfc_err("Interrupt (ctx->int_type:%d, command:%d) timed out\n",
-							ctx->int_type, command);
-		return 1;
-	} else if (ret == -ERESTARTSYS) {
-		mfc_err("Interrupted by a signal\n");
-		return 1;
-	}
-	mfc_debug(1, "Finished waiting (ctx->int_type:%d, command: %d)\n",
-							ctx->int_type, command);
-	if (ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET
-	    || test_bit(0, &ctx->dev->hw_error))
-		return 1;
+	mfc_debug(1, "Finished waiting for ctx %p\n", ctx);
 	return 0;
 }
 
-void s5p_mfc_clean_ctx_int_flags(struct s5p_mfc_ctx *ctx)
+void s5p_mfc_wake_up(struct s5p_mfc_dev *dev)
 {
-	ctx->int_cond = 0;
-	ctx->int_type = 0;
-	ctx->int_err = 0;
-}
-
-/* Wake up context wait_queue */
-void s5p_mfc_wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
-			 unsigned int err)
-{
-	ctx->int_cond = 1;
-	ctx->int_type = reason;
-	ctx->int_err = err;
-	wake_up(&ctx->queue);
-}
-
-/* Wake up device wait_queue */
-void s5p_mfc_wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
-			 unsigned int err)
-{
-	dev->int_cond = 1;
-	dev->int_type = reason;
-	dev->int_err = err;
-	wake_up(&dev->queue);
+	wake_up_all(&dev->queue);
 }
 

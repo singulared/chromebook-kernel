@@ -309,9 +309,6 @@ struct s5p_mfc_priv_buf {
  * @irqlock:		lock for operations on data shared with IRQ handler
  *			(always acquired by IRQ handler)
  * @mfc_mutex:		lock for video_device
- * @int_cond:		variable used by the waitqueue
- * @int_type:		type of last interrupt
- * @int_err:		error number for last interrupt
  * @queue:		waitqueue for waiting for completion of device commands
  * @fw_size:		size of firmware
  * @fw_virt_addr:	virtual firmware address
@@ -356,9 +353,6 @@ struct s5p_mfc_dev {
 	int num_inst;
 	spinlock_t irqlock;	/* lock when operating on videobuf2 queues */
 	struct mutex mfc_mutex; /* video_device lock */
-	int int_cond;
-	int int_type;
-	unsigned int int_err;
 	wait_queue_head_t queue;
 	size_t fw_size;
 	void *fw_virt_addr;
@@ -530,11 +524,6 @@ struct s5p_mfc_codec_ops {
  *
  * @dev:		pointer to the s5p_mfc_dev of the device
  * @fh:			struct v4l2_fh
- * @int_cond:		variable used by the waitqueue
- * @int_type:		type of the last interrupt
- * @int_err:		error number received from MFC hw in the interrupt
- * @queue:		waitqueue that can be used to wait for this context to
- *			finish
  * @ready_ctx_list:	list head to queue in ready context list
  *			(needs to be accessed with dev->irqlock held)
  * @ctx_list:		list head to queue in list of all contexts
@@ -616,10 +605,6 @@ struct s5p_mfc_ctx {
 	struct s5p_mfc_dev *dev;
 	struct v4l2_fh fh;
 
-	int int_cond;
-	int int_type;
-	unsigned int int_err;
-	wait_queue_head_t queue;
 	struct list_head ready_ctx_list;
 	struct list_head ctx_list;
 

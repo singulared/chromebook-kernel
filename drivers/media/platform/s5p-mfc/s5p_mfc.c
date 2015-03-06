@@ -97,7 +97,6 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	 */
 	set_bit(0, &dev->hw_error);
 	clear_bit(0, &dev->hw_lock);
-	s5p_mfc_wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
 
 	/*
 	 * Clean up all existing contexts, put them into error state
@@ -119,9 +118,9 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		s5p_mfc_fatal_error(dev, ctx);
 		ctx->inst_no = MFC_NO_INSTANCE_SET;
 		s5p_mfc_ctx_done_locked(ctx);
-		s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
 
+	s5p_mfc_wake_up(dev);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/*
@@ -245,8 +244,6 @@ static void s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 
 	/* Unrecoverable error. */
 	s5p_mfc_fatal_error(dev, ctx);
-	s5p_mfc_wake_up_dev(dev, reason, err);
-	clear_bit(0, &dev->enter_suspend);
 }
 
 /* Header parsing interrupt handling */
@@ -335,15 +332,15 @@ static void s5p_mfc_handle_dpb_flush(struct s5p_mfc_ctx *ctx)
 }
 
 static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
-		unsigned int reason, unsigned int err)
+				    unsigned int err)
 {
 	assert_spin_locked(&dev->irqlock);
 
 	if (err)
 		set_bit(0, &dev->hw_error);
-	s5p_mfc_wake_up_dev(dev, reason, err);
 	clear_bit(0, &dev->hw_lock);
-	clear_bit(0, &dev->enter_suspend);
+
+	s5p_mfc_wake_up(dev);
 }
 
 /* Interrupt processing */
@@ -394,7 +391,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	case S5P_MFC_R2H_CMD_FW_STATUS_RET:
 	case S5P_MFC_R2H_CMD_SLEEP_RET:
 	case S5P_MFC_R2H_CMD_WAKEUP_RET:
-		s5p_mfc_handle_sys_init(dev, reason, err);
+		s5p_mfc_handle_sys_init(dev, err);
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 		mfc_debug_leave();
 		return IRQ_HANDLED;
@@ -427,8 +424,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		s5p_mfc_clock_off(dev);
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		mfc_err("Failed to unlock hw\n");
-	if (ctx)
-		s5p_mfc_wake_up_ctx(ctx, reason, err);
+	s5p_mfc_wake_up(dev);
 	s5p_mfc_try_run(dev);
 
 	mfc_debug_leave();
@@ -578,8 +574,6 @@ static int s5p_mfc_open(struct file *file)
 		|| s5p_mfc_init_vb2_queue(&ctx->vq_src, &ctx->fh,
 			V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, node_type))
 		goto err_shutdown;
-
-	init_waitqueue_head(&ctx->queue);
 
 	spin_lock_irqsave(&dev->irqlock, flags);
 	list_add_tail(&ctx->ctx_list, &dev->ctx_list);
@@ -1078,25 +1072,26 @@ static int s5p_mfc_suspend(struct device *dev)
 		return -EIO;
 	}
 
-	/* Check if we're processing then wait if it necessary. */
-	while (test_and_set_bit(0, &m_dev->hw_lock) != 0) {
-		/* Try and lock the HW */
-		/* Wait on the interrupt waitqueue */
-		ret = wait_event_interruptible_timeout(m_dev->queue,
-			m_dev->int_cond, msecs_to_jiffies(MFC_INT_TIMEOUT));
-		if (ret == 0) {
-			mfc_err("Waiting for hardware to finish timed out\n");
-			clear_bit(0, &m_dev->enter_suspend);
-			return -EIO;
-		}
-	}
+	/*
+	 * Wait for run being currently processed if necessary.
+	 *
+	 * Since s5p_mfc_try_run() checks status of enter_suspend flag,
+	 * if we acquire hw_lock no other thread will be able to schedule
+	 * further runs.
+	 *
+	 * Timeout is handled by watchdog timer.
+	 */
+	wait_event(m_dev->queue, !test_and_set_bit(0, &m_dev->hw_lock));
+	clear_bit(0, &m_dev->hw_lock);
 
 	ret = s5p_mfc_ctrl_ops_call(m_dev, sleep, m_dev);
 	if (ret) {
 		clear_bit(0, &m_dev->enter_suspend);
 		clear_bit(0, &m_dev->hw_lock);
+		return ret;
 	}
-	return ret;
+
+	return 0;
 }
 
 static int s5p_mfc_resume(struct device *dev)
@@ -1107,7 +1102,9 @@ static int s5p_mfc_resume(struct device *dev)
 
 	if (m_dev->num_inst == 0)
 		return 0;
+
 	ret = s5p_mfc_ctrl_ops_call(m_dev, wakeup, m_dev);
+	clear_bit(0, &m_dev->enter_suspend);
 	if (ret) {
 		clear_bit(0, &m_dev->hw_lock);
 		return ret;

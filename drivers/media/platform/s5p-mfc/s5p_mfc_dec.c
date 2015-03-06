@@ -695,7 +695,7 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 			s5p_mfc_handle_frame_all_extracted(ctx);
 			ctx->state = MFCINST_RES_CHANGE_END;
 
-			goto leave_handle_frame;
+			return 0;
 		} else {
 			s5p_mfc_handle_frame_all_extracted(ctx);
 		}
@@ -739,10 +739,6 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 				vb2_buffer_done(src_buf->b, VB2_BUF_STATE_DONE);
 		}
 	}
-leave_handle_frame:
-	/* if suspending, wake up device*/
-	if (test_bit(0, &dev->enter_suspend))
-		s5p_mfc_wake_up_dev(dev, reason, err);
 
 	return 0;
 }
@@ -827,8 +823,7 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 						MFCINST_RES_CHANGE_END)) {
 		/* If the MFC is parsing the header,
 		 * so wait until it is finished */
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_SEQ_DONE_RET,
-									0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 	    ctx->state >= MFCINST_HEAD_PARSED &&
@@ -1060,8 +1055,7 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 	ctx->capture_state = QUEUE_BUFS_MMAPED;
 
 	s5p_mfc_try_ctx(ctx);
-	ret = s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_INIT_BUFFERS_RET, 0);
+	ret = s5p_mfc_wait_for_done_ctx(ctx);
 	if (ret) {
 		mfc_err("CMD_INIT_BUFFERS failed\n");
 		ret = -EIO;
@@ -1248,8 +1242,7 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		/* Should wait for the header to be parsed */
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
 		    ctx->state < MFCINST_ABORT) {
 			ctrl->val = ctx->dpb_count;
@@ -1546,8 +1539,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->state ==  MFCINST_RUNNING) &&
 		dev->curr_ctx == ctx && dev->hw_lock) {
 		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx,
-					S5P_MFC_R2H_CMD_FRAME_DONE_RET, 0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 		aborted = 1;
 	}
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
@@ -1562,8 +1554,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		if (IS_MFCV6(dev) && (ctx->state == MFCINST_RUNNING)) {
 			ctx->state = MFCINST_FLUSH;
 			s5p_mfc_try_ctx(ctx);
-			if (s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_DPB_FLUSH_RET, 0))
+			if (s5p_mfc_wait_for_done_ctx(ctx))
 				mfc_err("Err flushing buffers\n");
 		}
 	}

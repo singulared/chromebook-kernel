@@ -178,8 +178,6 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	if (test_and_set_bit(0, &dev->clk_flag) == 0)
 		s5p_mfc_clock_on(dev);
 
-	s5p_mfc_clean_ctx_int_flags(ctx);
-
 	schedule_delayed_work(&dev->watchdog_work,
 				msecs_to_jiffies(MFC_WATCHDOG_TIMEOUT_MS));
 
@@ -206,7 +204,7 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		mfc_err("Failed to unlock hardware\n");
 
-	s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
+	s5p_mfc_wake_up(dev);
 
 	return -EAGAIN;
 }
