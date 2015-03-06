@@ -142,7 +142,6 @@ enum s5p_mfc_inst_state {
 	MFCINST_FINISHED,
 	MFCINST_RETURN_INST,
 	MFCINST_ERROR,
-	MFCINST_ABORT,
 	MFCINST_FLUSH,
 	MFCINST_RES_CHANGE_INIT,
 	MFCINST_RES_CHANGE_FLUSH,
@@ -600,6 +599,12 @@ struct s5p_mfc_codec_ops {
  * @ctrls:		array of controls, used when adding controls to the
  *			v4l2 control framework
  * @ctrl_handler:	handler for v4l2 framework
+ * @stopping:		Boolean flag indicating that the context should stop
+ *			being processed as soon as possible. (Note that it
+ *			might take few additional runs to trigger necessary
+ *			hardware state changes until the context is actually
+ *			stopped, so s5p_mfc_wait_for_done_ctx() must be used
+ *			to wait for the processing to end.
  */
 struct s5p_mfc_ctx {
 	struct s5p_mfc_dev *dev;
@@ -698,6 +703,7 @@ struct s5p_mfc_ctx {
 	struct v4l2_ctrl_handler ctrl_handler;
 	unsigned int frame_tag;
 	size_t scratch_buf_size;
+	bool stopping:1;
 };
 
 #define MFC_V5_BIT	BIT(0)

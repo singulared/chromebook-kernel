@@ -742,7 +742,8 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	/* context is ready to encode a frame */
 	case MFCINST_HEAD_PARSED:
 	case MFCINST_RUNNING:
-		if (ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1)
+		if (ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1 &&
+		    !ctx->stopping)
 			return true;
 		break;
 	/* context is ready to encode remaining frames */
@@ -1657,7 +1658,7 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	switch (ctrl->id) {
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 			break;
 		} else if (ctx->state != MFCINST_INIT) {
@@ -1667,7 +1668,7 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		/* Should wait for the header to be produced */
 		s5p_mfc_wait_for_done_ctx(ctx);
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 		} else {
 			v4l2_err(&dev->v4l2_dev, "Encoding not initialised\n");
@@ -2076,13 +2077,9 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
 	struct s5p_mfc_dev *dev = ctx->dev;
 
-	if ((ctx->state == MFCINST_FINISHING ||
-		ctx->state == MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx && dev->hw_lock) {
-		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx);
-	}
-	ctx->state = MFCINST_FINISHED;
+	ctx->stopping = true;
+	s5p_mfc_wait_for_done_ctx(ctx);
+
 	spin_lock_irqsave(&dev->irqlock, flags);
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->dst_queue,
@@ -2098,6 +2095,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->src_queue_cnt = 0;
 	}
 	spin_unlock_irqrestore(&dev->irqlock, flags);
+	ctx->stopping = false;
 	return 0;
 }
 

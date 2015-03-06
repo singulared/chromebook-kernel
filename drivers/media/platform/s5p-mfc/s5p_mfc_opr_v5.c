@@ -1159,7 +1159,8 @@ static int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx, int last_frame)
 	unsigned long flags;
 	unsigned int index;
 
-	if (ctx->state == MFCINST_FINISHING) {
+	if (ctx->state == MFCINST_FINISHING ||
+	    ctx->state == MFCINST_FLUSH) {
 		last_frame = MFC_DEC_LAST_FRAME;
 		s5p_mfc_set_dec_stream_buffer_v5(ctx, 0, 0, 0);
 		s5p_mfc_decode_one_frame_v5(ctx, last_frame);
@@ -1335,6 +1336,7 @@ static int s5p_mfc_run_v5(struct s5p_mfc_ctx *ctx)
 		s5p_mfc_set_dec_desc_buffer(ctx);
 		switch (ctx->state) {
 		case MFCINST_FINISHING:
+		case MFCINST_FLUSH:
 			s5p_mfc_run_dec_frame(ctx, MFC_DEC_LAST_FRAME);
 			return 0;
 		case MFCINST_RUNNING:

@@ -417,14 +417,13 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	/* Context is to decode a frame */
 	case MFCINST_RUNNING:
 		if (ctx->src_queue_cnt >= 1 &&
-		    ctx->dst_queue_cnt >= ctx->dpb_count)
+		    ctx->dst_queue_cnt >= ctx->dpb_count &&
+		    !ctx->stopping)
 			return true;
 		break;
 	/* Context is to return last frame */
 	case MFCINST_FINISHING:
-		if (ctx->dst_queue_cnt >= ctx->dpb_count)
-			return true;
-		break;
+		return !ctx->stopping;
 	/* Context is to free instance ID */
 	case MFCINST_RETURN_INST:
 		return true;
@@ -434,12 +433,10 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	/* Resolution change flush in progress */
 	case MFCINST_RES_CHANGE_INIT:
 	case MFCINST_RES_CHANGE_FLUSH:
-		if (ctx->dst_queue_cnt >= ctx->dpb_count)
-			return true;
-		break;
+		return !ctx->stopping;
 	/* Resolution change flush finished */
 	case MFCINST_RES_CHANGE_END:
-		if (ctx->src_queue_cnt >= 1)
+		if (ctx->src_queue_cnt >= 1 && !ctx->stopping)
 			return true;
 		break;
 	default:
@@ -819,15 +816,15 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	mfc_debug_enter();
 	pix_mp = &f->fmt.pix_mp;
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
-	    (ctx->state == MFCINST_GOT_INST || ctx->state ==
-						MFCINST_RES_CHANGE_END)) {
+	    (ctx->state < MFCINST_HEAD_PARSED || ctx->state >=
+						MFCINST_RES_CHANGE_INIT)) {
 		/* If the MFC is parsing the header,
 		 * so wait until it is finished */
 		s5p_mfc_wait_for_done_ctx(ctx);
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 	    ctx->state >= MFCINST_HEAD_PARSED &&
-	    ctx->state < MFCINST_ABORT) {
+	    ctx->state < MFCINST_ERROR) {
 		/* This is run on CAPTURE (decode output) */
 		/* Width and height are set to the dimensions of the buffer,
 		   The movie's dimensions may be smaller; the cropping rectangle
@@ -1233,7 +1230,7 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	switch (ctrl->id) {
 	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 			break;
 		} else if (ctx->state != MFCINST_INIT &&
@@ -1244,7 +1241,7 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		/* Should wait for the header to be parsed */
 		s5p_mfc_wait_for_done_ctx(ctx);
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 		} else {
 			v4l2_err(&dev->v4l2_dev, "Decoding not initialised\n");
@@ -1267,7 +1264,7 @@ static int vidioc_g_crop(struct file *file, void *priv,
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 
-	if (ctx->state >= MFCINST_HEAD_PARSED && ctx->state < MFCINST_ABORT) {
+	if (ctx->state >= MFCINST_HEAD_PARSED && ctx->state < MFCINST_ERROR) {
 		cr->c.left = ctx->crop_left;
 		cr->c.top = ctx->crop_top;
 		cr->c.width = ctx->crop_width;
@@ -1533,16 +1530,14 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 	unsigned long flags;
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
 	struct s5p_mfc_dev *dev = ctx->dev;
-	int aborted = 0;
 
-	if ((ctx->state == MFCINST_FINISHING ||
-		ctx->state ==  MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx && dev->hw_lock) {
-		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx);
-		aborted = 1;
-	}
+	ctx->stopping = true;
+	s5p_mfc_wait_for_done_ctx(ctx);
+
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		enum s5p_mfc_inst_state state;
+		bool flush = false;
+
 		spin_lock_irqsave(&dev->irqlock, flags);
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->dst_queue,
 				&ctx->vq_dst);
@@ -1550,12 +1545,34 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->dst_queue_cnt = 0;
 		ctx->dpb_flush_flag = 1;
 		ctx->dec_dst_flag = 0;
-		spin_unlock_irqrestore(&dev->irqlock, flags);
-		if (IS_MFCV6(dev) && (ctx->state == MFCINST_RUNNING)) {
+		state = ctx->state;
+		if (state == MFCINST_RUNNING ||
+		    state == MFCINST_FINISHING ||
+		    state == MFCINST_RES_CHANGE_INIT ||
+		    state == MFCINST_RES_CHANGE_FLUSH) {
+			state = ctx->state;
 			ctx->state = MFCINST_FLUSH;
+			flush = true;
+		}
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+
+		if (flush) {
 			s5p_mfc_try_ctx(ctx);
 			if (s5p_mfc_wait_for_done_ctx(ctx))
 				mfc_err("Err flushing buffers\n");
+
+			/*
+			 * Even though this instance should not be running at
+			 * this point, another one might have crashed the
+			 * hardware and triggered watchdog worker, which might
+			 * have changed the state of all instances to
+			 * MFCINST_ERROR.
+			 */
+			spin_lock_irqsave(&dev->irqlock, flags);
+			if (ctx->state != MFCINST_ERROR &&
+			    state >= MFCINST_RES_CHANGE_INIT)
+				ctx->state = MFCINST_RES_CHANGE_END;
+			spin_unlock_irqrestore(&dev->irqlock, flags);
 		}
 	}
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
@@ -1566,8 +1583,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->src_queue_cnt = 0;
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 	}
-	if (aborted)
-		ctx->state = MFCINST_RUNNING;
+	ctx->stopping = false;
 	return 0;
 }
 
