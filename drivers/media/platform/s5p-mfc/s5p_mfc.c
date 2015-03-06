@@ -1110,6 +1110,7 @@ static int s5p_mfc_resume(struct device *dev)
 		return ret;
 	}
 
+	s5p_mfc_try_run(m_dev);
 	return 0;
 }
 #endif
