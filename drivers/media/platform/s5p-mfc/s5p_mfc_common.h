@@ -511,19 +511,18 @@ struct s5p_mfc_enc_params {
 };
 
 /**
- * struct s5p_mfc_codec_ops - codec ops, used by encoding
- * (called with dev->irqlock acquired)
+ * struct s5p_mfc_codec_ops - codec ops
+ * @post_seq_start:	Callback executed after receiving SEQ_DONE interrupt.
+ *			Runs in atomic context with dev->irqlock held.
+ * @post_frame_start:	Callback executed after receiving
+ *			{SLICE,FIELD,FRAME}_DONE interrupt. Runs in atomic
+ *			context with dev->irqlock held.
  */
 struct s5p_mfc_codec_ops {
-	/* initialization routines */
 	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
-	/* execution routines */
-	int (*post_frame_start) (struct s5p_mfc_ctx *ctx);
+	int (*post_frame_start) (struct s5p_mfc_ctx *ctx, unsigned int reason,
+				 unsigned int err);
 };
-
-#define call_cop(c, op, args...)				\
-	(((c)->c_ops->op) ?					\
-		((c)->c_ops->op(args)) : 0)
 
 /**
  * struct s5p_mfc_ctx - This struct contains the instance context

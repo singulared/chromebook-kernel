@@ -96,26 +96,6 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx)
 	spin_unlock_irqrestore(&dev->condlock, flags);
 }
 
-/* Wake up context wait_queue */
-static void wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
-			unsigned int err)
-{
-	ctx->int_cond = 1;
-	ctx->int_type = reason;
-	ctx->int_err = err;
-	wake_up(&ctx->queue);
-}
-
-/* Wake up device wait_queue */
-static void wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
-			unsigned int err)
-{
-	dev->int_cond = 1;
-	dev->int_type = reason;
-	dev->int_err = err;
-	wake_up(&dev->queue);
-}
-
 static void s5p_mfc_watchdog(unsigned long arg)
 {
 	struct s5p_mfc_dev *dev = (struct s5p_mfc_dev *)arg;
@@ -167,7 +147,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->src_queue,
 				&ctx->vq_src);
 		clear_work_bit(ctx);
-		wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
+		s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
 	clear_bit(0, &dev->hw_lock);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -201,241 +181,13 @@ static enum s5p_mfc_node_type s5p_mfc_get_node_type(struct file *file)
 	return MFCNODE_INVALID;
 }
 
-static void s5p_mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_buf *dst_buf;
-	struct s5p_mfc_dev *dev = ctx->dev;
-
-	assert_spin_locked(&dev->irqlock);
-
-	ctx->state = MFCINST_FINISHED;
-	ctx->sequence++;
-	while (!list_empty(&ctx->dst_queue)) {
-		dst_buf = list_entry(ctx->dst_queue.next,
-				     struct s5p_mfc_buf, list);
-		mfc_debug(2, "Cleaning up buffer: %d\n",
-					  dst_buf->b->v4l2_buf.index);
-		vb2_set_plane_payload(dst_buf->b, 0, 0);
-		vb2_set_plane_payload(dst_buf->b, 1, 0);
-		list_del(&dst_buf->list);
-		ctx->dst_queue_cnt--;
-		dst_buf->b->v4l2_buf.sequence = (ctx->sequence++);
-
-		if (s5p_mfc_hw_call(dev->mfc_ops, get_pic_type_top, ctx) ==
-			s5p_mfc_hw_call(dev->mfc_ops, get_pic_type_bot, ctx))
-			dst_buf->b->v4l2_buf.field = V4L2_FIELD_NONE;
-		else
-			dst_buf->b->v4l2_buf.field = V4L2_FIELD_INTERLACED;
-
-		ctx->dec_dst_flag &= ~(1 << dst_buf->b->v4l2_buf.index);
-		vb2_buffer_done(dst_buf->b, VB2_BUF_STATE_DONE);
-	}
-}
-
-static void s5p_mfc_handle_frame_copy_time(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf  *dst_buf, *src_buf;
-	size_t dec_y_addr;
-	unsigned int frame_type;
-
-	assert_spin_locked(&dev->irqlock);
-
-	/* Make sure we actually have a new frame before continuing. */
-	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_dec_frame_type, dev);
-	dec_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dec_y_adr, dev);
-
-	/* Copy timestamp / timecode from decoded src to dst and set
-	   appropriate flags. */
-	src_buf = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
-	list_for_each_entry(dst_buf, &ctx->dst_queue, list) {
-		if (vb2_dma_contig_plane_dma_addr(dst_buf->b, 0) == dec_y_addr) {
-			dst_buf->b->v4l2_buf.timecode =
-						src_buf->b->v4l2_buf.timecode;
-			dst_buf->b->v4l2_buf.timestamp =
-						src_buf->b->v4l2_buf.timestamp;
-			switch (frame_type) {
-			case S5P_FIMV_DECODE_FRAME_I_FRAME:
-				dst_buf->b->v4l2_buf.flags |=
-						V4L2_BUF_FLAG_KEYFRAME;
-				break;
-			case S5P_FIMV_DECODE_FRAME_P_FRAME:
-				dst_buf->b->v4l2_buf.flags |=
-						V4L2_BUF_FLAG_PFRAME;
-				break;
-			case S5P_FIMV_DECODE_FRAME_B_FRAME:
-				dst_buf->b->v4l2_buf.flags |=
-						V4L2_BUF_FLAG_BFRAME;
-				break;
-			default:
-				/* Don't know how to handle
-				   S5P_FIMV_DECODE_FRAME_OTHER_FRAME. */
-				mfc_debug(2, "Unexpected frame type: %d\n",
-						frame_type);
-			}
-			break;
-		}
-	}
-}
-
-static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf  *dst_buf;
-	size_t dspl_y_addr;
-	unsigned int frame_type;
-	unsigned int index;
-
-	assert_spin_locked(&dev->irqlock);
-
-	dspl_y_addr = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_y_adr, dev);
-	frame_type = s5p_mfc_hw_call(dev->mfc_ops, get_disp_frame_type, ctx);
-
-	/* If frame is same as previous then skip and do not dequeue */
-	if (frame_type == S5P_FIMV_DECODE_FRAME_SKIPPED) {
-		if (!ctx->after_packed_pb)
-			ctx->sequence++;
-		ctx->after_packed_pb = 0;
-		return;
-	}
-	ctx->sequence++;
-	/* The MFC returns address of the buffer, now we have to
-	 * check which videobuf does it correspond to */
-	list_for_each_entry(dst_buf, &ctx->dst_queue, list) {
-		/* Check if this is the buffer we're looking for */
-		if (vb2_dma_contig_plane_dma_addr(dst_buf->b, 0) == dspl_y_addr) {
-			list_del(&dst_buf->list);
-			ctx->dst_queue_cnt--;
-			dst_buf->b->v4l2_buf.sequence = ctx->sequence;
-			if (s5p_mfc_hw_call(dev->mfc_ops,
-					get_pic_type_top, ctx) ==
-				s5p_mfc_hw_call(dev->mfc_ops,
-					get_pic_type_bot, ctx))
-				dst_buf->b->v4l2_buf.field = V4L2_FIELD_NONE;
-			else
-				dst_buf->b->v4l2_buf.field =
-							V4L2_FIELD_INTERLACED;
-			vb2_set_plane_payload(dst_buf->b, 0, ctx->luma_size);
-			vb2_set_plane_payload(dst_buf->b, 1, ctx->chroma_size);
-			clear_bit(dst_buf->b->v4l2_buf.index,
-							&ctx->dec_dst_flag);
-
-			vb2_buffer_done(dst_buf->b,
-				err ? VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE);
-
-			index = dst_buf->b->v4l2_buf.index;
-			break;
-		}
-	}
-}
-
-/* Handle frame decoding interrupt */
-static void s5p_mfc_handle_frame_dec(struct s5p_mfc_ctx *ctx,
-					unsigned int reason, unsigned int err)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	unsigned int dst_frame_status;
-	unsigned int dec_frame_status;
-	struct s5p_mfc_buf *src_buf;
-	unsigned int res_change;
-	struct v4l2_event ev;
-
-	unsigned int index;
-
-	assert_spin_locked(&dev->irqlock);
-
-	dst_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status, dev)
-				& S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
-	dec_frame_status = s5p_mfc_hw_call(dev->mfc_ops, get_dec_status, dev)
-				& S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK;
-	res_change = (s5p_mfc_hw_call(dev->mfc_ops, get_dspl_status, dev)
-				& S5P_FIMV_DEC_STATUS_RESOLUTION_MASK)
-				>> S5P_FIMV_DEC_STATUS_RESOLUTION_SHIFT;
-	mfc_debug(2, "Frame Status: %x\n", dst_frame_status);
-	if (ctx->state == MFCINST_RES_CHANGE_INIT)
-		ctx->state = MFCINST_RES_CHANGE_FLUSH;
-	if (res_change == S5P_FIMV_RES_INCREASE ||
-		res_change == S5P_FIMV_RES_DECREASE) {
-		ctx->state = MFCINST_RES_CHANGE_INIT;
-		return;
-	}
-	if (ctx->dpb_flush_flag)
-		ctx->dpb_flush_flag = 0;
-
-	/* All frames remaining in the buffer have been extracted  */
-	if (dst_frame_status == S5P_FIMV_DEC_STATUS_DECODING_EMPTY) {
-		if (ctx->state == MFCINST_RES_CHANGE_FLUSH) {
-			s5p_mfc_handle_frame_all_extracted(ctx);
-			ctx->state = MFCINST_RES_CHANGE_END;
-
-			memset(&ev, 0, sizeof(struct v4l2_event));
-			ev.type = V4L2_EVENT_RESOLUTION_CHANGE;
-			v4l2_event_queue_fh(&ctx->fh, &ev);
-
-			goto leave_handle_frame;
-		} else {
-			s5p_mfc_handle_frame_all_extracted(ctx);
-		}
-	}
-
-	if (dec_frame_status == S5P_FIMV_DEC_STATUS_DECODING_DISPLAY)
-		s5p_mfc_handle_frame_copy_time(ctx);
-
-	/* A frame has been decoded and is in the buffer  */
-	if (dst_frame_status == S5P_FIMV_DEC_STATUS_DISPLAY_ONLY ||
-	    dst_frame_status == S5P_FIMV_DEC_STATUS_DECODING_DISPLAY) {
-		s5p_mfc_handle_frame_new(ctx, err);
-	} else {
-		mfc_debug(2, "No frame decode\n");
-	}
-	/* Mark source buffer as complete */
-	if (dst_frame_status != S5P_FIMV_DEC_STATUS_DISPLAY_ONLY
-		&& !list_empty(&ctx->src_queue)) {
-		src_buf = list_entry(ctx->src_queue.next, struct s5p_mfc_buf,
-								list);
-		ctx->consumed_stream += s5p_mfc_hw_call(dev->mfc_ops,
-						get_consumed_stream, dev);
-		if (ctx->codec_mode == S5P_MFC_CODEC_MPEG4_DEC &&
-			ctx->consumed_stream + STUFF_BYTE <
-			src_buf->b->v4l2_planes[0].bytesused) {
-			/* Run MFC again on the same buffer */
-			mfc_debug(2, "Running again the same buffer\n");
-			ctx->after_packed_pb = 1;
-		} else {
-			index = src_buf->b->v4l2_buf.index;
-			mfc_debug(2, "MFC needs next buffer\n");
-			ctx->consumed_stream = 0;
-			if (src_buf->flags & MFC_BUF_FLAG_EOS)
-				ctx->state = MFCINST_FINISHING;
-			list_del(&src_buf->list);
-			ctx->src_queue_cnt--;
-			if (s5p_mfc_hw_call(dev->mfc_ops, err_dec, err) > 0)
-				vb2_buffer_done(src_buf->b, VB2_BUF_STATE_ERROR);
-			else
-				vb2_buffer_done(src_buf->b, VB2_BUF_STATE_DONE);
-		}
-	}
-leave_handle_frame:
-	if ((ctx->src_queue_cnt == 0 && ctx->state != MFCINST_FINISHING)
-		|| (ctx->dst_queue_cnt < ctx->dpb_count
-		&& ctx->state != MFCINST_RES_CHANGE_END))
-		clear_work_bit(ctx);
-	/* if suspending, wake up device*/
-	if (test_bit(0, &dev->enter_suspend))
-		wake_up_dev(dev, reason, err);
-}
-
 static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 					unsigned int err)
 {
 	assert_spin_locked(&ctx->dev->irqlock);
 
-	if (ctx->c_ops->post_frame_start) {
-		if (ctx->c_ops->post_frame_start(ctx))
-			mfc_err("post_frame_start() failed\n");
-	} else {
-		s5p_mfc_handle_frame_dec(ctx, reason, err);
-	}
+	if (s5p_mfc_hw_call(ctx->c_ops, post_frame_start, ctx, reason, err))
+		mfc_err("post_frame_start() failed\n");
 }
 
 static void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev,
@@ -522,87 +274,20 @@ static void s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 
 	/* Unrecoverable error. */
 	s5p_mfc_fatal_error(dev, ctx);
-	wake_up_dev(dev, reason, err);
+	s5p_mfc_wake_up_dev(dev, reason, err);
 	clear_bit(0, &dev->enter_suspend);
 }
 
 /* Header parsing interrupt handling */
 static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev;
-
 	if (ctx == NULL)
 		return;
-	dev = ctx->dev;
 
-	assert_spin_locked(&dev->irqlock);
+	assert_spin_locked(&ctx->dev->irqlock);
 
-	if (ctx->c_ops->post_seq_start) {
-		if (ctx->c_ops->post_seq_start(ctx))
-			mfc_err("post_seq_start() failed\n");
-	} else {
-		ctx->img_width = s5p_mfc_hw_call(dev->mfc_ops, get_img_width,
-				dev);
-		ctx->img_height = s5p_mfc_hw_call(dev->mfc_ops, get_img_height,
-				dev);
-
-		s5p_mfc_hw_call(dev->mfc_ops, dec_calc_dpb_size, ctx);
-
-		if (ctx->src_fmt->fourcc == V4L2_PIX_FMT_H264) {
-			u32 crop_h, crop_v;
-			u32 left, right, top, bottom;
-			crop_h = s5p_mfc_hw_call(dev->mfc_ops,
-					get_crop_info_h, ctx);
-			crop_v = s5p_mfc_hw_call(dev->mfc_ops,
-					get_crop_info_v, ctx);
-			right = crop_h >> S5P_FIMV_SHARED_CROP_RIGHT_SHIFT;
-			left = crop_h & S5P_FIMV_SHARED_CROP_LEFT_MASK;
-			bottom = crop_v >> S5P_FIMV_SHARED_CROP_BOTTOM_SHIFT;
-			top = crop_v & S5P_FIMV_SHARED_CROP_TOP_MASK;
-			ctx->crop_left = left;
-			ctx->crop_top = top;
-			ctx->crop_width = ctx->img_width - left - right;
-			ctx->crop_height = ctx->img_height - top - bottom;
-			mfc_debug(2, "Cropping info [h264]: l=%d t=%d "
-				"w=%d h=%d (r=%d b=%d fw=%d fh=%d\n",
-				left, top, ctx->crop_width, ctx->crop_height,
-				right, bottom, ctx->buf_width, ctx->buf_height);
-		} else {
-			ctx->crop_left = 0;
-			ctx->crop_top = 0;
-			ctx->crop_width = ctx->img_width;
-			ctx->crop_height = ctx->img_height;
-			mfc_debug(2, "Cropping info: w=%d h=%d fw=%d fh=%d\n",
-				ctx->crop_width, ctx->crop_height,
-				ctx->buf_width, ctx->buf_height);
-		}
-
-		ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops, get_dpb_count,
-				dev);
-		ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count,
-				dev);
-		if (ctx->img_width == 0 || ctx->img_height == 0)
-			ctx->state = MFCINST_ERROR;
-		else
-			ctx->state = MFCINST_HEAD_PARSED;
-
-		if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
-			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC ||
-			ctx->codec_mode == S5P_MFC_CODEC_VP8_DEC) &&
-				!list_empty(&ctx->src_queue)) {
-			struct s5p_mfc_buf *src_buf;
-			src_buf = list_entry(ctx->src_queue.next,
-					struct s5p_mfc_buf, list);
-			if (s5p_mfc_hw_call(dev->mfc_ops, get_consumed_stream,
-						dev) <
-					src_buf->b->v4l2_planes[0].bytesused)
-				ctx->head_processed = 0;
-			else
-				ctx->head_processed = 1;
-		} else {
-			ctx->head_processed = 1;
-		}
-	}
+	if (s5p_mfc_hw_call(ctx->c_ops, post_seq_start, ctx))
+		mfc_err("post_seq_start() failed\n");
 	clear_work_bit(ctx);
 }
 
@@ -690,7 +375,7 @@ static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
 {
 	assert_spin_locked(&dev->irqlock);
 
-	wake_up_dev(dev, reason, err);
+	s5p_mfc_wake_up_dev(dev, reason, err);
 	clear_bit(0, &dev->hw_lock);
 	clear_bit(0, &dev->enter_suspend);
 }
@@ -774,7 +459,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
 		mfc_err("Failed to unlock hw\n");
 	if (ctx)
-		wake_up_ctx(ctx, reason, err);
+		s5p_mfc_wake_up_ctx(ctx, reason, err);
 	s5p_mfc_try_run(dev);
 
 	mfc_debug_leave();

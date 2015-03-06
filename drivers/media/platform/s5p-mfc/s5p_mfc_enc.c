@@ -807,7 +807,8 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
-static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
+static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
+				unsigned int err)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;

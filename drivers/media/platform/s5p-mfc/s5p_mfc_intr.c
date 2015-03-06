@@ -89,3 +89,23 @@ void s5p_mfc_clean_ctx_int_flags(struct s5p_mfc_ctx *ctx)
 	ctx->int_err = 0;
 }
 
+/* Wake up context wait_queue */
+void s5p_mfc_wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
+			 unsigned int err)
+{
+	ctx->int_cond = 1;
+	ctx->int_type = reason;
+	ctx->int_err = err;
+	wake_up(&ctx->queue);
+}
+
+/* Wake up device wait_queue */
+void s5p_mfc_wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
+			 unsigned int err)
+{
+	dev->int_cond = 1;
+	dev->int_type = reason;
+	dev->int_err = err;
+	wake_up(&dev->queue);
+}
+

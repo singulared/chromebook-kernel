@@ -22,5 +22,9 @@ int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
 int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command);
 void s5p_mfc_clean_ctx_int_flags(struct s5p_mfc_ctx *ctx);
 void s5p_mfc_clean_dev_int_flags(struct s5p_mfc_dev *dev);
+void s5p_mfc_wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
+			 unsigned int err);
+void s5p_mfc_wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
+			 unsigned int err);
 
 #endif /* S5P_MFC_INTR_H_ */
