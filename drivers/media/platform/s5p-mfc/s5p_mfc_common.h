@@ -552,6 +552,10 @@ struct s5p_mfc_codec_ops {
  * @img_height:		height of the image that is decoded or encoded
  * @buf_width:		width of the buffer for processed image
  * @buf_height:		height of the buffer for processed image
+ * @crop_left:		left offset of crop
+ * @crop_top:		top offset of crop
+ * @crop_width:		width of crop
+ * @crop_height:	height of crop
  * @luma_size:		size of a luma plane
  * @chroma_size:	size of a chroma plane
  * @mv_size:		size of a motion vectors buffer
@@ -633,6 +637,10 @@ struct s5p_mfc_ctx {
 	int img_height;
 	int buf_width;
 	int buf_height;
+	int crop_left;
+	int crop_top;
+	int crop_width;
+	int crop_height;
 
 	int luma_size;
 	int chroma_size;

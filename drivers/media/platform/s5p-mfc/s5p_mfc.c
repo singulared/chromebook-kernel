@@ -549,6 +549,35 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 
 		s5p_mfc_hw_call(dev->mfc_ops, dec_calc_dpb_size, ctx);
 
+		if (ctx->src_fmt->fourcc == V4L2_PIX_FMT_H264) {
+			u32 crop_h, crop_v;
+			u32 left, right, top, bottom;
+			crop_h = s5p_mfc_hw_call(dev->mfc_ops,
+					get_crop_info_h, ctx);
+			crop_v = s5p_mfc_hw_call(dev->mfc_ops,
+					get_crop_info_v, ctx);
+			right = crop_h >> S5P_FIMV_SHARED_CROP_RIGHT_SHIFT;
+			left = crop_h & S5P_FIMV_SHARED_CROP_LEFT_MASK;
+			bottom = crop_v >> S5P_FIMV_SHARED_CROP_BOTTOM_SHIFT;
+			top = crop_v & S5P_FIMV_SHARED_CROP_TOP_MASK;
+			ctx->crop_left = left;
+			ctx->crop_top = top;
+			ctx->crop_width = ctx->img_width - left - right;
+			ctx->crop_height = ctx->img_height - top - bottom;
+			mfc_debug(2, "Cropping info [h264]: l=%d t=%d "
+				"w=%d h=%d (r=%d b=%d fw=%d fh=%d\n",
+				left, top, ctx->crop_width, ctx->crop_height,
+				right, bottom, ctx->buf_width, ctx->buf_height);
+		} else {
+			ctx->crop_left = 0;
+			ctx->crop_top = 0;
+			ctx->crop_width = ctx->img_width;
+			ctx->crop_height = ctx->img_height;
+			mfc_debug(2, "Cropping info: w=%d h=%d fw=%d fh=%d\n",
+				ctx->crop_width, ctx->crop_height,
+				ctx->buf_width, ctx->buf_height);
+		}
+
 		ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops, get_dpb_count,
 				dev);
 		ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count,
@@ -559,7 +588,8 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 			ctx->state = MFCINST_HEAD_PARSED;
 
 		if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
-			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC) &&
+			ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC ||
+			ctx->codec_mode == S5P_MFC_CODEC_VP8_DEC) &&
 				!list_empty(&ctx->src_queue)) {
 			struct s5p_mfc_buf *src_buf;
 			src_buf = list_entry(ctx->src_queue.next,
