@@ -1947,13 +1947,6 @@ mwifiex_cfg80211_scan(struct wiphy *wiphy,
 
 	wiphy_dbg(wiphy, "info: received scan request on %s\n", dev->name);
 
-	if ((request->flags & NL80211_SCAN_FLAG_LOW_PRIORITY) &&
-	    atomic_read(&priv->wmm.tx_pkts_queued) >=
-	    MWIFIEX_MIN_TX_PENDING_TO_CANCEL_SCAN) {
-		dev_dbg(priv->adapter->dev, "scan rejected due to traffic\n");
-		return -EBUSY;
-	}
-
 	/* Block scan request if scan operation or scan cleanup when interface
 	 * is disabled is in process
 	 */
@@ -1992,7 +1985,8 @@ mwifiex_cfg80211_scan(struct wiphy *wiphy,
 		user_scan_cfg->chan_list[i].chan_number = chan->hw_value;
 		user_scan_cfg->chan_list[i].radio_type = chan->band;
 
-		if (chan->flags & IEEE80211_CHAN_PASSIVE_SCAN)
+		if ((chan->flags & IEEE80211_CHAN_PASSIVE_SCAN) ||
+		    !request->n_ssids)
 			user_scan_cfg->chan_list[i].scan_type =
 						MWIFIEX_SCAN_TYPE_PASSIVE;
 		else
@@ -2001,6 +1995,11 @@ mwifiex_cfg80211_scan(struct wiphy *wiphy,
 
 		user_scan_cfg->chan_list[i].scan_time = 0;
 	}
+
+	if (priv->adapter->scan_chan_gap_enabled &&
+	    mwifiex_is_any_intf_active(priv))
+		user_scan_cfg->scan_chan_gap =
+					      priv->adapter->scan_chan_gap_time;
 
 	ret = mwifiex_scan_networks(priv, user_scan_cfg);
 	kfree(user_scan_cfg);

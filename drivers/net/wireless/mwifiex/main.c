@@ -249,8 +249,8 @@ process_start:
 			    adapter->tx_lock_flag)
 				break;
 
-			if ((adapter->scan_processing &&
-			     !adapter->scan_delay_cnt) || adapter->data_sent ||
+			if ((!adapter->scan_chan_gap_enabled &&
+			     adapter->scan_processing) || adapter->data_sent ||
 			    mwifiex_wmm_lists_empty(adapter)) {
 				if (adapter->cmd_sent || adapter->curr_cmd ||
 				    (!is_command_pending(adapter)))
@@ -304,7 +304,8 @@ process_start:
 			}
 		}
 
-		if ((!adapter->scan_processing || adapter->scan_delay_cnt) &&
+		if ((adapter->scan_chan_gap_enabled ||
+		     !adapter->scan_processing) &&
 		    !adapter->data_sent && !mwifiex_wmm_lists_empty(adapter)) {
 			mwifiex_wmm_process_tx(adapter);
 			if (adapter->hs_activated) {
@@ -595,9 +596,6 @@ int mwifiex_queue_tx_pkt(struct mwifiex_private *priv, struct sk_buff *skb)
 
 	atomic_inc(&priv->adapter->tx_pending);
 	mwifiex_wmm_add_buf_txqueue(priv, skb);
-
-	if (priv->adapter->scan_delay_cnt)
-		atomic_set(&priv->adapter->is_tx_received, true);
 
 	queue_work(priv->adapter->workqueue, &priv->adapter->main_work);
 
