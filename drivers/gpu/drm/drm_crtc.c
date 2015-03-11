@@ -636,9 +636,11 @@ void drm_framebuffer_remove(struct drm_framebuffer *fb)
 		struct drm_atomic_state *state;
 		int ret;
 
+		mutex_lock(&dev->mode_config.mutex);
 		state = dev->driver->atomic_begin(dev, 0);
 		if (IS_ERR(state)) {
 			DRM_ERROR("failed to disable crtc and/or plane when fb was deleted\n");
+			mutex_unlock(&dev->mode_config.mutex);
 			return;
 		}
 
@@ -680,6 +682,7 @@ out:
 			goto retry;
 		}
 		dev->driver->atomic_end(dev, state);
+		mutex_unlock(&dev->mode_config.mutex);
 	}
 
 	drm_framebuffer_unreference(fb);
