@@ -404,6 +404,7 @@ static int exynos_drm_gem_mmap_buffer(struct file *filp,
 	struct exynos_drm_gem_buf *buffer;
 	struct drm_file *file_priv;
 	unsigned long vm_size;
+	unsigned long vm_pgoff = vma->vm_pgoff;
 	int ret;
 
 	DRM_DEBUG_KMS("[GEM:%d] vma->pgoff: 0x%lx vma: 0x%lx -> 0x%lx\n",
@@ -438,9 +439,11 @@ static int exynos_drm_gem_mmap_buffer(struct file *filp,
 	if (vm_size > buffer->size)
 		return -EINVAL;
 
+	vma->vm_pgoff = 0;
 	ret = dma_mmap_attrs(drm_dev->dev, vma, buffer->pages,
 				buffer->dma_addr, buffer->size,
 				&buffer->dma_attrs);
+	vma->vm_pgoff = vm_pgoff;
 	if (ret < 0) {
 		DRM_ERROR("failed to mmap.\n");
 		return ret;
