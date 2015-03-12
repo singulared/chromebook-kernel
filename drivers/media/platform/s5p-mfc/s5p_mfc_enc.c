@@ -808,9 +808,6 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 
 	if (!IS_MFCV6(dev)) {
 		ctx->state = MFCINST_RUNNING;
-		if (s5p_mfc_ctx_ready(ctx))
-			set_work_bit_irqsave(ctx);
-		s5p_mfc_try_run(dev);
 	} else {
 		ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
