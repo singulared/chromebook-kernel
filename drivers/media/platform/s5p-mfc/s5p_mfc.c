@@ -511,6 +511,7 @@ static int s5p_mfc_handle_irq_error(struct s5p_mfc_dev *dev,
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 		wake_up_ctx(ctx, reason, err);
 		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+		s5p_mfc_try_run(dev);
 		return 0;
 
 	case ERR_WARNING:
@@ -643,18 +644,12 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 		} else {
 			ctx->dpb_flush_flag = 0;
 		}
-		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
-
-		wake_up(&ctx->queue);
-		s5p_mfc_try_run(dev);
-	} else {
-		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
-
-		if (test_and_clear_bit(0, &dev->clk_flag))
-			s5p_mfc_clock_off(dev);
-
-		wake_up(&ctx->queue);
 	}
+
+	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+
+	wake_up(&ctx->queue);
+	s5p_mfc_try_run(dev);
 }
 
 static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx,
@@ -717,6 +712,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 				s5p_mfc_clock_off(dev);
 			wake_up_dev(dev, reason, err);
 			clear_bit(0, &dev->enter_suspend);
+			s5p_mfc_try_run(dev);
 		}
 		break;
 
