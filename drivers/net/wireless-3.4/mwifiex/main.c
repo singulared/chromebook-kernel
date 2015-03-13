@@ -171,11 +171,13 @@ process_start:
 		    (is_command_pending(adapter) ||
 		     !mwifiex_wmm_lists_empty(adapter))) {
 			adapter->pm_wakeup_fw_try = true;
+			mod_timer(&adapter->wakeup_timer, jiffies + (HZ*3));
 			adapter->if_ops.wakeup(adapter);
 			continue;
 		}
 		if (IS_CARD_RX_RCVD(adapter)) {
 			adapter->pm_wakeup_fw_try = false;
+			del_timer(&adapter->wakeup_timer);
 			if (adapter->ps_state == PS_STATE_SLEEP)
 				adapter->ps_state = PS_STATE_AWAKE;
 		} else {
