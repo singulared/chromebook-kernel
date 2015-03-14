@@ -74,6 +74,7 @@ int mwifiex_wait_queue_complete(struct mwifiex_adapter *adapter)
 						  (12 * HZ));
 	if (status <= 0) {
 		dev_err(adapter->dev, "cmd_wait_q terminated: %d\n", status);
+		mwifiex_cancel_all_pending_cmd(adapter);
 		return status;
 	}
 
@@ -471,6 +472,9 @@ int mwifiex_enable_hs(struct mwifiex_adapter *adapter)
 
 	memset(&hscfg, 0, sizeof(struct mwifiex_ds_hs_cfg));
 	hscfg.is_invoke_hostcmd = true;
+
+	adapter->hs_enabling = true;
+	mwifiex_cancel_all_pending_cmd(adapter);
 
 	if (mwifiex_set_hs_params(mwifiex_get_priv(adapter,
 						   MWIFIEX_BSS_ROLE_STA),
