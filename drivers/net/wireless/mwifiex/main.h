@@ -1271,7 +1271,7 @@ u8 mwifiex_get_center_freq_index(struct mwifiex_private *priv, u8 band,
 void mwifiex_uap_del_sta_data(struct mwifiex_private *priv,
 			      struct mwifiex_sta_node *node);
 int mwifiex_init_channel_scan_gap(struct mwifiex_adapter *adapter);
-void *mwifiex_alloc_rx_buf(int rx_len, gfp_t flags);
+void *mwifiex_alloc_dma_align_buf(int rx_len, gfp_t flags);
 
 #ifdef CONFIG_DEBUG_FS
 void mwifiex_debugfs_init(void);
