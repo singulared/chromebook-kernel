@@ -49,6 +49,8 @@ enum {
 
 #define MWIFIEX_MAX_AP				64
 
+#define MWIFIEX_MAX_PKTS_TXQ			16
+
 #define MWIFIEX_DEFAULT_WATCHDOG_TIMEOUT	(5 * HZ)
 
 #define MWIFIEX_TIMER_10S			10000
@@ -112,6 +114,7 @@ enum {
 
 #define MWIFIEX_TYPE_CMD				1
 #define MWIFIEX_TYPE_DATA				0
+#define MWIFIEX_TYPE_AGGR_DATA				10
 #define MWIFIEX_TYPE_EVENT				3
 
 #define MAX_BITMAP_RATES_SIZE			18
@@ -131,6 +134,9 @@ enum {
 
 /* Threshold for tx_timeout_cnt before we trigger a card reset */
 #define TX_TIMEOUT_THRESHOLD	6
+
+/* Address alignment */
+#define MWIFIEX_ALIGN_ADDR(p, a) (((long)(p) + (a) - 1) & ~((a) - 1))
 
 struct mwifiex_dbg {
 	u32 num_cmd_host_to_card_failure;
@@ -201,6 +207,12 @@ struct mwifiex_tx_aggr {
 	u8 amsdu;
 };
 
+enum mwifiex_ba_status {
+	BA_SETUP_NONE = 0,
+	BA_SETUP_INPROGRESS,
+	BA_SETUP_COMPLETE
+};
+
 struct mwifiex_ra_list_tbl {
 	struct list_head list;
 	struct sk_buff_head skb_head;
@@ -209,6 +221,8 @@ struct mwifiex_ra_list_tbl {
 	u16 max_amsdu;
 	u16 ba_pkt_count;
 	u8 ba_packet_thr;
+	enum mwifiex_ba_status ba_status;
+	u8 amsdu_in_ampdu;
 	u16 total_pkt_count;
 	bool tdls_link;
 };
@@ -548,11 +562,6 @@ struct mwifiex_private {
 	struct sk_buff_head tdls_txq;
 };
 
-enum mwifiex_ba_status {
-	BA_SETUP_NONE = 0,
-	BA_SETUP_INPROGRESS,
-	BA_SETUP_COMPLETE
-};
 
 struct mwifiex_tx_ba_stream_tbl {
 	struct list_head list;
@@ -674,6 +683,7 @@ struct mwifiex_if_ops {
 	int (*clean_pcie_ring) (struct mwifiex_adapter *adapter);
 	void (*iface_work)(struct work_struct *work);
 	void (*read_regs)(struct mwifiex_adapter *adapter);
+	void (*deaggr_pkt)(struct mwifiex_adapter *, struct sk_buff *);
 };
 
 struct mwifiex_adapter {
@@ -702,14 +712,18 @@ struct mwifiex_adapter {
 	bool rx_processing;
 	bool delay_main_work;
 	bool rx_locked;
+	bool main_locked;
 	struct mwifiex_bss_prio_tbl bss_prio_tbl[MWIFIEX_MAX_BSS_NUM];
 	/* spin lock for init/shutdown */
 	spinlock_t mwifiex_lock;
 	/* spin lock for main process */
 	spinlock_t main_proc_lock;
 	u32 mwifiex_processing;
+	u8 more_task_flag;
 	u16 tx_buf_size;
 	u16 curr_tx_buf_size;
+	bool sdio_rx_aggr_enable;
+	u16 sdio_rx_block_size;
 	u32 ioport;
 	enum MWIFIEX_HARDWARE_STATUS hw_status;
 	u16 number_of_antenna;
@@ -744,6 +758,8 @@ struct mwifiex_adapter {
 	spinlock_t scan_pending_q_lock;
 	/* spin lock for RX processing routine */
 	spinlock_t rx_proc_lock;
+	struct sk_buff_head tx_data_q;
+	atomic_t tx_queued;
 	struct sk_buff_head usb_rx_data_q;
 	u32 scan_processing;
 	u16 region_code;
@@ -820,6 +836,8 @@ struct mwifiex_adapter {
 	struct semaphore *card_sem;
 	bool scan_chan_gap_enabled;
 };
+
+void mwifiex_process_tx_queue(struct mwifiex_adapter *adapter);
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
 
@@ -1266,6 +1284,8 @@ u8 mwifiex_get_center_freq_index(struct mwifiex_private *priv, u8 band,
 void mwifiex_uap_del_sta_data(struct mwifiex_private *priv,
 			      struct mwifiex_sta_node *node);
 int mwifiex_init_channel_scan_gap(struct mwifiex_adapter *adapter);
+void *mwifiex_alloc_dma_align_buf(int rx_len, gfp_t flags);
+void mwifiex_queue_main_work(struct mwifiex_adapter *adapter);
 
 #ifdef CONFIG_DEBUG_FS
 void mwifiex_debugfs_init(void);

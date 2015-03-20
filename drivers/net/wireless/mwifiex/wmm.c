@@ -161,6 +161,8 @@ mwifiex_ralist_add(struct mwifiex_private *priv, u8 *ra)
 
 		ra_list->is_11n_enabled = 0;
 		ra_list->tdls_link = false;
+		ra_list->ba_status = BA_SETUP_NONE;
+		ra_list->amsdu_in_ampdu = false;
 		if (!mwifiex_queuing_ra_based(priv)) {
 			if (mwifiex_get_tdls_link_status(priv, ra) ==
 			    TDLS_SETUP_COMPLETE) {
@@ -574,9 +576,9 @@ mwifiex_clean_txrx(struct mwifiex_private *priv)
  * This function retrieves a particular RA list node, matching with the
  * given TID and RA address.
  */
-static struct mwifiex_ra_list_tbl *
+struct mwifiex_ra_list_tbl *
 mwifiex_wmm_get_ralist_node(struct mwifiex_private *priv, u8 tid,
-			    u8 *ra_addr)
+			    const u8 *ra_addr)
 {
 	struct mwifiex_ra_list_tbl *ra_list;
 
@@ -920,15 +922,12 @@ mwifiex_wmm_get_highest_priolist_ptr(struct mwifiex_adapter *adapter,
 	struct mwifiex_bss_prio_node *bssprio_node, *bssprio_head;
 	struct mwifiex_tid_tbl *tid_ptr;
 	atomic_t *hqp;
-	unsigned long flags_bss, flags_ra;
+	unsigned long flags_ra;
 	int i, j;
 
 	for (j = adapter->priv_num - 1; j >= 0; --j) {
-		spin_lock_irqsave(&adapter->bss_prio_tbl[j].bss_prio_lock,
-				  flags_bss);
-
 		if (list_empty(&adapter->bss_prio_tbl[j].bss_prio_head))
-			goto skip_prio_tbl;
+			continue;
 
 		if (adapter->bss_prio_tbl[j].bss_prio_cur ==
 		    (struct mwifiex_bss_prio_node *)
@@ -1024,21 +1023,15 @@ skip_bss:
 						struct mwifiex_bss_prio_node,
 						list);
 		} while (bssprio_node != bssprio_head);
-
-skip_prio_tbl:
-		spin_unlock_irqrestore(&adapter->bss_prio_tbl[j].bss_prio_lock,
-				       flags_bss);
 	}
 
 	return NULL;
 
 found:
-	/* holds bss_prio_lock / ra_list_spinlock */
+	/* holds ra_list_spinlock */
 	if (atomic_read(hqp) > i)
 		atomic_set(hqp, i);
 	spin_unlock_irqrestore(&priv_tmp->wmm.ra_list_spinlock, flags_ra);
-	spin_unlock_irqrestore(&adapter->bss_prio_tbl[j].bss_prio_lock,
-			       flags_bss);
 
 	*priv = priv_tmp;
 	*tid = tos_to_tid[i];
@@ -1196,6 +1189,14 @@ mwifiex_send_processed_packet(struct mwifiex_private *priv,
 
 	skb = skb_dequeue(&ptr->skb_head);
 
+	if (adapter->data_sent || adapter->tx_lock_flag) {
+		spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock,
+				       ra_list_flags);
+		skb_queue_tail(&adapter->tx_data_q, skb);
+		atomic_inc(&adapter->tx_queued);
+		return;
+	}
+
 	if (!skb_queue_empty(&ptr->skb_head))
 		skb_next = skb_peek(&ptr->skb_head);
 	else
@@ -1305,13 +1306,13 @@ mwifiex_dequeue_tx_packet(struct mwifiex_adapter *adapter)
 	}
 
 	if (!ptr->is_11n_enabled ||
-	    mwifiex_is_ba_stream_setup(priv, ptr, tid) ||
-	    priv->wps.session_enable) {
+		ptr->ba_status ||
+		priv->wps.session_enable) {
 		if (ptr->is_11n_enabled &&
-		    mwifiex_is_ba_stream_setup(priv, ptr, tid) &&
-		    mwifiex_is_amsdu_in_ampdu_allowed(priv, ptr, tid) &&
-		    mwifiex_is_amsdu_allowed(priv, tid) &&
-		    mwifiex_is_11n_aggragation_possible(priv, ptr,
+			ptr->ba_status &&
+			ptr->amsdu_in_ampdu &&
+			mwifiex_is_amsdu_allowed(priv, tid) &&
+			mwifiex_is_11n_aggragation_possible(priv, ptr,
 							adapter->tx_buf_size))
 			mwifiex_11n_aggregate_pkt(priv, ptr, ptr_index, flags);
 			/* ra_list_spinlock has been freed in
@@ -1358,11 +1359,16 @@ void
 mwifiex_wmm_process_tx(struct mwifiex_adapter *adapter)
 {
 	do {
-		/* Check if busy */
-		if (adapter->data_sent || adapter->tx_lock_flag)
-			break;
-
 		if (mwifiex_dequeue_tx_packet(adapter))
 			break;
+		if (adapter->iface_type != MWIFIEX_SDIO) {
+			if (adapter->data_sent ||
+			    adapter->tx_lock_flag)
+				break;
+		} else {
+			if (atomic_read(&adapter->tx_queued) >=
+			    MWIFIEX_MAX_PKTS_TXQ)
+				break;
+		}
 	} while (!mwifiex_wmm_lists_empty(adapter));
 }

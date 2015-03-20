@@ -47,9 +47,13 @@
 
 #define MWIFIEX_MAX_BSS_NUM         (3)
 
-#define MWIFIEX_MIN_DATA_HEADER_LEN 36	/* sizeof(mwifiex_txpd)
-					 *   + 4 byte alignment
-					 */
+#define MWIFIEX_DMA_ALIGN_SZ	    64
+#define MWIFIEX_RX_HEADROOM	    64
+#define MAX_TXPD_SZ		    32
+#define INTF_HDR_ALIGN		     4
+
+#define MWIFIEX_MIN_DATA_HEADER_LEN (MWIFIEX_DMA_ALIGN_SZ + INTF_HDR_ALIGN + \
+				     MAX_TXPD_SZ)
 #define MWIFIEX_MGMT_FRAME_HEADER_SIZE	8	/* sizeof(pkt_type)
 						 *   + sizeof(tx_control)
 						 */
@@ -91,6 +95,7 @@
 #define MWIFIEX_BUF_FLAG_REQUEUED_PKT      BIT(0)
 #define MWIFIEX_BUF_FLAG_BRIDGED_PKT	   BIT(1)
 #define MWIFIEX_BUF_FLAG_TDLS_PKT	   BIT(2)
+#define MWIFIEX_BUF_FLAG_AGGR_PKT          BIT(5)
 
 #define MWIFIEX_BRIDGED_PKTS_THRESHOLD     1024
 
@@ -98,6 +103,11 @@
 #define MWIFIEX_TDLS_ENABLE_LINK              0x01
 #define MWIFIEX_TDLS_CREATE_LINK              0x02
 #define MWIFIEX_TDLS_CONFIG_LINK              0x03
+
+/* SDIO Aggr data packet special info */
+#define SDIO_MAX_AGGR_BUF_SIZE		(256 * 255)
+#define BLOCK_NUMBER_OFFSET		15
+#define SDIO_HEADER_OFFSET		28
 
 enum mwifiex_bss_type {
 	MWIFIEX_BSS_TYPE_STA = 0,
@@ -156,10 +166,11 @@ struct mwifiex_wait_queue {
 };
 
 struct mwifiex_rxinfo {
+	struct sk_buff *parent;
 	u8 bss_num;
 	u8 bss_type;
-	struct sk_buff *parent;
 	u8 use_count;
+	u8 buf_type;
 };
 
 struct mwifiex_txinfo {
@@ -167,6 +178,7 @@ struct mwifiex_txinfo {
 	u8 flags;
 	u8 bss_num;
 	u8 bss_type;
+	u8 aggr_num;
 };
 
 enum mwifiex_wmm_ac_e {
