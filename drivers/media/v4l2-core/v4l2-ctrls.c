@@ -1270,6 +1270,10 @@ static int cluster_changed(struct v4l2_ctrl *master)
 
 		if (ctrl == NULL)
 			continue;
+
+		if (ctrl->flags & V4L2_CTRL_FLAG_EXECUTE_ON_WRITE)
+			return 1;
+
 		switch (ctrl->type) {
 		case V4L2_CTRL_TYPE_BUTTON:
 			/* Button controls are always 'different' */
