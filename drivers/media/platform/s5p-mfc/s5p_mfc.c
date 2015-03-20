@@ -96,7 +96,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	 * dev->hw_lock and make further waits non-blocking.
 	 */
 	set_bit(0, &dev->hw_error);
-	clear_bit(0, &dev->hw_lock);
+	s5p_mfc_hw_unlock(dev);
 
 	/*
 	 * Clean up all existing contexts, put them into error state
@@ -159,7 +159,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		 * PM domain driver).
 		 */
 		mfc_err("Failed to reinit FW\n");
-		clear_bit(0, &dev->hw_lock);
+		__s5p_mfc_hw_unlock(dev);
 	}
 
 	s5p_mfc_try_run(dev);
@@ -338,7 +338,7 @@ static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
 
 	if (err)
 		set_bit(0, &dev->hw_error);
-	clear_bit(0, &dev->hw_lock);
+	s5p_mfc_hw_unlock(dev);
 
 	s5p_mfc_wake_up(dev);
 }
@@ -422,8 +422,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 	if (test_and_clear_bit(0, &dev->clk_flag))
 		s5p_mfc_clock_off(dev);
-	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-		mfc_err("Failed to unlock hw\n");
+	s5p_mfc_hw_unlock(dev);
 	s5p_mfc_wake_up(dev);
 	s5p_mfc_try_run(dev);
 
@@ -474,7 +473,7 @@ err_init_hw:
 	if (s5p_mfc_power_off() < 0)
 		mfc_err("power off failed\n");
 	s5p_mfc_clock_off(dev);
-	clear_bit(0, &dev->hw_lock);
+	__s5p_mfc_hw_unlock(dev);
 	clear_bit(0, &dev->hw_error);
 
 	return ret;
@@ -623,7 +622,7 @@ static int s5p_mfc_release(struct file *file)
 		 * hiding somewhere in the code let's try to keep the system
 		 * kind of running.
 		 */
-		clear_bit(0, &dev->hw_lock);
+		s5p_mfc_hw_unlock(dev);
 		dev->curr_ctx = NULL;
 	}
 	list_del(&ctx->ctx_list);
@@ -998,7 +997,6 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	video_set_drvdata(vfd, dev);
 	platform_set_drvdata(pdev, dev);
 
-	dev->hw_lock = 0;
 	dev->clk_flag = 0;
 	INIT_DELAYED_WORK(&dev->watchdog_work, s5p_mfc_watchdog_worker);
 
@@ -1081,13 +1079,13 @@ static int s5p_mfc_suspend(struct device *dev)
 	 *
 	 * Timeout is handled by watchdog timer.
 	 */
-	wait_event(m_dev->queue, !test_and_set_bit(0, &m_dev->hw_lock));
-	clear_bit(0, &m_dev->hw_lock);
+	wait_event(m_dev->queue, !s5p_mfc_hw_trylock(m_dev));
+	s5p_mfc_hw_unlock(m_dev);
 
 	ret = s5p_mfc_ctrl_ops_call(m_dev, sleep, m_dev);
 	if (ret) {
 		clear_bit(0, &m_dev->enter_suspend);
-		clear_bit(0, &m_dev->hw_lock);
+		__s5p_mfc_hw_unlock(m_dev);
 		return ret;
 	}
 
@@ -1106,7 +1104,7 @@ static int s5p_mfc_resume(struct device *dev)
 	ret = s5p_mfc_ctrl_ops_call(m_dev, wakeup, m_dev);
 	clear_bit(0, &m_dev->enter_suspend);
 	if (ret) {
-		clear_bit(0, &m_dev->hw_lock);
+		__s5p_mfc_hw_unlock(m_dev);
 		return ret;
 	}
 

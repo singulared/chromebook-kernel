@@ -334,6 +334,34 @@ struct s5p_mfc_hw_ops {
 	unsigned int (*get_crop_info_v)(struct s5p_mfc_ctx *ctx);
 };
 
+/**
+ * s5p_mfc_hw_trylock() - try to acquire exclusive access to hardware
+ * @dev:	Device to acquire exclusive access for.
+ *
+ * Return: 0 if acquired the lock successfully or negative error otherwise.
+ */
+int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev);
+
+/**
+ * __s5p_mfc_hw_unlock() - reinitialize hardware lock to released state
+ * @dev:	Device to release.
+ */
+int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev);
+
+/**
+ * s5p_mfc_hw_unlock() - release hardware access
+ * @dev:	Device to release.
+ */
+void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev);
+
+/**
+ * s5p_mfc_hw_locked() - checks if hardware is currently locked
+ * @dev:	Device to check.
+ *
+ * Return: true if device is locked, false otherwise.
+ */
+bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev);
+
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_regs(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_hw_ctrls(struct s5p_mfc_dev *dev);

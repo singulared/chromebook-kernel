@@ -20,12 +20,13 @@
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
+#include "s5p_mfc_opr.h"
 
 int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev)
 {
 	int ret;
 
-	ret = wait_event_timeout(dev->queue, !test_bit(0, &dev->hw_lock),
+	ret = wait_event_timeout(dev->queue, !s5p_mfc_hw_is_locked(dev),
 					msecs_to_jiffies(MFC_INT_TIMEOUT));
 	if (!ret || test_bit(0, &dev->hw_error)) {
 		mfc_err("Waiting for dev failed\n");

@@ -20,6 +20,28 @@
 #include "s5p_mfc_intr.h"
 #include "s5p_mfc_pm.h"
 
+int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev)
+{
+	if (test_and_set_bit(0, &dev->hw_lock))
+		return -EBUSY;
+	return 0;
+}
+
+int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	return test_and_clear_bit(0, &dev->hw_lock);
+}
+
+void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	WARN_ON(!__s5p_mfc_hw_unlock(dev));
+}
+
+bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev)
+{
+	return test_bit(0, &dev->hw_lock);
+}
+
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev)
 {
 	if (IS_MFCV6(dev))
@@ -134,7 +156,7 @@ static struct s5p_mfc_ctx *s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 		goto done;
 	}
 	/* Check whether hardware is not running */
-	if (test_and_set_bit(0, &dev->hw_lock) != 0) {
+	if (s5p_mfc_hw_trylock(dev)) {
 		/* This is perfectly ok, the scheduled ctx should wait */
 		mfc_debug(1, "Couldn't lock HW\n");
 		goto done;
@@ -201,8 +223,7 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	if (test_and_clear_bit(0, &dev->clk_flag))
 		s5p_mfc_clock_off(dev);
 	/* Free hardware lock */
-	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-		mfc_err("Failed to unlock hardware\n");
+	s5p_mfc_hw_unlock(dev);
 
 	s5p_mfc_wake_up(dev);
 

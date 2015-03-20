@@ -99,7 +99,7 @@ static int s5p_mfc_init_hw_v5(struct s5p_mfc_dev *dev)
 	/* 2. Initialize registers of channel I/F */
 	s5p_mfc_clear_cmds(dev);
 	/* Lock the HW before releasing RISC reset */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* 3. Release reset signal to the RISC */
 	mfc_write(dev, 0x3ff, S5P_FIMV_SW_RESET);
 
@@ -138,7 +138,7 @@ static int s5p_mfc_wakeup_v5(struct s5p_mfc_dev *dev)
 	/* 2. Initialize registers of channel I/F */
 	s5p_mfc_clear_cmds(dev);
 	/* Lock the HW before sending wake-up command */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* 3. Send MFC wakeup command and wait for completion*/
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {

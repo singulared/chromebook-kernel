@@ -90,7 +90,7 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 	/* 1. Set DRAM base Addr */
 	s5p_mfc_init_memctrl_v6(dev);
 	/* Lock the HW before starting the RISC */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* 2. Release reset signal to the RISC */
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
@@ -114,7 +114,7 @@ static int s5p_mfc_wait_wakeup_v8(struct s5p_mfc_dev *dev)
 	int ret;
 
 	/* Lock the HW before starting the RISC */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* Release reset signal to the RISC */
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
@@ -124,7 +124,7 @@ static int s5p_mfc_wait_wakeup_v8(struct s5p_mfc_dev *dev)
 	}
 	mfc_debug(2, "Write command to wakeup MFCV8\n");
 	/* Lock the HW before sending wakeup command */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFCV8 - timeout\n");
@@ -143,7 +143,7 @@ static int s5p_mfc_wait_wakeup_v6(struct s5p_mfc_dev *dev)
 	int ret;
 
 	/* Lock the HW before sending wakeup command */
-	set_bit(0, &dev->hw_lock);
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* Send MFC wakeup command */
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
