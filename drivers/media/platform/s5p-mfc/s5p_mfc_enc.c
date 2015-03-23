@@ -821,6 +821,7 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
+	struct s5p_mfc_buf *dst_buf;
 	unsigned long enc_y_addr, enc_c_addr;
 	unsigned long mb_y_addr, mb_c_addr;
 	int slice_type;
@@ -840,8 +841,14 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		list_for_each_entry(mb_entry, &ctx->src_queue, list) {
 			mb_y_addr = vb2_dma_contig_plane_dma_addr(mb_entry->b, 0);
 			mb_c_addr = vb2_dma_contig_plane_dma_addr(mb_entry->b, 1);
+			dst_buf = list_entry(ctx->dst_queue.next,
+					struct s5p_mfc_buf, list);
 			if ((enc_y_addr == mb_y_addr) &&
 						(enc_c_addr == mb_c_addr)) {
+				dst_buf->b->v4l2_buf.timecode =
+					mb_entry->b->v4l2_buf.timecode;
+				dst_buf->b->v4l2_buf.timestamp =
+					mb_entry->b->v4l2_buf.timestamp;
 				list_del(&mb_entry->list);
 				ctx->src_queue_cnt--;
 				vb2_buffer_done(mb_entry->b,
@@ -852,8 +859,14 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		list_for_each_entry(mb_entry, &ctx->ref_queue, list) {
 			mb_y_addr = vb2_dma_contig_plane_dma_addr(mb_entry->b, 0);
 			mb_c_addr = vb2_dma_contig_plane_dma_addr(mb_entry->b, 1);
+			dst_buf = list_entry(ctx->dst_queue.next,
+					struct s5p_mfc_buf, list);
 			if ((enc_y_addr == mb_y_addr) &&
 						(enc_c_addr == mb_c_addr)) {
+				dst_buf->b->v4l2_buf.timecode =
+					mb_entry->b->v4l2_buf.timecode;
+				dst_buf->b->v4l2_buf.timestamp =
+					mb_entry->b->v4l2_buf.timestamp;
 				list_del(&mb_entry->list);
 				ctx->ref_queue_cnt--;
 				vb2_buffer_done(mb_entry->b,
