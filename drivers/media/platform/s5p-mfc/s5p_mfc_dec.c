@@ -73,6 +73,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+		},
 	},
 	{
 		.name		= "H264/MVC Encoded Stream",
@@ -81,6 +99,21 @@ static struct s5p_mfc_fmt formats[] = {
 		.type		= MFC_FMT_DEC,
 		.num_planes	= 1,
 		.versions	= MFC_V6_BIT | MFC_V7_BIT | MFC_V8_BIT,
+		.resolution	= {
+			{},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+		},
 	},
 	{
 		.name		= "H263 Encoded Stream",
@@ -90,6 +123,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1152,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 1152,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 1152,
+			},
+		},
 	},
 	{
 		.name		= "MPEG1 Encoded Stream",
@@ -99,6 +150,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+		},
 	},
 	{
 		.name		= "MPEG2 Encoded Stream",
@@ -108,6 +177,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+		},
 	},
 	{
 		.name		= "MPEG4 Encoded Stream",
@@ -117,6 +204,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+		},
 	},
 	{
 		.name		= "XviD Encoded Stream",
@@ -126,6 +231,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2048,
+			},
+		},
 	},
 	{
 		.name		= "VC1 Encoded Stream",
@@ -135,6 +258,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2032,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2032,
+			},
+		},
 	},
 	{
 		.name		= "VC1 RCV Encoded Stream",
@@ -144,6 +285,24 @@ static struct s5p_mfc_fmt formats[] = {
 		.num_planes	= 1,
 		.versions	= MFC_V5_BIT | MFC_V6_BIT | MFC_V7_BIT |
 				  MFC_V8_BIT,
+		.resolution	= {
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 1920,
+				.stepwise.max_height	= 1088,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2032,
+			},
+			{
+				.stepwise.max_width	= 2048,
+				.stepwise.max_height	= 2032,
+			},
+		},
 	},
 	{
 		.name		= "VP8 Encoded Stream",
@@ -152,19 +311,33 @@ static struct s5p_mfc_fmt formats[] = {
 		.type		= MFC_FMT_DEC,
 		.num_planes	= 1,
 		.versions	= MFC_V6_BIT | MFC_V7_BIT | MFC_V8_BIT,
+		.resolution	= {
+			{},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+			{
+				.stepwise.max_width	= 8192,
+				.stepwise.max_height	= 8192,
+			},
+		},
 	},
 };
 
 #define NUM_FORMATS ARRAY_SIZE(formats)
 
 /* Find selected format description */
-static struct s5p_mfc_fmt *find_format(struct v4l2_format *f, unsigned int t)
+static struct s5p_mfc_fmt *find_format(unsigned int fourcc, unsigned int t)
 {
 	unsigned int i;
 
 	for (i = 0; i < NUM_FORMATS; i++) {
-		if (formats[i].fourcc == f->fmt.pix_mp.pixelformat &&
-		    formats[i].type == t)
+		if (formats[i].fourcc == fourcc && formats[i].type == t)
 			return &formats[i];
 	}
 	return NULL;
@@ -383,7 +556,7 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 
 	mfc_debug(2, "Type is %d\n", f->type);
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		fmt = find_format(f, MFC_FMT_DEC);
+		fmt = find_format(f->fmt.pix_mp.pixelformat, MFC_FMT_DEC);
 		if (!fmt) {
 			mfc_err("Unsupported format for source.\n");
 			return -EINVAL;
@@ -397,7 +570,7 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 			return -EINVAL;
 		}
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		fmt = find_format(f, MFC_FMT_RAW);
+		fmt = find_format(f->fmt.pix_mp.pixelformat, MFC_FMT_RAW);
 		if (!fmt) {
 			mfc_err("Unsupported format for destination.\n");
 			return -EINVAL;
@@ -431,12 +604,14 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		/* dst_fmt is validated by call to vidioc_try_fmt */
-		ctx->dst_fmt = find_format(f, MFC_FMT_RAW);
+		ctx->dst_fmt = find_format(f->fmt.pix_mp.pixelformat,
+				MFC_FMT_RAW);
 		ret = 0;
 		goto out;
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/* src_fmt is validated by call to vidioc_try_fmt */
-		ctx->src_fmt = find_format(f, MFC_FMT_DEC);
+		ctx->src_fmt = find_format(f->fmt.pix_mp.pixelformat,
+				MFC_FMT_DEC);
 		ctx->codec_mode = ctx->src_fmt->codec_mode;
 		mfc_debug(2, "The codec number is: %d\n", ctx->codec_mode);
 		pix_mp->height = 0;
@@ -818,6 +993,30 @@ static int vidioc_subscribe_event(struct v4l2_fh *fh,
 	}
 }
 
+static int vidioc_enum_framesizes(struct file *file, void *priv,
+		struct v4l2_frmsizeenum *fsize)
+{
+	struct s5p_mfc_dev *dev = video_drvdata(file);
+	struct s5p_mfc_fmt *mfc_format;
+	unsigned int version_index = fls(dev->variant->version_bit) - 1;
+
+	if (fsize->index != 0)
+		return -EINVAL;
+
+	mfc_format = find_format(fsize->pixel_format, MFC_FMT_DEC);
+	if (!mfc_format || !(mfc_format->versions & dev->variant->version_bit))
+		return -EINVAL;
+
+	memcpy(fsize, &mfc_format->resolution[version_index],
+			sizeof(struct v4l2_frmsizeenum));
+	fsize->pixel_format = mfc_format->fourcc;
+	fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+	fsize->stepwise.min_width = 32;
+	fsize->stepwise.min_height = 32;
+	fsize->stepwise.step_width = 16;
+	fsize->stepwise.step_height = 16;
+	return 0;
+}
 
 /* v4l2_ioctl_ops */
 static const struct v4l2_ioctl_ops s5p_mfc_dec_ioctl_ops = {
@@ -841,6 +1040,7 @@ static const struct v4l2_ioctl_ops s5p_mfc_dec_ioctl_ops = {
 	.vidioc_decoder_cmd = vidioc_decoder_cmd,
 	.vidioc_subscribe_event = vidioc_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
+	.vidioc_enum_framesizes = vidioc_enum_framesizes,
 };
 
 static int s5p_mfc_queue_setup(struct vb2_queue *vq,
@@ -1155,16 +1355,15 @@ void s5p_mfc_dec_ctrls_delete(struct s5p_mfc_ctx *ctx)
 
 int s5p_mfc_dec_init(struct s5p_mfc_ctx *ctx)
 {
-	struct v4l2_format f;
 	struct s5p_mfc_dev *dev = ctx->dev;
-	f.fmt.pix_mp.pixelformat = GET_MFC_DEF_FMT(dev, SRC_FMT_DEC);
-	ctx->src_fmt = find_format(&f, MFC_FMT_DEC);
+	ctx->src_fmt = find_format(GET_MFC_DEF_FMT(dev, SRC_FMT_DEC),
+			MFC_FMT_DEC);
 	if (!ctx->src_fmt) {
 		mfc_err("Source format unsupported.\n");
 		return -EINVAL;
 	}
-	f.fmt.pix_mp.pixelformat = GET_MFC_DEF_FMT(dev, DST_FMT_DEC);
-	ctx->dst_fmt = find_format(&f, MFC_FMT_RAW);
+	ctx->dst_fmt = find_format(GET_MFC_DEF_FMT(dev, DST_FMT_DEC),
+			MFC_FMT_RAW);
 	if (!ctx->dst_fmt) {
 		mfc_err("Destination format unsupported.\n");
 		return -EINVAL;
