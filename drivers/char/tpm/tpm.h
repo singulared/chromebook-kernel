@@ -139,6 +139,8 @@ struct tpm_chip {
 	void (*release) (struct device *);
 	struct notifier_block shutdown_nb;
 	void (*shutdown_callback)(struct tpm_chip *);
+	int (*cpend_flag_get_cb)(int *);
+	int (*cpend_flag_set_cb)(int);
 };
 
 #define to_tpm_chip(n) container_of(n, struct tpm_chip, vendor)
