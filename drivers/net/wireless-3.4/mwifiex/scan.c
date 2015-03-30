@@ -1001,16 +1001,8 @@ mwifiex_config_scan(struct mwifiex_private *priv,
 	 * based on total number of channels to be scanned due to constraints
 	 * of command buffers.
 	 */
-	if (priv->media_connected) {
-		if (chan_num < MWIFIEX_LIMIT_1_CHANNEL_PER_SCAN_CMD)
-			*max_chan_per_scan = 1;
-		else if (chan_num < MWIFIEX_LIMIT_2_CHANNELS_PER_SCAN_CMD)
-			*max_chan_per_scan = 2;
-		else if (chan_num < MWIFIEX_LIMIT_3_CHANNELS_PER_SCAN_CMD)
-			*max_chan_per_scan = 3;
-		else
-			*max_chan_per_scan = 4;
-	}
+	if (priv->media_connected)
+		*max_chan_per_scan = 1;
 }
 
 /*
