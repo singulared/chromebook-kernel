@@ -238,13 +238,13 @@ int chromeos_vbc_register(struct chromeos_vbc *chromeos_vbc)
 	chromeos_vbc_ptr = chromeos_vbc;
 	mutex_init(&vbc_mutex);
 	/* Register the "attack flag" callbacks, used when the TPM is reset in
-	 * the middle of a command.
+	 * the middle of a command.  This is not critical, so report errors but
+	 * ignore them.
 	 */
 	retval = tpm_register_cpend_flag_cbs(chromeos_get_tpm_attack_flag,
 					     chromeos_set_tpm_attack_flag);
 	if (retval) {
 		pr_err("chromeos: tpm attack callbacks: %d\n", retval);
-		return retval;
 	}
 	return 0;
 }
