@@ -170,10 +170,11 @@ static int sdio_irq_thread(void *_host)
 			 */
 			if (ret > 0)
 				period = idle_period;
-			else if (period < msecs_to_jiffies(10000))
+			else {
 				period *= 4;
-			else
-				period = MAX_SCHEDULE_TIMEOUT;
+				if (period > msecs_to_jiffies(1000))
+					period = msecs_to_jiffies(1000);
+			}
 		}
 
 		set_current_state(TASK_INTERRUPTIBLE);

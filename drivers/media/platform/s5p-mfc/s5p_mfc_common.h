@@ -708,6 +708,12 @@ struct s5p_mfc_ctx {
 	size_t scratch_buf_size;
 };
 
+#define MFC_V5_BIT	BIT(0)
+#define MFC_V6_BIT	BIT(1)
+#define MFC_V7_BIT	BIT(2)
+#define MFC_V8_BIT	BIT(3)
+#define MFC_NUM_VERSION_BIT	4
+
 /*
  * struct s5p_mfc_fmt -	structure used to store information about pixelformats
  *			used by the MFC
@@ -719,6 +725,7 @@ struct s5p_mfc_fmt {
 	enum s5p_mfc_fmt_type type;
 	u32 num_planes;
 	u32 versions;
+	struct v4l2_frmsizeenum resolution[MFC_NUM_VERSION_BIT];
 };
 
 /**
@@ -767,11 +774,6 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 #define HAS_MFC_DEF_FMT(dev) ((HAS_VARIANT(dev)) && ((dev)->variant->def_fmt))
 #define GET_MFC_DEF_FMT(dev, fmt_idx) \
 	((HAS_MFC_DEF_FMT(dev)) ? ((dev)->variant->def_fmt[fmt_idx]) : -1)
-
-#define MFC_V5_BIT	BIT(0)
-#define MFC_V6_BIT	BIT(1)
-#define MFC_V7_BIT	BIT(2)
-#define MFC_V8_BIT	BIT(3)
 
 
 #endif /* S5P_MFC_COMMON_H_ */

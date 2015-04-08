@@ -35,6 +35,7 @@
 #include "tpm_eventlog.h"
 
 void tpm_continue_selftest_nocheck(struct tpm_chip *chip);
+static struct tpm_chip *tpm_chip_find_get(int chip_num);
 
 enum tpm_duration {
 	TPM_SHORT = 0,
@@ -382,6 +383,114 @@ static void resume_if_needed(struct tpm_chip *chip)
 	mutex_unlock(&chip->resume_mutex);
 }
 
+
+/* States for the "command pending" (cpend) flag. */
+
+/* Set/clear the cpend flag on command request/response when this is true.
+ * This is set to false under various error conditions, or after 30s after
+ * boot.
+ */
+static bool must_update_cpend_flag = true;
+
+/* If the cpend flag in the nvram is already set, it must have happened
+ * in the previous boot session.  In that case we want to leave it untouched so
+ * that userspace gets a chance to see it (and clear it).  We need to keep
+ * checking if userspace clears it, so that we can resume the normal behavior.
+ */
+static bool cpend_flag_previously_set;
+
+/* When true, skip the clear, because we didn't do the set. */
+static bool skip_cpend_flag_clear;
+
+
+/* Sets the tpm "cpend command" flag, a bit that persists across a reboot
+ * (both warm and cold) and indicates that the TPM may have been interrupted
+ * between a command request and its response in the first 30s since boot.
+ */
+static void tpm_set_cpend_flag(struct tpm_chip *chip)
+{
+	int err;
+	struct timespec uptime;
+	int old_cpend_flag;
+
+	BUG_ON(!chip->cpend_flag_get_cb);
+	BUG_ON(!chip->cpend_flag_set_cb);
+
+	if (!must_update_cpend_flag)
+		return;
+
+	err = chip->cpend_flag_get_cb(&old_cpend_flag);
+	if (err < 0) {
+		/* Give up forever. */
+		dev_warn(chip->dev, "tpm: get cpend flag: %d\n", err);
+		must_update_cpend_flag = false;
+		return;
+	}
+	/* The old cpend flag was read successfully. */
+	cpend_flag_previously_set = old_cpend_flag;
+
+	do_posix_clock_monotonic_gettime(&uptime);
+	monotonic_to_bootbased(&uptime);
+
+	/* We stop caring after 30 seconds. */
+	if (uptime.tv_sec > 30) {
+		must_update_cpend_flag = false;
+		return;
+	}
+
+	/* Set the NVRAM bit that means a command is in progress. */
+	if (cpend_flag_previously_set)
+		return;
+	err = chip->cpend_flag_set_cb(1);
+	if (err < 0) {
+		dev_warn(chip->dev, "tpm: set cpend flag: %d\n", err);
+		must_update_cpend_flag = false;
+	}
+}
+
+
+static void tpm_clear_cpend_flag(struct tpm_chip *chip)
+{
+	int err;
+
+	BUG_ON(!chip->cpend_flag_set_cb);
+
+	if (!must_update_cpend_flag ||
+	    cpend_flag_previously_set ||
+	    skip_cpend_flag_clear) {
+		skip_cpend_flag_clear = false;
+		return;
+	}
+
+	err = chip->cpend_flag_set_cb(0);
+	if (err < 0) {
+		dev_warn(chip->dev, "tpm: clear cpend flag: %d\n", err);
+		must_update_cpend_flag = false;
+		return;
+	}
+}
+
+
+int tpm_register_cpend_flag_cbs(int (*get_flag_cb)(int *),
+				int (*set_flag_cb)(int))
+{
+	struct tpm_chip *chip;
+
+	chip = tpm_chip_find_get(0);
+	if (chip == NULL)
+		return -ENODEV;
+
+	mutex_lock(&chip->tpm_mutex);
+	chip->cpend_flag_get_cb = get_flag_cb;
+	chip->cpend_flag_set_cb = set_flag_cb;
+	mutex_unlock(&chip->tpm_mutex);
+
+	tpm_chip_put(chip);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tpm_register_cpend_flag_cbs);
+
+
 /*
  * Returns max number of jiffies to wait
  */
@@ -432,6 +541,12 @@ static ssize_t tpm_transmit(struct tpm_chip *chip, const char *buf,
 	}
 
 	mutex_lock(&chip->tpm_mutex);
+	/* There is a race between setting the "command pending" flag and
+	 * calling vendor.send, but this is hard (impossible?) to do this
+	 * atomically, and we're only using it for statistical purposes.
+	 */
+	if (chip->cpend_flag_set_cb)
+		tpm_set_cpend_flag(chip);
 
 	if ((rc = chip->vendor.send(chip, (u8 *) buf, count)) < 0) {
 		dev_err(chip->dev,
@@ -470,6 +585,8 @@ out_recv:
 		dev_err(chip->dev,
 			"tpm_transmit: tpm_recv: error %zd\n", rc);
 out:
+	if (chip->cpend_flag_set_cb)
+		tpm_clear_cpend_flag(chip);
 	mutex_unlock(&chip->tpm_mutex);
 	return rc;
 }
