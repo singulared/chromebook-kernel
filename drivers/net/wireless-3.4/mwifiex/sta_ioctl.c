@@ -266,8 +266,10 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 
 	if (priv->bss_mode == NL80211_IFTYPE_STATION) {
 		/* Infra mode */
-		if (bss_desc == NULL)
+		if (!bss_desc) {
+			ret = -1;
 			goto done;
+		}
 
 		ret = mwifiex_check_network_compatibility(priv, bss_desc);
 		if (ret)
