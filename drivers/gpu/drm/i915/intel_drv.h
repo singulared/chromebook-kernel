@@ -429,6 +429,7 @@ struct intel_dp {
 	struct delayed_work panel_vdd_work;
 	bool want_panel_vdd;
 	bool is_apple_vga;
+	bool is_ps8617;
 	struct intel_connector *attached_connector;
 };
 

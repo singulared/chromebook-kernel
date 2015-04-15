@@ -1315,6 +1315,8 @@ static int arm_iommu_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
 	if (!pages)
 		return -ENXIO;
 
+	pages += vma->vm_pgoff;
+
 	do {
 		int ret = vm_insert_page(vma, uaddr, *pages++);
 		if (ret) {
