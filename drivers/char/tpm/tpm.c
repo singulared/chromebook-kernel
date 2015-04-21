@@ -399,9 +399,6 @@ static bool must_update_cpend_flag = true;
  */
 static bool cpend_flag_previously_set;
 
-/* When true, skip the clear, because we didn't do the set. */
-static bool skip_cpend_flag_clear;
-
 
 /* Sets the tpm "cpend command" flag, a bit that persists across a reboot
  * (both warm and cold) and indicates that the TPM may have been interrupted
@@ -455,12 +452,8 @@ static void tpm_clear_cpend_flag(struct tpm_chip *chip)
 
 	BUG_ON(!chip->cpend_flag_set_cb);
 
-	if (!must_update_cpend_flag ||
-	    cpend_flag_previously_set ||
-	    skip_cpend_flag_clear) {
-		skip_cpend_flag_clear = false;
+	if (!must_update_cpend_flag || cpend_flag_previously_set)
 		return;
-	}
 
 	err = chip->cpend_flag_set_cb(0);
 	if (err < 0) {
@@ -525,6 +518,7 @@ static ssize_t tpm_transmit(struct tpm_chip *chip, const char *buf,
 {
 	ssize_t rc;
 	u32 count, ordinal;
+	u16 tag;
 	unsigned long stop;
 
 	if (bufsiz > TPM_BUFSIZE)
@@ -545,7 +539,8 @@ static ssize_t tpm_transmit(struct tpm_chip *chip, const char *buf,
 	 * calling vendor.send, but this is hard (impossible?) to do this
 	 * atomically, and we're only using it for statistical purposes.
 	 */
-	if (chip->cpend_flag_set_cb)
+	tag = be16_to_cpu(*((__be16 *) buf));
+	if (chip->cpend_flag_set_cb && (tag == 0xc2 || tag == 0xc3))
 		tpm_set_cpend_flag(chip);
 
 	if ((rc = chip->vendor.send(chip, (u8 *) buf, count)) < 0) {
@@ -585,7 +580,7 @@ out_recv:
 		dev_err(chip->dev,
 			"tpm_transmit: tpm_recv: error %zd\n", rc);
 out:
-	if (chip->cpend_flag_set_cb)
+	if (chip->cpend_flag_set_cb && (tag == 0xc2 || tag == 0xc3))
 		tpm_clear_cpend_flag(chip);
 	mutex_unlock(&chip->tpm_mutex);
 	return rc;
