@@ -31,7 +31,9 @@
 #include <net/bluetooth/bluetooth.h>
 #include <linux/proc_fs.h>
 
-#define VERSION "2.19"
+#include "selftest.h"
+
+#define VERSION "2.20"
 
 /* Bluetooth sockets */
 #define BT_MAX_PROTO	8
@@ -641,7 +643,7 @@ static int bt_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static struct seq_operations bt_seq_ops = {
+static const struct seq_operations bt_seq_ops = {
 	.start = bt_seq_start,
 	.next  = bt_seq_next,
 	.stop  = bt_seq_stop,
@@ -717,9 +719,16 @@ EXPORT_SYMBOL_GPL(bt_debugfs);
 
 static int __init bt_init(void)
 {
+	struct sk_buff *skb;
 	int err;
 
+	BUILD_BUG_ON(sizeof(struct bt_skb_cb) > sizeof(skb->cb));
+
 	BT_INFO("Core ver %s", VERSION);
+
+	err = bt_selftest();
+	if (err < 0)
+		return err;
 
 	bt_debugfs = debugfs_create_dir("bluetooth", NULL);
 
@@ -749,6 +758,13 @@ static int __init bt_init(void)
 		goto sock_err;
 	}
 
+	err = mgmt_init();
+	if (err < 0) {
+		sco_exit();
+		l2cap_exit();
+		goto sock_err;
+	}
+
 	return 0;
 
 sock_err:
@@ -763,6 +779,8 @@ error:
 
 static void __exit bt_exit(void)
 {
+	mgmt_exit();
+
 	sco_exit();
 
 	l2cap_exit();

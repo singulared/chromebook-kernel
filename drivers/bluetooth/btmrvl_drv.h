@@ -32,6 +32,24 @@
 /* Time to wait for command response in millisecond */
 #define WAIT_UNTIL_CMD_RESP		msecs_to_jiffies(5000)
 
+enum rdwr_status {
+	RDWR_STATUS_SUCCESS = 0,
+	RDWR_STATUS_FAILURE = 1,
+	RDWR_STATUS_DONE = 2
+};
+
+#define FW_DUMP_MAX_NAME_LEN    8
+#define FW_DUMP_HOST_READY      0xEE
+#define FW_DUMP_DONE            0xFF
+#define FW_DUMP_READ_DONE       0xFE
+
+struct memory_type_mapping {
+	u8 mem_name[FW_DUMP_MAX_NAME_LEN];
+	u8 *mem_ptr;
+	u32 mem_size;
+	u8 done_flag;
+};
+
 struct btmrvl_thread {
 	struct task_struct *task;
 	wait_queue_head_t wait_q;
@@ -81,6 +99,7 @@ struct btmrvl_private {
 				u8 *payload, u16 nb);
 	int (*hw_wakeup_firmware) (struct btmrvl_private *priv);
 	int (*hw_process_int_status) (struct btmrvl_private *priv);
+	void (*firmware_dump)(struct btmrvl_private *priv);
 	spinlock_t driver_lock;		/* spinlock used by driver */
 #ifdef CONFIG_DEBUG_FS
 	void *debugfs_data;
@@ -93,6 +112,7 @@ struct btmrvl_private {
 /* Vendor specific Bluetooth commands */
 #define BT_CMD_PSCAN_WIN_REPORT_ENABLE	0xFC03
 #define BT_CMD_ROUTE_SCO_TO_HOST	0xFC1D
+#define BT_CMD_SET_BDADDR		0xFC22
 #define BT_CMD_AUTO_SLEEP_MODE		0xFC23
 #define BT_CMD_HOST_SLEEP_CONFIG	0xFC59
 #define BT_CMD_HOST_SLEEP_ENABLE	0xFC5A
@@ -146,11 +166,13 @@ void btmrvl_interrupt(struct btmrvl_private *priv);
 bool btmrvl_check_evtpkt(struct btmrvl_private *priv, struct sk_buff *skb);
 int btmrvl_process_event(struct btmrvl_private *priv, struct sk_buff *skb);
 
-int btmrvl_send_module_cfg_cmd(struct btmrvl_private *priv, int subcmd);
+int btmrvl_send_module_cfg_cmd(struct btmrvl_private *priv, u8 subcmd);
+int btmrvl_pscan_window_reporting(struct btmrvl_private *priv, u8 subcmd);
 int btmrvl_send_hscfg_cmd(struct btmrvl_private *priv);
 int btmrvl_enable_ps(struct btmrvl_private *priv);
 int btmrvl_prepare_command(struct btmrvl_private *priv);
 int btmrvl_enable_hs(struct btmrvl_private *priv);
+void btmrvl_firmware_dump(struct btmrvl_private *priv);
 
 #ifdef CONFIG_DEBUG_FS
 void btmrvl_debugfs_init(struct hci_dev *hdev);
