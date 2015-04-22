@@ -335,21 +335,39 @@ static void iwl_mvm_scan_calc_params(struct iwl_mvm *mvm,
 		if (mvm->fw->ucode_capa.api[0] &
 		    IWL_UCODE_TLV_API_FRAGMENTED_SCAN) {
 			params->suspend_time = 105;
-			params->max_out_time = 70;
 			frag_passive_dwell = 40;
+			params->max_out_time = frag_passive_dwell;
 			break;
+		} else {
+			params->suspend_time = 120;
+			params->max_out_time = 120;
 		}
 	case IWL_MVM_VENDOR_LOAD_MEDIUM:
-		params->suspend_time = 120;
-		params->max_out_time = 120;
+		if (CPTCFG_IWLMVM_SCAN_PRECEDENCE_LEVEL == 1) {
+			params->suspend_time = 250;
+			params->max_out_time = 250;
+		} else {
+			params->suspend_time = 120;
+			params->max_out_time = 120;
+		}
 		break;
 	default:
-		params->suspend_time = 30;
-		params->max_out_time = 170;
+		if (CPTCFG_IWLMVM_SCAN_PRECEDENCE_LEVEL == 1) {
+			params->suspend_time = 100;
+			params->max_out_time = 600;
+		} else {
+			params->suspend_time = 30;
+			params->max_out_time = 120;
+		}
 	}
 #else
-	params->suspend_time = 30;
-	params->max_out_time = 170;
+	if (CPTCFG_IWLMVM_SCAN_PRECEDENCE_LEVEL == 1) {
+		params->suspend_time = 100;
+		params->max_out_time = 600;
+	} else {
+		params->suspend_time = 30;
+		params->max_out_time = 120;
+	}
 #endif
 
 	if (iwl_mvm_low_latency(mvm)) {
@@ -363,8 +381,8 @@ static void iwl_mvm_scan_calc_params(struct iwl_mvm *mvm,
 #else
 			params->suspend_time = 105;
 #endif
-			params->max_out_time = 70;
 			frag_passive_dwell = 20;
+			params->max_out_time = frag_passive_dwell;
 		} else {
 			params->suspend_time = 120;
 			params->max_out_time = 120;
@@ -389,7 +407,8 @@ static void iwl_mvm_scan_calc_params(struct iwl_mvm *mvm,
 		}
 	}
 
-	if (flags & NL80211_SCAN_FLAG_LOW_PRIORITY)
+	if ((flags & NL80211_SCAN_FLAG_LOW_PRIORITY) &&
+	    (params->max_out_time > 200))
 		params->max_out_time = 200;
 
 not_bound:
