@@ -803,6 +803,10 @@ int ath9k_init_device(u16 devid, struct ath_softc *sc,
 		error = regulatory_hint(hw->wiphy, reg->alpha2);
 		if (error)
 			goto error_world;
+	} else {
+		error = regulatory_hint(hw->wiphy, "00");
+		if (error)
+			goto error_world;
 	}
 
 	sc->last_rssi = ATH_RSSI_DUMMY_MARKER;
