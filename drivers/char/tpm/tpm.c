@@ -583,6 +583,8 @@ out:
 	if (chip->cpend_flag_set_cb && (tag == 0xc2 || tag == 0xc3))
 		tpm_clear_cpend_flag(chip);
 	mutex_unlock(&chip->tpm_mutex);
+	dev_info(chip->dev, "command 0x%x (size %d) returned code 0x%x\n",
+		 ordinal, count, be32_to_cpu(*((__be32 *) (buf + 6))));
 	return rc;
 }
 
