@@ -4557,7 +4557,7 @@ out:
 	return ret;
 }
 
-static struct drm_pending_vblank_event *create_vblank_event(
+struct drm_pending_vblank_event *create_vblank_event(
 		struct drm_device *dev, struct drm_file *file_priv, uint64_t user_data)
 {
 	struct drm_pending_vblank_event *e = NULL;
@@ -4591,7 +4591,7 @@ out:
 	return e;
 }
 
-static void destroy_vblank_event(struct drm_device *dev,
+void destroy_vblank_event(struct drm_device *dev,
 		struct drm_file *file_priv, struct drm_pending_vblank_event *e)
 {
 	unsigned long flags;
