@@ -3665,10 +3665,8 @@ static void i9xx_pfit_enable(struct intel_crtc *crtc)
 	if (!crtc->config.gmch_pfit.control)
 		return;
 
-	if (crtc->config.gmch_pfit.control & PFIT_ENABLE) {
-		WARN_ON(I915_READ(PFIT_CONTROL) & PFIT_ENABLE);
-		assert_pipe_disabled(dev_priv, crtc->pipe);
-	}
+	WARN_ON(I915_READ(PFIT_CONTROL) & PFIT_ENABLE);
+	assert_pipe_disabled(dev_priv, crtc->pipe);
 
 	/*
 	 * Enable automatic panel scaling so that non-native modes
