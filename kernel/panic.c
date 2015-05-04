@@ -403,6 +403,17 @@ void oops_exit(void)
 	kmsg_dump(KMSG_DUMP_OOPS);
 }
 
+void print_warning_header(const char *file, int line, void *caller)
+{
+	const char *board;
+
+	printk(KERN_WARNING "------------[ cut here ]------------\n");
+	printk(KERN_WARNING "WARNING: at %s:%d %pS()\n", file, line, caller);
+	board = dmi_get_system_info(DMI_PRODUCT_NAME);
+	if (board)
+		printk(KERN_WARNING "Hardware name: %s\n", board);
+}
+
 #ifdef WANT_WARN_ON_SLOWPATH
 struct slowpath_args {
 	const char *fmt;
@@ -412,13 +423,7 @@ struct slowpath_args {
 static void warn_slowpath_common(const char *file, int line, void *caller,
 				 unsigned taint, struct slowpath_args *args)
 {
-	const char *board;
-
-	printk(KERN_WARNING "------------[ cut here ]------------\n");
-	printk(KERN_WARNING "WARNING: at %s:%d %pS()\n", file, line, caller);
-	board = dmi_get_system_info(DMI_PRODUCT_NAME);
-	if (board)
-		printk(KERN_WARNING "Hardware name: %s\n", board);
+	print_warning_header(file, line, caller);
 
 	if (args)
 		vprintk(args->fmt, args->args);

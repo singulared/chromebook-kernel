@@ -77,6 +77,17 @@ static struct notifier_block panic_block = {
 	.notifier_call = hung_task_panic,
 };
 
+static void warn_potentially_hung_task(struct task_struct *t,
+				       unsigned long timeout)
+{
+	print_warning_header(__FILE__, __LINE__, __builtin_return_address(0));
+	pr_warn("task %s:%d is hung for %ld seconds\n",
+		t->comm, t->pid, timeout);
+	sched_show_task(t);
+	debug_show_held_locks(t);
+	print_oops_end_marker();
+}
+
 static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
 	long switch_count = t->nvcsw + t->nivcsw;
@@ -112,8 +123,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 		 * To decide if a shorter timeout is good enough, keep track
 		 * of tasks that aren't making progress, but don't panic yet.
 		 */
-		WARN(1, "task %s:%d is hung for %ld seconds\n",
-			t->comm, t->pid, timeout);
+		warn_potentially_hung_task(t, timeout);
 		t->last_switch_count |= HUNG_TASK_MASK;
 		return;
 	}
