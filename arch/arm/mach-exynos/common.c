@@ -581,6 +581,8 @@ static struct irq_chip combiner_chip = {
 	.irq_set_affinity = combiner_set_affinity,
 };
 
+static struct lock_class_key combiner_irq_lock_class;
+
 static void __init combiner_cascade_irq(unsigned int combiner_nr, unsigned int irq)
 {
 	unsigned int max_nr;
@@ -595,6 +597,7 @@ static void __init combiner_cascade_irq(unsigned int combiner_nr, unsigned int i
 	if (irq_set_handler_data(irq, &combiner_data[combiner_nr]) != 0)
 		BUG();
 	irq_set_chained_handler(irq, combiner_handle_cascade_irq);
+	irq_set_lockdep_class(irq, &combiner_irq_lock_class);
 	combiner_data[combiner_nr].gic_irq = irq;
 }
 
