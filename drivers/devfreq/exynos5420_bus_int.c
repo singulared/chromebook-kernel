@@ -424,6 +424,10 @@ struct int_clk_info aclk_400_disp1[] = {
 	{LV_6, 120000, D_PLL},
 };
 
+/*
+ * Keep aclk_300_jpeg at a minimum frequency
+ * of 200MHz to achieve lower latency
+ */
 struct int_clk_info aclk_300_jpeg[] = {
 	/* Level, Freq, Parent_Pll */
 	{LV_0, 300000, D_PLL},
@@ -431,8 +435,8 @@ struct int_clk_info aclk_300_jpeg[] = {
 	{LV_2, 300000, D_PLL},
 	{LV_3, 300000, D_PLL},
 	{LV_4, 200000, D_PLL},
-	{LV_5, 150000, D_PLL},
-	{LV_6,  75000, D_PLL},
+	{LV_5, 200000, D_PLL},
+	{LV_6, 200000, D_PLL},
 };
 
 #define EXYNOS5_INT_PM_CLK(NAME, CLK, PCLK, CLK_INFO)	\
