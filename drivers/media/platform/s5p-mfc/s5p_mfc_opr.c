@@ -180,6 +180,9 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 
 	s5p_mfc_clean_ctx_int_flags(ctx);
 
+	schedule_delayed_work(&dev->watchdog_work,
+				msecs_to_jiffies(MFC_WATCHDOG_TIMEOUT_MS));
+
 	if (!s5p_mfc_hw_call(dev->mfc_ops, run, ctx))
 		return 0;
 
@@ -188,6 +191,9 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 	 * We need to signal an error, recover and try another one.
 	 * We do it exactly the same as in case of hardware error interrupt.
 	 */
+
+	cancel_delayed_work(&dev->watchdog_work);
+
 	spin_lock_irqsave(&dev->irqlock, flags);
 	s5p_mfc_fatal_error(dev, ctx);
 	s5p_mfc_ctx_done_locked(ctx);

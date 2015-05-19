@@ -263,21 +263,48 @@ err:
 	return ret;
 }
 
-void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
+void s5p_mfc_free_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 {
-	ctx->state = MFCINST_RETURN_INST;
-	s5p_mfc_try_ctx(ctx);
-	/* Wait until instance is returned or timeout occurred */
-	if (s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET, 0))
-		mfc_err("Err returning instance\n");
-
-	/* Free resources */
 	s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
 	s5p_mfc_hw_call(dev->mfc_ops, release_instance_buffer, ctx);
 	if (ctx->type == MFCINST_DECODER)
 		s5p_mfc_hw_call(dev->mfc_ops, release_dec_desc_buffer, ctx);
+}
 
+static void s5p_mfc_release_mfc_inst(struct s5p_mfc_dev *dev,
+				     struct s5p_mfc_ctx *ctx)
+{
+	unsigned long flags;
+
+	/*
+	 * Even though this instance should not be running at this point,
+	 * another one might have crashed the hardware and triggered watchdog
+	 * worker, which might have changed the state of all instances to
+	 * MFCINST_ERROR.
+	 */
+	spin_lock_irqsave(&dev->irqlock, flags);
+
+	if (ctx->state != MFCINST_ERROR)
+		ctx->state = MFCINST_RETURN_INST;
+
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	s5p_mfc_try_ctx(ctx);
+	/* Wait	until instance is returned or timeout occurred */
+	if (s5p_mfc_wait_for_done_ctx(ctx,
+			S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET, 0))
+		mfc_err("Err returning instance\n");
+	else
+		ctx->state = MFCINST_FREE;
 	ctx->inst_no = MFC_NO_INSTANCE_SET;
-	ctx->state = MFCINST_FREE;
+}
+
+void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
+{
+	/* Release hardware instance if needed. */
+	if (ctx->inst_no != MFC_NO_INSTANCE_SET)
+		s5p_mfc_release_mfc_inst(dev, ctx);
+
+	/* Free resources */
+	s5p_mfc_free_mfc_inst(dev, ctx);
 }
