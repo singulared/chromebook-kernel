@@ -189,13 +189,13 @@ static void exynos_plane_helper_commit_cb(void *cookie, void *unused)
 	struct drm_crtc *crtc = sync_cookie->crtc;
 	int ret;
 
+#ifdef CONFIG_DRM_DMA_SYNC
+	exynos_plane->pending_fence = sync_cookie->fence;
+#endif
 	kfree(sync_cookie);
 
 	drm_vblank_get(crtc->dev, exynos_drm_pipe_from_crtc(crtc));
 
-#ifdef CONFIG_DRM_DMA_SYNC
-	exynos_plane->pending_fence = sync_cookie->fence;
-#endif
 	ret = exynos_plane->helper_funcs->commit_plane(plane, crtc, fb);
 	if (ret)
 		goto err;

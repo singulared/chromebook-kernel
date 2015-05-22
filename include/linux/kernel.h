@@ -216,6 +216,8 @@ void do_exit(long error_code)
 void complete_and_exit(struct completion *, long)
 	__noreturn;
 
+void print_warning_header(const char *file, int line, void *caller);
+
 /* Internal, do not use. */
 int __must_check _kstrtoul(const char *s, unsigned int base, unsigned long *res);
 int __must_check _kstrtol(const char *s, unsigned int base, long *res);

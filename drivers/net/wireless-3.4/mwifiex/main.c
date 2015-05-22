@@ -113,6 +113,7 @@ static int mwifiex_unregister(struct mwifiex_adapter *adapter)
 	for (i = 0; i < adapter->priv_num; i++) {
 		if (adapter->priv[i]) {
 			mwifiex_free_curr_bcn(adapter->priv[i]);
+			del_timer_sync(&adapter->priv[i]->scan_delay_timer);
 			kfree(adapter->priv[i]);
 		}
 	}
@@ -399,7 +400,8 @@ static int mwifiex_init_hw_fw(struct mwifiex_adapter *adapter)
 static int
 mwifiex_open(struct net_device *dev)
 {
-	netif_tx_start_all_queues(dev);
+	netif_carrier_off(dev);
+
 	return 0;
 }
 

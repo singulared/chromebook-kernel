@@ -234,11 +234,11 @@ static int mwifiex_dnld_sleep_confirm_cmd(struct mwifiex_adapter *adapter)
 						adapter->sleep_cfm->data;
 	priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 
+	adapter->seq_num++;
 	sleep_cfm_buf->seq_num =
 		cpu_to_le16((HostCmd_SET_SEQ_NO_BSS_INFO
 					(adapter->seq_num, priv->bss_num,
 					 priv->bss_type)));
-	adapter->seq_num++;
 
 	skb_push(adapter->sleep_cfm, INTF_HEADER_LEN);
 	ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_CMD,

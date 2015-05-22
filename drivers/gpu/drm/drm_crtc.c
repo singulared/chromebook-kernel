@@ -1010,6 +1010,29 @@ int drm_crtc_set_property(struct drm_crtc *crtc,
 EXPORT_SYMBOL(drm_crtc_set_property);
 
 /**
+ * drm_connector_index - find the index of a registered connector
+ * @connector: connector to find index for
+ *
+ * Given a registered connector, return the index of that connector within a DRM
+ * device's list of connectors.
+ */
+unsigned int drm_connector_index(struct drm_connector *connector)
+{
+	unsigned int index = 0;
+	struct drm_connector *tmp;
+
+	list_for_each_entry(tmp, &connector->dev->mode_config.connector_list, head) {
+		if (tmp == connector)
+			return index;
+
+		index++;
+	}
+
+	BUG();
+}
+EXPORT_SYMBOL(drm_connector_index);
+
+/**
  * drm_mode_probed_add - add a mode to a connector's probed mode list
  * @connector: connector the new mode
  * @mode: mode data
@@ -1480,6 +1503,29 @@ int drm_plane_set_property(struct drm_plane *plane,
 	return 0;
 }
 EXPORT_SYMBOL(drm_plane_set_property);
+
+/**
+ * drm_plane_index - find the index of a registered plane
+ * @plane: plane to find index for
+ *
+ * Given a registered plane, return the index of that CRTC within a DRM
+ * device's list of planes.
+ */
+unsigned int drm_plane_index(struct drm_plane *plane)
+{
+	unsigned int index = 0;
+	struct drm_plane *tmp;
+
+	list_for_each_entry(tmp, &plane->dev->mode_config.plane_list, head) {
+		if (tmp == plane)
+			return index;
+
+		index++;
+	}
+
+	BUG();
+}
+EXPORT_SYMBOL(drm_plane_index);
 
 void drm_plane_force_disable(struct drm_plane *plane,
 		struct drm_atomic_state *state)
@@ -4511,7 +4557,7 @@ out:
 	return ret;
 }
 
-static struct drm_pending_vblank_event *create_vblank_event(
+struct drm_pending_vblank_event *create_vblank_event(
 		struct drm_device *dev, struct drm_file *file_priv, uint64_t user_data)
 {
 	struct drm_pending_vblank_event *e = NULL;
@@ -4545,7 +4591,7 @@ out:
 	return e;
 }
 
-static void destroy_vblank_event(struct drm_device *dev,
+void destroy_vblank_event(struct drm_device *dev,
 		struct drm_file *file_priv, struct drm_pending_vblank_event *e)
 {
 	unsigned long flags;
@@ -4583,6 +4629,19 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		return PTR_ERR(state);
 
 retry:
+	ret = drm_modeset_lock(&crtc->mutex, &state->acquire_ctx);
+	if (ret)
+		goto out;
+
+	if (crtc->primary->fb == NULL) {
+		/* The framebuffer is currently unbound, presumably
+		 * due to a hotplug event, that userspace has not
+		 * yet discovered.
+		 */
+		ret = -EBUSY;
+		goto out;
+	}
+
 	if (page_flip->flags & DRM_MODE_PAGE_FLIP_EVENT) {
 		e = create_vblank_event(dev, file_priv, page_flip->user_data);
 		if (!e) {

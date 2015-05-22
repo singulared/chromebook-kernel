@@ -1814,9 +1814,20 @@ static void mwifiex_sdio_reg_dbg_work(struct mwifiex_adapter *adapter)
 		NULL
 	};
 	int n, i, ret = 0;
+	int claim_retry = 0;
 	u32 reg;
 
-	sdio_claim_host(func);
+	while (!mmc_try_claim_host(func->card->host)) {
+		if (++claim_retry >= 10) {
+			dev_err(adapter->dev,
+				"%s: host is still claimed, giving up\n",
+				__func__);
+			return;
+		}
+		dev_info(adapter->dev, "%s: host is claimed, retrying\n",
+			 __func__);
+		msleep(100);
+	}
 
 	for (n = 0; regs[n]; n++) {
 		char buf[REG_DBG_MAX_NUM*5+1];
@@ -1848,7 +1859,7 @@ static void mwifiex_sdio_reg_dbg_work(struct mwifiex_adapter *adapter)
 		dev_info(adapter->dev, "%s: %s", regs[n]->name, buf);
 	}
 
-	sdio_release_host(func);
+	mmc_release_host(func->card->host);
 }
 
 static void sdio_work_worker(struct work_struct *work)
