@@ -48,6 +48,7 @@ int mwifiex_handle_rx_packet(struct mwifiex_adapter *adapter,
 	if (!priv)
 		priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 
+	memset(rx_info, 0, sizeof(*rx_info));
 	rx_info->bss_num = priv->bss_num;
 	rx_info->bss_type = priv->bss_type;
 
