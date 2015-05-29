@@ -91,8 +91,6 @@
 #define DN_LD_HOST_INT_MASK		(0x2U)
 /* Enable Host interrupt mask */
 #define HOST_INT_ENABLE	(UP_LD_HOST_INT_MASK | DN_LD_HOST_INT_MASK)
-/* Disable Host interrupt mask */
-#define	HOST_INT_DISABLE		0xff
 
 /* Host Control Registers : Host interrupt status */
 #define HOST_INTSTATUS_REG		0x03

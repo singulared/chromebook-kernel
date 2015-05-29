@@ -771,7 +771,7 @@ int mwifiex_dnld_fw(struct mwifiex_adapter *adapter,
 	if (!ret) {
 		dev_notice(adapter->dev,
 			   "WLAN FW already running! Skip FW download\n");
-		goto done;
+		return 0;
 	}
 	poll_num = MAX_FIRMWARE_POLL_TRIES;
 
@@ -794,12 +794,7 @@ int mwifiex_dnld_fw(struct mwifiex_adapter *adapter,
 poll_fw:
 	/* Check if the firmware is downloaded successfully or not */
 	ret = adapter->if_ops.check_fw_status(adapter, poll_num);
-	if (ret) {
+	if (ret)
 		dev_err(adapter->dev, "FW failed to be active in time\n");
-		return -1;
-	}
-done:
-	/* re-enable host interrupt for mwifiex after fw dnld is successful */
-	adapter->if_ops.enable_int(adapter);
 	return ret;
 }
