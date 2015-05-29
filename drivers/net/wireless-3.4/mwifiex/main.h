@@ -692,6 +692,7 @@ struct mwifiex_adapter {
 	u8 scan_delay_cnt;
 	u8 empty_tx_q_cnt;
 	atomic_t is_tx_received;
+	struct semaphore *card_sem;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
