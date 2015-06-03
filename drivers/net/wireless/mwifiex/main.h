@@ -560,6 +560,7 @@ struct mwifiex_private {
 	unsigned long csa_expire_time;
 	struct station_parameters *sta_params;
 	struct sk_buff_head tdls_txq;
+	struct mwifiex_ds_mem_rw mem_rw;
 };
 
 
