@@ -28,12 +28,23 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/kref.h>
+#include <linux/of_platform.h>
+#include <asm/dma-iommu.h>
+#endif
 
 #include "jpeg-core.h"
 #include "jpeg-hw-s5p.h"
 #include "jpeg-hw-exynos4.h"
 #include "jpeg-hw-exynos3250.h"
 #include "jpeg-regs.h"
+
+#ifdef CONFIG_EXYNOS_IOMMU
+static struct dma_iommu_mapping *mapping;
+#endif
 
 static struct s5p_jpeg_fmt sjpeg_formats[] = {
 	{
@@ -751,6 +762,55 @@ static void exynos4_jpeg_set_huff_tbl(void __iomem *base)
 							ARRAY_SIZE(hactblg0));
 }
 
+#ifdef CONFIG_EXYNOS_IOMMU
+static int jpeg_iommu_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int err = -ENOMEM;
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
+						SZ_512M, 4);
+	if (IS_ERR(mapping)) {
+		dev_err(dev, "IOMMU mapping failed\n");
+		return PTR_ERR(mapping);
+	}
+
+	dev->dma_parms = devm_kzalloc(dev, sizeof(*dev->dma_parms),
+						GFP_KERNEL);
+	if (!dev->dma_parms)
+		goto err_alloc;
+
+	err = dma_set_max_seg_size(dev, 0xffffffffu);
+	if (err)
+		goto error;
+
+	err = arm_iommu_attach_device(dev, mapping);
+	if (err)
+		goto error;
+
+	return 0;
+
+error:
+	devm_kfree(dev, dev->dma_parms);
+	dev->dma_parms = NULL;
+err_alloc:
+	arm_iommu_release_mapping(mapping);
+	mapping = NULL;
+	return err;
+}
+
+static void jpeg_iommu_deinit(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	if (mapping) {
+		arm_iommu_detach_device(dev);
+		devm_kfree(dev, dev->dma_parms);
+		dev->dma_parms = NULL;
+		arm_iommu_release_mapping(mapping);
+		mapping = NULL;
+	}
+}
+#endif
 /*
  * ============================================================================
  * Device file operations
@@ -2476,6 +2536,13 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	spin_lock_init(&jpeg->slock);
 	jpeg->dev = &pdev->dev;
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	ret = jpeg_iommu_init(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "IOMMU Initialization failed\n");
+		return ret;
+	}
+#endif
 	/* memory-mapped registers */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
@@ -2613,6 +2680,9 @@ static int s5p_jpeg_remove(struct platform_device *pdev)
 	if (!IS_ERR(jpeg->sclk))
 		clk_put(jpeg->sclk);
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	jpeg_iommu_deinit(pdev);
+#endif
 	return 0;
 }
 
