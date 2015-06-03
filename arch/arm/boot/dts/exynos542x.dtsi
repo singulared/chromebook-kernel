@@ -1007,7 +1007,7 @@
 		samsung,syscon-phandle = <&pmu_syscon>;
         };
 
-	jpeg_codec@11F50000 {
+	jpeg_codec: jpeg_codec@11F50000 {
 		compatible = "samsung,exynos3250-jpeg";
 		reg = <0x11F50000 0x1000>;
 		interrupts = <0 89 0>;
@@ -1016,12 +1016,33 @@
 		status = "ok";
 	};
 
-	jpeg_codec@11F60000 {
+	sysmmu-jpeg {
+		mmuname = "jpeg";
+		reg = <0x11F10000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupt-parent = <&combiner>;
+		interrupts = <4 2>;
+		mmu-master = <&jpeg_codec>;
+		clocks = <&clock 453>, <&clock 451>;
+		clock-names = "sysmmu", "master";
+	};
+
+	jpeg_codec2: jpeg_codec@11F60000 {
 		compatible = "samsung,exynos3250-jpeg";
 		reg = <0x11F60000 0x1000>;
 		interrupts = <0 168 0>;
 		clocks = <&clock 452>;
 		clock-names = "jpeg";
 		status = "ok";
+	};
+
+	sysmmu-jpeg2 {
+		mmuname = "jpeg2";
+		reg = <0x11F20000 0x1000>;
+		compatible = "samsung,exynos-sysmmu";
+		interrupts = <0 169 0>;
+		mmu-master = <&jpeg_codec2>;
+		clocks = <&clock 506>, <&clock 452>;
+		clock-names = "sysmmu", "master";
 	};
 };
