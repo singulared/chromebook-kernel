@@ -9285,19 +9285,6 @@ static void i915_redisable_vga(struct drm_device *dev)
 	}
 }
 
-/* Force-cycle the cursor */
-void intel_restore_cursor_state(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	enum pipe pipe;
-	for_each_pipe(pipe) {
-		struct intel_crtc *crtc = to_intel_crtc(
-				dev_priv->pipe_to_crtc_mapping[pipe]);
-		crtc->cursor_visible = false;
-		intel_crtc_update_cursor(&crtc->base, true);
-	}
-}
-
 /* Scan out the current hw modeset state, sanitizes it and maps it into the drm
  * and i915 state tracking structures. */
 void intel_modeset_setup_hw_state(struct drm_device *dev,
@@ -9403,8 +9390,14 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 	if (force_restore) {
 		for_each_pipe(pipe) {
 			intel_crtc_restore_mode(dev_priv->pipe_to_crtc_mapping[pipe]);
+
+			crtc = to_intel_crtc(dev_priv->pipe_to_crtc_mapping[pipe]);
+
+			/* Force-cycle the cursor */
+			crtc->cursor_visible = false;
+			intel_crtc_update_cursor(&crtc->base, true);
 		}
-		intel_restore_cursor_state(dev);
+
 		i915_redisable_vga(dev);
 	} else {
 		intel_modeset_update_staged_output_state(dev);
