@@ -36,13 +36,12 @@
 static void
 mwifiex_init_cmd_node(struct mwifiex_private *priv,
 		      struct cmd_ctrl_node *cmd_node,
-		      u32 cmd_oid, void *data_buf)
+		      u32 cmd_oid, void *data_buf, bool sync)
 {
 	cmd_node->priv = priv;
 	cmd_node->cmd_oid = cmd_oid;
-	if (priv->adapter->cmd_wait_q_required) {
-		cmd_node->wait_q_enabled = priv->adapter->cmd_wait_q_required;
-		priv->adapter->cmd_wait_q_required = false;
+	if (sync) {
+		cmd_node->wait_q_enabled = true;
 		cmd_node->cmd_wait_q_woken = false;
 		cmd_node->condition = &cmd_node->cmd_wait_q_woken;
 	}
@@ -423,29 +422,6 @@ int mwifiex_process_event(struct mwifiex_adapter *adapter)
 }
 
 /*
- * This function is used to send synchronous command to the firmware.
- *
- * it allocates a wait queue for the command and wait for the command
- * response.
- */
-int mwifiex_send_cmd_sync(struct mwifiex_private *priv, uint16_t cmd_no,
-			  u16 cmd_action, u32 cmd_oid, void *data_buf)
-{
-	int ret = 0;
-	struct mwifiex_adapter *adapter = priv->adapter;
-
-	adapter->cmd_wait_q_required = true;
-
-	ret = mwifiex_send_cmd_async(priv, cmd_no, cmd_action, cmd_oid,
-				     data_buf);
-	if (!ret)
-		ret = mwifiex_wait_queue_complete(adapter);
-
-	return ret;
-}
-
-
-/*
  * This function prepares a command and asynchronously send it to the firmware.
  *
  * Preparation includes -
@@ -456,8 +432,8 @@ int mwifiex_send_cmd_sync(struct mwifiex_private *priv, uint16_t cmd_no,
  *      - Fill up the non-default parameters and buffer pointers
  *      - Add the command to pending queue
  */
-int mwifiex_send_cmd_async(struct mwifiex_private *priv, uint16_t cmd_no,
-			   u16 cmd_action, u32 cmd_oid, void *data_buf)
+int mwifiex_send_cmd(struct mwifiex_private *priv, u16 cmd_no,
+		     u16 cmd_action, u32 cmd_oid, void *data_buf, bool sync)
 {
 	int ret;
 	struct mwifiex_adapter *adapter = priv->adapter;
@@ -500,7 +476,7 @@ int mwifiex_send_cmd_async(struct mwifiex_private *priv, uint16_t cmd_no,
 	}
 
 	/* Initialize the command node */
-	mwifiex_init_cmd_node(priv, cmd_node, cmd_oid, data_buf);
+	mwifiex_init_cmd_node(priv, cmd_node, cmd_oid, data_buf, sync);
 
 	if (!cmd_node->cmd_skb) {
 		dev_err(adapter->dev, "PREP_CMD: no free cmd buf\n");
@@ -538,6 +514,8 @@ int mwifiex_send_cmd_async(struct mwifiex_private *priv, uint16_t cmd_no,
 		adapter->cmd_queued = cmd_node;
 		mwifiex_insert_cmd_to_pending_q(adapter, cmd_node, true);
 		queue_work(adapter->workqueue, &adapter->main_work);
+		if (cmd_node->wait_q_enabled)
+			ret = mwifiex_wait_queue_complete(adapter);
 	}
 
 	return ret;
