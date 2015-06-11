@@ -1661,9 +1661,14 @@ static int hdmi_connector_set_property(struct drm_connector *connector, struct d
 		struct drm_property *property, uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
+	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
 	int ret;
 
+	mutex_lock(&mode_config->mutex);
+
 	ret = set_property(hdata, &connector->base, property, val);
+
+	mutex_unlock(&mode_config->mutex);
 	if (ret)
 		return ret;
 
