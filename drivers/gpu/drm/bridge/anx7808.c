@@ -1927,16 +1927,21 @@ int anx7808_set_property(struct drm_connector *connector,
 
 	anx7808 = container_of(connector, struct anx7808_data, connector);
 
-	WARN_ON(!mutex_is_locked(&mode_config->mutex));
+	mutex_lock(&mode_config->mutex);
 
 	if (property != mode_config->content_protection_property)
-		return 0;
+		goto out;
 
-	if (val == DRM_MODE_CONTENT_PROTECTION_ENABLED)
-		return -EINVAL;
+	if (val == DRM_MODE_CONTENT_PROTECTION_ENABLED) {
+		ret = -EINVAL;
+		goto out;
+	}
 
-	if (val == DRM_MODE_CONTENT_PROTECTION_DESIRED && anx7808->hdcp_desired)
-		return -EALREADY;
+	if (val == DRM_MODE_CONTENT_PROTECTION_DESIRED &&
+			anx7808->hdcp_desired) {
+		ret = -EALREADY;
+		goto out;
+	}
 
 	anx7808->hdcp_desired = val;
 
@@ -1959,6 +1964,8 @@ int anx7808_set_property(struct drm_connector *connector,
 		mutex_unlock(&anx7808->big_lock);
 	}
 
+out:
+	mutex_unlock(&mode_config->mutex);
 	return ret;
 }
 
