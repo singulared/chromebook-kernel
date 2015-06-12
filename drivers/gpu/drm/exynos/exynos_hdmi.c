@@ -1421,6 +1421,9 @@ static int hdcp_update_drm_property(struct hdmi_context *hdata, int value)
 
 	WARN_ON(!mutex_is_locked(&mode_config->mutex));
 
+	if (WARN_ON(!hdata->hdcp_object))
+		return -ENODEV;
+
 	return drm_object_property_set_value(hdata->hdcp_object,
 			hdata->hdcp_object->propvals,
 			mode_config->content_protection_property, value,
