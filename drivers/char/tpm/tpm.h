@@ -27,6 +27,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/tpm.h>
+#include <linux/workqueue.h>
 
 enum tpm_const {
 	TPM_MINOR = 224,	/* officially assigned */
@@ -130,6 +131,8 @@ struct tpm_chip {
 	struct timer_list user_read_timer;	/* user needs to claim result */
 	struct work_struct work;
 	struct mutex tpm_mutex;	/* tpm is processing */
+	struct delayed_work savestate_work;	/* for proactive savestate */
+	bool last_command_was_savestate;
 
 	struct tpm_vendor_specific vendor;
 

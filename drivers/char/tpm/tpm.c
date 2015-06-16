@@ -48,6 +48,51 @@ enum tpm_duration {
 #define TPM_MAX_PROTECTED_ORDINAL 12
 #define TPM_PROTECTED_ORDINAL_MASK 0xFF
 
+#define TPM_INTERNAL_RESULT_SIZE 200
+#define TPM_TAG_RQU_COMMAND cpu_to_be16(193)
+
+#define TPM_ORD_CONTINUE_SELFTEST       0x53
+#define TPM_ORD_GET_CAP                 0x65
+#define TPM_ORD_GET_RANDOM              0x46
+#define TPM_ORD_PCR_EXTEND              0x14
+#define TPM_ORD_PCRREAD                 0x15
+#define TSC_ORD_PHYSICALPRESENCE        0x4000000A
+#define TPM_ORD_PHYSICALENABLE          0x6F
+#define TPM_ORD_PHYSICALDISABLE         0x70
+#define TPM_ORD_READPUBEK               0x7c
+#define TPM_ORD_SELFTESTFULL            0x50
+#define TPM_ORD_SAVESTATE               0x98
+
+
+/* Early Savestate: workaround for unnecessary savestate delays.
+ *
+ * Some TPM models throttle execution of TPM_Savestate to prevent excessive
+ * NVRAM wear.  A subset of these models (e.g. the Infineon SLB9655) can
+ * overthrottle, i.e. can delay the suspend even when the savestate commands
+ * are not close to each other.  The command delay causes a suspend delay
+ * greater than 3 seconds and interferes with other system functions.  Setting
+ * |tpm_early_savestate| to TRUE minimizes this by proactively saving the state
+ * earlier than needed.  The drawback of this workaround is that the system may
+ * execute more Savestate commands than necessary.
+ */
+
+static bool tpm_early_savestate = true;
+module_param(tpm_early_savestate, bool, 0644);
+MODULE_PARM_DESC(tpm_early_savestate, "proactively save state before suspend to avoid suspend delays");
+
+/* When we send Savestate commands proactively (tpm_early_savestate == true)
+ * we don't need to send a Savestate at suspend if the last command sent
+ * to the TPM was already a Savestate.  However, in some cases we still
+ * want to do that for the side effect of making the DA counters decrease.
+ */
+static bool tpm_force_suspend_savestate = true;
+module_param(tpm_force_suspend_savestate, bool, 0644);
+MODULE_PARM_DESC(tpm_force_suspend_savestate, "save state at suspend even if it was saved earlier");
+
+static int tpm_savestate_delay_seconds = 25;
+module_param(tpm_savestate_delay_seconds, int, 0644);
+MODULE_PARM_DESC(tpm_savestate_delay_seconds, "delay between the most recent TPM command and a proactive savestate");
+
 /*
  * Bug workaround - some TPM's don't flush the most
  * recently changed pcr on suspend, so force the flush
@@ -355,6 +400,37 @@ static void set_needs_resume(struct tpm_chip *chip)
 	mutex_unlock(&chip->resume_mutex);
 }
 
+static void savestate_work(struct work_struct *work);
+
+/* Schedule a savestate command if it might prevent delays at suspend.
+ *
+ * The savestate is scheduled only for commands that MAY change the state.  The
+ * TCG specification says that ANY command (except savestate, presumably) may
+ * invalidate the previously saved state, but we try to save TPM wear.  If we
+ * get this wrong, we'll hit the throttle delay at suspend.
+ */
+static void schedule_savestate(struct tpm_chip *chip, u32 ordinal)
+{
+	/* First check for commands that may change the volatile flags or
+	 * other volatile state.
+	 *
+	 * If this list is not complete, we may hit the savestate delay.
+	 * But this entire scheme is not guaranteed to work anyway, for
+	 * instance if we suspend before the delayed work triggers.
+	 */
+	dev_info(chip->dev, "tpm: scheduling savestate for %d\n", ordinal);
+	if (ordinal == TPM_ORD_PCR_EXTEND ||
+	    ordinal == TPM_ORD_SELFTESTFULL ||   /* for testing */
+	    ordinal == TSC_ORD_PHYSICALPRESENCE ||
+	    ordinal == TPM_ORD_PHYSICALENABLE ||
+	    ordinal == TPM_ORD_PHYSICALDISABLE) {
+		dev_info(chip->dev, "tpm: queueing delayed savestate\n");
+		mod_delayed_work(system_wq,
+				 &chip->savestate_work,
+				 tpm_savestate_delay_seconds * HZ);
+	}
+}
+
 /* The maximum time in milliseconds that the TPM self test will take to
  * complete.  TODO(semenzato): 1s should be plenty for all TPMs, but how can we
  * ensure it?
@@ -544,8 +620,7 @@ static ssize_t tpm_transmit(struct tpm_chip *chip, const char *buf,
 		tpm_set_cpend_flag(chip);
 
 	if ((rc = chip->vendor.send(chip, (u8 *) buf, count)) < 0) {
-		dev_err(chip->dev,
-			"tpm_transmit: tpm_send: error %zd\n", rc);
+		dev_err(chip->dev, "tpm_transmit: tpm_send: error %zd\n", rc);
 		goto out;
 	}
 
@@ -582,9 +657,19 @@ out_recv:
 out:
 	if (chip->cpend_flag_set_cb && (tag == 0xc2 || tag == 0xc3))
 		tpm_clear_cpend_flag(chip);
+
+	/* Remember if the last executed command was a Savestate or not. */
+	chip->last_command_was_savestate = (ordinal == TPM_ORD_SAVESTATE);
+
 	mutex_unlock(&chip->tpm_mutex);
 	dev_info(chip->dev, "command 0x%x (size %d) returned code 0x%x\n",
 		 ordinal, count, be32_to_cpu(*((__be32 *) (buf + 6))));
+
+	if (rc >= 0 &&
+	    tpm_early_savestate &&
+	    !chip->last_command_was_savestate)
+		schedule_savestate(chip, ordinal);
+
 	return rc;
 }
 
@@ -631,8 +716,6 @@ static ssize_t transmit_cmd(struct tpm_chip *chip, struct tpm_cmd_t *cmd,
 
 #define TPM_INTERNAL_RESULT_SIZE 200
 #define TPM_TAG_RQU_COMMAND cpu_to_be16(193)
-#define TPM_ORD_GET_CAP 101
-#define TPM_ORD_GET_RANDOM 70
 
 static const struct tpm_input_header tpm_getcap_header = {
 	.tag = TPM_TAG_RQU_COMMAND,
@@ -772,7 +855,6 @@ duration:
 }
 EXPORT_SYMBOL_GPL(tpm_get_timeouts);
 
-#define TPM_ORD_CONTINUE_SELFTEST 83
 #define CONTINUE_SELFTEST_RESULT_SIZE 10
 
 static struct tpm_input_header continue_selftest_header = {
@@ -893,7 +975,6 @@ static struct tpm_chip *tpm_chip_find_get(int chip_num)
 	return chip;
 }
 
-#define TPM_ORD_PCRREAD 21
 #define READ_PCR_RESULT_SIZE 30
 static struct tpm_input_header pcrread_header = {
 	.tag = TPM_TAG_RQU_COMMAND,
@@ -952,7 +1033,6 @@ EXPORT_SYMBOL_GPL(tpm_pcr_read);
  * isn't, protect against the chip disappearing, by incrementing
  * the module usage count.
  */
-#define TPM_ORD_PCR_EXTEND 20
 #define EXTEND_PCR_RESULT_SIZE 34
 static struct tpm_input_header pcrextend_header = {
 	.tag = TPM_TAG_RQU_COMMAND,
@@ -997,11 +1077,8 @@ int tpm_do_selftest(struct tpm_chip *chip)
 	unsigned long duration;
 	struct tpm_cmd_t cmd;
 
-	duration = tpm_calc_ordinal_duration(chip,
-	                                     TPM_ORD_CONTINUE_SELFTEST);
-
+	duration = tpm_calc_ordinal_duration(chip, TPM_ORD_CONTINUE_SELFTEST);
 	loops = jiffies_to_msecs(duration) / delay_msec;
-
 	rc = tpm_continue_selftest(chip);
 	/* This may fail if there was no TPM driver during a suspend/resume
 	 * cycle; some may return 10 (BAD_ORDINAL), others 28 (FAILEDSELFTEST)
@@ -1083,7 +1160,6 @@ ssize_t tpm_show_pcrs(struct device *dev, struct device_attribute *attr,
 EXPORT_SYMBOL_GPL(tpm_show_pcrs);
 
 #define  READ_PUBEK_RESULT_SIZE 314
-#define TPM_ORD_READPUBEK 124
 static struct tpm_input_header tpm_readpubek_header = {
 	.tag = TPM_TAG_RQU_COMMAND,
 	.length = cpu_to_be32(30),
@@ -1440,12 +1516,13 @@ void tpm_remove_hardware(struct device *dev)
 	tpm_remove_ppi(&dev->kobj);
 	tpm_bios_log_teardown(chip->bios_dir);
 
+	cancel_delayed_work_sync(&chip->savestate_work);
+
 	/* write it this way to be explicit (chip->dev == dev) */
 	put_device(chip->dev);
 }
 EXPORT_SYMBOL_GPL(tpm_remove_hardware);
 
-#define TPM_ORD_SAVESTATE 152
 #define SAVESTATE_RESULT_SIZE 10
 
 static struct tpm_input_header savestate_header = {
@@ -1455,6 +1532,62 @@ static struct tpm_input_header savestate_header = {
 };
 
 /*
+ * Send the savestate command, trying multiple times if necessary.
+ * Skip sending the command if it was the last command sent and
+ * we're OK with that.
+ */
+int tpm_savestate(struct tpm_chip *chip)
+{
+	struct tpm_cmd_t cmd;
+	int rc, try;
+
+	if (chip->last_command_was_savestate && !tpm_force_suspend_savestate) {
+		dev_info(chip->dev, "skipping savestate at suspend\n");
+		return 0;
+	}
+
+	for (try = 0; try < TPM_RETRY; try++) {
+		cmd.header.in = savestate_header;
+		rc = transmit_cmd(chip, &cmd, SAVESTATE_RESULT_SIZE,
+				  "attempting savestate");
+
+		/*
+		 * If the TPM indicates that it is too busy to respond to
+		 * this command then retry before giving up.  It can take
+		 * several seconds for this TPM to be ready.
+		 *
+		 * This can happen if the TPM has already been sent the
+		 * SaveState command before the driver has loaded.  TCG 1.2
+		 * specification states that any communication after SaveState
+		 * may cause the TPM to invalidate previously saved state.
+		 */
+		if (rc != TPM_WARN_RETRY)
+			break;
+		msleep(TPM_TIMEOUT_RETRY);
+	}
+
+	dev_info(chip->dev, "tpm savestate: result %d\n", rc);
+	if (rc == 0 && try > 0)
+		dev_warn(chip->dev, "TPM savestate: %d retries\n", try);
+
+	return rc;
+}
+
+static void savestate_work(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct tpm_chip *chip;
+	int rc;
+
+	dwork = container_of(work, struct delayed_work, work);
+	chip = container_of(dwork, struct tpm_chip, savestate_work);
+	dev_info(chip->dev, "tpm: executing delayed savestate\n");
+	rc = tpm_savestate(chip);
+	if (rc)
+		dev_err(chip->dev, "Error (%d) in savestate_work\n", rc);
+}
+
+/*
  * We are about to suspend. Save the TPM state
  * so that it can be restored.
  */
@@ -1462,7 +1595,7 @@ int tpm_pm_suspend(struct device *dev)
 {
 	struct tpm_chip *chip = dev_get_drvdata(dev);
 	struct tpm_cmd_t cmd;
-	int rc, try;
+	int rc;
 
 	u8 dummy_hash[TPM_DIGEST_SIZE] = { 0 };
 
@@ -1480,31 +1613,10 @@ int tpm_pm_suspend(struct device *dev)
 	}
 
 	/* now do the actual savestate */
-	for (try = 0; try < TPM_RETRY; try++) {
-		cmd.header.in = savestate_header;
-		rc = transmit_cmd(chip, &cmd, SAVESTATE_RESULT_SIZE, NULL);
-
-		/*
-		 * If the TPM indicates that it is too busy to respond to
-		 * this command then retry before giving up.  It can take
-		 * several seconds for this TPM to be ready.
-		 *
-		 * This can happen if the TPM has already been sent the
-		 * SaveState command before the driver has loaded.  TCG 1.2
-		 * specification states that any communication after SaveState
-		 * may cause the TPM to invalidate previously saved state.
-		 */
-		if (rc != TPM_WARN_RETRY)
-			break;
-		msleep(TPM_TIMEOUT_RETRY);
-	}
-
+	rc = tpm_savestate(chip);
 	if (rc)
 		dev_err(chip->dev,
-			"Error (%d) sending savestate before suspend\n", rc);
-	else if (try > 0)
-		dev_warn(chip->dev, "TPM savestate took %dms\n",
-			 try * TPM_TIMEOUT_RETRY);
+			"Error (%d) sending savestate at suspend\n", rc);
 
 	return rc;
 }
@@ -1670,7 +1782,6 @@ struct tpm_chip *tpm_register_hardware(struct device *dev,
 	INIT_LIST_HEAD(&chip->list);
 
 	INIT_WORK(&chip->work, timeout_work);
-
 	setup_timer(&chip->user_read_timer, user_reader_timeout,
 			(unsigned long)chip);
 
@@ -1729,6 +1840,15 @@ struct tpm_chip *tpm_register_hardware(struct device *dev,
 	chip->shutdown_nb.notifier_call = tpm_shutdown_notify;
 	dev_info(chip->dev, "registering reboot notifier [gentle shutdown]\n");
 	register_reboot_notifier(&chip->shutdown_nb);
+
+	INIT_DELAYED_WORK(&chip->savestate_work, savestate_work);
+	if (tpm_early_savestate)
+		/* The firmware may have changed the volatile flags (locking
+		 * physical presence, for instance) so we do Savestate
+		 * proactively, to minimize suspend delays due to savestate
+		 * throttling.
+		 */
+		tpm_savestate(chip);
 
 	return chip;
 
