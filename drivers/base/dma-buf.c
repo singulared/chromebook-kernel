@@ -31,6 +31,9 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/reservation.h>
+#include <linux/uaccess.h>
+
+#include <uapi/linux/dma-buf.h>
 
 static inline int is_dma_buf_file(struct file *);
 
@@ -111,10 +114,53 @@ static loff_t dma_buf_llseek(struct file *file, loff_t offset, int whence)
 	return base + offset;
 }
 
+static long dma_buf_ioctl(struct file *file,
+				unsigned int cmd, unsigned long arg)
+{
+	struct dma_buf *dmabuf;
+	struct dma_buf_sync sync;
+	enum dma_data_direction direction;
+
+	dmabuf = file->private_data;
+
+	switch (cmd) {
+	case DMA_BUF_IOCTL_SYNC:
+		if (copy_from_user(&sync, (void __user *) arg, sizeof(sync)))
+			return -EFAULT;
+
+		if (sync.flags & ~DMA_BUF_SYNC_VALID_FLAGS_MASK)
+			return -EINVAL;
+
+		switch (sync.flags & DMA_BUF_SYNC_RW) {
+		case DMA_BUF_SYNC_READ:
+			direction = DMA_FROM_DEVICE;
+			break;
+		case DMA_BUF_SYNC_WRITE:
+			direction = DMA_TO_DEVICE;
+			break;
+		case DMA_BUF_SYNC_RW:
+			direction = DMA_BIDIRECTIONAL;
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (sync.flags & DMA_BUF_SYNC_END)
+			dma_buf_end_cpu_access(dmabuf, direction);
+		else
+			dma_buf_begin_cpu_access(dmabuf, direction);
+
+		return 0;
+	default:
+		return -ENOTTY;
+	}
+}
+
 static const struct file_operations dma_buf_fops = {
 	.release	= dma_buf_release,
 	.mmap		= dma_buf_mmap_internal,
 	.llseek		= dma_buf_llseek,
+	.unlocked_ioctl = dma_buf_ioctl,
 };
 
 /*
