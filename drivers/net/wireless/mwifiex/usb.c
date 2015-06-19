@@ -61,7 +61,7 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 
 	switch (ep) {
 	case MWIFIEX_USB_EP_CMD_EVENT:
-		wifiex_dbg(adapter, CMD,
+		mwifiex_dbg(adapter, CMD,
 			   "%s: EP_CMD_EVENT\n", __func__);
 		skb_copy_from_linear_data(skb, &tmp, INTF_HEADER_LEN);
 		recv_type = le32_to_cpu(tmp);
@@ -75,7 +75,7 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 				ret = -1;
 				goto exit_restore_skb;
 			} else if (!adapter->curr_cmd) {
-				wifiex_dbg(adapter, CMD, "CMD: no curr_cmd\n");
+				mwifiex_dbg(adapter, CMD, "CMD: no curr_cmd\n");
 				if (adapter->ps_state == PS_STATE_SLEEP_CFM) {
 					mwifiex_process_sleep_confirm_resp(
 							adapter, skb->data,
@@ -99,7 +99,7 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 			}
 			skb_copy_from_linear_data(skb, &tmp, sizeof(u32));
 			adapter->event_cause = le32_to_cpu(tmp);
-			wifiex_dbg(adapter, EVENT,
+			mwifiex_dbg(adapter, EVENT,
 				   "event_cause %#x\n", adapter->event_cause);
 
 			if (skb->len > MAX_EVENT_SIZE) {
@@ -122,7 +122,7 @@ static int mwifiex_usb_recv(struct mwifiex_adapter *adapter,
 		}
 		break;
 	case MWIFIEX_USB_EP_DATA:
-		wifiex_dbg(adapter, DATA, "%s: EP_DATA\n", __func__);
+		mwifiex_dbg(adapter, DATA, "%s: EP_DATA\n", __func__);
 		if (skb->len > MWIFIEX_RX_DATA_BUF_SIZE) {
 			mwifiex_dbg(adapter, ERROR,
 				    "DATA: skb->len too large\n");
@@ -932,7 +932,7 @@ static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 					goto cleanup;
 				}
 
-				wifiex_dbg(adapter, INFO,
+				mwifiex_dbg(adapter, INFO,
 					   "USB is the winner,\t"
 					   "start to download FW\n");
 
@@ -956,7 +956,7 @@ static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 	} while ((dnld_cmd != FW_HAS_LAST_BLOCK) && retries);
 
 cleanup:
-	wifiex_dbg(adapter, INFO,
+	mwifiex_dbg(adapter, INFO,
 		   "%s: %d bytes downloaded\n", __func__, tlen);
 
 	kfree(recv_buff);
