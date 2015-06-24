@@ -7878,8 +7878,13 @@ intel_modeset_check_state(struct drm_device *dev)
 	list_for_each_entry(connector, &dev->mode_config.connector_list,
 			    base.head) {
 		/* This also checks the encoder/connector hw state with the
-		 * ->get_hw_state callbacks. */
-		intel_connector_check_state(connector);
+		 * ->get_hw_state callbacks.
+		 *
+		 * Bypass the check on gen3 because the bios is known to not
+		 * reset the GPU state properly. See crbug.com/504003.
+		 */
+		if (!IS_GEN3(dev))
+			intel_connector_check_state(connector);
 
 		WARN(&connector->new_encoder->base != connector->base.encoder,
 		     "connector's staged encoder doesn't match current encoder\n");
@@ -7955,9 +7960,15 @@ intel_modeset_check_state(struct drm_device *dev)
 			if (encoder->connectors_active)
 				active = true;
 		}
-		WARN(active != crtc->active,
-		     "crtc's computed active state doesn't match tracked active state "
-		     "(expected %i, found %i)\n", active, crtc->active);
+		/*
+		 * Bypass the check on gen3 because the bios is known to not
+		 * reset the GPU state properly. See crbug.com/504003.
+		 */
+		if (!IS_GEN3(dev)) {
+			WARN(active != crtc->active,
+			     "crtc's computed active state doesn't match tracked active state "
+			     "(expected %i, found %i)\n", active, crtc->active);
+		}
 		WARN(enabled != crtc->base.enabled,
 		     "crtc's computed enabled state doesn't match tracked enabled state "
 		     "(expected %i, found %i)\n", enabled, crtc->base.enabled);
