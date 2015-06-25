@@ -1023,44 +1023,60 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 	if (reqbufs->count == 0) {
 		mfc_debug(2, "Freeing buffers\n");
 		ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
-		if (ret)
-			goto out;
-		s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
-		ctx->dst_bufs_cnt = 0;
-	} else if (ctx->capture_state == QUEUE_FREE) {
-		WARN_ON(ctx->dst_bufs_cnt != 0);
-		mfc_debug(2, "Allocating %d buffers for CAPTURE queue\n",
-				reqbufs->count);
-		ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
-		if (ret)
-			goto out;
-
-		ctx->capture_state = QUEUE_BUFS_REQUESTED;
-		ctx->total_dpb_count = reqbufs->count;
-
-		ret = s5p_mfc_hw_call(dev->mfc_ops, alloc_codec_buffers, ctx);
 		if (ret) {
-			mfc_err("Failed to allocate decoding buffers\n");
-			reqbufs->count = 0;
-			vb2_reqbufs(&ctx->vq_dst, reqbufs);
-			ret = -ENOMEM;
-			ctx->capture_state = QUEUE_FREE;
-			goto out;
+			mfc_err("vb2_reqbufs(0) on CAPTURE queue failed\n");
+			return ret;
 		}
 
-		WARN_ON(ctx->dst_bufs_cnt != ctx->total_dpb_count);
-		ctx->capture_state = QUEUE_BUFS_MMAPED;
-
-		s5p_mfc_try_ctx(ctx);
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_INIT_BUFFERS_RET,
-					  0);
-	} else {
-		mfc_err("Buffers have already been requested\n");
-		ret = -EINVAL;
+		s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
+		ctx->dst_bufs_cnt = 0;
+		return 0;
 	}
-out:
-	if (ret)
-		mfc_err("Failed allocating buffers for CAPTURE queue\n");
+
+	if (ctx->capture_state != QUEUE_FREE) {
+		mfc_err("Buffers have already been requested\n");
+		return -EINVAL;
+	}
+
+	WARN_ON(ctx->dst_bufs_cnt != 0);
+	mfc_debug(2, "Allocating %d buffers for CAPTURE queue\n",
+			reqbufs->count);
+	ret = vb2_reqbufs(&ctx->vq_dst, reqbufs);
+	if (ret) {
+		mfc_err("vb2_reqbufs() on CAPTURE queue failed\n");
+		return ret;
+	}
+
+	ctx->total_dpb_count = reqbufs->count;
+
+	ret = s5p_mfc_hw_call(dev->mfc_ops, alloc_codec_buffers, ctx);
+	if (ret) {
+		mfc_err("Failed to allocate decoding buffers\n");
+		ret = -ENOMEM;
+		goto err_reqbufs;
+	}
+
+	WARN_ON(ctx->dst_bufs_cnt != ctx->total_dpb_count);
+	ctx->capture_state = QUEUE_BUFS_MMAPED;
+
+	s5p_mfc_try_ctx(ctx);
+	ret = s5p_mfc_wait_for_done_ctx(ctx,
+				S5P_MFC_R2H_CMD_INIT_BUFFERS_RET, 0);
+	if (ret) {
+		mfc_err("CMD_INIT_BUFFERS failed\n");
+		ret = -EIO;
+		goto err_alloc;
+	}
+
+	return 0;
+
+err_alloc:
+	ctx->capture_state = QUEUE_FREE;
+	s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
+err_reqbufs:
+	reqbufs->count = 0;
+	vb2_reqbufs(&ctx->vq_dst, reqbufs);
+
 	return ret;
 }
 

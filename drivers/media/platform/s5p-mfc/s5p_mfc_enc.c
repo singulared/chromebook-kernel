@@ -2055,13 +2055,18 @@ static int s5p_mfc_buf_prepare(struct vb2_buffer *vb)
 static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
+	int ret;
 
 	/* If context is ready then dev = work->data;schedule it to run */
 	s5p_mfc_try_ctx(ctx);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		s5p_mfc_wait_for_done_ctx(ctx,
+		ret = s5p_mfc_wait_for_done_ctx(ctx,
 				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		if (ret) {
+			mfc_err("Hardware failed to initialize encoding\n");
+			return -EIO;
+		}
 	}
 
 	return 0;
