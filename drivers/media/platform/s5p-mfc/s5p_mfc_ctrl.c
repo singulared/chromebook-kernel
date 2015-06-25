@@ -188,6 +188,9 @@ void s5p_mfc_deinit_hw(struct s5p_mfc_dev *dev)
 
 	dev->risc_on = 0;
 	s5p_mfc_clock_off(dev);
+
+	/* Hardware will start in a clean state on next init. */
+	clear_bit(0, &dev->hw_error);
 }
 
 int s5p_mfc_sleep(struct s5p_mfc_dev *dev)

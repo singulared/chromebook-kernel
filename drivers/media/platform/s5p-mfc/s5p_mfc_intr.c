@@ -27,7 +27,8 @@ int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
 
 	ret = wait_event_interruptible_timeout(dev->queue,
 		(dev->int_cond && (dev->int_type == command
-		|| dev->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
+		|| dev->int_type == S5P_MFC_R2H_CMD_ERR_RET))
+		|| test_bit(0, &dev->hw_error),
 		msecs_to_jiffies(MFC_INT_TIMEOUT));
 	if (ret == 0) {
 		mfc_err("Interrupt (dev->int_type:%d, command:%d) timed out\n",
@@ -39,7 +40,8 @@ int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
 	}
 	mfc_debug(1, "Finished waiting (dev->int_type:%d, command: %d)\n",
 							dev->int_type, command);
-	if (dev->int_type == S5P_MFC_R2H_CMD_ERR_RET)
+	if (dev->int_type == S5P_MFC_R2H_CMD_ERR_RET
+	    || test_bit(0, &dev->hw_error))
 		return 1;
 	return 0;
 }
@@ -59,12 +61,14 @@ int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
 	if (interrupt) {
 		ret = wait_event_interruptible_timeout(ctx->queue,
 				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
+			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET))
+			|| test_bit(0, &ctx->dev->hw_error),
 					msecs_to_jiffies(MFC_INT_TIMEOUT));
 	} else {
 		ret = wait_event_timeout(ctx->queue,
 				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
+			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET))
+			|| test_bit(0, &ctx->dev->hw_error),
 					msecs_to_jiffies(MFC_INT_TIMEOUT));
 	}
 	if (ret == 0) {
@@ -77,7 +81,8 @@ int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
 	}
 	mfc_debug(1, "Finished waiting (ctx->int_type:%d, command: %d)\n",
 							ctx->int_type, command);
-	if (ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)
+	if (ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET
+	    || test_bit(0, &ctx->dev->hw_error))
 		return 1;
 	return 0;
 }

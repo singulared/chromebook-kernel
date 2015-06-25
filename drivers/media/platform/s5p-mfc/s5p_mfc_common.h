@@ -320,6 +320,9 @@ struct s5p_mfc_priv_buf {
  * @bank1:		address of the beginning of bank 1 memory
  * @bank2:		address of the beginning of bank 2 memory
  * @hw_lock:		used for hardware locking
+ * @hw_error:		atomic flag indicating that hardware state is
+ *			inconsistent after an error and MFC needs to be
+ *			reinitialized to continue operation
  * @ctx_list:		list of all open instances
  *			(needs to be accessed with dev->irqlock held)
  * @curr_ctx:		currently running context
@@ -364,6 +367,7 @@ struct s5p_mfc_dev {
 	dma_addr_t bank1;
 	dma_addr_t bank2;
 	unsigned long hw_lock;
+	unsigned long hw_error;
 	struct list_head ctx_list;
 	struct s5p_mfc_ctx *curr_ctx;
 	struct list_head ready_ctx_list;

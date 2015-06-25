@@ -103,6 +103,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		s5p_mfc_ctx_done_locked(ctx);
 		s5p_mfc_wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
+	set_bit(0, &dev->hw_error);
 	clear_bit(0, &dev->hw_lock);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
@@ -289,6 +290,8 @@ static void s5p_mfc_handle_sys_init(struct s5p_mfc_dev *dev,
 {
 	assert_spin_locked(&dev->irqlock);
 
+	if (err)
+		set_bit(0, &dev->hw_error);
 	s5p_mfc_wake_up_dev(dev, reason, err);
 	clear_bit(0, &dev->hw_lock);
 	clear_bit(0, &dev->enter_suspend);
@@ -430,6 +433,7 @@ err_init_hw:
 	if (s5p_mfc_power_off() < 0)
 		mfc_err("power off failed\n");
 	s5p_mfc_clock_off(dev);
+	clear_bit(0, &dev->hw_error);
 
 	return ret;
 }

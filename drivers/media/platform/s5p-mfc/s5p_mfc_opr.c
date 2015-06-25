@@ -91,8 +91,11 @@ void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 
 	mfc_err("Got a fatal error, will clean up context if present.\n");
 
-	if (!ctx)
+	if (!ctx) {
+		/* Unrecoverable error in low level initialization. */
+		set_bit(0, &dev->hw_error);
 		return;
+	}
 
 	ctx->state = MFCINST_ERROR;
 
@@ -119,6 +122,10 @@ static struct s5p_mfc_ctx *s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 
 	if (test_bit(0, &dev->enter_suspend)) {
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
+		return NULL;
+	}
+	if (test_bit(0, &dev->hw_error)) {
+		mfc_debug(1, "Hardware error recovery in progress, not scheduling\n");
 		return NULL;
 	}
 	spin_lock_irqsave(&dev->irqlock, flags);
