@@ -153,6 +153,8 @@ int s5p_mfc_init_fw(struct s5p_mfc_dev *dev)
 		return -EIO;
 	}
 	s5p_mfc_clean_dev_int_flags(dev);
+	/* Lock the HW before issuing sys_init command */
+	set_bit(0, &dev->hw_lock);
 	/* 4. Initialize firmware */
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sys_init_cmd, dev);
 	if (ret) {
@@ -200,6 +202,8 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	mfc_debug_enter();
 	s5p_mfc_clock_on(dev);
 	s5p_mfc_clean_dev_int_flags(dev);
+	/* Lock the HW before issuing sleep command */
+	set_bit(0, &dev->hw_lock);
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sleep_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");

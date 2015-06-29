@@ -150,7 +150,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	/* De-init MFC. Will clear dev->hw_error. */
 	s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
 	ret = s5p_mfc_ctrl_ops_call(dev, init_hw, dev);
-	if (ret)
+	if (ret) {
 		/*
 		 * This can only mean that hardware has gone totally
 		 * bonghits and we cannot do anything about it anymore.
@@ -160,6 +160,8 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		 * PM domain driver).
 		 */
 		mfc_err("Failed to reinit FW\n");
+		clear_bit(0, &dev->hw_lock);
+	}
 
 	s5p_mfc_try_run(dev);
 
@@ -476,6 +478,7 @@ err_init_hw:
 	if (s5p_mfc_power_off() < 0)
 		mfc_err("power off failed\n");
 	s5p_mfc_clock_off(dev);
+	clear_bit(0, &dev->hw_lock);
 	clear_bit(0, &dev->hw_error);
 
 	return ret;
@@ -1100,10 +1103,17 @@ static int s5p_mfc_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct s5p_mfc_dev *m_dev = platform_get_drvdata(pdev);
+	int ret;
 
 	if (m_dev->num_inst == 0)
 		return 0;
-	return s5p_mfc_ctrl_ops_call(m_dev, wakeup, m_dev);
+	ret = s5p_mfc_ctrl_ops_call(m_dev, wakeup, m_dev);
+	if (ret) {
+		clear_bit(0, &m_dev->hw_lock);
+		return ret;
+	}
+
+	return 0;
 }
 #endif
 

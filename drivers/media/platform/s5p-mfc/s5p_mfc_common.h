@@ -317,7 +317,9 @@ struct s5p_mfc_priv_buf {
  * @fw_virt_addr:	virtual firmware address
  * @bank1:		address of the beginning of bank 1 memory
  * @bank2:		address of the beginning of bank 2 memory
- * @hw_lock:		used for hardware locking
+ * @hw_lock:		used for hardware locking (needs to be taken before
+ *			issuing a command to hardware; released by interrupt
+ *			handler and watchdog worker)
  * @hw_error:		atomic flag indicating that hardware state is
  *			inconsistent after an error and MFC needs to be
  *			reinitialized to continue operation
