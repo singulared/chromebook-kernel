@@ -405,6 +405,43 @@ static int s5p_mfc_init_vb2_queue(struct vb2_queue *q, void *priv,
 	return ret;
 }
 
+static int s5p_mfc_startup(struct s5p_mfc_dev *dev)
+{
+	int ret;
+
+	ret = s5p_mfc_power_on();
+	if (ret < 0) {
+		mfc_err("power on failed\n");
+		return ret;
+	}
+
+	/* Init the FW */
+	ret = s5p_mfc_ctrl_ops_call(dev, init_hw, dev);
+	if (ret)
+		goto err_init_hw;
+
+	dev->watchdog_timer.expires = jiffies +
+				msecs_to_jiffies(MFC_WATCHDOG_INTERVAL);
+	add_timer(&dev->watchdog_timer);
+
+	return 0;
+
+err_init_hw:
+	if (s5p_mfc_power_off() < 0)
+		mfc_err("power off failed\n");
+	s5p_mfc_clock_off(dev);
+
+	return ret;
+}
+
+static void s5p_mfc_shutdown(struct s5p_mfc_dev *dev)
+{
+	s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
+	del_timer_sync(&dev->watchdog_timer);
+	if (s5p_mfc_power_off() < 0)
+		mfc_err("Power off failed\n");
+}
+
 /* Open an MFC node */
 static int s5p_mfc_open(struct file *file)
 {
@@ -482,25 +519,16 @@ static int s5p_mfc_open(struct file *file)
 	ctx->inst_no = MFC_NO_INSTANCE_SET;
 	/* Load firmware if this is the first instance */
 	if (dev->num_inst == 1) {
-		dev->watchdog_timer.expires = jiffies +
-					msecs_to_jiffies(MFC_WATCHDOG_INTERVAL);
-		add_timer(&dev->watchdog_timer);
-		ret = s5p_mfc_power_on();
-		if (ret < 0) {
-			mfc_err("power on failed\n");
-			goto err_pwr_enable;
-		}
-		/* Init the FW */
-		ret = s5p_mfc_ctrl_ops_call(dev, init_hw, dev);
+		ret = s5p_mfc_startup(dev);
 		if (ret)
-			goto err_init_hw;
+			goto err_ctrls_setup;
 	}
 	/* Init videobuf2 queues */
 	if (s5p_mfc_init_vb2_queue(&ctx->vq_dst, &ctx->fh,
 			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, node_type)
 		|| s5p_mfc_init_vb2_queue(&ctx->vq_src, &ctx->fh,
 			V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, node_type))
-		goto err_queue_init;
+		goto err_shutdown;
 
 	init_waitqueue_head(&ctx->queue);
 
@@ -513,17 +541,9 @@ static int s5p_mfc_open(struct file *file)
 	return ret;
 
 	/* Deinit when failure occured */
-err_queue_init:
+err_shutdown:
 	if (dev->num_inst == 1)
-		s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
-err_init_hw:
-err_pwr_enable:
-	if (dev->num_inst == 1) {
-		if (s5p_mfc_power_off() < 0)
-			mfc_err("power off failed\n");
-		del_timer_sync(&dev->watchdog_timer);
-		s5p_mfc_clock_off(dev);
-	}
+		s5p_mfc_shutdown(dev);
 err_ctrls_setup:
 	s5p_mfc_dec_ctrls_delete(ctx);
 err_fh_del:
@@ -572,10 +592,7 @@ static int s5p_mfc_release(struct file *file)
 	dev->num_inst--;
 	if (dev->num_inst == 0) {
 		mfc_debug(2, "Last instance\n");
-		s5p_mfc_ctrl_ops_call(dev, deinit_hw, dev);
-		del_timer_sync(&dev->watchdog_timer);
-		if (s5p_mfc_power_off() < 0)
-			mfc_err("Power off failed\n");
+		s5p_mfc_shutdown(dev);
 	}
 	mfc_debug(2, "Shutting down clock\n");
 	s5p_mfc_dec_ctrls_delete(ctx);
