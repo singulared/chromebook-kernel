@@ -1190,6 +1190,7 @@ void s5p_mfc_cleanup_memdevs(struct platform_device *pdev)
 /* MFC probe function */
 static int s5p_mfc_probe(struct platform_device *pdev)
 {
+	DEFINE_DMA_ATTRS(attrs);
 	struct s5p_mfc_dev *dev;
 	struct video_device *vfd;
 	struct resource *res;
@@ -1268,13 +1269,17 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->mem_dev_l = &dev->plat_dev->dev;
 	dev->mem_dev_r = &dev->plat_dev->dev;
 #endif
-	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx(dev->mem_dev_l);
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
+
+	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx_attrs(dev->mem_dev_l,
+							  &attrs);
 	if (IS_ERR(dev->alloc_ctx[0])) {
 		ret = PTR_ERR(dev->alloc_ctx[0]);
 		goto err_cleanupmemdevs;
 	}
 
-	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx(dev->mem_dev_r);
+	dev->alloc_ctx[1] = vb2_dma_contig_init_ctx_attrs(dev->mem_dev_r,
+							  &attrs);
 	if (IS_ERR(dev->alloc_ctx[1])) {
 		ret = PTR_ERR(dev->alloc_ctx[1]);
 		goto err_mem_init_ctx_1;
