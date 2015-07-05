@@ -304,8 +304,7 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 		ht_cap->header.len =
 				cpu_to_le16(sizeof(struct ieee80211_ht_cap));
 		memcpy((u8 *) ht_cap + sizeof(struct mwifiex_ie_types_header),
-		       (u8 *) bss_desc->bcn_ht_cap +
-		       sizeof(struct ieee_types_header),
+		       (u8 *)bss_desc->bcn_ht_cap,
 		       le16_to_cpu(ht_cap->header.len));
 
 		mwifiex_fill_cap_info(priv, radio_type, ht_cap);
@@ -326,8 +325,7 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 
 			memcpy((u8 *) ht_info +
 			       sizeof(struct mwifiex_ie_types_header),
-			       (u8 *) bss_desc->bcn_ht_info +
-			       sizeof(struct ieee_types_header),
+			       (u8 *) bss_desc->bcn_ht_info,
 			       le16_to_cpu(ht_info->header.len));
 
 			if (!(sband->ht_cap.cap &
@@ -437,8 +435,8 @@ mwifiex_cfg_tx_buf(struct mwifiex_private *priv,
 	else if (priv->adapter->curr_tx_buf_size <= MWIFIEX_TX_DATA_BUF_SIZE_8K)
 		curr_tx_buf_size = MWIFIEX_TX_DATA_BUF_SIZE_8K;
 	if (curr_tx_buf_size != tx_buf)
-		mwifiex_send_cmd_async(priv, HostCmd_CMD_RECONFIGURE_TX_BUFF,
-				       HostCmd_ACT_GEN_SET, 0, &tx_buf);
+		mwifiex_send_cmd(priv, HostCmd_CMD_RECONFIGURE_TX_BUFF,
+				       HostCmd_ACT_GEN_SET, 0, &tx_buf, false);
 }
 
 /*
@@ -581,8 +579,8 @@ int mwifiex_send_addba(struct mwifiex_private *priv, int tid, u8 *peer_mac)
 	memcpy(&add_ba_req.peer_mac_addr, peer_mac, ETH_ALEN);
 
 	/* We don't wait for the response of this command */
-	ret = mwifiex_send_cmd_async(priv, HostCmd_CMD_11N_ADDBA_REQ,
-				     0, 0, &add_ba_req);
+	ret = mwifiex_send_cmd(priv, HostCmd_CMD_11N_ADDBA_REQ,
+			       0, 0, &add_ba_req, false);
 
 	return ret;
 }
@@ -609,8 +607,8 @@ int mwifiex_send_delba(struct mwifiex_private *priv, int tid, u8 *peer_mac,
 	memcpy(&delba.peer_mac_addr, peer_mac, ETH_ALEN);
 
 	/* We don't wait for the response of this command */
-	ret = mwifiex_send_cmd_async(priv, HostCmd_CMD_11N_DELBA,
-				     HostCmd_ACT_GEN_SET, 0, &delba);
+	ret = mwifiex_send_cmd(priv, HostCmd_CMD_11N_DELBA,
+			       HostCmd_ACT_GEN_SET, 0, &delba, false);
 
 	return ret;
 }

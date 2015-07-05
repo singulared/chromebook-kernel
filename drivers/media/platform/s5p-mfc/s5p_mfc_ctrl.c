@@ -147,12 +147,13 @@ int s5p_mfc_init_fw(struct s5p_mfc_dev *dev)
 	int ret;
 
 	mfc_debug(2, "Will now wait for completion of firmware transfer\n");
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to load firmware\n");
 		s5p_mfc_ctrl_ops_call(dev, reset, dev);
 		return -EIO;
 	}
-	s5p_mfc_clean_dev_int_flags(dev);
+	/* Lock the HW before issuing sys_init command */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* 4. Initialize firmware */
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sys_init_cmd, dev);
 	if (ret) {
@@ -161,17 +162,8 @@ int s5p_mfc_init_fw(struct s5p_mfc_dev *dev)
 		return ret;
 	}
 	mfc_debug(2, "Ok, now will write a command to init the system\n");
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SYS_INIT_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to load firmware\n");
-		s5p_mfc_ctrl_ops_call(dev, reset, dev);
-		return -EIO;
-	}
-	dev->int_cond = 0;
-	if (dev->int_err != 0 || dev->int_type !=
-					S5P_MFC_R2H_CMD_SYS_INIT_RET) {
-		/* Failure. */
-		mfc_err("Failed to init firmware - error: %d int: %d\n",
-						dev->int_err, dev->int_type);
 		s5p_mfc_ctrl_ops_call(dev, reset, dev);
 		return -EIO;
 	}
@@ -188,6 +180,9 @@ void s5p_mfc_deinit_hw(struct s5p_mfc_dev *dev)
 
 	dev->risc_on = 0;
 	s5p_mfc_clock_off(dev);
+
+	/* Hardware will start in a clean state on next init. */
+	clear_bit(0, &dev->hw_error);
 }
 
 int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
@@ -196,25 +191,18 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 
 	mfc_debug_enter();
 	s5p_mfc_clock_on(dev);
-	s5p_mfc_clean_dev_int_flags(dev);
+	/* Lock the HW before issuing sleep command */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sleep_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
 		return ret;
 	}
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SLEEP_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to sleep\n");
 		return -EIO;
 	}
 	s5p_mfc_clock_off(dev);
-	dev->int_cond = 0;
-	if (dev->int_err != 0 || dev->int_type !=
-						S5P_MFC_R2H_CMD_SLEEP_RET) {
-		/* Failure. */
-		mfc_err("Failed to sleep - error: %d int: %d\n", dev->int_err,
-								dev->int_type);
-		return -EIO;
-	}
 	dev->risc_on = 0;
 	mfc_debug_leave();
 	return ret;
@@ -239,10 +227,8 @@ int s5p_mfc_open_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 		}
 	}
 
-	set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
-	if (s5p_mfc_wait_for_done_ctx(ctx,
-		S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET, 0)) {
+	s5p_mfc_try_ctx(ctx);
+	if (s5p_mfc_wait_for_done_ctx(ctx)) {
 		/* Error or timeout */
 		mfc_err("Error getting instance from hardware\n");
 		ret = -EIO;
@@ -261,22 +247,47 @@ err:
 	return ret;
 }
 
-void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
+void s5p_mfc_free_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 {
-	ctx->state = MFCINST_RETURN_INST;
-	set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
-	/* Wait until instance is returned or timeout occurred */
-	if (s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET, 0))
-		mfc_err("Err returning instance\n");
-
-	/* Free resources */
 	s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);
 	s5p_mfc_hw_call(dev->mfc_ops, release_instance_buffer, ctx);
 	if (ctx->type == MFCINST_DECODER)
 		s5p_mfc_hw_call(dev->mfc_ops, release_dec_desc_buffer, ctx);
+}
 
+static void s5p_mfc_release_mfc_inst(struct s5p_mfc_dev *dev,
+				     struct s5p_mfc_ctx *ctx)
+{
+	unsigned long flags;
+
+	/*
+	 * Even though this instance should not be running at this point,
+	 * another one might have crashed the hardware and triggered watchdog
+	 * worker, which might have changed the state of all instances to
+	 * MFCINST_ERROR.
+	 */
+	spin_lock_irqsave(&dev->irqlock, flags);
+
+	if (ctx->state != MFCINST_ERROR)
+		ctx->state = MFCINST_RETURN_INST;
+
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	s5p_mfc_try_ctx(ctx);
+	/* Wait	until instance is returned or timeout occurred */
+	if (s5p_mfc_wait_for_done_ctx(ctx))
+		mfc_err("Err returning instance\n");
+	else
+		ctx->state = MFCINST_FREE;
 	ctx->inst_no = MFC_NO_INSTANCE_SET;
-	ctx->state = MFCINST_FREE;
+}
+
+void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
+{
+	/* Release hardware instance if needed. */
+	if (ctx->inst_no != MFC_NO_INSTANCE_SET)
+		s5p_mfc_release_mfc_inst(dev, ctx);
+
+	/* Free resources */
+	s5p_mfc_free_mfc_inst(dev, ctx);
 }

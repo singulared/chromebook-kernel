@@ -296,7 +296,7 @@ struct s5p_mfc_hw_ops {
 	int (*init_encode)(struct s5p_mfc_ctx *ctx);
 	int (*init_enc_buffers)(struct s5p_mfc_ctx *ctx);
 	int (*encode_one_frame)(struct s5p_mfc_ctx *ctx);
-	void (*try_run)(struct s5p_mfc_dev *dev);
+	int (*run)(struct s5p_mfc_ctx *ctx);
 	void (*cleanup_queue)(struct list_head *lh,
 			struct vb2_queue *vq);
 	void (*clear_int_flags)(struct s5p_mfc_dev *dev);
@@ -334,6 +334,34 @@ struct s5p_mfc_hw_ops {
 	unsigned int (*get_crop_info_v)(struct s5p_mfc_ctx *ctx);
 };
 
+/**
+ * s5p_mfc_hw_trylock() - try to acquire exclusive access to hardware
+ * @dev:	Device to acquire exclusive access for.
+ *
+ * Return: 0 if acquired the lock successfully or negative error otherwise.
+ */
+int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev);
+
+/**
+ * __s5p_mfc_hw_unlock() - reinitialize hardware lock to released state
+ * @dev:	Device to release.
+ */
+int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev);
+
+/**
+ * s5p_mfc_hw_unlock() - release hardware access
+ * @dev:	Device to release.
+ */
+void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev);
+
+/**
+ * s5p_mfc_hw_locked() - checks if hardware is currently locked
+ * @dev:	Device to check.
+ *
+ * Return: true if device is locked, false otherwise.
+ */
+bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev);
+
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_regs(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_hw_ctrls(struct s5p_mfc_dev *dev);
@@ -341,5 +369,42 @@ int s5p_mfc_alloc_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b,
 				size_t size, bool needs_cpu_access);
 void s5p_mfc_release_priv_buf(struct device *dev, struct s5p_mfc_priv_buf *b);
 
+/**
+ * s5p_mfc_fatal_error() - sanitize context state after fatal error
+ * @dev:	Device to which the context belongs.
+ * @ctx:	Context which failed.
+ *
+ * This function should be called after a fatal error happens during execution
+ * of context. It will mark the context as failed to prevent its futher
+ * execution and sanitize internal state.
+ *
+ * Needs to be called with dev->irqlock held.
+ */
+void s5p_mfc_fatal_error(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
+
+void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
+
+/**
+ * s5p_mfc_try_ctx() - try to schedule the context
+ * @ctx:	Context to schedule.
+ *
+ * This function atomically checks if given context is ready, by calling
+ * .ctx_ready() codec op and if yes, it adds it to the list of ready contexts
+ * if its not already there. It also tries to kick the hardware, if not already
+ * running by calling s5p_mfc_try_run().
+ */
+void s5p_mfc_try_ctx(struct s5p_mfc_ctx *ctx);
+
+/**
+ * s5p_mfc_ctx_done_locked() - reconsider the context for further execution
+ * @ctx:	Context to reconsider.
+ *
+ * This function removes given context from ready context list, checks
+ * if its still ready after last run and puts it at the end of ready
+ * context list if so.
+ *
+ * Must be called with dev->irqlock held.
+ */
+void s5p_mfc_ctx_done_locked(struct s5p_mfc_ctx *ctx);
 
 #endif /* S5P_MFC_OPR_H_ */

@@ -559,6 +559,7 @@ struct mwifiex_if_ops {
 	int (*register_dev) (struct mwifiex_adapter *);
 	void (*unregister_dev) (struct mwifiex_adapter *);
 	int (*enable_int) (struct mwifiex_adapter *);
+	void (*disable_int) (struct mwifiex_adapter *);
 	int (*process_int_status) (struct mwifiex_adapter *);
 	int (*host_to_card) (struct mwifiex_adapter *, u8, struct sk_buff *,
 			     struct mwifiex_tx_param *);
@@ -599,6 +600,7 @@ struct mwifiex_adapter {
 	/* spin lock for main process */
 	spinlock_t main_proc_lock;
 	u32 mwifiex_processing;
+	u8 more_task_flag;
 	u16 max_tx_buf_size;
 	u16 tx_buf_size;
 	u16 curr_tx_buf_size;
@@ -683,7 +685,6 @@ struct mwifiex_adapter {
 	struct mwifiex_dbg dbg;
 	u8 arp_filter[ARP_FILTER_MAX_BUF_SIZE];
 	u32 arp_filter_size;
-	u16 cmd_wait_q_required;
 	struct mwifiex_wait_queue cmd_wait_q;
 	u8 scan_wait_q_woken;
 	struct cmd_ctrl_node *cmd_queued;
@@ -692,6 +693,7 @@ struct mwifiex_adapter {
 	u8 scan_delay_cnt;
 	u8 empty_tx_q_cnt;
 	atomic_t is_tx_received;
+	struct semaphore *card_sem;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
@@ -724,11 +726,8 @@ int mwifiex_process_event(struct mwifiex_adapter *adapter);
 int mwifiex_complete_cmd(struct mwifiex_adapter *adapter,
 			 struct cmd_ctrl_node *cmd_node);
 
-int mwifiex_send_cmd_async(struct mwifiex_private *priv, uint16_t cmd_no,
-			   u16 cmd_action, u32 cmd_oid, void *data_buf);
-
-int mwifiex_send_cmd_sync(struct mwifiex_private *priv, uint16_t cmd_no,
-			  u16 cmd_action, u32 cmd_oid, void *data_buf);
+int mwifiex_send_cmd(struct mwifiex_private *priv, u16 cmd_no,
+		     u16 cmd_action, u32 cmd_oid, void *data_buf, bool sync);
 
 void mwifiex_cmd_timeout_func(unsigned long function_context);
 
@@ -742,6 +741,8 @@ void mwifiex_cancel_pending_ioctl(struct mwifiex_adapter *adapter);
 
 void mwifiex_insert_cmd_to_free_q(struct mwifiex_adapter *adapter,
 				  struct cmd_ctrl_node *cmd_node);
+void mwifiex_recycle_cmd_node(struct mwifiex_adapter *adapter,
+			      struct cmd_ctrl_node *cmd_node);
 
 void mwifiex_insert_cmd_to_pending_q(struct mwifiex_adapter *adapter,
 				     struct cmd_ctrl_node *cmd_node,

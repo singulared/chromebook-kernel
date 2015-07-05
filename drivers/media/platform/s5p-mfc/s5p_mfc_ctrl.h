@@ -47,5 +47,6 @@ struct s5p_mfc_hw_ctrl_ops *s5p_mfc_init_hw_ctrl_ops_v5(void);
 struct s5p_mfc_hw_ctrl_ops *s5p_mfc_init_hw_ctrl_ops_v6_plus(void);
 int s5p_mfc_open_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
 void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
+void s5p_mfc_free_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
 
 #endif /* S5P_MFC_CTRL_H */

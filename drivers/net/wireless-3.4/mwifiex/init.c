@@ -492,6 +492,8 @@ mwifiex_adapter_cleanup(struct mwifiex_adapter *adapter)
 
 	del_timer(&adapter->wakeup_timer);
 	mwifiex_cancel_all_pending_cmd(adapter);
+	wake_up_interruptible(&adapter->cmd_wait_q.wait);
+	wake_up_interruptible(&adapter->hs_activate_wait_q);
 
 	/* Free lock variables */
 	mwifiex_free_lock_list(adapter);
@@ -711,6 +713,14 @@ mwifiex_shutdown_drv(struct mwifiex_adapter *adapter)
 		return ret;
 	}
 
+	/* cancel current command */
+	if (adapter->curr_cmd) {
+		dev_warn(adapter->dev, "curr_cmd is still in processing\n");
+		del_timer(&adapter->cmd_timer);
+		mwifiex_recycle_cmd_node(adapter, adapter->curr_cmd);
+		adapter->curr_cmd = NULL;
+	}
+
 	/* shut down mwifiex */
 	dev_dbg(adapter->dev, "info: shutdown mwifiex...\n");
 
@@ -761,7 +771,7 @@ int mwifiex_dnld_fw(struct mwifiex_adapter *adapter,
 	if (!ret) {
 		dev_notice(adapter->dev,
 			   "WLAN FW already running! Skip FW download\n");
-		goto done;
+		return 0;
 	}
 	poll_num = MAX_FIRMWARE_POLL_TRIES;
 
@@ -784,12 +794,7 @@ int mwifiex_dnld_fw(struct mwifiex_adapter *adapter,
 poll_fw:
 	/* Check if the firmware is downloaded successfully or not */
 	ret = adapter->if_ops.check_fw_status(adapter, poll_num);
-	if (ret) {
+	if (ret)
 		dev_err(adapter->dev, "FW failed to be active in time\n");
-		return -1;
-	}
-done:
-	/* re-enable host interrupt for mwifiex after fw dnld is successful */
-	adapter->if_ops.enable_int(adapter);
 	return ret;
 }

@@ -724,24 +724,42 @@ static const char * const *mfc51_get_menu(u32 id)
 	return NULL;
 }
 
-static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
+	assert_spin_locked(&ctx->dev->irqlock);
+
 	mfc_debug(2, "src=%d, dst=%d, state=%d\n",
 		  ctx->src_queue_cnt, ctx->dst_queue_cnt, ctx->state);
+	switch (ctx->state) {
+	/* Context is to acquire instance ID */
+	case MFCINST_INIT:
+		return true;
 	/* context is ready to make header */
-	if (ctx->state == MFCINST_GOT_INST && ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_GOT_INST:
+		if (ctx->dst_queue_cnt >= 1)
+			return true;
+		break;
 	/* context is ready to encode a frame */
-	if ((ctx->state == MFCINST_RUNNING ||
-		ctx->state == MFCINST_HEAD_PARSED) &&
-		ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_HEAD_PARSED:
+	case MFCINST_RUNNING:
+		if (ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1 &&
+		    !ctx->stopping)
+			return true;
+		break;
 	/* context is ready to encode remaining frames */
-	if (ctx->state == MFCINST_FINISHING &&
-		ctx->dst_queue_cnt >= 1)
-		return 1;
+	case MFCINST_FINISHING:
+		if (ctx->dst_queue_cnt >= 1)
+			return true;
+		break;
+	/* Context is to free instance ID */
+	case MFCINST_RETURN_INST:
+		return true;
+	default:
+		break;
+	}
+
 	mfc_debug(2, "ctx is not ready\n");
-	return 0;
+	return false;
 }
 
 static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
@@ -766,33 +784,15 @@ static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
 	ctx->ref_queue_cnt = 0;
 }
 
-static int enc_pre_seq_start(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf *dst_mb;
-	unsigned long dst_addr;
-	unsigned int dst_size;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->irqlock, flags);
-	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = vb2_dma_contig_plane_dma_addr(dst_mb->b, 0);
-	dst_size = vb2_plane_size(dst_mb->b, 0);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx, dst_addr,
-			dst_size);
-	spin_unlock_irqrestore(&dev->irqlock, flags);
-	return 0;
-}
-
 static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
 	struct s5p_mfc_buf *dst_mb;
-	unsigned long flags;
+
+	assert_spin_locked(&dev->irqlock);
 
 	if (p->seq_hdr_mode == V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE) {
-		spin_lock_irqsave(&dev->irqlock, flags);
 		if (!list_empty(&ctx->dst_queue)) {
 			dst_mb = list_entry(ctx->dst_queue.next,
 					struct s5p_mfc_buf, list);
@@ -803,14 +803,10 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 						dev));
 			vb2_buffer_done(dst_mb->b, VB2_BUF_STATE_DONE);
 		}
-		spin_unlock_irqrestore(&dev->irqlock, flags);
 	}
 
 	if (!IS_MFCV6(dev)) {
 		ctx->state = MFCINST_RUNNING;
-		if (s5p_mfc_ctx_ready(ctx))
-			set_work_bit_irqsave(ctx);
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
 	} else {
 		ctx->dpb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
@@ -820,35 +816,8 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 	return 0;
 }
 
-static int enc_pre_frame_start(struct s5p_mfc_ctx *ctx)
-{
-	struct s5p_mfc_dev *dev = ctx->dev;
-	struct s5p_mfc_buf *dst_mb;
-	struct s5p_mfc_buf *src_mb;
-	unsigned long flags;
-	unsigned long src_y_addr, src_c_addr, dst_addr;
-	unsigned int dst_size;
-
-	spin_lock_irqsave(&dev->irqlock, flags);
-	src_mb = list_entry(ctx->src_queue.next, struct s5p_mfc_buf, list);
-	src_y_addr = vb2_dma_contig_plane_dma_addr(src_mb->b, 0);
-	src_c_addr = vb2_dma_contig_plane_dma_addr(src_mb->b, 1);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_frame_buffer, ctx, src_y_addr,
-			src_c_addr);
-	spin_unlock_irqrestore(&dev->irqlock, flags);
-
-	spin_lock_irqsave(&dev->irqlock, flags);
-	dst_mb = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf, list);
-	dst_addr = vb2_dma_contig_plane_dma_addr(dst_mb->b, 0);
-	dst_size = vb2_plane_size(dst_mb->b, 0);
-	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx, dst_addr,
-			dst_size);
-	spin_unlock_irqrestore(&dev->irqlock, flags);
-
-	return 0;
-}
-
-static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
+static int enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int reason,
+				unsigned int err)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
@@ -856,7 +825,8 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 	unsigned long mb_y_addr, mb_c_addr;
 	int slice_type;
 	unsigned int strm_size;
-	unsigned long flags;
+
+	assert_spin_locked(&dev->irqlock);
 
 	slice_type = s5p_mfc_hw_call(dev->mfc_ops, get_enc_slice_type, dev);
 	strm_size = s5p_mfc_hw_call(dev->mfc_ops, get_enc_strm_size, dev);
@@ -864,7 +834,6 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 	mfc_debug(2, "Encoded stream size: %d\n", strm_size);
 	mfc_debug(2, "Display order: %d\n",
 		  mfc_read(dev, S5P_FIMV_ENC_SI_PIC_CNT));
-	spin_lock_irqsave(&dev->irqlock, flags);
 	if (slice_type >= 0) {
 		s5p_mfc_hw_call(dev->mfc_ops, get_enc_frame_buffer, ctx,
 				&enc_y_addr, &enc_c_addr);
@@ -924,17 +893,13 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 		vb2_set_plane_payload(mb_entry->b, 0, strm_size);
 		vb2_buffer_done(mb_entry->b, VB2_BUF_STATE_DONE);
 	}
-	spin_unlock_irqrestore(&dev->irqlock, flags);
-	if ((ctx->src_queue_cnt == 0) || (ctx->dst_queue_cnt == 0))
-		clear_work_bit(ctx);
 	return 0;
 }
 
 static struct s5p_mfc_codec_ops encoder_codec_ops = {
-	.pre_seq_start		= enc_pre_seq_start,
 	.post_seq_start		= enc_post_seq_start,
-	.pre_frame_start	= enc_pre_frame_start,
 	.post_frame_start	= enc_post_frame_start,
+	.ctx_ready		= s5p_mfc_ctx_ready,
 };
 
 /* Query capabilities of the device */
@@ -1100,12 +1065,19 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	ret = vidioc_try_fmt(file, priv, f);
 	if (ret)
 		return ret;
-	if (ctx->vq_src.streaming || ctx->vq_dst.streaming) {
-		v4l2_err(&dev->v4l2_dev, "%s queue busy\n", __func__);
+	if (vb2_is_streaming(&ctx->vq_src) || vb2_is_streaming(&ctx->vq_dst)) {
+		v4l2_err(&dev->v4l2_dev, "%s queue already streaming\n",
+				__func__);
 		ret = -EBUSY;
 		goto out;
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		if (vb2_is_busy(&ctx->vq_dst)) {
+			v4l2_err(&dev->v4l2_dev, "%s queue buffers already requested\n",
+					__func__);
+			ret = -EBUSY;
+			goto out;
+		}
 		/* dst_fmt is validated by call to vidioc_try_fmt */
 		ctx->dst_fmt = find_format(f->fmt.pix_mp.pixelformat,
 				MFC_FMT_ENC);
@@ -1117,6 +1089,12 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		ctx->capture_state = QUEUE_FREE;
 		ret = s5p_mfc_open_mfc_inst(dev, ctx);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (vb2_is_busy(&ctx->vq_src)) {
+			v4l2_err(&dev->v4l2_dev, "%s queue buffers already requested\n",
+					__func__);
+			ret = -EBUSY;
+			goto out;
+		}
 		/* src_fmt is validated by call to vidioc_try_fmt */
 		ctx->src_fmt = find_format(f->fmt.pix_mp.pixelformat,
 				MFC_FMT_RAW);
@@ -1226,8 +1204,7 @@ static int vidioc_reqbufs(struct file *file, void *priv,
 				vb2_reqbufs(&ctx->vq_src, reqbufs);
 				return -ENOMEM;
 			}
-			set_work_bit_irqsave(ctx);
-			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+			s5p_mfc_try_ctx(ctx);
 		}
 
 		ctx->output_state = QUEUE_BUFS_REQUESTED;
@@ -1681,7 +1658,7 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	switch (ctrl->id) {
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 			break;
 		} else if (ctx->state != MFCINST_INIT) {
@@ -1689,10 +1666,9 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		/* Should wait for the header to be produced */
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		s5p_mfc_wait_for_done_ctx(ctx);
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
-		    ctx->state < MFCINST_ABORT) {
+		    ctx->state < MFCINST_ERROR) {
 			ctrl->val = ctx->dpb_count;
 		} else {
 			v4l2_err(&dev->v4l2_dev, "Encoding not initialised\n");
@@ -1822,17 +1798,15 @@ int vidioc_encoder_cmd(struct file *file, void *priv,
 		if (cmd->flags != 0)
 			return -EINVAL;
 
-		if (!ctx->vq_src.streaming)
+		if (!vb2_is_streaming(&ctx->vq_src))
 			return -EINVAL;
 
 		spin_lock_irqsave(&dev->irqlock, flags);
 		if (list_empty(&ctx->src_queue)) {
 			mfc_debug(2, "EOS: empty src queue, entering finishing state\n");
 			ctx->state = MFCINST_FINISHING;
-			if (s5p_mfc_ctx_ready(ctx))
-				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+			s5p_mfc_try_ctx(ctx);
 		} else {
 			mfc_debug(2, "EOS: marking last buffer of stream\n");
 			buf = list_entry(ctx->src_queue.prev,
@@ -2081,16 +2055,17 @@ static int s5p_mfc_buf_prepare(struct vb2_buffer *vb)
 static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
-	struct s5p_mfc_dev *dev = ctx->dev;
+	int ret;
 
 	/* If context is ready then dev = work->data;schedule it to run */
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_ctx(ctx);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		ret = s5p_mfc_wait_for_done_ctx(ctx);
+		if (ret) {
+			mfc_err("Hardware failed to initialize encoding\n");
+			return -EIO;
+		}
 	}
 
 	return 0;
@@ -2102,14 +2077,9 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
 	struct s5p_mfc_dev *dev = ctx->dev;
 
-	if ((ctx->state == MFCINST_FINISHING ||
-		ctx->state == MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx->num && dev->hw_lock) {
-		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_FRAME_DONE_RET,
-					  0);
-	}
-	ctx->state = MFCINST_FINISHED;
+	ctx->stopping = true;
+	s5p_mfc_wait_for_done_ctx(ctx);
+
 	spin_lock_irqsave(&dev->irqlock, flags);
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		s5p_mfc_hw_call(dev->mfc_ops, cleanup_queue, &ctx->dst_queue,
@@ -2125,6 +2095,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->src_queue_cnt = 0;
 	}
 	spin_unlock_irqrestore(&dev->irqlock, flags);
+	ctx->stopping = false;
 	return 0;
 }
 
@@ -2171,9 +2142,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	} else {
 		mfc_err("unsupported buffer type (%d)\n", vq->type);
 	}
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_ctx(ctx);
 }
 
 static struct vb2_ops s5p_mfc_enc_qops = {

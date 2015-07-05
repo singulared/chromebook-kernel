@@ -183,6 +183,7 @@ struct mwifiex_ds_tx_ba_stream_tbl {
 #define DBG_CMD_NUM	5
 
 struct mwifiex_debug_info {
+	unsigned int debug_mask;
 	u32 int_counter;
 	u32 packets_out[MAX_NUM_TID];
 	u32 tx_buf_size;
@@ -331,6 +332,11 @@ struct mwifiex_ds_read_eeprom {
 	__le16 offset;
 	__le16 byte_count;
 	u8 value[MAX_EEPROM_DATA];
+};
+
+struct mwifiex_ds_mem_rw {
+	u32 addr;
+	u32 value;
 };
 
 #define IEEE_MAX_IE_SIZE		256

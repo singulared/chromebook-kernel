@@ -57,9 +57,7 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 /* Busy wait timeout */
 #define MFC_BW_TIMEOUT		500
 /* Watchdog interval */
-#define MFC_WATCHDOG_INTERVAL   1000
-/* After how many executions watchdog should assume lock up */
-#define MFC_WATCHDOG_CNT        10
+#define MFC_WATCHDOG_TIMEOUT_MS	10000
 #define MFC_NO_INSTANCE_SET	-1
 #define MFC_ENC_CAP_PLANE_COUNT	1
 #define MFC_ENC_OUT_PLANE_COUNT	2
@@ -139,13 +137,11 @@ enum s5p_mfc_inst_state {
 	MFCINST_INIT = 100,
 	MFCINST_GOT_INST,
 	MFCINST_HEAD_PARSED,
-	MFCINST_BUFS_SET,
 	MFCINST_RUNNING,
 	MFCINST_FINISHING,
 	MFCINST_FINISHED,
 	MFCINST_RETURN_INST,
 	MFCINST_ERROR,
-	MFCINST_ABORT,
 	MFCINST_FLUSH,
 	MFCINST_RES_CHANGE_INIT,
 	MFCINST_RES_CHANGE_FLUSH,
@@ -309,24 +305,26 @@ struct s5p_mfc_priv_buf {
  * @pm:			power management control
  * @variant:		MFC hardware variant information
  * @num_inst:		couter of active MFC instances
- * @irqlock:		lock for operations on videobuf2 queues
- * @condlock:		lock for changing/checking if a context is ready to be
- *			processed
+ * @irqlock:		lock for operations on data shared with IRQ handler
+ *			(always acquired by IRQ handler)
  * @mfc_mutex:		lock for video_device
- * @int_cond:		variable used by the waitqueue
- * @int_type:		type of last interrupt
- * @int_err:		error number for last interrupt
  * @queue:		waitqueue for waiting for completion of device commands
  * @fw_size:		size of firmware
  * @fw_virt_addr:	virtual firmware address
  * @bank1:		address of the beginning of bank 1 memory
  * @bank2:		address of the beginning of bank 2 memory
- * @hw_lock:		used for hardware locking
- * @ctx:		array of driver contexts
- * @curr_ctx:		number of the currently running context
- * @ctx_work_bits:	used to mark which contexts are waiting for hardware
- * @watchdog_cnt:	counter for the watchdog
- * @watchdog_workqueue:	workqueue for the watchdog
+ * @hw_lock:		used for hardware locking (needs to be taken before
+ *			issuing a command to hardware; released by interrupt
+ *			handler and watchdog worker)
+ * @hw_error:		atomic flag indicating that hardware state is
+ *			inconsistent after an error and MFC needs to be
+ *			reinitialized to continue operation
+ * @ctx_list:		list of all open instances
+ *			(needs to be accessed with dev->irqlock held)
+ * @curr_ctx:		currently running context
+ *			(needs to be accessed with dev->irqlock held)
+ * @ready_ctx_list:	list of contexts that can be run
+ *			(needs to be accessed with dev->irqlock held)
  * @watchdog_work:	worker for the watchdog
  * @alloc_ctx:		videobuf2 allocator contexts for two memory banks
  * @clk_flag:		flag used for dynamic control of mfc clock
@@ -353,25 +351,18 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_variant	*variant;
 	int num_inst;
 	spinlock_t irqlock;	/* lock when operating on videobuf2 queues */
-	spinlock_t condlock;	/* lock when changing/checking if a context is
-					ready to be processed */
 	struct mutex mfc_mutex; /* video_device lock */
-	int int_cond;
-	int int_type;
-	unsigned int int_err;
 	wait_queue_head_t queue;
 	size_t fw_size;
 	void *fw_virt_addr;
 	dma_addr_t bank1;
 	dma_addr_t bank2;
 	unsigned long hw_lock;
-	struct s5p_mfc_ctx *ctx[MFC_NUM_CONTEXTS];
-	int curr_ctx;
-	unsigned long ctx_work_bits;
-	atomic_t watchdog_cnt;
-	struct timer_list watchdog_timer;
-	struct workqueue_struct *watchdog_workqueue;
-	struct work_struct watchdog_work;
+	unsigned long hw_error;
+	struct list_head ctx_list;
+	struct s5p_mfc_ctx *curr_ctx;
+	struct list_head ready_ctx_list;
+	struct delayed_work watchdog_work;
 	void *alloc_ctx[2];
 	unsigned long clk_flag;
 	unsigned long enter_suspend;
@@ -511,42 +502,46 @@ struct s5p_mfc_enc_params {
 };
 
 /**
- * struct s5p_mfc_codec_ops - codec ops, used by encoding
+ * struct s5p_mfc_codec_ops - codec ops
+ * @post_seq_start:	Callback executed after receiving SEQ_DONE interrupt.
+ *			Runs in atomic context with dev->irqlock held.
+ * @post_frame_start:	Callback executed after receiving
+ *			{SLICE,FIELD,FRAME}_DONE interrupt. Runs in atomic
+ *			context with dev->irqlock held.
+ * @ctx_ready:		This callback shall check if given context is ready
+ *			for running. Runs with dev->irqlock held.
  */
 struct s5p_mfc_codec_ops {
-	/* initialization routines */
-	int (*pre_seq_start) (struct s5p_mfc_ctx *ctx);
 	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
-	/* execution routines */
-	int (*pre_frame_start) (struct s5p_mfc_ctx *ctx);
-	int (*post_frame_start) (struct s5p_mfc_ctx *ctx);
+	int (*post_frame_start) (struct s5p_mfc_ctx *ctx, unsigned int reason,
+				 unsigned int err);
+	bool (*ctx_ready) (struct s5p_mfc_ctx *ctx);
 };
-
-#define call_cop(c, op, args...)				\
-	(((c)->c_ops->op) ?					\
-		((c)->c_ops->op(args)) : 0)
 
 /**
  * struct s5p_mfc_ctx - This struct contains the instance context
  *
  * @dev:		pointer to the s5p_mfc_dev of the device
  * @fh:			struct v4l2_fh
- * @num:		number of the context that this structure describes
- * @int_cond:		variable used by the waitqueue
- * @int_type:		type of the last interrupt
- * @int_err:		error number received from MFC hw in the interrupt
- * @queue:		waitqueue that can be used to wait for this context to
- *			finish
+ * @ready_ctx_list:	list head to queue in ready context list
+ *			(needs to be accessed with dev->irqlock held)
+ * @ctx_list:		list head to queue in list of all contexts
+ *			(needs to be accessed with dev->irqlock held)
  * @src_fmt:		source pixelformat information
  * @dst_fmt:		destination pixelformat information
  * @vq_src:		vb2 queue for source buffers
  * @vq_dst:		vb2 queue for destination buffers
  * @src_queue:		driver internal queue for source buffers
+ *			(needs to be accessed with dev->irqlock held)
  * @dst_queue:		driver internal queue for destination buffers
+ *			(needs to be accessed with dev->irqlock held)
  * @src_queue_cnt:	number of buffers queued on the source internal queue
+ *			(needs to be accessed with dev->irqlock held)
  * @dst_queue_cnt:	number of buffers queued on the dest internal queue
+ *			(needs to be accessed with dev->irqlock held)
  * @type:		type of the instance - decoder or encoder
  * @state:		state of the context
+ *			(needs to be accessed with dev->irqlock held)
  * @inst_no:		number of hw instance associated with the context
  * @img_width:		width of the image that is decoded or encoded
  * @img_height:		height of the image that is decoded or encoded
@@ -604,17 +599,19 @@ struct s5p_mfc_codec_ops {
  * @ctrls:		array of controls, used when adding controls to the
  *			v4l2 control framework
  * @ctrl_handler:	handler for v4l2 framework
+ * @stopping:		Boolean flag indicating that the context should stop
+ *			being processed as soon as possible. (Note that it
+ *			might take few additional runs to trigger necessary
+ *			hardware state changes until the context is actually
+ *			stopped, so s5p_mfc_wait_for_done_ctx() must be used
+ *			to wait for the processing to end.
  */
 struct s5p_mfc_ctx {
 	struct s5p_mfc_dev *dev;
 	struct v4l2_fh fh;
 
-	int num;
-
-	int int_cond;
-	int int_type;
-	unsigned int int_err;
-	wait_queue_head_t queue;
+	struct list_head ready_ctx_list;
+	struct list_head ctx_list;
 
 	struct s5p_mfc_fmt *src_fmt;
 	struct s5p_mfc_fmt *dst_fmt;
@@ -706,6 +703,7 @@ struct s5p_mfc_ctx {
 	struct v4l2_ctrl_handler ctrl_handler;
 	unsigned int frame_tag;
 	size_t scratch_buf_size;
+	bool stopping:1;
 };
 
 #define MFC_V5_BIT	BIT(0)
@@ -758,11 +756,6 @@ struct mfc_control {
 #define fh_to_ctx(__fh) container_of(__fh, struct s5p_mfc_ctx, fh)
 #define ctrl_to_ctx(__ctrl) \
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
-
-void clear_work_bit(struct s5p_mfc_ctx *ctx);
-void set_work_bit(struct s5p_mfc_ctx *ctx);
-void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
-void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
 
 #define HAS_VARIANT(dev) ((dev) && ((dev)->variant))
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \

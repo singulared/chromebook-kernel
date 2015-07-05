@@ -70,7 +70,6 @@ static int s5p_mfc_open_inst_cmd_v6(struct s5p_mfc_ctx *ctx)
 	int codec_type;
 
 	mfc_debug(2, "Requested codec mode: %d\n", ctx->codec_mode);
-	dev->curr_ctx = ctx->num;
 	switch (ctx->codec_mode) {
 	case S5P_MFC_CODEC_H264_DEC:
 		codec_type = S5P_FIMV_CODEC_H264_DEC_V6;
@@ -130,7 +129,6 @@ static int s5p_mfc_close_inst_cmd_v6(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_cmd_args h2r_args;
 	int ret = 0;
 
-	dev->curr_ctx = ctx->num;
 	if (ctx->state != MFCINST_FREE) {
 		mfc_write(dev, ctx->inst_no, S5P_FIMV_INSTANCE_ID_V6);
 		ret = s5p_mfc_cmd_host2risc_v6(dev,

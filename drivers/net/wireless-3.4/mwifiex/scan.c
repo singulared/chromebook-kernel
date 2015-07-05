@@ -557,10 +557,12 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 			  *chan_tlv_out,
 			  struct mwifiex_chan_scan_param_set *scan_chan_list)
 {
+	struct mwifiex_adapter *adapter = priv->adapter;
 	int ret = 0;
 	struct mwifiex_chan_scan_param_set *tmp_chan_list;
 	struct mwifiex_chan_scan_param_set *start_chan;
-
+	struct cmd_ctrl_node *cmd_node, *tmp_node;
+	unsigned long flags;
 	u32 tlv_idx;
 	u32 total_scan_time;
 	bool done_early = false;
@@ -699,11 +701,22 @@ mwifiex_scan_channel_list(struct mwifiex_private *priv,
 
 		/* Send the scan command to the firmware with the specified
 		   cfg */
-		ret = mwifiex_send_cmd_async(priv, HostCmd_CMD_802_11_SCAN,
-					     HostCmd_ACT_GEN_SET, 0,
-					     scan_cfg_out);
-		if (ret)
+		ret = mwifiex_send_cmd(priv, HostCmd_CMD_802_11_SCAN,
+				       HostCmd_ACT_GEN_SET, 0,
+				       scan_cfg_out, false);
+		if (ret) {
+			spin_lock_irqsave(&adapter->scan_pending_q_lock, flags);
+			list_for_each_entry_safe(cmd_node, tmp_node,
+						 &adapter->scan_pending_q,
+						 list) {
+				list_del(&cmd_node->list);
+				cmd_node->wait_q_enabled = false;
+				mwifiex_insert_cmd_to_free_q(adapter, cmd_node);
+			}
+			spin_unlock_irqrestore(&adapter->scan_pending_q_lock,
+					       flags);
 			break;
+		}
 	}
 
 	if (ret)
@@ -1272,18 +1285,14 @@ int mwifiex_update_bss_desc_with_ie(struct mwifiex_adapter *adapter,
 					bss_entry->beacon_buf);
 			break;
 		case WLAN_EID_BSS_COEX_2040:
-			bss_entry->bcn_bss_co_2040 = (u8 *) (current_ptr +
-					sizeof(struct ieee_types_header));
-			bss_entry->bss_co_2040_offset = (u16) (current_ptr +
-					sizeof(struct ieee_types_header) -
-						bss_entry->beacon_buf);
+			bss_entry->bcn_bss_co_2040 = current_ptr;
+			bss_entry->bss_co_2040_offset =
+				(u16) (current_ptr - bss_entry->beacon_buf);
 			break;
 		case WLAN_EID_EXT_CAPABILITY:
-			bss_entry->bcn_ext_cap = (u8 *) (current_ptr +
-					sizeof(struct ieee_types_header));
-			bss_entry->ext_cap_offset = (u16) (current_ptr +
-					sizeof(struct ieee_types_header) -
-					bss_entry->beacon_buf);
+			bss_entry->bcn_ext_cap = current_ptr;
+			bss_entry->ext_cap_offset =
+				(u16) (current_ptr - bss_entry->beacon_buf);
 			break;
 		default:
 			break;
@@ -1346,6 +1355,12 @@ int mwifiex_scan_networks(struct mwifiex_private *priv,
 		dev_err(adapter->dev,
 			"cmd: Scan is blocked during association...\n");
 		return -EBUSY;
+	}
+
+	if (adapter->surprise_removed || adapter->num_cmd_timeout) {
+		dev_err(adapter->dev,
+			"Ignore scan. Card removed or firmware in bad state\n");
+		return -EFAULT;
 	}
 
 	spin_lock_irqsave(&adapter->mwifiex_cmd_lock, flags);

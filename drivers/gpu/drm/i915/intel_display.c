@@ -7878,8 +7878,13 @@ intel_modeset_check_state(struct drm_device *dev)
 	list_for_each_entry(connector, &dev->mode_config.connector_list,
 			    base.head) {
 		/* This also checks the encoder/connector hw state with the
-		 * ->get_hw_state callbacks. */
-		intel_connector_check_state(connector);
+		 * ->get_hw_state callbacks.
+		 *
+		 * Bypass the check on gen3 because the bios is known to not
+		 * reset the GPU state properly. See crbug.com/504003.
+		 */
+		if (!IS_GEN3(dev))
+			intel_connector_check_state(connector);
 
 		WARN(&connector->new_encoder->base != connector->base.encoder,
 		     "connector's staged encoder doesn't match current encoder\n");
@@ -7955,9 +7960,15 @@ intel_modeset_check_state(struct drm_device *dev)
 			if (encoder->connectors_active)
 				active = true;
 		}
-		WARN(active != crtc->active,
-		     "crtc's computed active state doesn't match tracked active state "
-		     "(expected %i, found %i)\n", active, crtc->active);
+		/*
+		 * Bypass the check on gen3 because the bios is known to not
+		 * reset the GPU state properly. See crbug.com/504003.
+		 */
+		if (!IS_GEN3(dev)) {
+			WARN(active != crtc->active,
+			     "crtc's computed active state doesn't match tracked active state "
+			     "(expected %i, found %i)\n", active, crtc->active);
+		}
 		WARN(enabled != crtc->base.enabled,
 		     "crtc's computed enabled state doesn't match tracked enabled state "
 		     "(expected %i, found %i)\n", enabled, crtc->base.enabled);
@@ -9138,136 +9149,6 @@ void intel_modeset_init(struct drm_device *dev)
 	intel_setup_outputs(dev);
 }
 
-static void
-intel_connector_break_all_links(struct intel_connector *connector)
-{
-	connector->base.dpms = DRM_MODE_DPMS_OFF;
-	connector->base.encoder = NULL;
-	connector->encoder->connectors_active = false;
-	connector->encoder->base.crtc = NULL;
-}
-
-static void intel_enable_pipe_a(struct drm_device *dev)
-{
-	struct intel_connector *connector;
-	struct drm_connector *crt = NULL;
-	struct intel_load_detect_pipe load_detect_temp;
-	struct drm_modeset_acquire_ctx ctx;
-
-	/* We can't just switch on the pipe A, we need to set things up with a
-	 * proper mode and output configuration. As a gross hack, enable pipe A
-	 * by enabling the load detect pipe once. */
-	list_for_each_entry(connector,
-			    &dev->mode_config.connector_list,
-			    base.head) {
-		if (connector->encoder->type == INTEL_OUTPUT_ANALOG) {
-			crt = &connector->base;
-			break;
-		}
-	}
-
-	if (!crt)
-		return;
-
-	if (intel_get_load_detect_pipe(crt, NULL, &load_detect_temp, &ctx))
-		intel_release_load_detect_pipe(crt, &load_detect_temp, &ctx);
-
-
-}
-
-static void intel_sanitize_crtc(struct intel_crtc *crtc)
-{
-	struct drm_device *dev = crtc->base.dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	u32 reg;
-
-	/* Clear any frame start delays used for debugging left by the BIOS */
-	reg = PIPECONF(crtc->cpu_transcoder);
-	I915_WRITE(reg, I915_READ(reg) & ~PIPECONF_FRAME_START_DELAY_MASK);
-
-	if (dev_priv->quirks & QUIRK_PIPEA_FORCE &&
-	    crtc->pipe == PIPE_A && !crtc->active) {
-		/* BIOS forgot to enable pipe A, this mostly happens after
-		 * resume. Force-enable the pipe to fix this, the update_dpms
-		 * call below we restore the pipe to the right state, but leave
-		 * the required bits on. */
-		intel_enable_pipe_a(dev);
-	}
-
-	/* Adjust the state of the output pipe according to whether we
-	 * have active connectors/encoders. */
-	intel_crtc_update_dpms(&crtc->base);
-
-	if (crtc->active != crtc->base.enabled) {
-		struct intel_encoder *encoder;
-
-		/* This can happen either due to bugs in the get_hw_state
-		 * functions or because the pipe is force-enabled due to the
-		 * pipe A quirk. */
-		DRM_DEBUG_KMS("[CRTC:%d] hw state adjusted, was %s, now %s\n",
-			      crtc->base.base.id,
-			      crtc->base.enabled ? "enabled" : "disabled",
-			      crtc->active ? "enabled" : "disabled");
-
-		crtc->base.enabled = crtc->active;
-
-		/* Because we only establish the connector -> encoder ->
-		 * crtc links if something is active, this means the
-		 * crtc is now deactivated. Break the links. connector
-		 * -> encoder links are only establish when things are
-		 *  actually up, hence no need to break them. */
-		WARN_ON(crtc->active);
-
-		for_each_encoder_on_crtc(dev, &crtc->base, encoder) {
-			WARN_ON(encoder->connectors_active);
-			encoder->base.crtc = NULL;
-		}
-	}
-}
-
-static void intel_sanitize_encoder(struct intel_encoder *encoder)
-{
-	struct intel_connector *connector;
-	struct drm_device *dev = encoder->base.dev;
-
-	/* We need to check both for a crtc link (meaning that the
-	 * encoder is active and trying to read from a pipe) and the
-	 * pipe itself being active. */
-	bool has_active_crtc = encoder->base.crtc &&
-		to_intel_crtc(encoder->base.crtc)->active;
-
-	if (encoder->connectors_active && !has_active_crtc) {
-		DRM_DEBUG_KMS("[ENCODER:%d:%s] has active connectors but no active pipe!\n",
-			      encoder->base.base.id,
-			      drm_get_encoder_name(&encoder->base));
-
-		/* Connector is active, but has no active pipe. This is
-		 * fallout from our resume register restoring. Disable
-		 * the encoder manually again. */
-		if (encoder->base.crtc) {
-			DRM_DEBUG_KMS("[ENCODER:%d:%s] manually disabled\n",
-				      encoder->base.base.id,
-				      drm_get_encoder_name(&encoder->base));
-			encoder->disable(encoder);
-		}
-
-		/* Inconsistent output/port/pipe state happens presumably due to
-		 * a bug in one of the get_hw_state functions. Or someplace else
-		 * in our code, like the register restore mess on resume. Clamp
-		 * things to off as a safer default. */
-		list_for_each_entry(connector,
-				    &dev->mode_config.connector_list,
-				    base.head) {
-			if (connector->encoder != encoder)
-				continue;
-
-			intel_connector_break_all_links(connector);
-		}
-	}
-	/* Enabled encoders without active connectors will be fixed in
-	 * the crtc fixup. */
-}
-
 static void i915_redisable_vga(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -9374,17 +9255,6 @@ void intel_modeset_setup_hw_state(struct drm_device *dev,
 			      connector->base.base.id,
 			      drm_get_connector_name(&connector->base),
 			      connector->base.encoder ? "enabled" : "disabled");
-	}
-
-	/* HW state is read out, now we need to sanitize this mess. */
-	list_for_each_entry(encoder, &dev->mode_config.encoder_list,
-			    base.head) {
-		intel_sanitize_encoder(encoder);
-	}
-
-	for_each_pipe(pipe) {
-		crtc = to_intel_crtc(dev_priv->pipe_to_crtc_mapping[pipe]);
-		intel_sanitize_crtc(crtc);
 	}
 
 	if (force_restore) {

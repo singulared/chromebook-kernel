@@ -89,8 +89,9 @@ static int s5p_mfc_init_hw_v6(struct s5p_mfc_dev *dev)
 	mfc_debug(2, "Done MFC reset..\n");
 	/* 1. Set DRAM base Addr */
 	s5p_mfc_init_memctrl_v6(dev);
+	/* Lock the HW before starting the RISC */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* 2. Release reset signal to the RISC */
-	s5p_mfc_clean_dev_int_flags(dev);
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
 	ret = s5p_mfc_init_fw(dev);
@@ -112,21 +113,25 @@ static int s5p_mfc_wait_wakeup_v8(struct s5p_mfc_dev *dev)
 {
 	int ret;
 
+	/* Lock the HW before starting the RISC */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* Release reset signal to the RISC */
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to reset MFCV8\n");
 		return -EIO;
 	}
 	mfc_debug(2, "Write command to wakeup MFCV8\n");
+	/* Lock the HW before sending wakeup command */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFCV8 - timeout\n");
 		return ret;
 	}
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to wakeup MFC\n");
 		return -EIO;
 	}
@@ -137,6 +142,8 @@ static int s5p_mfc_wait_wakeup_v6(struct s5p_mfc_dev *dev)
 {
 	int ret;
 
+	/* Lock the HW before sending wakeup command */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
 	/* Send MFC wakeup command */
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
@@ -147,7 +154,7 @@ static int s5p_mfc_wait_wakeup_v6(struct s5p_mfc_dev *dev)
 	/* Release reset signal to the RISC */
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
+	if (s5p_mfc_wait_for_done_dev(dev)) {
 		mfc_err("Failed to wakeup MFC\n");
 		return -EIO;
 	}
@@ -172,9 +179,7 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	mfc_debug(2, "Done MFC reset..\n");
 	/* 1. Set DRAM base Addr */
 	s5p_mfc_init_memctrl_v6(dev);
-	/* 2. Initialize registers of channel I/F */
-	s5p_mfc_clean_dev_int_flags(dev);
-	/* 3. Send MFC wakeup command and wait for completion*/
+	/* 2. Send MFC wakeup command and wait for completion*/
 	if (IS_MFCV8(dev))
 		ret = s5p_mfc_wait_wakeup_v8(dev);
 	else
@@ -183,15 +188,6 @@ static int s5p_mfc_wakeup_v6(struct s5p_mfc_dev *dev)
 	s5p_mfc_clock_off(dev);
 	if (ret)
 		return ret;
-
-	dev->int_cond = 0;
-	if (dev->int_err != 0 || dev->int_type !=
-						S5P_MFC_R2H_CMD_WAKEUP_RET) {
-		/* Failure. */
-		mfc_err("Failed to wakeup - error: %d int: %d\n", dev->int_err,
-								dev->int_type);
-		return -EIO;
-	}
 	dev->risc_on = 1;
 	mfc_debug_leave();
 	return 0;

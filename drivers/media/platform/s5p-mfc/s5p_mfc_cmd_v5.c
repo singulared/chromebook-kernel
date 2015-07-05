@@ -79,7 +79,6 @@ static int s5p_mfc_open_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 
 	/* Preparing decoding - getting instance number */
 	mfc_debug(2, "Getting instance number (codec: %d)\n", ctx->codec_mode);
-	dev->curr_ctx = ctx->num;
 	memset(&h2r_args, 0, sizeof(struct s5p_mfc_cmd_args));
 	switch (ctx->codec_mode) {
 	case S5P_MFC_CODEC_H264_DEC:
@@ -137,7 +136,6 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 	}
 	/* Closing decoding instance  */
 	mfc_debug(2, "Returning instance number %d\n", ctx->inst_no);
-	dev->curr_ctx = ctx->num;
 	memset(&h2r_args, 0, sizeof(struct s5p_mfc_cmd_args));
 	h2r_args.arg[0] = ctx->inst_no;
 	ret = s5p_mfc_cmd_host2risc_v5(dev, S5P_FIMV_H2R_CMD_CLOSE_INSTANCE,

@@ -1421,6 +1421,9 @@ static int hdcp_update_drm_property(struct hdmi_context *hdata, int value)
 
 	WARN_ON(!mutex_is_locked(&mode_config->mutex));
 
+	if (WARN_ON(!hdata->hdcp_object))
+		return -ENODEV;
+
 	return drm_object_property_set_value(hdata->hdcp_object,
 			hdata->hdcp_object->propvals,
 			mode_config->content_protection_property, value,
@@ -1661,9 +1664,14 @@ static int hdmi_connector_set_property(struct drm_connector *connector, struct d
 		struct drm_property *property, uint64_t val, void *blob_data)
 {
 	struct hdmi_context *hdata = ctx_from_connector(connector);
+	struct drm_mode_config *mode_config = &hdata->drm_dev->mode_config;
 	int ret;
 
+	mutex_lock(&mode_config->mutex);
+
 	ret = set_property(hdata, &connector->base, property, val);
+
+	mutex_unlock(&mode_config->mutex);
 	if (ret)
 		return ret;
 

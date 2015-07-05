@@ -72,7 +72,7 @@ int mwifiex_init_shutdown_fw(struct mwifiex_private *priv,
 		return -1;
 	}
 
-	return mwifiex_send_cmd_sync(priv, cmd, HostCmd_ACT_GEN_SET, 0, NULL);
+	return mwifiex_send_cmd(priv, cmd, HostCmd_ACT_GEN_SET, 0, NULL, true);
 }
 EXPORT_SYMBOL_GPL(mwifiex_init_shutdown_fw);
 
@@ -229,7 +229,6 @@ int mwifiex_recv_packet(struct mwifiex_adapter *adapter, struct sk_buff *skb)
 int mwifiex_complete_cmd(struct mwifiex_adapter *adapter,
 			 struct cmd_ctrl_node *cmd_node)
 {
-	atomic_dec(&adapter->cmd_pending);
 	dev_dbg(adapter->dev, "cmd completed: status=%d\n",
 		adapter->cmd_wait_q.status);
 
