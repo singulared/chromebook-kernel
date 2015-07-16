@@ -433,10 +433,10 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	/* Resolution change flush in progress */
 	case MFCINST_RES_CHANGE_INIT:
 	case MFCINST_RES_CHANGE_FLUSH:
-		return !ctx->stopping;
+		return true;
 	/* Resolution change flush finished */
 	case MFCINST_RES_CHANGE_END:
-		if (ctx->src_queue_cnt >= 1 && !ctx->stopping)
+		if (ctx->src_queue_cnt >= 1)
 			return true;
 		break;
 	default:
@@ -680,6 +680,7 @@ static int s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int reason,
 		ctx->state = MFCINST_RES_CHANGE_FLUSH;
 	if (res_change == S5P_FIMV_RES_INCREASE ||
 		res_change == S5P_FIMV_RES_DECREASE) {
+		mfc_debug(2, "Resolution change detected: %x\n", res_change);
 		ctx->state = MFCINST_RES_CHANGE_INIT;
 		return 0;
 	}
@@ -1546,11 +1547,7 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->dpb_flush_flag = 1;
 		ctx->dec_dst_flag = 0;
 		state = ctx->state;
-		if (state == MFCINST_RUNNING ||
-		    state == MFCINST_FINISHING ||
-		    state == MFCINST_RES_CHANGE_INIT ||
-		    state == MFCINST_RES_CHANGE_FLUSH) {
-			state = ctx->state;
+		if (state == MFCINST_RUNNING || state == MFCINST_FINISHING) {
 			ctx->state = MFCINST_FLUSH;
 			flush = true;
 		}
@@ -1560,19 +1557,6 @@ static int s5p_mfc_stop_streaming(struct vb2_queue *q)
 			s5p_mfc_try_ctx(ctx);
 			if (s5p_mfc_wait_for_done_ctx(ctx))
 				mfc_err("Err flushing buffers\n");
-
-			/*
-			 * Even though this instance should not be running at
-			 * this point, another one might have crashed the
-			 * hardware and triggered watchdog worker, which might
-			 * have changed the state of all instances to
-			 * MFCINST_ERROR.
-			 */
-			spin_lock_irqsave(&dev->irqlock, flags);
-			if (ctx->state != MFCINST_ERROR &&
-			    state >= MFCINST_RES_CHANGE_INIT)
-				ctx->state = MFCINST_RES_CHANGE_END;
-			spin_unlock_irqrestore(&dev->irqlock, flags);
 		}
 	}
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
