@@ -16,16 +16,6 @@ if MALI_PLATFORM_THIRDPARTY_NAME = "chromebook"
 menu "Chromebook options"
 	depends on MALI_MIDGARD && MALI_EXPERT && MALI_PLATFORM_THIRDPARTY
 
-config MIDGARD_DVFS_FREQ_LOCK
-	bool "Enable dvfs frequency lock support"
-	depends on MALI_MIDGARD_DVFS && MALI_EXPERT
-	default n
-	help
-	  Choose this option to enable locking the DVFS frequency.  If sysfs
-	  support is enabled files will be created for inspecting and
-	  (potentially) setting a fixed DVFS frequency.  This is used
-	  for debugging; enable only if you know what you are doing.
-
 config MALI_HWC_TRACE
 	bool "Enable hardware counter event tracing support"
 	depends on MALI_MIDGARD && MALI_EXPERT
