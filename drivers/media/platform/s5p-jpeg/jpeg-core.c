@@ -988,6 +988,9 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 	case 0x33:
 		ctx->subsampling = V4L2_JPEG_CHROMA_SUBSAMPLING_GRAY;
 		break;
+	case 0x41:
+		ctx->subsampling = V4L2_JPEG_CHROMA_SUBSAMPLING_411;
+		break;
 	default:
 		return false;
 	}
