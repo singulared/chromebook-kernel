@@ -59,6 +59,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/acpi.h>
+#include <linux/dmi.h>
 #include <linux/pci.h>
 #include <linux/mfd/core.h>
 #include <linux/mfd/lpc_ich.h>
@@ -707,6 +708,24 @@ static int lpc_ich_check_conflict_gpio(struct resource *res)
 {
 	int ret;
 	u8 use_gpio = 0;
+
+	static struct dmi_system_id dmi_stout[] = {
+		{
+			.ident = "ChromeOS Stout",
+			.matches = {DMI_MATCH(DMI_PRODUCT_NAME, "Stout")}
+		}, {}
+	};
+
+	/*
+	 * crbug.com/516371: Stout FW defines an ACPI OperatingRegion
+	 * around the GPIO address space. acpi_check_region() would thus
+	 * normally return an error. The error can be ignored on Stout
+	 * since no GPIO access from SMI actually occurs. Therefore, skip
+	 * calling acpi_check_region() entirely for Stout and return a mask
+	 * to indicate that all GPIO banks are accessable by the kernel.
+	 */
+	if (dmi_check_system(dmi_stout))
+		return 0x7;
 
 	if (resource_size(res) >= 0x50 &&
 	    !acpi_check_region(res->start + 0x40, 0x10, "LPC ICH GPIO3"))
