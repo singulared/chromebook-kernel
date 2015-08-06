@@ -720,6 +720,7 @@ static int mwifiex_sdio_card_to_host(struct mwifiex_adapter *adapter,
 static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 				    struct mwifiex_fw_image *fw)
 {
+	struct sdio_mmc_card *card = adapter->card;
 	int ret;
 	u8 *firmware = fw->fw_buf;
 	u32 firmware_len = fw->fw_len;
@@ -746,6 +747,8 @@ static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 			"unable to alloc buffer for FW. Terminating dnld\n");
 		return -ENOMEM;
 	}
+
+	sdio_claim_host(card->func);
 
 	/* Perform firmware data transfer */
 	do {
@@ -847,6 +850,8 @@ static int mwifiex_prog_fw_w_helper(struct mwifiex_adapter *adapter,
 
 		offset += txlen;
 	} while (true);
+
+	sdio_release_host(card->func);
 
 	dev_dbg(adapter->dev, "info: FW download over, size %d bytes\n",
 		offset);
