@@ -22,7 +22,7 @@ static int s5p_mfc_cmd_host2risc_v5(struct s5p_mfc_dev *dev, int cmd,
 	int cur_cmd;
 	unsigned long timeout;
 
-	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT_MS);
 	/* wait until host to risc command register becomes 'H2R_CMD_EMPTY' */
 	do {
 		if (time_after(jiffies, timeout)) {

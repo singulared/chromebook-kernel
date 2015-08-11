@@ -201,7 +201,7 @@ static int s5p_mfc_try_once(struct s5p_mfc_dev *dev)
 		s5p_mfc_clock_on(dev);
 
 	schedule_delayed_work(&dev->watchdog_work,
-				msecs_to_jiffies(MFC_WATCHDOG_TIMEOUT_MS));
+				msecs_to_jiffies(MFC_INT_TIMEOUT_MS));
 
 	if (!s5p_mfc_hw_call(dev->mfc_ops, run, ctx))
 		return 0;

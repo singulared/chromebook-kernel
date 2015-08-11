@@ -53,11 +53,9 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 #define MFC_MAX_BUFFERS		32
 #define MFC_NUM_CONTEXTS	8
 /* Interrupt timeout */
-#define MFC_INT_TIMEOUT		2000
+#define MFC_INT_TIMEOUT_MS	1000
 /* Busy wait timeout */
-#define MFC_BW_TIMEOUT		500
-/* Watchdog interval */
-#define MFC_WATCHDOG_TIMEOUT_MS	10000
+#define MFC_BW_TIMEOUT_MS	500
 #define MFC_NO_INSTANCE_SET	-1
 #define MFC_ENC_CAP_PLANE_COUNT	1
 #define MFC_ENC_OUT_PLANE_COUNT	2
