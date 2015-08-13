@@ -714,6 +714,10 @@ static int lpc_ich_check_conflict_gpio(struct resource *res)
 		{
 			.ident = "ChromeOS Stout",
 			.matches = {DMI_MATCH(DMI_PRODUCT_NAME, "Stout")}
+		},
+		{
+			.ident = "ChromeOS ZGB",
+			.matches = {DMI_MATCH(DMI_PRODUCT_NAME, "ZGB")}
 		}, {}
 	};
 
