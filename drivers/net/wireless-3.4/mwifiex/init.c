@@ -385,7 +385,7 @@ static void mwifiex_init_adapter(struct mwifiex_adapter *adapter)
 	adapter->arp_filter_size = 0;
 	adapter->channel_type = NL80211_CHAN_HT20;
 	adapter->empty_tx_q_cnt = 0;
-
+	adapter->active_scan_triggered = false;
 	setup_timer(&adapter->wakeup_timer, wakeup_timer_fn,
 		    (unsigned long)adapter);
 }

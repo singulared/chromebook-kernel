@@ -484,6 +484,7 @@ struct mwifiex_private {
 	bool scan_aborting;
 	u8 csa_chan;
 	unsigned long csa_expire_time;
+	struct mwifiex_user_scan_chan hidden_chan[MWIFIEX_USER_SCAN_CHAN_MAX];
 };
 
 enum mwifiex_ba_status {
@@ -694,6 +695,7 @@ struct mwifiex_adapter {
 	u8 empty_tx_q_cnt;
 	atomic_t is_tx_received;
 	struct semaphore *card_sem;
+	u8 active_scan_triggered;
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
