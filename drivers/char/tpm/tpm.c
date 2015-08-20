@@ -76,7 +76,7 @@ enum tpm_duration {
  * execute more Savestate commands than necessary.
  */
 
-static bool tpm_early_savestate = true;
+static bool tpm_early_savestate;
 module_param(tpm_early_savestate, bool, 0644);
 MODULE_PARM_DESC(tpm_early_savestate, "proactively save state before suspend to avoid suspend delays");
 
@@ -420,7 +420,6 @@ static void schedule_savestate(struct tpm_chip *chip, u32 ordinal)
 	 */
 	dev_info(chip->dev, "tpm: scheduling savestate for %d\n", ordinal);
 	if (ordinal == TPM_ORD_PCR_EXTEND ||
-	    ordinal == TPM_ORD_SELFTESTFULL ||   /* for testing */
 	    ordinal == TSC_ORD_PHYSICALPRESENCE ||
 	    ordinal == TPM_ORD_PHYSICALENABLE ||
 	    ordinal == TPM_ORD_PHYSICALDISABLE) {
