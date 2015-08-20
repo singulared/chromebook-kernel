@@ -294,6 +294,13 @@
 	    from a video decoder.
 	    </entry>
 	  </row>
+	  <row>
+	    <entry><constant>V4L2_EVENT_SRC_CH_PIXELFORMAT</constant></entry>
+	    <entry>0x0002</entry>
+	    <entry>This event gets triggered when a pixelformat change is
+	    detected. This can come from a decoder or a capture device.
+	    </entry>
+	  </row>
 	</tbody>
       </tgroup>
     </table>
