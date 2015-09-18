@@ -38,7 +38,7 @@ static int s5p_mfc_reset_v5(struct s5p_mfc_dev *dev)
 	mfc_write(dev, 0x3e2, S5P_FIMV_SW_RESET);
 	mdelay(10);
 
-	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT_MS);
 	/* Check MC status */
 	do {
 		if (time_after(jiffies, timeout)) {

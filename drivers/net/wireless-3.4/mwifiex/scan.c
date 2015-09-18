@@ -519,9 +519,11 @@ mwifiex_scan_create_channel_list(struct mwifiex_private *priv,
 				scan_chan_list[chan_idx].max_scan_time =
 					cpu_to_le16(adapter->active_scan_time);
 
-			if (ch->flags & IEEE80211_CHAN_PASSIVE_SCAN)
+			if (ch->flags & IEEE80211_CHAN_PASSIVE_SCAN) {
 				scan_chan_list[chan_idx].chan_scan_mode_bitmap
-					|= MWIFIEX_PASSIVE_SCAN;
+					|= MWIFIEX_PASSIVE_SCAN
+						| MWIFIEX_HIDDEN_SSID_REPORT;
+			}
 			else
 				scan_chan_list[chan_idx].chan_scan_mode_bitmap
 					&= ~MWIFIEX_PASSIVE_SCAN;
@@ -967,7 +969,8 @@ mwifiex_config_scan(struct mwifiex_private *priv,
 			if (scan_type == MWIFIEX_SCAN_TYPE_PASSIVE)
 				(scan_chan_list +
 				 chan_idx)->chan_scan_mode_bitmap
-					|= MWIFIEX_PASSIVE_SCAN;
+					|= MWIFIEX_PASSIVE_SCAN
+						| MWIFIEX_HIDDEN_SSID_REPORT;
 			else
 				(scan_chan_list +
 				 chan_idx)->chan_scan_mode_bitmap
@@ -1489,6 +1492,78 @@ int mwifiex_check_network_compatibility(struct mwifiex_private *priv,
 	return ret;
 }
 
+/* This function checks if SSID string contains all zeroes or length is zero */
+static bool mwifiex_is_hidden_ssid(struct cfg80211_ssid *ssid)
+{
+	int idx;
+
+	for (idx = 0; idx < ssid->ssid_len; idx++) {
+		if (ssid->ssid[idx])
+			return false;
+	}
+
+	return true;
+}
+
+/* This function checks if any hidden SSID found in passive scan channels
+ * and save those channels for specific SSID active scan
+ */
+static int mwifiex_save_hidden_ssid_channels(struct mwifiex_private *priv,
+					  struct cfg80211_bss *bss)
+{
+	struct mwifiex_bssdescriptor *bss_desc;
+	int ret;
+	u8 *beacon_ie;
+	size_t beacon_ie_len = bss->len_information_elements;
+	int chid;
+
+	/* Allocate and fill new bss descriptor */
+	bss_desc = kzalloc(sizeof(struct mwifiex_bssdescriptor),
+			GFP_KERNEL);
+	if (!bss_desc) {
+		dev_err(priv->adapter->dev, " failed to alloc bss_desc\n");
+		return -ENOMEM;
+	}
+
+	beacon_ie = kmemdup(bss->information_elements, beacon_ie_len,
+			    GFP_KERNEL);
+	if (!beacon_ie) {
+		kfree(bss_desc);
+		return -ENOMEM;
+	}
+
+	ret = mwifiex_fill_new_bss_desc(priv, bss, bss_desc, beacon_ie,
+					beacon_ie_len);
+	if (ret)
+		goto done;
+
+
+	if (mwifiex_is_hidden_ssid(&bss_desc->ssid)) {
+		dev_dbg(priv->adapter->dev, "found hidden SSID\n");
+		for (chid = 0 ; chid < MWIFIEX_USER_SCAN_CHAN_MAX; chid++) {
+			if (priv->hidden_chan[chid].chan_number ==
+			    bss->channel->hw_value)
+				break;
+
+			if (!priv->hidden_chan[chid].chan_number) {
+				priv->hidden_chan[chid].chan_number
+				= bss->channel->hw_value;
+				priv->hidden_chan[chid].radio_type
+				= bss->channel->band;
+				priv->hidden_chan[chid].scan_type
+				= MWIFIEX_SCAN_TYPE_ACTIVE;
+				break;
+			}
+		}
+	}
+
+done:
+	kfree(beacon_ie);
+	kfree(bss_desc);
+	return 0;
+}
+
+
 static int mwifiex_update_curr_bss_params(struct mwifiex_private *priv,
 					  struct cfg80211_bss *bss)
 {
@@ -1540,7 +1615,58 @@ done:
 }
 
 /*
- * This function handles the command response of scan.
+ * This function checks if any hidden SSID found in passive scan channels
+ *          and do specific SSID active scan for those channels
+ */
+static int
+mwifiex_active_scan_req_for_passive_chan(struct mwifiex_private *priv)
+{
+	int ret;
+	struct mwifiex_adapter *adapter = priv->adapter;
+	u8 id = 0;
+	struct mwifiex_user_scan_cfg  *user_scan_cfg;
+
+	if (adapter->active_scan_triggered) {
+		adapter->active_scan_triggered = false;
+		return 0;
+	}
+
+	if (!priv->hidden_chan[0].chan_number) {
+		dev_dbg(priv->adapter->dev, "No BSS with hidden SSID found on DFS channels\n");
+		return 0;
+	}
+	user_scan_cfg = kzalloc(sizeof(*user_scan_cfg), GFP_KERNEL);
+
+	if (!user_scan_cfg)
+		return -ENOMEM;
+
+	memset(user_scan_cfg, 0, sizeof(*user_scan_cfg));
+
+	for (id = 0; id < MWIFIEX_USER_SCAN_CHAN_MAX; id++) {
+		if (!priv->hidden_chan[id].chan_number)
+			break;
+		memcpy(&user_scan_cfg->chan_list[id], &priv->hidden_chan[id],
+		       sizeof(struct mwifiex_user_scan_chan));
+	}
+
+	adapter->active_scan_triggered = true;
+	user_scan_cfg->num_ssids = priv->scan_request->n_ssids;
+	user_scan_cfg->ssid_list = priv->scan_request->ssids;
+
+	ret = mwifiex_scan_networks(priv, user_scan_cfg);
+	kfree(user_scan_cfg);
+
+	memset(&priv->hidden_chan, 0, sizeof(priv->hidden_chan));
+
+	if (ret) {
+		dev_err(priv->adapter->dev, "scan failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+/* This function handles the command response of scan.
  *
  * The response buffer for the scan command has the following
  * memory layout:
@@ -1787,6 +1913,16 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 					mwifiex_update_curr_bss_params(priv,
 								       bss);
 				cfg80211_put_bss(bss);
+
+				if ((chan->flags & IEEE80211_CHAN_RADAR) ||
+				    (chan->flags &
+				     IEEE80211_CHAN_PASSIVE_SCAN)) {
+					dev_dbg(adapter->dev,
+						"radar or passive channel %d\n",
+						channel);
+					mwifiex_save_hidden_ssid_channels(priv,
+									  bss);
+				}
 			}
 		} else {
 			dev_dbg(adapter->dev, "missing BSS channel IE\n");
@@ -1801,6 +1937,7 @@ check_next_scan:
 		adapter->scan_processing = false;
 		spin_unlock_irqrestore(&adapter->mwifiex_cmd_lock, flags);
 
+		mwifiex_active_scan_req_for_passive_chan(priv);
 		/* Need to indicate IOCTL complete */
 		if (adapter->curr_cmd->wait_q_enabled) {
 			adapter->cmd_wait_q.status = 0;
@@ -1809,13 +1946,17 @@ check_next_scan:
 		if (priv->report_scan_result)
 			priv->report_scan_result = false;
 
-		if (priv->scan_request) {
-			dev_dbg(adapter->dev, "info: notifying scan done\n");
-			cfg80211_scan_done(priv->scan_request, 0);
-			priv->scan_request = NULL;
-		} else {
-			priv->scan_aborting = false;
-			dev_dbg(adapter->dev, "info: scan already aborted\n");
+		if (!adapter->active_scan_triggered) {
+			if (priv->scan_request) {
+				dev_dbg(adapter->dev,
+					"info: notifying scan done\n");
+				cfg80211_scan_done(priv->scan_request, 0);
+				priv->scan_request = NULL;
+			} else {
+				priv->scan_aborting = false;
+				dev_dbg(adapter->dev,
+					"info: scan already aborted\n");
+			}
 		}
 	} else {
 		if ((priv->scan_aborting && !priv->scan_request) ||

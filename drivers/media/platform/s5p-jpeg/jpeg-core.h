@@ -40,6 +40,7 @@
 /* a selection of JPEG markers */
 #define TEM				0x01
 #define SOF0				0xc0
+#define DHT				0xc4
 #define RST				0xd0
 #define SOI				0xd8
 #define EOI				0xd9

@@ -60,6 +60,7 @@
 #include <mali_midg_regmap.h>
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_defs.h>
+#include <backend/gpu/mali_kbase_pm_internal.h>
 
 #include "mali_linux_dvfs_trace.h"
 
@@ -315,7 +316,7 @@ static int kbase_platform_asv_set(int enable);
 
 int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control);
 void kbase_platform_remove_sysfs_file(struct device *dev);
-mali_error kbase_platform_init(struct kbase_device *kbdev);
+int kbase_platform_init(struct kbase_device *kbdev);
 void kbase_platform_term(struct kbase_device *kbdev);
 static void kbase_platform_dvfs_set_max(struct kbase_device *kbdev);
 
@@ -350,7 +351,7 @@ int get_cpu_clock_speed(u32* cpu_clock)
 	u32 freq=0;
 	cpu_clk = clk_get(NULL, "armclk");
 	if (IS_ERR(cpu_clk))
-		return 1;
+		return PTR_ERR(cpu_clk);
 	freq = clk_get_rate(cpu_clk);
 	*cpu_clock = (freq/HZ_IN_MHZ);
 	return 0;
@@ -385,7 +386,7 @@ static void pm_callback_suspend(struct kbase_device *kbdev)
 	kbase_platform_dvfs_set_max(kbdev);
 }
 
-static struct kbase_pm_callback_conf pm_callbacks =
+struct kbase_pm_callback_conf pm_callbacks =
 {
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
@@ -393,23 +394,32 @@ static struct kbase_pm_callback_conf pm_callbacks =
 	.power_resume_callback = NULL
 };
 
+int kbase_platform_early_init(void)
+{
+	/* Nothing needed at this stage */
+	return 0;
+}
+
 /**
  * Exynos5 hardware specific initialization
  */
-mali_bool kbase_platform_exynos5_init(struct kbase_device *kbdev)
+int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 {
-	if(MALI_ERROR_NONE == kbase_platform_init(kbdev))
-	{
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
-		if(kbase_platform_create_sysfs_file(kbdev->dev))
-		{
-			return MALI_TRUE;
-		}
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
-		return MALI_TRUE;
-	}
+	int err;
 
-	return MALI_FALSE;
+	err = kbase_platform_init(kbdev);
+	if (err)
+		return err;
+
+#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
+	err = kbase_platform_create_sysfs_file(kbdev->dev);
+	if (err) {
+		kbase_platform_term(kbdev);
+		return err;
+	}
+#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
+
+	return 0;
 }
 
 /**
@@ -429,73 +439,10 @@ struct kbase_platform_funcs_conf platform_funcs =
 	.platform_term_func = &kbase_platform_exynos5_term,
 };
 
-const struct kbase_attribute config_attributes_exynos5250[] = {
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
-		(uintptr_t)&pm_callbacks
-	},
-#ifdef CONFIG_MALI_MIDGARD_DVFS
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
-		KBASE_PM_DVFS_FREQUENCY /* 100ms */
-	},
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
-	{
-		KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
-		(uintptr_t)&platform_funcs
-	},
-	{
-		KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS,
-		500 /* 500ms before cancelling stuck jobs */
-	},
-	{
-		KBASE_CONFIG_ATTR_CPU_SPEED_FUNC,
-		(uintptr_t)&get_cpu_clock_speed
-	},
-	{
-		KBASE_CONFIG_ATTR_END,
-		0
-	}
-};
-
-const struct kbase_attribute config_attributes_exynos5420[] = {
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_CALLBACKS,
-		(uintptr_t)&pm_callbacks
-	},
-#ifdef CONFIG_MALI_MIDGARD_DVFS
-	{
-		KBASE_CONFIG_ATTR_POWER_MANAGEMENT_DVFS_FREQ,
-		KBASE_PM_DVFS_FREQUENCY /* 100ms */
-	},
-#endif
-	{
-		KBASE_CONFIG_ATTR_PLATFORM_FUNCS,
-		(uintptr_t)&platform_funcs
-	},
-	{
-		KBASE_CONFIG_ATTR_JS_RESET_TIMEOUT_MS,
-		500 /* 500ms before cancelling stuck jobs */
-	},
-	{
-		KBASE_CONFIG_ATTR_CPU_SPEED_FUNC,
-		(uintptr_t)&get_cpu_clock_speed
-	},
-	{
-		KBASE_CONFIG_ATTR_END,
-		0
-	}
-};
-
 struct kbase_platform_config platform_config;
 
 struct kbase_platform_config *kbase_get_platform_config(void)
 {
-	if (soc_is_exynos5250())
-		platform_config.attributes = config_attributes_exynos5250;
-	else if (soc_is_exynos542x())
-		platform_config.attributes = config_attributes_exynos5420;
-
 	return &platform_config;
 }
 
@@ -1036,7 +983,7 @@ static ssize_t mali_sysfs_show_dvfs(struct device *dev,
 static ssize_t mali_sysfs_set_dvfs(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
-	mali_error ret;
+	int ret;
 	struct kbase_device *kbdev;
 	struct exynos_context *platform;
 	kbdev = dev_get_drvdata(dev);
@@ -1058,7 +1005,7 @@ static ssize_t mali_sysfs_set_dvfs(struct device *dev,
 	} else if (sysfs_streq("on", buf)) {
 		if (!kbase_pm_metrics_is_active(kbdev)) {
 			ret = kbasep_pm_metrics_init(kbdev);
-			if (ret != MALI_ERROR_NONE)
+			if (ret)
 				pr_warning("kbase_pm_metrics_init failed,"
 				    " error %u\n", ret);
 			else
@@ -1125,94 +1072,73 @@ static ssize_t mali_sysfs_set_asv(struct device *dev,
 DEVICE_ATTR(asv, S_IRUGO|S_IWUSR, mali_sysfs_show_asv, mali_sysfs_set_asv);
 #endif
 
+static struct device_attribute *attributes[] = {
+	&dev_attr_clock,
+	&dev_attr_available_frequencies,
+	&dev_attr_fbdev,
+	&dev_attr_memory,
+	&dev_attr_vol,
+	&dev_attr_clkout,
+#ifdef CONFIG_MALI_MIDGARD_DVFS
+	&dev_attr_dvfs,
+#ifdef MALI_DVFS_ASV_ENABLE
+	&dev_attr_asv,
+#endif /* MALI_DVFS_ASV_ENABLE */
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
+	NULL
+};
+
 static int kbase_platform_create_sysfs_file(struct device *dev)
 {
-	if (device_create_file(dev, &dev_attr_clock))
-	{
-		dev_err(dev, "Couldn't create sysfs file [clock]\n");
-		goto out;
+	struct device_attribute **attr;
+	int err;
+
+	for (attr = attributes; *attr; attr++) {
+		err = device_create_file(dev, *attr);
+		if (err) {
+			dev_err(dev, "Couldn't create sysfs file [%s]\n",
+					(*attr)->attr.name);
+			goto out;
+
+		}
 	}
 
-	if (device_create_file(dev, &dev_attr_available_frequencies)) {
-		dev_err(dev, "Couldn't create sysfs file [available_frequencies]\n");
-		goto out;
-	}
-
-	if (device_create_file(dev, &dev_attr_fbdev))
-	{
-		dev_err(dev, "Couldn't create sysfs file [fbdev]\n");
-		goto out;
-	}
-
-	if (device_create_file(dev, &dev_attr_memory))
-	{
-		dev_err(dev, "Couldn't create sysfs file [memory]\n");
-		goto out;
-	}
-
-	if (device_create_file(dev, &dev_attr_vol))
-	{
-		dev_err(dev, "Couldn't create sysfs file [vol]\n");
-		goto out;
-	}
-
-	if (device_create_file(dev, &dev_attr_clkout))
-	{
-		dev_err(dev, "Couldn't create sysfs file [clkout]\n");
-		goto out;
-	}
-#ifdef CONFIG_MALI_MIDGARD_DVFS
-	if (device_create_file(dev, &dev_attr_dvfs))
-	{
-		dev_err(dev, "Couldn't create sysfs file [dvfs]\n");
-		goto out;
-	}
-#ifdef MALI_DVFS_ASV_ENABLE
-	if (device_create_file(dev, &dev_attr_asv)) {
-		dev_err(dev, "Couldn't create sysfs file [asv]\n");
-		goto out;
-	}
-#endif
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
 #ifdef CONFIG_MALI_HWC_TRACE
-	if (!mali_setup_system_tracing(dev))
+	err = mali_setup_system_tracing(dev);
+	if (err)
 		goto out;
 #endif /* CONFIG_MALI_HWC_TRACE */
 
 	return 0;
 out:
-	return -ENOENT;
+	for (; attr >= attributes; attr--)
+		device_remove_file(dev, *attr);
+
+	return err;
 }
 
 void kbase_platform_remove_sysfs_file(struct device *dev)
 {
-	device_remove_file(dev, &dev_attr_clock);
-	device_remove_file(dev, &dev_attr_available_frequencies);
-	device_remove_file(dev, &dev_attr_fbdev);
-	device_remove_file(dev, &dev_attr_vol);
-	device_remove_file(dev, &dev_attr_clkout);
-#ifdef CONFIG_MALI_MIDGARD_DVFS
-	device_remove_file(dev, &dev_attr_dvfs);
-#ifdef MALI_DVFS_ASV_ENABLE
-	device_remove_file(dev, &dev_attr_asv);
-#endif
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+	struct device_attribute **attr;
+
+	for (attr = attributes; *attr; attr++)
+		device_remove_file(dev, *attr);
+
 #ifdef CONFIG_MALI_HWC_TRACE
 	mali_cleanup_system_tracing(dev);
 #endif /* CONFIG_MALI_HWC_TRACE */
 }
 #endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
-mali_error kbase_platform_init(struct kbase_device *kbdev)
+int kbase_platform_init(struct kbase_device *kbdev)
 {
 	struct exynos_context *platform;
+	int err;
 
 	platform = kmalloc(sizeof(struct exynos_context), GFP_KERNEL);
 
-	if(NULL == platform)
-	{
-		return MALI_ERROR_OUT_OF_MEMORY;
-	}
+	if (!platform)
+		return -ENOMEM;
 
 	kbdev->platform_context = (void *) platform;
 
@@ -1224,26 +1150,25 @@ mali_error kbase_platform_init(struct kbase_device *kbdev)
 	platform->cmu_pmu_status = 0;
 	spin_lock_init(&platform->cmu_pmu_lock);
 
-	if(kbase_platform_power_clock_init(kbdev))
-	{
+	err = kbase_platform_power_clock_init(kbdev);
+	if (err)
 		goto clock_init_fail;
-	}
 
 #ifdef CONFIG_REGULATOR
-	if(kbase_platform_regulator_init())
-	{
+	err = kbase_platform_regulator_init();
+	if (err)
 		goto regulator_init_fail;
-	}
 #endif /* CONFIG_REGULATOR */
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
-	if (!kbase_platform_dvfs_init(kbdev))
+	err = kbase_platform_dvfs_init(kbdev);
+	if (err)
 		goto dvfs_init_fail;
 #endif /* CONFIG_MALI_MIDGARD_DVFS */
 
 	/* Enable power */
 	kbase_platform_cmu_pmu_control(kbdev, 1);
-	return MALI_ERROR_NONE;
+	return 0;
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 dvfs_init_fail:
@@ -1255,7 +1180,7 @@ regulator_init_fail:
 clock_init_fail:
 	kfree(platform);
 	kbdev->platform_context = NULL;
-	return MALI_ERROR_FUNCTION_FAILED;
+	return err;
 }
 
 void kbase_platform_term(struct kbase_device *kbdev)
@@ -1490,7 +1415,7 @@ int kbase_platform_dvfs_init(struct kbase_device *kbdev)
 	*/
 	mali_dvfs_wq = create_singlethread_workqueue("mali_dvfs");
 	if (!mali_dvfs_wq)
-		return MALI_FALSE;
+		return -ENOMEM;
 
 	spin_lock_init(&mali_dvfs_spinlock);
 
@@ -1519,7 +1444,7 @@ int kbase_platform_dvfs_init(struct kbase_device *kbdev)
 
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, irqflags);
 
-	return MALI_TRUE;
+	return 0;
 }
 
 void kbase_platform_dvfs_term(void)
@@ -1544,33 +1469,38 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation,
 	queue_work_on(0, mali_dvfs_wq, &mali_dvfs_work);
 
 	/*add error handle here*/
-	return MALI_TRUE;
+	return 0;
 #else
-	return MALI_FALSE;
+	return -ENODEV;
 #endif
 }
 
 int kbase_platform_regulator_init(void)
 {
 #ifdef CONFIG_REGULATOR
+	int err;
+
 	g3d_regulator = regulator_get(NULL, "vdd_g3d");
-	if(IS_ERR(g3d_regulator))
-	{
-		printk("[kbase_platform_regulator_init] failed to get mali t6xx regulator\n");
-		return -1;
+	if (IS_ERR(g3d_regulator)) {
+		pr_err("%s: failed to obtain g3d regulator (err %ld)\n",
+				__func__, PTR_ERR(g3d_regulator));
+		return PTR_ERR(g3d_regulator);
 	}
 
-	if(regulator_enable(g3d_regulator) != 0)
-	{
-		printk("[kbase_platform_regulator_init] failed to enable mali t6xx regulator\n");
-		return -1;
+	err = regulator_enable(g3d_regulator);
+	if (err) {
+		pr_err("%s: failed to enable g3d regulator (err %d)\n",
+				__func__, err);
+		g3d_regulator = NULL;
+		return err;
 	}
 
-	if(regulator_set_voltage(g3d_regulator, mali_gpu_vol, mali_gpu_vol) != 0)
-	{
+	err = regulator_set_voltage(g3d_regulator, mali_gpu_vol, mali_gpu_vol);
+	if (err) {
 		kbase_platform_regulator_disable();
-		printk("[kbase_platform_regulator_init] failed to set mali t6xx operating voltage [%d]\n", mali_gpu_vol);
-		return -1;
+		pr_err("%s: failed to set g3d regulator operating voltage [%d] (err %d)\n",
+				__func__, mali_gpu_vol, err);
+		return err;
 	}
 #endif /* CONFIG_REGULATOR */
 
@@ -1580,16 +1510,18 @@ int kbase_platform_regulator_init(void)
 int kbase_platform_regulator_disable(void)
 {
 #ifdef CONFIG_REGULATOR
-	if(!g3d_regulator)
-	{
-		printk("[kbase_platform_regulator_disable] g3d_regulator is not initialized\n");
-		return -1;
+	int err;
+
+	if (!g3d_regulator) {
+		pr_err("%s: g3d_regulator is not initialized\n", __func__);
+		return -ENODEV;
 	}
 
-	if(regulator_disable(g3d_regulator) != 0)
-	{
-		printk("[kbase_platform_regulator_disable] failed to disable g3d regulator\n");
-		return -1;
+	err = regulator_disable(g3d_regulator);
+	if (err) {
+		pr_err("%s: failed to disable g3d regulator (err %d)\n",
+				__func__, err);
+		return err;
 	}
 #endif /* CONFIG_REGULATOR */
 	return 0;
@@ -1598,16 +1530,18 @@ int kbase_platform_regulator_disable(void)
 int kbase_platform_regulator_enable(void)
 {
 #ifdef CONFIG_REGULATOR
-	if(!g3d_regulator)
-	{
-		printk("[kbase_platform_regulator_enable] g3d_regulator is not initialized\n");
-		return -1;
+	int err;
+
+	if (!g3d_regulator) {
+		pr_err("%s: g3d_regulator is not initialized\n", __func__);
+		return -ENODEV;
 	}
 
-	if(regulator_enable(g3d_regulator) != 0)
-	{
-		printk("[kbase_platform_regulator_enable] failed to enable g3d regulator\n");
-		return -1;
+	err = regulator_enable(g3d_regulator);
+	if (err) {
+		pr_err("%s: failed to enable g3d regulator (err %d)\n",
+				__func__, err);
+		return err;
 	}
 #endif /* CONFIG_REGULATOR */
 	return 0;
@@ -1627,10 +1561,10 @@ int kbase_platform_get_default_voltage(struct device *dev, int *vol)
 int kbase_platform_get_voltage(struct device *dev, int *vol)
 {
 #ifdef CONFIG_REGULATOR
-	if(!g3d_regulator)
-	{
-		printk("[kbase_platform_get_voltage] g3d_regulator is not initialized\n");
-		return -1;
+	if (!g3d_regulator) {
+		dev_err(dev, "%s: g3d_regulator is not initialized\n",
+				__func__);
+		return -ENODEV;
 	}
 
 	*vol = regulator_get_voltage(g3d_regulator);
@@ -1645,16 +1579,19 @@ int kbase_platform_get_voltage(struct device *dev, int *vol)
 static int kbase_platform_set_voltage(struct device *dev, int vol)
 {
 #ifdef CONFIG_REGULATOR
-	if(!g3d_regulator)
-	{
-		printk("[kbase_platform_set_voltage] g3d_regulator is not initialized\n");
-		return -1;
+	int err;
+
+	if (!g3d_regulator) {
+		dev_err(dev, "%s: g3d_regulator is not initialized\n",
+				__func__);
+		return -ENODEV;
 	}
 
-	if(regulator_set_voltage(g3d_regulator, vol, vol) != 0)
-	{
-		printk("[kbase_platform_set_voltage] failed to set voltage\n");
-		return -1;
+	err = regulator_set_voltage(g3d_regulator, vol, vol);
+	if (err) {
+		dev_err(dev, "%s failed to set voltage (err %d)\n",
+				__func__, err);
+		return err;
 	}
 #endif /* CONFIG_REGULATOR */
 	return 0;
@@ -2413,20 +2350,21 @@ static int shader_block_update(const int event_num)
  */
 static void mali_hwcounter_collect(struct work_struct *w)
 {
-	mali_error error;
+	int error;
 
 	mutex_lock(&mali_hwcounter_mutex);
 	if (mali_hwcs.active) {
 		/* NB: dumping the counters can block */
 		error = kbase_instr_hwcnt_dump(mali_hwcs.ctx);
-		if (error == MALI_ERROR_NONE) {
+		if (!error) {
 			/* extract data and generate trace events */
 			JM_DISPATCH_EVENTS();
 			TILER_DISPATCH_EVENTS();
 			SHADER_DISPATCH_EVENTS();
 			MMU_DISPATCH_EVENTS();
-		} else
+		} else {
 			pr_err("%s: failed to dump hw counters\n", __func__);
+		}
 	}
 	mutex_unlock(&mali_hwcounter_mutex);
 }
@@ -2470,9 +2408,9 @@ static int mali_hwcounter_polling_start(struct kbase_device *kbdev)
 	MMU_CHECK_ENABLED();
 
 	if (ncounters > 0) {
-		mali_error error;
+		int error;
 
-		mali_hwcs.ctx = kbase_create_context(kbdev);
+		mali_hwcs.ctx = kbase_create_context(kbdev, is_compat_task());
 		if (mali_hwcs.ctx == NULL) {
 			pr_err("%s: cannot create context\n", __func__);
 			mutex_unlock(&mali_hwcounter_mutex);
@@ -2485,7 +2423,7 @@ static int mali_hwcounter_polling_start(struct kbase_device *kbdev)
 
 		error = kbase_instr_hwcnt_enable(mali_hwcs.ctx,
 						 &mali_hwcs.setup);
-		if (error != MALI_ERROR_NONE) {
+		if (error) {
 			pr_err("%s: cannot enable hw counters\n", __func__);
 
 			kbase_va_free(mali_hwcs.ctx, &mali_hwcs.handle);
@@ -2564,9 +2502,10 @@ static int mali_setup_system_tracing(struct device *dev)
 	mali_hwcs.wq = create_singlethread_workqueue("mali_hwc");
 	mali_hwcs.active = false;
 
-	if (device_create_file(dev, &dev_attr_hwc_enable)) {
+	err = device_create_file(dev, &dev_attr_hwc_enable);
+	if (err) {
 		dev_err(dev, "Couldn't create sysfs file [hwc_enable]\n");
-		return -ENOENT;
+		return err;
 	}
 	return 0;
 }

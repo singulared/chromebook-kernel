@@ -893,7 +893,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			       unsigned long buffer, unsigned long size,
 			       struct s5p_jpeg_ctx *ctx)
 {
-	int c, components, notfound;
+	int c, components, has_sof0, has_dht;
 	unsigned int height, width, word, subsampling = 0;
 	long length;
 	struct s5p_jpeg_buffer jpeg_buffer;
@@ -902,8 +902,9 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 	jpeg_buffer.data = buffer;
 	jpeg_buffer.curr = 0;
 
-	notfound = 1;
-	while (notfound) {
+	has_sof0 = 1;
+	has_dht = 1;
+	while (has_sof0 || has_dht) {
 		c = get_byte(&jpeg_buffer);
 		if (c == -1)
 			return false;
@@ -931,7 +932,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			components = get_byte(&jpeg_buffer);
 			if (components == -1)
 				break;
-			notfound = 0;
+			has_sof0 = 0;
 
 			if (components == 1) {
 				subsampling = 0x33;
@@ -942,6 +943,14 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			}
 
 			skip(&jpeg_buffer, components * 2);
+			break;
+
+		case DHT:
+			if (get_word_be(&jpeg_buffer, &word))
+				break;
+			has_dht = 0;
+			length = (long)word - 2;
+			skip(&jpeg_buffer, length);
 			break;
 
 		/* skip payload-less markers */
@@ -981,7 +990,10 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 		return false;
 	}
 
-	return !notfound;
+	if(has_dht)
+		pr_err("HUFFMAN table NOT found.. !\n");
+
+	return !(has_sof0 | has_dht);
 }
 
 static int s5p_jpeg_querycap(struct file *file, void *priv,

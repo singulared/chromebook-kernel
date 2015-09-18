@@ -28,3 +28,58 @@
  * Default value: NA
  */
 #define GPU_FREQ_KHZ_MIN 100000
+
+/**
+ * CPU_SPEED_FUNC - A pointer to a function that calculates the CPU clock
+ *
+ * CPU clock speed of the platform is in MHz - see kbase_cpu_clk_speed_func
+ * for the function prototype.
+ *
+ * Attached value: A kbase_cpu_clk_speed_func.
+ * Default Value:  NA
+ */
+#define CPU_SPEED_FUNC (&get_cpu_clock_speed)
+
+/**
+ * GPU_SPEED_FUNC - A pointer to a function that calculates the GPU clock
+ *
+ * GPU clock speed of the platform in MHz - see kbase_gpu_clk_speed_func
+ * for the function prototype.
+ *
+ * Attached value: A kbase_gpu_clk_speed_func.
+ * Default Value:  NA
+ */
+#define GPU_SPEED_FUNC (NULL)
+
+/**
+ * Power management configuration
+ *
+ * Attached value: pointer to @ref kbase_pm_callback_conf
+ * Default value: See @ref kbase_pm_callback_conf
+ */
+#define POWER_MANAGEMENT_CALLBACKS (&pm_callbacks)
+
+/**
+ * Platform specific configuration functions
+ *
+ * Attached value: pointer to @ref kbase_platform_funcs_conf
+ * Default value: See @ref kbase_platform_funcs_conf
+ */
+#define PLATFORM_FUNCS (&platform_funcs)
+
+/** Power model for IPA
+ *
+ * Attached value: pointer to @ref mali_pa_model_ops
+ */
+#define POWER_MODEL_CALLBACKS (NULL)
+
+int get_cpu_clock_speed(u32* cpu_clock);
+extern struct kbase_pm_callback_conf pm_callbacks;
+extern struct kbase_platform_funcs_conf platform_funcs;
+
+/**
+ * Secure mode switch
+ *
+ * Attached value: pointer to @ref kbase_secure_ops
+ */
+#define SECURE_CALLBACKS (NULL)

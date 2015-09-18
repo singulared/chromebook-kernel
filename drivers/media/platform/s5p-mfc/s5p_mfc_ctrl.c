@@ -130,7 +130,7 @@ int s5p_mfc_bus_reset(struct s5p_mfc_dev *dev)
 
 	/* Reset */
 	mfc_write(dev, 0x1, S5P_FIMV_MFC_BUS_RESET_CTRL);
-	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(MFC_BW_TIMEOUT_MS);
 	/* Check bus status */
 	do {
 		if (time_after(jiffies, timeout)) {

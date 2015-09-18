@@ -21,7 +21,7 @@ export CPTCFG_IWLWIFI_DEVICE_TRACING=y
 export CPTCFG_MAC80211_MESSAGE_TRACING=y
 endif
 
-ifeq ($(CONFIG_IWLWIFI_LEDS),y)
+ifeq ($(CONFIG_IWL7000_LEDS),y)
 export CPTCFG_IWLWIFI_LEDS=y
 endif
 
@@ -30,6 +30,7 @@ export CPTCFG_IWLXVT=m
 endif
 
 subdir-ccflags-y = -I$(src) -include "hdrs/iwl-chrome.h"
+subdir-ccflags-y += -I$(src)/hdrs/
 subdir-ccflags-y += $(call cc-option,-Wno-error=date-time)
 subdir-ccflags-y += $(call cc-option,-Wno-date-time)
 

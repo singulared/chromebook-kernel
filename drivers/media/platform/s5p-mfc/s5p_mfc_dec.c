@@ -494,13 +494,14 @@ static int s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 		ctx->state = MFCINST_ERROR;
 	} else {
 		if (ctx->state == MFCINST_RES_CHANGE_END) {
-			struct v4l2_event ev;
+			static const struct v4l2_event ev_src_ch = {
+				.type = V4L2_EVENT_SOURCE_CHANGE,
+				.u.src_change.changes =
+					V4L2_EVENT_SRC_CH_RESOLUTION,
+			};
 
 			ctx->capture_state = QUEUE_FREE;
-
-			memset(&ev, 0, sizeof(struct v4l2_event));
-			ev.type = V4L2_EVENT_RESOLUTION_CHANGE;
-			v4l2_event_queue_fh(&ctx->fh, &ev);
+			v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
 		}
 		ctx->state = MFCINST_HEAD_PARSED;
 	}
@@ -1322,8 +1323,8 @@ static int vidioc_subscribe_event(struct v4l2_fh *fh,
 	switch (sub->type) {
 	case V4L2_EVENT_EOS:
 		return v4l2_event_subscribe(fh, sub, 2, NULL);
-	case V4L2_EVENT_RESOLUTION_CHANGE:
-		return v4l2_event_subscribe(fh, sub, 2, NULL);
+	case V4L2_EVENT_SOURCE_CHANGE:
+		return v4l2_src_change_event_subscribe(fh, sub);
 	default:
 		return -EINVAL;
 	}

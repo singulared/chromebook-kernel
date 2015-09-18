@@ -27,7 +27,7 @@ int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev)
 	int ret;
 
 	ret = wait_event_timeout(dev->queue, !s5p_mfc_hw_is_locked(dev),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
+					msecs_to_jiffies(MFC_INT_TIMEOUT_MS));
 	if (!ret || test_bit(0, &dev->hw_error)) {
 		mfc_err("Waiting for dev failed\n");
 		return -EIO;
