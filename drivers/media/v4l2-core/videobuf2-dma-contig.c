@@ -150,10 +150,36 @@ static void vb2_dc_put(void *buf_priv)
 		sg_free_table(buf->sgt_base);
 		kfree(buf->sgt_base);
 	}
+	if (buf->dma_sgt) {
+		sg_free_table(buf->dma_sgt);
+		kfree(buf->dma_sgt);
+	}
 	dma_free_attrs(buf->dev, buf->size, buf->cookie, buf->dma_addr,
 			&buf->attrs);
 	put_device(buf->dev);
 	kfree(buf);
+}
+
+static struct sg_table *vb2_dc_get_base_sgt(struct vb2_dc_buf *buf)
+{
+	int ret;
+	struct sg_table *sgt;
+
+	sgt = kmalloc(sizeof(*sgt), GFP_KERNEL);
+	if (!sgt) {
+		dev_err(buf->dev, "failed to alloc sg table\n");
+		return NULL;
+	}
+
+	ret = dma_get_sgtable_attrs(buf->dev, sgt, buf->cookie, buf->dma_addr,
+		buf->size, &buf->attrs);
+	if (ret < 0) {
+		dev_err(buf->dev, "failed to get scatterlist from DMA API\n");
+		kfree(sgt);
+		return NULL;
+	}
+
+	return sgt;
 }
 
 static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size,
@@ -187,6 +213,10 @@ static void *vb2_dc_alloc(void *alloc_ctx, unsigned long size,
 	buf->handler.refcount = &buf->refcount;
 	buf->handler.put = vb2_dc_put;
 	buf->handler.arg = buf;
+
+	if (!dma_get_attr(DMA_ATTR_NO_KERNEL_MAPPING, &buf->attrs) &&
+	    dma_get_attr(DMA_ATTR_NON_CONSISTENT, &buf->attrs))
+		buf->dma_sgt = vb2_dc_get_base_sgt(buf);
 
 	atomic_inc(&buf->refcount);
 
@@ -222,6 +252,11 @@ static int vb2_dc_mmap(void *buf_priv, struct vm_area_struct *vma)
 	vma->vm_ops		= &vb2_common_vm_ops;
 
 	vma->vm_ops->open(vma);
+
+	if (dma_get_attr(DMA_ATTR_NO_KERNEL_MAPPING, &buf->attrs) &&
+	    dma_get_attr(DMA_ATTR_NON_CONSISTENT, &buf->attrs) &&
+	    !buf->dma_sgt)
+		buf->dma_sgt = vb2_dc_get_base_sgt(buf);
 
 	pr_debug("%s: mapped dma addr 0x%08lx at 0x%08lx, size %ld\n",
 		__func__, (unsigned long)buf->dma_addr, vma->vm_start,
@@ -380,28 +415,6 @@ static struct dma_buf_ops vb2_dc_dmabuf_ops = {
 	.mmap = vb2_dc_dmabuf_ops_mmap,
 	.release = vb2_dc_dmabuf_ops_release,
 };
-
-static struct sg_table *vb2_dc_get_base_sgt(struct vb2_dc_buf *buf)
-{
-	int ret;
-	struct sg_table *sgt;
-
-	sgt = kmalloc(sizeof(*sgt), GFP_KERNEL);
-	if (!sgt) {
-		dev_err(buf->dev, "failed to alloc sg table\n");
-		return NULL;
-	}
-
-	ret = dma_get_sgtable_attrs(buf->dev, sgt, buf->cookie, buf->dma_addr,
-		buf->size, &buf->attrs);
-	if (ret < 0) {
-		dev_err(buf->dev, "failed to get scatterlist from DMA API\n");
-		kfree(sgt);
-		return NULL;
-	}
-
-	return sgt;
-}
 
 static struct dma_buf *vb2_dc_get_dmabuf(void *buf_priv, unsigned long flags)
 {
