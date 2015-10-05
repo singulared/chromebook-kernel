@@ -580,25 +580,18 @@ static int daisy_resume_post(struct snd_soc_card *card)
 	return 0;
 }
 
-static struct snd_soc_dai_link daisy_dai[] = {
-	{ /* Primary DAI i/f */
-		.name = "MAX98095 RX",
-		.stream_name = "Playback",
-		.codec_dai_name = "HiFi",
-		.init = daisy_init,
-		.ops = &daisy_ops,
-	}, { /* Capture i/f */
-		.name = "MAX98095 TX",
-		.stream_name = "Capture",
-		.codec_dai_name = "HiFi",
-		.ops = &daisy_ops,
-	},
+static struct snd_soc_dai_link daisy_dai = {
+	.name = "MAX98095",
+	.stream_name = "Primary",
+	.codec_dai_name = "HiFi",
+	.init = daisy_init,
+	.ops = &daisy_ops,
 };
 
 static struct snd_soc_card daisy_snd = {
 	.name = "DAISY-I2S",
-	.dai_link = daisy_dai,
-	.num_links = ARRAY_SIZE(daisy_dai),
+	.dai_link = &daisy_dai,
+	.num_links = 1,
 	.controls = daisy_dapm_controls,
 	.num_controls = ARRAY_SIZE(daisy_dapm_controls),
 	.dapm_widgets = daisy_dapm_widgets,
@@ -639,7 +632,7 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 	struct device_node *i2s_node, *codec_node;
 	struct audio_codec_plugin *plugin = NULL;
 	const char *name;
-	int i, ret;
+	int ret;
 
 	if (!pdev->dev.platform_data && !pdev->dev.of_node) {
 		dev_err(&pdev->dev, "No platform data supplied\n");
@@ -672,11 +665,9 @@ static int daisy_max98095_driver_probe(struct platform_device *pdev)
 		card->num_dapm_routes = ARRAY_SIZE(max98090_audio_map);
 	}
 
-	for (i = 0; i < ARRAY_SIZE(daisy_dai); i++) {
-		daisy_dai[i].codec_of_node = codec_node;
-		daisy_dai[i].cpu_of_node =  i2s_node;
-		daisy_dai[i].platform_of_node = i2s_node;
-	}
+	daisy_dai.codec_of_node = codec_node;
+	daisy_dai.cpu_of_node =  i2s_node;
+	daisy_dai.platform_of_node = i2s_node;
 
 	plugin_init(&plugin);
 	daisy_dapm_controls[0].private_value = (unsigned long)plugin;
