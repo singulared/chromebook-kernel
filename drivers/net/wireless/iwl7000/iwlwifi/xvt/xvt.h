@@ -273,7 +273,7 @@ struct iwl_xvt {
 /* Host Commands */
 int __must_check iwl_xvt_send_cmd(struct iwl_xvt *xvt,
 				  struct iwl_host_cmd *cmd);
-int __must_check iwl_xvt_send_cmd_pdu(struct iwl_xvt *xvt, u8 id,
+int __must_check iwl_xvt_send_cmd_pdu(struct iwl_xvt *xvt, u32 id,
 				      u32 flags, u16 len, const void *data);
 
 /* Utils */
@@ -292,7 +292,7 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 			     struct iwl_tm_data *data_out);
 
 /* FW */
-int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type);
+int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type,  bool cont_run);
 
 /* NVM */
 int iwl_xvt_nvm_init(struct iwl_xvt *xvt);

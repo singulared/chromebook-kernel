@@ -423,7 +423,17 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 		sprintf(tag, "%d", drv->fw_index);
 	}
 
+#ifdef CPTCFG_IWLWIFI_DISALLOW_OLDER_FW
+	/* The dbg-cfg check here works because the first time we get
+	 * here we always load the 'api_max' version, and once that
+	 * has returned we load the dbg-cfg file.
+	 */
+	if ((drv->fw_index != drv->cfg->ucode_api_max &&
+	     !drv->trans->dbg_cfg.load_old_fw) ||
+	    drv->fw_index < drv->cfg->ucode_api_min) {
+#else
 	if (drv->fw_index < drv->cfg->ucode_api_min) {
+#endif
 		IWL_ERR(drv, "no suitable firmware found!\n");
 		return -ENOENT;
 	}
@@ -567,6 +577,30 @@ static int iwl_store_cscheme(struct iwl_fw *fw, const u8 *data, const u32 len)
 	return 0;
 }
 
+static int iwl_store_gscan_capa(struct iwl_fw *fw, const u8 *data,
+				const u32 len)
+{
+	struct iwl_fw_gscan_capabilities *fw_capa = (void *)data;
+	struct iwl_gscan_capabilities *capa = &fw->gscan_capa;
+
+	if (len < sizeof(*fw_capa))
+		return -EINVAL;
+
+	capa->max_scan_cache_size = le32_to_cpu(fw_capa->max_scan_cache_size);
+	capa->max_scan_buckets = le32_to_cpu(fw_capa->max_scan_buckets);
+	capa->max_ap_cache_per_scan =
+		le32_to_cpu(fw_capa->max_ap_cache_per_scan);
+	capa->max_rssi_sample_size = le32_to_cpu(fw_capa->max_rssi_sample_size);
+	capa->max_scan_reporting_threshold =
+		le32_to_cpu(fw_capa->max_scan_reporting_threshold);
+	capa->max_hotlist_aps = le32_to_cpu(fw_capa->max_hotlist_aps);
+	capa->max_significant_change_aps =
+		le32_to_cpu(fw_capa->max_significant_change_aps);
+	capa->max_bssid_history_entries =
+		le32_to_cpu(fw_capa->max_bssid_history_entries);
+	return 0;
+}
+
 /*
  * Gets uCode section from tlv.
  */
@@ -618,13 +652,19 @@ static int iwl_set_ucode_api_flags(struct iwl_drv *drv, const u8 *data,
 {
 	const struct iwl_ucode_api *ucode_api = (void *)data;
 	u32 api_index = le32_to_cpu(ucode_api->api_index);
+	u32 api_flags = le32_to_cpu(ucode_api->api_flags);
+	int i;
 
-	if (api_index >= IWL_API_ARRAY_SIZE) {
+	if (api_index >= IWL_API_MAX_BITS / 32) {
 		IWL_ERR(drv, "api_index larger than supported by driver\n");
-		return -EINVAL;
+		/* don't return an error so we can load FW that has more bits */
+		return 0;
 	}
 
-	capa->api[api_index] = le32_to_cpu(ucode_api->api_flags);
+	for (i = 0; i < 32; i++) {
+		if (api_flags & BIT(i))
+			__set_bit(i + 32 * api_index, capa->_api);
+	}
 
 	return 0;
 }
@@ -634,13 +674,19 @@ static int iwl_set_ucode_capabilities(struct iwl_drv *drv, const u8 *data,
 {
 	const struct iwl_ucode_capa *ucode_capa = (void *)data;
 	u32 api_index = le32_to_cpu(ucode_capa->api_index);
+	u32 api_flags = le32_to_cpu(ucode_capa->api_capa);
+	int i;
 
-	if (api_index >= IWL_CAPABILITIES_ARRAY_SIZE) {
+	if (api_index >= IWL_CAPABILITIES_MAX_BITS / 32) {
 		IWL_ERR(drv, "api_index larger than supported by driver\n");
-		return -EINVAL;
+		/* don't return an error so we can load FW that has more bits */
+		return 0;
 	}
 
-	capa->capa[api_index] = le32_to_cpu(ucode_capa->api_capa);
+	for (i = 0; i < 32; i++) {
+		if (api_flags & BIT(i))
+			__set_bit(i + 32 * api_index, capa->_capa);
+	}
 
 	return 0;
 }
@@ -763,6 +809,7 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 	int num_of_cpus;
 	bool usniffer_images = false;
 	bool usniffer_req = false;
+	bool gscan_capa = false;
 
 	if (len < sizeof(*ucode)) {
 		IWL_ERR(drv, "uCode has invalid length: %zd\n", len);
@@ -1076,12 +1123,14 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 		case IWL_UCODE_TLV_FW_DBG_DEST: {
 			struct iwl_fw_dbg_dest_tlv *dest = (void *)tlv_data;
 
+#ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 			if (drv->trans->dbg_cfg.dbm_destination_path) {
 				IWL_ERR(drv,
 					"Ignoring destination, ini file present\n");
 				break;
 			}
+#endif
 #endif
 
 			if (pieces->dbg_dest_tlv) {
@@ -1173,6 +1222,11 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 			drv->fw.sdio_adma_addr =
 				le32_to_cpup((__le32 *)tlv_data);
 			break;
+		case IWL_UCODE_TLV_FW_GSCAN_CAPA:
+			if (iwl_store_gscan_capa(&drv->fw, tlv_data, tlv_len))
+				goto invalid_tlv_len;
+			gscan_capa = true;
+			break;
 		default:
 			IWL_DEBUG_INFO(drv, "unknown TLV: %d\n", tlv_type);
 			break;
@@ -1190,6 +1244,16 @@ static int iwl_parse_tlv_firmware(struct iwl_drv *drv,
 		iwl_print_hex_dump(drv, IWL_DL_FW, (u8 *)data, len);
 		return -EINVAL;
 	}
+
+	/*
+	 * If ucode advertises that it supports GSCAN but GSCAN
+	 * capabilities TLV is not present, warn and continue without GSCAN.
+	 */
+	if (fw_has_capa(capa, IWL_UCODE_TLV_CAPA_GSCAN_SUPPORT) &&
+	    WARN(!gscan_capa,
+		 "GSCAN is supported but capabilities TLV is unavailable\n"))
+		__clear_bit((__force long)IWL_UCODE_TLV_CAPA_GSCAN_SUPPORT,
+			    capa->_capa);
 
 	return 0;
 
@@ -1340,6 +1404,10 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	if (!api_ok)
 		api_ok = api_max;
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	iwl_dbg_cfg_load_ini(drv->trans->dev, &drv->trans->dbg_cfg);
+#endif
+
 	pieces = kzalloc(sizeof(*pieces), GFP_KERNEL);
 	if (!pieces)
 		return;
@@ -1362,8 +1430,6 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	}
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	iwl_dbg_cfg_load_ini(drv->trans->dev, &drv->trans->dbg_cfg);
-
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	/*
 	* Check if different uCode is required, according to configuration.
@@ -1400,7 +1466,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	if (err)
 		goto try_again;
 
-	if (drv->fw.ucode_capa.api[0] & IWL_UCODE_TLV_API_NEW_VERSION)
+	if (fw_has_api(&drv->fw.ucode_capa, IWL_UCODE_TLV_API_NEW_VERSION))
 		api_ver = drv->fw.ucode_ver;
 	else
 		api_ver = IWL_UCODE_API(drv->fw.ucode_ver);
@@ -1864,11 +1930,6 @@ static int __init iwl_drv_init(void)
 
 	if (!iwl_dbgfs_root)
 		return -EFAULT;
-#endif
-
-#if defined(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) && \
-    defined(CPTCFG_IWLWIFI_DEBUGFS)
-	iwl_dbg_cfg_init_dbgfs(iwl_dbgfs_root);
 #endif
 
 	return iwl_register_bus_drivers();

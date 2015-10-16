@@ -146,7 +146,7 @@ static inline int drv_add_interface(struct ieee80211_local *local,
 
 	if (WARN_ON(sdata->vif.type == NL80211_IFTYPE_AP_VLAN ||
 		    (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
-		     !(local->hw.flags & IEEE80211_HW_WANT_MONITOR_VIF) &&
+		     !ieee80211_hw_check(&local->hw, WANT_MONITOR_VIF) &&
 		     !(sdata->u.mntr_flags & MONITOR_FLAG_ACTIVE))))
 		return -EINVAL;
 
@@ -257,6 +257,22 @@ static inline void drv_configure_filter(struct ieee80211_local *local,
 				   multicast);
 	local->ops->configure_filter(&local->hw, changed_flags, total_flags,
 				     multicast);
+	trace_drv_return_void(local);
+}
+
+static inline void drv_config_iface_filter(struct ieee80211_local *local,
+					   struct ieee80211_sub_if_data *sdata,
+					   unsigned int filter_flags,
+					   unsigned int changed_flags)
+{
+	might_sleep();
+
+	trace_drv_config_iface_filter(local, sdata, filter_flags,
+				      changed_flags);
+	if (local->ops->config_iface_filter)
+		local->ops->config_iface_filter(&local->hw, &sdata->vif,
+						filter_flags,
+						changed_flags);
 	trace_drv_return_void(local);
 }
 
@@ -417,12 +433,13 @@ static inline int drv_get_stats(struct ieee80211_local *local,
 	return ret;
 }
 
-static inline void drv_get_tkip_seq(struct ieee80211_local *local,
-				    u8 hw_key_idx, u32 *iv32, u16 *iv16)
+static inline void drv_get_key_seq(struct ieee80211_local *local,
+				   struct ieee80211_key *key,
+				   struct ieee80211_key_seq *seq)
 {
-	if (local->ops->get_tkip_seq)
-		local->ops->get_tkip_seq(&local->hw, hw_key_idx, iv32, iv16);
-	trace_drv_get_tkip_seq(local, hw_key_idx, iv32, iv16);
+	if (local->ops->get_key_seq)
+		local->ops->get_key_seq(&local->hw, &key->conf, seq);
+	trace_drv_get_key_seq(local, &key->conf);
 }
 
 static inline int drv_set_frag_threshold(struct ieee80211_local *local,
@@ -752,7 +769,7 @@ static inline int drv_ampdu_action(struct ieee80211_local *local,
 				   struct ieee80211_sub_if_data *sdata,
 				   enum ieee80211_ampdu_mlme_action action,
 				   struct ieee80211_sta *sta, u16 tid,
-				   u16 *ssn, u8 buf_size)
+				   u16 *ssn, u8 buf_size, bool amsdu)
 {
 	int ret = -EOPNOTSUPP;
 
@@ -762,11 +779,12 @@ static inline int drv_ampdu_action(struct ieee80211_local *local,
 	if (!check_sdata_in_driver(sdata))
 		return -EIO;
 
-	trace_drv_ampdu_action(local, sdata, action, sta, tid, ssn, buf_size);
+	trace_drv_ampdu_action(local, sdata, action, sta, tid,
+			       ssn, buf_size, amsdu);
 
 	if (local->ops->ampdu_action)
 		ret = local->ops->ampdu_action(&local->hw, &sdata->vif, action,
-					       sta, tid, ssn, buf_size);
+					       sta, tid, ssn, buf_size, amsdu);
 
 	trace_drv_return_int(local, ret);
 
@@ -902,6 +920,28 @@ static inline void drv_get_ringparam(struct ieee80211_local *local,
 	if (local->ops->get_ringparam)
 		local->ops->get_ringparam(&local->hw, tx, tx_max, rx, rx_max);
 	trace_drv_return_void(local);
+}
+
+static inline int drv_set_features(struct ieee80211_local *local,
+				   struct ieee80211_sub_if_data *sdata,
+				   netdev_features_t features,
+				   netdev_features_t changed)
+{
+	int ret = -EOPNOTSUPP;
+
+	might_sleep();
+
+	if (!check_sdata_in_driver(sdata))
+		return -EIO;
+
+	trace_drv_set_features(local, sdata, features, changed);
+	if (local->ops->set_features)
+		ret = local->ops->set_features(&local->hw,
+					       &sdata->vif,
+					       features, changed);
+	trace_drv_return_int(local, ret);
+
+	return ret;
 }
 
 static inline bool drv_tx_frames_pending(struct ieee80211_local *local)

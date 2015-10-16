@@ -104,31 +104,6 @@ u32 iwl_mvm_testmode_get_fw_ver(struct iwl_op_mode *op_mode)
 	return mvm->fw->ucode_ver;
 }
 
-struct sk_buff *iwl_mvm_testmode_alloc_reply(struct iwl_op_mode *op_mode,
-					     int len)
-{
-	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
-	return cfg80211_testmode_alloc_reply_skb(mvm->hw->wiphy, len);
-}
-
-int iwl_mvm_testmode_reply(struct iwl_op_mode *op_mode, struct sk_buff *skb)
-{
-	return cfg80211_testmode_reply(skb);
-}
-
-struct sk_buff *iwl_mvm_testmode_alloc_event(struct iwl_op_mode *op_mode,
-					     int len)
-{
-	struct iwl_mvm *mvm = IWL_OP_MODE_GET_MVM(op_mode);
-	return cfg80211_testmode_alloc_event_skb(mvm->hw->wiphy, len,
-						 GFP_ATOMIC);
-}
-
-void iwl_mvm_testmode_event(struct iwl_op_mode *op_mode, struct sk_buff *skb)
-{
-	cfg80211_testmode_event(skb, GFP_ATOMIC);
-}
-
 static int iwl_mvm_tm_send_hcmd(struct iwl_mvm *mvm,
 				struct iwl_tm_data *data_in,
 				struct iwl_tm_data *data_out)
@@ -375,11 +350,13 @@ static int iwl_tm_get_fw_info(struct iwl_mvm *mvm,
 {
 	struct iwl_tm_get_fw_info *fw_info;
 	u32 api_len, capa_len;
+	u32 *bitmap;
+	int i;
 
-	api_len = IWL_API_ARRAY_SIZE * sizeof(u32);
-	capa_len = IWL_CAPABILITIES_ARRAY_SIZE * sizeof(u32);
+	api_len = IWL_API_MAX_BITS / 8;
+	capa_len = IWL_API_MAX_BITS / 8;
 
-	fw_info = kmalloc(sizeof(*fw_info) + api_len + capa_len, GFP_KERNEL);
+	fw_info = kzalloc(sizeof(*fw_info) + api_len + capa_len, GFP_KERNEL);
 	if (!fw_info)
 		return -ENOMEM;
 
@@ -388,8 +365,20 @@ static int iwl_tm_get_fw_info(struct iwl_mvm *mvm,
 	fw_info->fw_capa_api_len = api_len;
 	fw_info->fw_capa_flags = mvm->fw->ucode_capa.flags;
 	fw_info->fw_capa_len = capa_len;
-	memcpy(fw_info->data, mvm->fw->ucode_capa.api, api_len);
-	memcpy(fw_info->data + api_len, mvm->fw->ucode_capa.capa, capa_len);
+
+	bitmap = (u32 *)fw_info->data;
+	for (i = 0; i < 8 * api_len; i++) {
+		if (fw_has_api(&mvm->fw->ucode_capa,
+			       (__force iwl_ucode_tlv_api_t)i))
+			bitmap[i / 32] |= BIT(i % 32);
+	}
+
+	bitmap = (u32 *)(fw_info->data + api_len);
+	for (i = 0; i < 8 * capa_len; i++) {
+		if (fw_has_capa(&mvm->fw->ucode_capa,
+				(__force iwl_ucode_tlv_capa_t)i))
+			bitmap[i / 32] |= BIT(i % 32);
+	}
 
 	data_out->data = fw_info;
 	data_out->len = sizeof(*fw_info) + api_len + capa_len;

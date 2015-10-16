@@ -440,7 +440,7 @@ void update_vsyscall_tz(void)
 }
 
 void update_vsyscall_old(struct timespec *wall, struct timespec *wtm,
-			struct clocksource *c, u32 mult)
+			 struct clocksource *c, u32 mult, cycles_t cycle_last)
 {
 	write_seqcount_begin(&fsyscall_gtod_data.seq);
 
@@ -449,7 +449,7 @@ void update_vsyscall_old(struct timespec *wall, struct timespec *wtm,
         fsyscall_gtod_data.clk_mult = mult;
         fsyscall_gtod_data.clk_shift = c->shift;
         fsyscall_gtod_data.clk_fsys_mmio = c->archdata.fsys_mmio;
-        fsyscall_gtod_data.clk_cycle_last = c->cycle_last;
+        fsyscall_gtod_data.clk_cycle_last = cycle_last;
 
 	/* copy kernel time structures */
         fsyscall_gtod_data.wall_time.tv_sec = wall->tv_sec;

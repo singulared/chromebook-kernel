@@ -254,6 +254,7 @@ struct iwl_tt_params {
 #define OTP_LOW_IMAGE_SIZE		(2 * 512 * sizeof(u16)) /* 2 KB */
 #define OTP_LOW_IMAGE_SIZE_FAMILY_7000	(16 * 512 * sizeof(u16)) /* 16 KB */
 #define OTP_LOW_IMAGE_SIZE_FAMILY_8000	(32 * 512 * sizeof(u16)) /* 32 KB */
+#define OTP_LOW_IMAGE_SIZE_FAMILY_9000	OTP_LOW_IMAGE_SIZE_FAMILY_8000
 
 struct iwl_eeprom_params {
 	const u8 regulatory_bands[7];
@@ -360,6 +361,7 @@ struct iwl_cfg {
 	const u32 smem_offset;
 	const u32 smem_len;
 	const struct iwl_tt_params *thermal_params;
+	bool apmg_not_supported;
 };
 
 /*
@@ -385,6 +387,7 @@ extern const struct iwl_cfg iwl8260_2ac_cfg;
 extern const struct iwl_cfg iwl4165_2ac_cfg;
 extern const struct iwl_cfg iwl8260_2ac_sdio_cfg;
 extern const struct iwl_cfg iwl4165_2ac_sdio_cfg;
+extern const struct iwl_cfg iwl9000_2ac_cfg;
 #endif /* CPTCFG_IWLMVM */
 
 #endif /* __IWL_CONFIG_H__ */

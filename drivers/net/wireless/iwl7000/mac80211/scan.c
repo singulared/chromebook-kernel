@@ -39,10 +39,31 @@ void ieee80211_rx_bss_put(struct ieee80211_local *local,
 			 container_of((void *)bss, struct cfg80211_bss, priv));
 }
 
+/*
+ * An incompatible AP workaround:
+ * if the AP does not advertise MIMO capabilities disable U-APSD.
+ * iPhones, among others, advertise themselves as U-APSD capable when
+ * they aren't. Avoid connecting to those devices in U-APSD enabled.
+ */
+static bool broken_uapsd_workarounds(struct ieee802_11_elems *elems)
+{
+	int i;
+
+	/* iPhone 4/4s with this problem doesn't have ht_capa */
+	if (!elems->ht_cap_elem)
+		return true;
+
+	for (i = 1; i < 4; i++) {
+		if (elems->ht_cap_elem->mcs.rx_mask[i])
+			return false;
+	}
+
+	return true;
+}
+
 static bool is_uapsd_supported(struct ieee802_11_elems *elems)
 {
 	u8 qos_info;
-	int i;
 
 	if (elems->wmm_info && elems->wmm_info_len == 7
 	    && elems->wmm_info[5] == 1)
@@ -54,22 +75,9 @@ static bool is_uapsd_supported(struct ieee802_11_elems *elems)
 		/* no valid wmm information or parameter element found */
 		return false;
 
-	/*
-	 * if the AP does not advertise MIMO capabilities -
-	 * disable U-APSD. iPhones, among others, advertise themselves
-	 * as U-APSD capable when they aren't. Avoid connecting to
-	 * those devices in U-APSD enabled.
-	 */
-	if (elems->parse_error || !elems->ht_cap_elem)
-		goto mimo;
+	if (broken_uapsd_workarounds(elems))
+		return false;
 
-	for (i = 1; i < 4; i++) {
-		if (elems->ht_cap_elem->mcs.rx_mask[i])
-			goto mimo;
-	}
-	return false;
-
-mimo:
 	return qos_info & IEEE80211_WMM_IE_AP_QOSINFO_UAPSD;
 }
 
@@ -88,9 +96,9 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	s32 signal = 0;
 	bool signal_valid;
 
-	if (local->hw.flags & IEEE80211_HW_SIGNAL_DBM)
+	if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
 		signal = rx_status->signal * 100;
-	else if (local->hw.flags & IEEE80211_HW_SIGNAL_UNSPEC)
+	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
 		signal = (rx_status->signal * 100) / local->hw.max_signal;
 
 	scan_width = NL80211_BSS_CHAN_WIDTH_20;
@@ -284,7 +292,7 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 	if (test_bit(SCAN_HW_CANCELLED, &local->scanning))
 		return false;
 
-	if (local->hw.flags & IEEE80211_SINGLE_HW_SCAN_ON_ALL_BANDS) {
+	if (ieee80211_hw_check(&local->hw, SINGLE_SCAN_ON_ALL_BANDS)) {
 		for (i = 0; i < req->n_channels; i++) {
 			local->hw_scan_req->req.channels[i] = req->channels[i];
 			bands_used |= BIT(req->channels[i]->band);
@@ -360,7 +368,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 		return;
 
 	if (hw_scan && !aborted &&
-	    !(local->hw.flags & IEEE80211_SINGLE_HW_SCAN_ON_ALL_BANDS) &&
+	    !ieee80211_hw_check(&local->hw, SINGLE_SCAN_ON_ALL_BANDS) &&
 	    ieee80211_prep_hw_scan(local)) {
 		int rc;
 
@@ -554,7 +562,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 
 		local->hw_scan_ies_bufsize = local->scan_ies_len + req->ie_len;
 
-		if (local->hw.flags & IEEE80211_SINGLE_HW_SCAN_ON_ALL_BANDS) {
+		if (ieee80211_hw_check(&local->hw, SINGLE_SCAN_ON_ALL_BANDS)) {
 			int i, n_bands = 0;
 			u8 bands_counted = 0;
 
@@ -1185,10 +1193,10 @@ int ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 	return ret;
 }
 
-int ieee80211_request_sched_scan_stop(struct ieee80211_sub_if_data *sdata)
+int ieee80211_request_sched_scan_stop(struct ieee80211_local *local)
 {
-	struct ieee80211_local *local = sdata->local;
-	int ret = 0;
+	struct ieee80211_sub_if_data *sched_scan_sdata;
+	int ret = -ENOENT;
 
 	mutex_lock(&local->mtx);
 
@@ -1200,8 +1208,10 @@ int ieee80211_request_sched_scan_stop(struct ieee80211_sub_if_data *sdata)
 	/* We don't want to restart sched scan anymore. */
 	RCU_INIT_POINTER(local->sched_scan_req, NULL);
 
-	if (rcu_access_pointer(local->sched_scan_sdata)) {
-		ret = drv_sched_scan_stop(local, sdata);
+	sched_scan_sdata = rcu_dereference_protected(local->sched_scan_sdata,
+						lockdep_is_held(&local->mtx));
+	if (sched_scan_sdata) {
+		ret = drv_sched_scan_stop(local, sched_scan_sdata);
 		if (!ret)
 			RCU_INIT_POINTER(local->sched_scan_sdata, NULL);
 	}

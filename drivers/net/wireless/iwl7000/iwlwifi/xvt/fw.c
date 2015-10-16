@@ -168,7 +168,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	const struct fw_img *fw;
 	int ret;
 	enum iwl_ucode_type old_type = xvt->cur_ucode;
-	static const u8 alive_cmd[] = { XVT_ALIVE };
+	static const u16 alive_cmd[] = { XVT_ALIVE };
 
 	xvt->cur_ucode = ucode_type;
 	fw = iwl_get_ucode_image(xvt, ucode_type);
@@ -227,7 +227,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	return 0;
 }
 
-int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type)
+int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 {
 	int ret;
 
@@ -244,10 +244,13 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type)
 						      IWL_XVT_DEFAULT_TX_QUEUE,
 						      true);
 		}
-		iwl_trans_stop_device(xvt->trans);
+		_iwl_trans_stop_device(xvt->trans, !cont_run);
 	}
 
-	ret = iwl_trans_start_hw(xvt->trans);
+	if (cont_run)
+		ret = _iwl_trans_start_hw(xvt->trans, false);
+	else
+		ret = iwl_trans_start_hw(xvt->trans);
 	if (ret) {
 		IWL_ERR(xvt, "Failed to start HW\n");
 		return ret;

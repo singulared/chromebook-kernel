@@ -24,16 +24,28 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-dma-contig.h>
+#ifdef CONFIG_EXYNOS_IOMMU
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/kref.h>
+#include <linux/of_platform.h>
+#include <asm/dma-iommu.h>
+#endif
 
 #include "jpeg-core.h"
 #include "jpeg-hw-s5p.h"
 #include "jpeg-hw-exynos4.h"
 #include "jpeg-hw-exynos3250.h"
 #include "jpeg-regs.h"
+
+#ifdef CONFIG_EXYNOS_IOMMU
+static struct dma_iommu_mapping *mapping;
+#endif
 
 static struct s5p_jpeg_fmt sjpeg_formats[] = {
 	{
@@ -751,6 +763,55 @@ static void exynos4_jpeg_set_huff_tbl(void __iomem *base)
 							ARRAY_SIZE(hactblg0));
 }
 
+#ifdef CONFIG_EXYNOS_IOMMU
+static int jpeg_iommu_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int err = -ENOMEM;
+
+	mapping = arm_iommu_create_mapping(&platform_bus_type, 0x20000000,
+						SZ_512M, 4);
+	if (IS_ERR(mapping)) {
+		dev_err(dev, "IOMMU mapping failed\n");
+		return PTR_ERR(mapping);
+	}
+
+	dev->dma_parms = devm_kzalloc(dev, sizeof(*dev->dma_parms),
+						GFP_KERNEL);
+	if (!dev->dma_parms)
+		goto err_alloc;
+
+	err = dma_set_max_seg_size(dev, 0xffffffffu);
+	if (err)
+		goto error;
+
+	err = arm_iommu_attach_device(dev, mapping);
+	if (err)
+		goto error;
+
+	return 0;
+
+error:
+	devm_kfree(dev, dev->dma_parms);
+	dev->dma_parms = NULL;
+err_alloc:
+	arm_iommu_release_mapping(mapping);
+	mapping = NULL;
+	return err;
+}
+
+static void jpeg_iommu_deinit(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	if (mapping) {
+		arm_iommu_detach_device(dev);
+		devm_kfree(dev, dev->dma_parms);
+		dev->dma_parms = NULL;
+		arm_iommu_release_mapping(mapping);
+		mapping = NULL;
+	}
+}
+#endif
 /*
  * ============================================================================
  * Device file operations
@@ -904,9 +965,9 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 	jpeg_buffer.data = buffer;
 	jpeg_buffer.curr = 0;
 
-	has_sof0 = 1;
-	has_dht = 1;
-	while (has_sof0 || has_dht) {
+	has_sof0 = 0;
+	has_dht = 0;
+	while (!has_sof0 || !has_dht) {
 		c = get_byte(&jpeg_buffer);
 		if (c == -1)
 			return false;
@@ -934,7 +995,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			components = get_byte(&jpeg_buffer);
 			if (components == -1)
 				break;
-			has_sof0 = 0;
+			has_sof0 = 1;
 
 			if (components == 1) {
 				subsampling = 0x33;
@@ -950,7 +1011,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 		case DHT:
 			if (get_word_be(&jpeg_buffer, &word))
 				break;
-			has_dht = 0;
+			has_dht = 1;
 			length = (long)word - 2;
 			skip(&jpeg_buffer, length);
 			break;
@@ -971,9 +1032,12 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			break;
 		}
 	}
-	result->w = width;
-	result->h = height;
-	result->size = components;
+
+	if (!has_dht)
+		pr_err("HUFFMAN table NOT found.. !\n");
+
+	if (!has_sof0 || !has_dht)
+		return false;
 
 	switch (subsampling) {
 	case 0x11:
@@ -995,10 +1059,10 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 		return false;
 	}
 
-	if(has_dht)
-		pr_err("HUFFMAN table NOT found.. !\n");
+	result->w = width;
+	result->h = height;
 
-	return !(has_sof0 | has_dht);
+	return true;
 }
 
 static int s5p_jpeg_querycap(struct file *file, void *priv,
@@ -1108,8 +1172,16 @@ static int s5p_jpeg_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	q_data = get_q_data(ct, f->type);
 	BUG_ON(q_data == NULL);
 
-	pix->width = q_data->w;
-	pix->height = q_data->h;
+	if ((f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+			ct->mode == S5P_JPEG_ENCODE) ||
+			(f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT &&
+			ct->mode == S5P_JPEG_DECODE)) {
+		pix->width = 0;
+		pix->height = 0;
+	} else {
+		pix->width = q_data->w;
+		pix->height = q_data->h;
+	}
 	pix->field = V4L2_FIELD_NONE;
 	pix->pixelformat = q_data->fmt->fourcc;
 	pix->bytesperline = 0;
@@ -1362,8 +1434,6 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 			FMT_TYPE_OUTPUT : FMT_TYPE_CAPTURE;
 
 	q_data->fmt = s5p_jpeg_find_format(ct, pix->pixelformat, f_type);
-	q_data->w = pix->width;
-	q_data->h = pix->height;
 	if (q_data->fmt->fourcc != V4L2_PIX_FMT_JPEG) {
 		/*
 		 * During encoding Exynos4x12 SoCs access wider memory area
@@ -1371,6 +1441,8 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 		 * the JPEG_IMAGE_SIZE register. In order to avoid sysmmu
 		 * page fault calculate proper buffer size in such a case.
 		 */
+		q_data->w = pix->width;
+		q_data->h = pix->height;
 		if (ct->jpeg->variant->version == SJPEG_EXYNOS4 &&
 		    f_type == FMT_TYPE_OUTPUT && ct->mode == S5P_JPEG_ENCODE)
 			q_data->size = exynos4_jpeg_get_output_buffer_size(ct,
@@ -1444,6 +1516,17 @@ static int s5p_jpeg_s_fmt_vid_out(struct file *file, void *priv,
 		return ret;
 
 	return s5p_jpeg_s_fmt(fh_to_ctx(priv), f);
+}
+
+static int s5p_jpeg_subscribe_event(struct v4l2_fh *fh,
+				const struct  v4l2_event_subscription *sub)
+{
+	switch (sub->type) {
+	case V4L2_EVENT_SOURCE_CHANGE:
+		return v4l2_src_change_event_subscribe(fh, sub);
+	default:
+		return -EINVAL;
+	}
 }
 
 static int exynos3250_jpeg_try_downscale(struct s5p_jpeg_ctx *ctx,
@@ -1770,6 +1853,9 @@ static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 
 	.vidioc_g_selection		= s5p_jpeg_g_selection,
 	.vidioc_s_selection		= s5p_jpeg_s_selection,
+
+	.vidioc_subscribe_event		= s5p_jpeg_subscribe_event,
+	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 };
 
 /*
@@ -2093,8 +2179,15 @@ static int s5p_jpeg_job_ready(void *priv)
 {
 	struct s5p_jpeg_ctx *ctx = priv;
 
-	if (ctx->mode == S5P_JPEG_DECODE)
+	if (ctx->mode == S5P_JPEG_DECODE) {
+		/*
+		 * We have only one input buffer and one output buffer. If there
+		 * is a resolution change event, no need to continue decoding.
+		 */
+		if (ctx->state == JPEGCTX_RESOLUTION_CHANGE)
+			return 0;
 		return ctx->hdr_parsed;
+	}
 	return 1;
 }
 
@@ -2175,14 +2268,36 @@ static int s5p_jpeg_buf_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
+static void s5p_jpeg_set_capture_queue_data(struct s5p_jpeg_ctx *ctx)
+{
+	struct s5p_jpeg_q_data *q_data = &ctx->cap_q;
+	q_data->w = ctx->out_q.w;
+	q_data->h = ctx->out_q.h;
+
+	jpeg_bound_align_image(ctx, &q_data->w, S5P_JPEG_MIN_WIDTH,
+			       S5P_JPEG_MAX_WIDTH, q_data->fmt->h_align,
+			       &q_data->h, S5P_JPEG_MIN_HEIGHT,
+			       S5P_JPEG_MAX_HEIGHT, q_data->fmt->v_align
+			      );
+	q_data->size = q_data->w * q_data->h * q_data->fmt->depth >> 3;
+}
+
 static void s5p_jpeg_buf_queue(struct vb2_buffer *vb)
 {
 	struct s5p_jpeg_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	if (ctx->mode == S5P_JPEG_DECODE &&
 	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		struct s5p_jpeg_q_data tmp, *q_data;
-		ctx->hdr_parsed = s5p_jpeg_parse_hdr(&tmp,
+		static const struct v4l2_event ev_src_ch = {
+			.type = V4L2_EVENT_SOURCE_CHANGE,
+			.u.src_change.changes =
+				V4L2_EVENT_SRC_CH_RESOLUTION,
+		};
+		struct vb2_queue *dst_vq = v4l2_m2m_get_vq(
+				ctx->fh.m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		u32 ori_w = ctx->out_q.w, ori_h = ctx->out_q.h;
+
+		ctx->hdr_parsed = s5p_jpeg_parse_hdr(&ctx->out_q,
 		     (unsigned long)vb2_plane_vaddr(vb, 0),
 		     min((unsigned long)ctx->out_q.size,
 			 vb2_get_plane_payload(vb, 0)), ctx);
@@ -2191,20 +2306,18 @@ static void s5p_jpeg_buf_queue(struct vb2_buffer *vb)
 			return;
 		}
 
-		q_data = &ctx->out_q;
-		q_data->w = tmp.w;
-		q_data->h = tmp.h;
-
-		q_data = &ctx->cap_q;
-		q_data->w = tmp.w;
-		q_data->h = tmp.h;
-
-		jpeg_bound_align_image(ctx, &q_data->w, S5P_JPEG_MIN_WIDTH,
-				       S5P_JPEG_MAX_WIDTH, q_data->fmt->h_align,
-				       &q_data->h, S5P_JPEG_MIN_HEIGHT,
-				       S5P_JPEG_MAX_HEIGHT, q_data->fmt->v_align
-				      );
-		q_data->size = q_data->w * q_data->h * q_data->fmt->depth >> 3;
+		/*
+		 * If there is a resolution change event, only update capture
+		 * queue when it is not streaming. Otherwise, update it in
+		 * STREAMOFF. See s5p_jpeg_stop_streaming for detail.
+		 */
+		if (ctx->out_q.w != ori_w || ctx->out_q.h != ori_h) {
+			v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
+			if (vb2_is_streaming(dst_vq))
+				ctx->state = JPEGCTX_RESOLUTION_CHANGE;
+			else
+				s5p_jpeg_set_capture_queue_data(ctx);
+		}
 	}
 
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vb);
@@ -2223,6 +2336,16 @@ static int s5p_jpeg_start_streaming(struct vb2_queue *q, unsigned int count)
 static int s5p_jpeg_stop_streaming(struct vb2_queue *q)
 {
 	struct s5p_jpeg_ctx *ctx = vb2_get_drv_priv(q);
+	/*
+	 * STREAMOFF is an acknowledgment for resolution change event.
+	 * Before STREAMOFF, we still have to return the old resolution and
+	 * subsampling. Update capture queue when the stream is off.
+	 */
+	if (ctx->state == JPEGCTX_RESOLUTION_CHANGE &&
+			q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+		s5p_jpeg_set_capture_queue_data(ctx);
+		ctx->state = JPEGCTX_RUNNING;
+	}
 
 	pm_runtime_put(ctx->jpeg->dev);
 
@@ -2476,6 +2599,13 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	spin_lock_init(&jpeg->slock);
 	jpeg->dev = &pdev->dev;
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	ret = jpeg_iommu_init(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "IOMMU Initialization failed\n");
+		return ret;
+	}
+#endif
 	/* memory-mapped registers */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
@@ -2613,6 +2743,9 @@ static int s5p_jpeg_remove(struct platform_device *pdev)
 	if (!IS_ERR(jpeg->sclk))
 		clk_put(jpeg->sclk);
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	jpeg_iommu_deinit(pdev);
+#endif
 	return 0;
 }
 

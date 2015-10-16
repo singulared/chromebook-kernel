@@ -83,6 +83,12 @@ struct ieee80211_local;
 
 #define IEEE80211_DEAUTH_FRAME_LEN	(24 /* hdr */ + 2 /* reason */)
 
+/* Only these features can be passed through mac80211 */
+#define IEEE80211_SUPPORTED_NETDEV_FEATURES	\
+	(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM |	\
+	 NETIF_F_RXCSUM | NETIF_F_SG | NETIF_F_HIGHDMA |		\
+	 NETIF_F_GSO_SOFTWARE)
+
 struct ieee80211_fragment_entry {
 	unsigned long first_frag_time;
 	unsigned int seq;
@@ -181,9 +187,6 @@ typedef unsigned __bitwise__ ieee80211_rx_result;
 
 /**
  * enum ieee80211_packet_rx_flags - packet RX flags
- * @IEEE80211_RX_RA_MATCH: frame is destined to interface currently processed
- *	(incl. multicast frames)
- * @IEEE80211_RX_FRAGMENTED: fragmented frame
  * @IEEE80211_RX_AMSDU: a-MSDU packet
  * @IEEE80211_RX_MALFORMED_ACTION_FRM: action frame is malformed
  * @IEEE80211_RX_DEFERRED_RELEASE: frame was subjected to receive reordering
@@ -192,8 +195,6 @@ typedef unsigned __bitwise__ ieee80211_rx_result;
  * @rx_flags field of &struct ieee80211_rx_status.
  */
 enum ieee80211_packet_rx_flags {
-	IEEE80211_RX_RA_MATCH			= BIT(1),
-	IEEE80211_RX_FRAGMENTED			= BIT(2),
 	IEEE80211_RX_AMSDU			= BIT(3),
 	IEEE80211_RX_MALFORMED_ACTION_FRM	= BIT(4),
 	IEEE80211_RX_DEFERRED_RELEASE		= BIT(5),
@@ -205,8 +206,6 @@ enum ieee80211_packet_rx_flags {
  * @IEEE80211_RX_CMNTR: received on cooked monitor already
  * @IEEE80211_RX_BEACON_REPORTED: This frame was already reported
  *	to cfg80211_report_obss_beacon().
- * @IEEE80211_RX_REORDER_TIMER: this frame is released by the
- *	reorder buffer timeout timer, not the normal RX path
  *
  * These flags are used across handling multiple interfaces
  * for a single frame.
@@ -214,10 +213,10 @@ enum ieee80211_packet_rx_flags {
 enum ieee80211_rx_flags {
 	IEEE80211_RX_CMNTR		= BIT(0),
 	IEEE80211_RX_BEACON_REPORTED	= BIT(1),
-	IEEE80211_RX_REORDER_TIMER	= BIT(2),
 };
 
 struct ieee80211_rx_data {
+	struct napi_struct *napi;
 	struct sk_buff *skb;
 	struct ieee80211_local *local;
 	struct ieee80211_sub_if_data *sdata;
@@ -542,6 +541,7 @@ struct ieee80211_if_managed {
 	struct sk_buff *teardown_skb; /* A copy to send through the AP */
 	spinlock_t teardown_lock; /* To lock changing teardown_skb */
 	bool tdls_chan_switch_prohibited;
+	bool tdls_wider_bw_prohibited;
 
 	/* WMM-AC TSPEC support */
 	struct ieee80211_sta_tx_tspec tx_tspec[IEEE80211_NUM_ACS];
@@ -722,21 +722,21 @@ struct ieee80211_if_mesh {
  * enum ieee80211_sub_if_data_flags - virtual interface flags
  *
  * @IEEE80211_SDATA_ALLMULTI: interface wants all multicast packets
- * @IEEE80211_SDATA_PROMISC: interface is promisc
  * @IEEE80211_SDATA_OPERATING_GMODE: operating in G-only mode
  * @IEEE80211_SDATA_DONT_BRIDGE_PACKETS: bridge packets between
  *	associated stations and deliver multicast frames both
  *	back to wireless media and to the local net stack.
  * @IEEE80211_SDATA_DISCONNECT_RESUME: Disconnect after resume.
  * @IEEE80211_SDATA_IN_DRIVER: indicates interface was added to driver
+ * @IEEE80211_SDATA_MU_MIMO_OWNER: indicates interface owns MU-MIMO capability
  */
 enum ieee80211_sub_if_data_flags {
 	IEEE80211_SDATA_ALLMULTI		= BIT(0),
-	IEEE80211_SDATA_PROMISC			= BIT(1),
 	IEEE80211_SDATA_OPERATING_GMODE		= BIT(2),
 	IEEE80211_SDATA_DONT_BRIDGE_PACKETS	= BIT(3),
 	IEEE80211_SDATA_DISCONNECT_RESUME	= BIT(4),
 	IEEE80211_SDATA_IN_DRIVER		= BIT(5),
+	IEEE80211_SDATA_MU_MIMO_OWNER		= BIT(6),
 };
 
 /**
@@ -1045,7 +1045,6 @@ enum queue_stop_reason {
 
 #ifdef CPTCFG_MAC80211_LEDS
 struct tpt_led_trigger {
-	struct led_trigger trig;
 	char name[32];
 	const struct ieee80211_tpt_blink *blink_table;
 	unsigned int blink_table_len;
@@ -1056,84 +1055,6 @@ struct tpt_led_trigger {
 	bool running;
 };
 #endif
-
-#ifdef CPTCFG_MAC80211_LATENCY_MEASUREMENTS
-/*
- * struct ieee80211_tx_consec_loss_ranges - Tx consecutive loss statistics
- * bins ranges
- *
- * Measuring Tx consecutive loss  statistics.
- * 1) Tx frames that were transmitted unsuccessfully.
- * 2) Tx frames that were transmitted successfully, but there latency passed
- * the late threshold, and therefor considered as transmitted unsuccessfully.
- * The user can configure the ranges via debugfs.
- *
- * @late_threshold: the late threshold for the successful packets.
- * @n_ranges: number of ranges that are taken in account
- * @ranges: the ranges that the user requested or NULL if disabled.
- */
-struct ieee80211_tx_consec_loss_ranges {
-	u32 late_threshold;
-	u32 n_ranges;
-	u32 ranges[];
-};
-
-/*
- * enum ieee80211_tx_latency_iface - ifaces that can have a latency threshold
- */
-enum ieee80211_tx_latency_iface {
-	IEEE80211_TX_LATENCY_BSS,
-	IEEE80211_TX_LATENCY_P2P
-};
-
-/*
- * enum ieee80211_tx_lat_msr_point - points where to measure the latency
- *
- * There are 4 points where we are capturing the timestamp:
- * 1. Tx packet Enter the Kernel
- * 2. Tx packet is written to the bus
- * 3. Tx packet is acked by the AP
- * 4. Tx packet is erased.
- */
-enum ieee80211_tx_lat_msr_point {
-	IEEE80211_TX_LAT_ENTER,
-	IEEE80211_TX_LAT_WRITE,
-	IEEE80211_TX_LAT_ACK,
-	IEEE80211_TX_LAT_DEL,
-	/* should always be last */
-	IEEE80211_TX_LAT_MAX_POINT,
-};
-
-#define IEEE80211_IF_DISABLE_THSHLD -1
-
-/*
- * struct ieee80211_tx_latency_bin_ranges - Tx latency statistics bins ranges
- *
- * Measuring Tx latency statistics. Counts how many Tx frames transmitted in a
- * certain latency range (in Milliseconds). Each station that uses these
- * ranges will have bins to count the amount of frames received in that range.
- * The user can configure the ranges via debugfs.
- * If ranges is NULL then Tx latency statistics bins are disabled for all
- * stations.
- *
- * @thresholds_bss: list of thresholds for each tid in a bss interface
- * @thresholds_p2p: list of thresholds for each tid in a p2p interface
- * @monitor_record_mode: recording mode.
- *	(0) Internal  buffer - recording using the ucodes internal buffer
- *	(1) Continues recording - recording using MIPI
- * @monitor_collec_wind: collection window for monitor logs
- * @n_ranges: number of ranges that are taken in account
- * @ranges: the ranges that the user requested or NULL if disabled.
- */
-struct ieee80211_tx_latency_bin_ranges {
-	u32 *thresholds_bss;
-	u32 *thresholds_p2p;
-	u8 monitor_record_mode;
-	u16 monitor_collec_wind;
-	int n_ranges;
-	u32 ranges[];
-};
-#endif /* CPTCFG_MAC80211_LATENCY_MEASUREMENTS */
 
 /**
  * mac80211 scan flags - currently active scan mode
@@ -1301,25 +1222,13 @@ struct ieee80211_local {
 	struct timer_list sta_cleanup;
 	int sta_generation;
 
-#ifdef CPTCFG_MAC80211_LATENCY_MEASUREMENTS
-	/*
-	 * Tx latency & consecutive loss statistics parameters for
-	 * all stations.
-	 * Can enable via debugfs (NULL when disabled).
-	 */
-	struct ieee80211_tx_consec_loss_ranges __rcu *tx_consec;
-	struct ieee80211_tx_latency_bin_ranges __rcu *tx_latency;
-	/* start & end points from where to measure the latency. */
-	enum ieee80211_tx_lat_msr_point tx_msrmnt_points[2];
-#endif /* CPTCFG_MAC80211_LATENCY_MEASUREMENTS */
-
 	struct sk_buff_head pending[IEEE80211_MAX_QUEUES];
 	struct tasklet_struct tx_pending_tasklet;
 
 	atomic_t agg_queue_stop[IEEE80211_MAX_QUEUES];
 
-	/* number of interfaces with corresponding IFF_ flags */
-	atomic_t iff_allmultis, iff_promiscs;
+	/* number of interfaces with allmulti RX */
+	atomic_t iff_allmultis;
 
 	struct rate_control_ref *rate_ctrl;
 
@@ -1371,6 +1280,16 @@ struct ieee80211_local {
 	struct list_head chanctx_list;
 	struct mutex chanctx_mtx;
 
+#ifdef CPTCFG_MAC80211_LEDS
+	int tx_led_counter, rx_led_counter;
+	struct led_trigger tx_led, rx_led, assoc_led, radio_led;
+	struct led_trigger tpt_led;
+	atomic_t tx_led_active, rx_led_active, assoc_led_active;
+	atomic_t radio_led_active, tpt_led_active;
+	struct tpt_led_trigger *tpt_led_trigger;
+#endif
+
+#ifdef CPTCFG_MAC80211_DEBUG_COUNTERS
 	/* SNMP counters */
 	/* dot11CountersTable */
 	u32 dot11TransmittedFragmentCount;
@@ -1383,21 +1302,9 @@ struct ieee80211_local {
 	u32 dot11MulticastReceivedFrameCount;
 	u32 dot11TransmittedFrameCount;
 
-#ifdef CPTCFG_MAC80211_LEDS
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0)
-	int tx_led_counter, rx_led_counter;
-#endif
-	struct led_trigger *tx_led, *rx_led, *assoc_led, *radio_led;
-	struct tpt_led_trigger *tpt_led_trigger;
-	char tx_led_name[32], rx_led_name[32],
-	     assoc_led_name[32], radio_led_name[32];
-#endif
-
-#ifdef CPTCFG_MAC80211_DEBUG_COUNTERS
 	/* TX/RX handler statistics */
 	unsigned int tx_handlers_drop;
 	unsigned int tx_handlers_queued;
-	unsigned int tx_handlers_drop_fragment;
 	unsigned int tx_handlers_drop_wep;
 	unsigned int tx_handlers_drop_not_assoc;
 	unsigned int tx_handlers_drop_unauth_port;
@@ -1405,11 +1312,9 @@ struct ieee80211_local {
 	unsigned int rx_handlers_queued;
 	unsigned int rx_handlers_drop_nullfunc;
 	unsigned int rx_handlers_drop_defrag;
-	unsigned int rx_handlers_drop_short;
 	unsigned int tx_expand_skb_head;
 	unsigned int tx_expand_skb_head_cloned;
-	unsigned int rx_expand_skb_head;
-	unsigned int rx_expand_skb_head2;
+	unsigned int rx_expand_skb_head_defrag;
 	unsigned int rx_handlers_fragments;
 	unsigned int tx_status_drop;
 #define I802_DEBUG_INC(c) (c)++
@@ -1468,14 +1373,12 @@ struct ieee80211_local {
 
 	struct ieee80211_sub_if_data __rcu *p2p_sdata;
 
-	struct napi_struct *napi;
-
 	/* virtual monitor interface */
 	struct ieee80211_sub_if_data __rcu *monitor_sdata;
 	struct cfg80211_chan_def monitor_chandef;
 
 	/* extended capabilities provided by mac80211 */
-	u8 ext_capa[8];
+	u8 ext_capa[9];
 
 	/* TDLS channel switch */
 	struct work_struct tdls_chsw_work;
@@ -1702,7 +1605,7 @@ __ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 				     struct cfg80211_sched_scan_request *req);
 int ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 				       struct cfg80211_sched_scan_request *req);
-int ieee80211_request_sched_scan_stop(struct ieee80211_sub_if_data *sdata);
+int ieee80211_request_sched_scan_stop(struct ieee80211_local *local);
 void ieee80211_sched_scan_end(struct ieee80211_local *local);
 void ieee80211_sched_scan_stopped_work(struct work_struct *work);
 
@@ -1766,6 +1669,11 @@ void ieee80211_purge_tx_queue(struct ieee80211_hw *hw,
 struct sk_buff *
 ieee80211_build_data_template(struct ieee80211_sub_if_data *sdata,
 			      struct sk_buff *skb, u32 info_flags);
+
+void ieee80211_check_fast_xmit(struct sta_info *sta);
+void ieee80211_check_fast_xmit_all(struct ieee80211_local *local);
+void ieee80211_check_fast_xmit_iface(struct ieee80211_sub_if_data *sdata);
+void ieee80211_clear_fast_xmit(struct sta_info *sta);
 
 /* HT */
 void ieee80211_apply_htcap_overrides(struct ieee80211_sub_if_data *sdata,
@@ -1884,8 +1792,6 @@ static inline int __ieee80211_resume(struct ieee80211_hw *hw)
 
 /* utility functions/constants */
 extern const void *const mac80211_wiphy_privid; /* for wiphy privid */
-u8 *ieee80211_get_bssid(struct ieee80211_hdr *hdr, size_t len,
-			enum nl80211_iftype type);
 int ieee80211_frame_duration(enum ieee80211_band band, size_t len,
 			     int rate, int erp, int short_preamble,
 			     int shift);
@@ -1893,7 +1799,7 @@ void mac80211_ev_michael_mic_failure(struct ieee80211_sub_if_data *sdata, int ke
 				     struct ieee80211_hdr *hdr, const u8 *tsc,
 				     gfp_t gfp);
 void ieee80211_set_wmm_default(struct ieee80211_sub_if_data *sdata,
-			       bool bss_notify);
+			       bool bss_notify, bool enable_qos);
 void ieee80211_xmit(struct ieee80211_sub_if_data *sdata,
 		    struct sta_info *sta, struct sk_buff *skb);
 
@@ -2086,7 +1992,7 @@ u8 *ieee80211_ie_build_ht_cap(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
 			      u16 cap);
 u8 *ieee80211_ie_build_ht_oper(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
 			       const struct cfg80211_chan_def *chandef,
-			       u16 prot_mode);
+			       u16 prot_mode, bool rifs_mode);
 u8 *ieee80211_ie_build_vht_cap(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,
 			       u32 cap);
 u8 *ieee80211_ie_build_vht_oper(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,

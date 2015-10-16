@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,7 +31,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * All rights reserved.
  *
@@ -80,23 +80,23 @@ struct iwl_dbg_cfg_bin {
 	unsigned int len;
 };
 
-#define DBG_CFG_bool	u32 /* for debugfs */
-#define DBG_CFG_u8	u8
-#define DBG_CFG_u16	u16
-#define DBG_CFG_u32	u32
 struct iwl_dbg_cfg {
-#define IWL_DBG_CFG(type, name)		DBG_CFG_##type name;
-#define IWL_DBG_CFG_NODEF(type, name)	DBG_CFG_##type name;
+	bool loaded;
+
+#define IWL_DBG_CFG(type, name)		type name;
+#define IWL_DBG_CFG_NODEF(type, name)	type name;
 #define IWL_DBG_CFG_BIN(name)		struct iwl_dbg_cfg_bin name;
 #define IWL_DBG_CFG_BINA(name, max)	struct iwl_dbg_cfg_bin name[max]; \
 					int n_ ## name;
-#define IWL_DBG_CFG_RANGE(type, name, min, max)	\
-					DBG_CFG_##type name;
+#define IWL_DBG_CFG_RANGE(type, name, min, max)	IWL_DBG_CFG(type, name)
+#define IWL_MOD_PARAM(type, name)	/* do nothing */
+
 #endif /* DBG_CFG_REINCLUDE */
 #if IS_ENABLED(CPTCFG_IWLXVT)
 	IWL_DBG_CFG(u32, XVT_DEFAULT_DBGM_MEM_POWER)
 	IWL_DBG_CFG(u32, XVT_DEFAULT_DBGM_LMAC_MASK)
 	IWL_DBG_CFG(u32, XVT_DEFAULT_DBGM_PRPH_MASK)
+	IWL_MOD_PARAM(bool, xvt_default_mode)
 #endif
 #if IS_ENABLED(CPTCFG_IWLMVM)
 	IWL_DBG_CFG(u32, MVM_DEFAULT_PS_TX_DATA_TIMEOUT)
@@ -136,6 +136,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(bool, MVM_BT_COEX_RRC)
 	IWL_DBG_CFG(bool, MVM_FW_MCAST_FILTER_PASS_ALL)
 	IWL_DBG_CFG(bool, MVM_FW_BCAST_FILTER_PASS_ALL)
+	IWL_DBG_CFG(bool, MVM_TOF_IS_RESPONDER)
 #ifdef CPTCFG_IWLMVM_TCM
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_MEDIUM_THRESH)
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_HIGH_THRESH)
@@ -147,6 +148,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u8, MVM_QUOTA_THRESHOLD)
 	IWL_DBG_CFG(u8, MVM_RS_RSSI_BASED_INIT_RATE)
 	IWL_DBG_CFG(u8, MVM_RS_DISABLE_P2P_MIMO)
+	IWL_DBG_CFG(u8, MVM_RS_80_20_FAR_RANGE_TWEAK)
 	IWL_DBG_CFG(u8, MVM_RS_NUM_TRY_BEFORE_ANT_TOGGLE)
 	IWL_DBG_CFG(u8, MVM_RS_HT_VHT_RETRIES_PER_RATE)
 	IWL_DBG_CFG(u8, MVM_RS_HT_VHT_RETRIES_PER_RATE_TW)
@@ -233,19 +235,38 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(u32, d0i3_debug)
 	IWL_DBG_CFG_NODEF(u32, valid_ants)
 	IWL_DBG_CFG_NODEF(u32, secure_boot_cfg)
-#ifdef CONFIG_HAS_WAKELOCK
+	IWL_MOD_PARAM(bool, uapsd_disable)
+	IWL_MOD_PARAM(bool, d0i3_disable)
+	IWL_MOD_PARAM(bool, lar_disable)
+	IWL_MOD_PARAM(bool, fw_monitor)
+	IWL_MOD_PARAM(bool, restart_fw)
+	IWL_MOD_PARAM(bool, power_save)
+	IWL_MOD_PARAM(bool, bt_coex_active)
+	IWL_MOD_PARAM(int, ant_coupling)
+	IWL_MOD_PARAM(int, power_level)
+	IWL_MOD_PARAM(int, led_mode)
+	IWL_MOD_PARAM(int, amsdu_size_8K)
+	IWL_MOD_PARAM(int, sw_crypto)
+	IWL_MOD_PARAM(uint, disable_11n)
+#ifdef CPTCFG_IWLMVM_WAKELOCK
 	IWL_DBG_CFG(u32, WAKELOCK_TIMEOUT_MS)
-#endif /* CONFIG_HAS_WAKELOCK */
+#endif /* CPTCFG_IWLMVM_WAKELOCK */
+#ifdef CPTCFG_IWLWIFI_DEBUG
+	IWL_MOD_PARAM(u32, debug_level)
+#endif /* CPTCFG_IWLWIFI_DEBUG */
+#ifdef CPTCFG_IWLWIFI_DISALLOW_OLDER_FW
+	IWL_DBG_CFG_NODEF(bool, load_old_fw)
+#endif /* CPTCFG_IWLWIFI_DISALLOW_OLDER_FW */
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_NODEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
+#undef IWL_MOD_PARAM
 #ifndef DBG_CFG_REINCLUDE
 };
 
 extern struct iwl_dbg_cfg current_dbg_config;
-void iwl_dbg_cfg_init_dbgfs(struct dentry *root);
 void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg);
 void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg);
 #endif /* DBG_CFG_REINCLUDE */

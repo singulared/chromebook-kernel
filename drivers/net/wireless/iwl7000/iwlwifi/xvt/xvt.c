@@ -226,9 +226,9 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 		wake_up_interruptible(&xvt->mod_tx_done_wq);
 }
 
-static int iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
-			       struct iwl_rx_cmd_buffer *rxb,
-			       struct iwl_device_cmd *cmd)
+static void iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
+				struct napi_struct *napi,
+				struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
@@ -238,7 +238,7 @@ static int iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
 	if (pkt->hdr.cmd == TX_CMD)
 		iwl_xvt_rx_tx_cmd_handler(xvt, pkt);
 
-	return iwl_xvt_send_user_rx_notif(xvt, rxb);
+	iwl_xvt_send_user_rx_notif(xvt, rxb);
 }
 
 static void iwl_xvt_nic_config(struct iwl_op_mode *op_mode)
@@ -269,7 +269,7 @@ static void iwl_xvt_nic_error(struct iwl_op_mode *op_mode)
 	xvt->fw_error = true;
 	wake_up_interruptible(&xvt->mod_tx_wq);
 
-	if (xvt->fw->ucode_capa.api[0] & IWL_UCODE_TLV_API_NEW_VERSION) {
+	if (fw_has_api(&xvt->fw->ucode_capa, IWL_UCODE_TLV_API_NEW_VERSION)) {
 		iwl_xvt_get_nic_error_log_v2(xvt, &table_v2);
 		iwl_xvt_dump_nic_error_log_v2(xvt, &table_v2);
 		p_table = kmemdup(&table_v2, sizeof(table_v2), GFP_ATOMIC);

@@ -6,7 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2008 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -32,7 +32,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,9 +105,23 @@ struct iwl_ucode_capabilities {
 	u32 n_scan_channels;
 	u32 standard_phy_calibration_size;
 	u32 flags;
-	u32 api[IWL_API_ARRAY_SIZE];
-	u32 capa[IWL_CAPABILITIES_ARRAY_SIZE];
+	unsigned long _api[BITS_TO_LONGS(IWL_API_MAX_BITS)];
+	unsigned long _capa[BITS_TO_LONGS(IWL_CAPABILITIES_MAX_BITS)];
 };
+
+static inline bool
+fw_has_api(const struct iwl_ucode_capabilities *capabilities,
+	   iwl_ucode_tlv_api_t api)
+{
+	return test_bit((__force long)api, capabilities->_api);
+}
+
+static inline bool
+fw_has_capa(const struct iwl_ucode_capabilities *capabilities,
+	    iwl_ucode_tlv_capa_t capa)
+{
+	return test_bit((__force long)capa, capabilities->_capa);
+}
 
 /* one for each uCode image (inst/data, init/runtime/wowlan) */
 struct fw_desc {
@@ -135,6 +149,30 @@ struct iwl_fw_cscheme_list {
 	u8 size;
 	struct iwl_fw_cipher_scheme cs[];
 } __packed;
+
+/**
+ * struct iwl_gscan_capabilities - gscan capabilities supported by FW
+ * @max_scan_cache_size: total space allocated for scan results (in bytes).
+ * @max_scan_buckets: maximum number of channel buckets.
+ * @max_ap_cache_per_scan: maximum number of APs that can be stored per scan.
+ * @max_rssi_sample_size: number of RSSI samples used for averaging RSSI.
+ * @max_scan_reporting_threshold: max possible report threshold. in percentage.
+ * @max_hotlist_aps: maximum number of entries for hotlist APs.
+ * @max_significant_change_aps: maximum number of entries for significant
+ *	change APs.
+ * @max_bssid_history_entries: number of BSSID/RSSI entries that the device can
+ *	hold.
+ */
+struct iwl_gscan_capabilities {
+	u32 max_scan_cache_size;
+	u32 max_scan_buckets;
+	u32 max_ap_cache_per_scan;
+	u32 max_rssi_sample_size;
+	u32 max_scan_reporting_threshold;
+	u32 max_hotlist_aps;
+	u32 max_significant_change_aps;
+	u32 max_bssid_history_entries;
+};
 
 /**
  * struct iwl_fw - variables associated with the firmware
@@ -194,6 +232,7 @@ struct iwl_fw {
 	struct iwl_fw_dbg_trigger_tlv *dbg_trigger_tlv[FW_DBG_TRIGGER_MAX];
 	size_t dbg_trigger_tlv_len[FW_DBG_TRIGGER_MAX];
 	u8 dbg_dest_reg_num;
+	struct iwl_gscan_capabilities gscan_capa;
 };
 
 static inline const char *get_fw_dbg_mode_string(int mode)
@@ -205,6 +244,8 @@ static inline const char *get_fw_dbg_mode_string(int mode)
 		return "EXTERNAL_DRAM";
 	case MARBH_MODE:
 		return "MARBH";
+	case MIPI_MODE:
+		return "MIPI";
 	default:
 		return "UNKNOWN";
 	}

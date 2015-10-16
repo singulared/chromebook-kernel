@@ -375,17 +375,9 @@ static int mt_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 
 	/* eGalax devices provide a Digitizer.Stylus input which overrides
 	 * the correct Digitizers.Finger X/Y ranges.
-	 * Let's just ignore this input.
-	 * The check for mt_report_id ensures we don't process
-	 * HID_DG_CONTACTCOUNT from the pen report as it is outside the physical
-	 * collection, but within the report ID.
-	 */
+	 * Let's just ignore this input. */
 	if (field->physical == HID_DG_STYLUS)
 		return -1;
-	else if ((field->physical == 0) &&
-		 (field->report->id != td->mt_report_id) &&
-		 (td->mt_report_id != -1))
-		return 0;
 
 	if (usage->usage_index)
 		prev_usage = &field->usage[usage->usage_index - 1];

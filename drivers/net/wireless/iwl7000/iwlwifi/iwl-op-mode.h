@@ -111,20 +111,6 @@ struct iwl_tm_data;
  * @valid_hw_addr: handler that is used by the test object to request the
  *	op_mode to check if the given address is a valid address.
  * @get_fw_ver: handler used to get the FW version.
- * @alloc_reply: handler used by the test object to request the op_mode
- *	to allocate an skb for sending a reply to the user, and initialize
- *	the skb. It is assumed that the test object only fills the required
- *	attributes.
- * @reply: handler used by the test object to request the op_mode to reply
- *	to a request. The skb is an skb previously allocated by the the
- *	alloc_reply callback.
- * @alloc_event: handler used by the test object to request the op_mode
- *	to allocate an skb for sending an event, and initialize
- *	the skb. It is assumed that the test object only fills the required
- *	attributes.
- * @reply: handler used by the test object to request the op_mode to send
- *	an event. The skb is an skb previously allocated by the the
- *	alloc_event callback.
  *
  * The structure defines the callbacks that the op_mode should handle,
  * inorder to handle logic that is out of the scope of iwl_test. The
@@ -139,11 +125,6 @@ struct iwl_test_ops {
 			struct iwl_host_cmd *cmd);
 	bool (*valid_hw_addr)(u32 addr);
 	u32 (*get_fw_ver)(struct iwl_op_mode *op_mode);
-
-	struct sk_buff *(*alloc_reply)(struct iwl_op_mode *op_mode, int len);
-	int (*reply)(struct iwl_op_mode *op_mode, struct sk_buff *skb);
-	struct sk_buff* (*alloc_event)(struct iwl_op_mode *op_mode, int len);
-	void (*event)(struct iwl_op_mode *op_mode, struct sk_buff *skb);
 };
 
 /**
@@ -161,10 +142,6 @@ struct iwl_test_ops {
  *	May sleep
  * @rx: Rx notification to the op_mode. rxb is the Rx buffer itself. Cmd is the
  *	HCMD this Rx responds to. Can't sleep.
- * @napi_add: NAPI initialization. The transport is fully responsible for NAPI,
- *	but the higher layers need to know about it (in particular mac80211 to
- *	to able to call the right NAPI RX functions); this function is needed
- *	to eventually call netif_napi_add() with higher layer involvement.
  * @queue_full: notifies that a HW queue is full.
  *	Must be atomic and called with BH disabled.
  * @queue_not_full: notifies that a HW queue is not full any more.
@@ -193,13 +170,8 @@ struct iwl_op_mode_ops {
 				     const struct iwl_fw *fw,
 				     struct dentry *dbgfs_dir);
 	void (*stop)(struct iwl_op_mode *op_mode);
-	int (*rx)(struct iwl_op_mode *op_mode, struct iwl_rx_cmd_buffer *rxb,
-		  struct iwl_device_cmd *cmd);
-	void (*napi_add)(struct iwl_op_mode *op_mode,
-			 struct napi_struct *napi,
-			 struct net_device *napi_dev,
-			 int (*poll)(struct napi_struct *, int),
-			 int weight);
+	void (*rx)(struct iwl_op_mode *op_mode, struct napi_struct *napi,
+		   struct iwl_rx_cmd_buffer *rxb);
 	void (*queue_full)(struct iwl_op_mode *op_mode, int queue);
 	void (*queue_not_full)(struct iwl_op_mode *op_mode, int queue);
 	bool (*hw_rf_kill)(struct iwl_op_mode *op_mode, bool state);
@@ -236,11 +208,11 @@ static inline void iwl_op_mode_stop(struct iwl_op_mode *op_mode)
 	op_mode->ops->stop(op_mode);
 }
 
-static inline int iwl_op_mode_rx(struct iwl_op_mode *op_mode,
-				  struct iwl_rx_cmd_buffer *rxb,
-				  struct iwl_device_cmd *cmd)
+static inline void iwl_op_mode_rx(struct iwl_op_mode *op_mode,
+				  struct napi_struct *napi,
+				  struct iwl_rx_cmd_buffer *rxb)
 {
-	return op_mode->ops->rx(op_mode, rxb, cmd);
+	return op_mode->ops->rx(op_mode, napi, rxb);
 }
 
 static inline void iwl_op_mode_queue_full(struct iwl_op_mode *op_mode,
@@ -306,17 +278,6 @@ static inline int iwl_op_mode_exit_d0i3(struct iwl_op_mode *op_mode)
 	if (!op_mode->ops->exit_d0i3)
 		return 0;
 	return op_mode->ops->exit_d0i3(op_mode);
-}
-
-static inline void iwl_op_mode_napi_add(struct iwl_op_mode *op_mode,
-					struct napi_struct *napi,
-					struct net_device *napi_dev,
-					int (*poll)(struct napi_struct *, int),
-					int weight)
-{
-	if (!op_mode->ops->napi_add)
-		return;
-	op_mode->ops->napi_add(op_mode, napi, napi_dev, poll, weight);
 }
 
 #endif /* __iwl_op_mode_h__ */

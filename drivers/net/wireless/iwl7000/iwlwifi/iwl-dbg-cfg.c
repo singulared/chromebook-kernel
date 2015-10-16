@@ -5,8 +5,8 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -31,8 +31,8 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
+ * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,6 +68,7 @@
 #include <linux/debugfs.h>
 #include <linux/firmware.h>
 #include "iwl-dbg-cfg.h"
+#include "iwl-modparams.h"
 
 /* grab default values */
 #undef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
@@ -86,6 +87,7 @@ struct iwl_dbg_cfg current_dbg_config = {
 #define IWL_DBG_CFG_NODEF(type, name) /* no default */
 #define IWL_DBG_CFG_BIN(name) /* nothing, default empty */
 #define IWL_DBG_CFG_BINA(name, max) /* nothing, default empty */
+#define IWL_MOD_PARAM(type, name) /* nothing, default empty */
 #define IWL_DBG_CFG_RANGE(type, name, min, max)	\
 	.name = IWL_ ## name,
 #include "iwl-dbg-cfg.h"
@@ -94,13 +96,15 @@ struct iwl_dbg_cfg current_dbg_config = {
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
+#undef IWL_MOD_PARAM
 };
 
 static const char dbg_cfg_magic[] = "[IWL DEBUG CONFIG DATA]";
 
 #define DBG_CFG_LOADER(_type)							\
-static void dbg_cfg_load_ ## _type(const char *name, const char *val,		\
-				   _type *out, _type min, _type max)		\
+static void __maybe_unused							\
+dbg_cfg_load_ ## _type(const char *name, const char *val,			\
+		       _type *out, _type min, _type max)			\
 {										\
 	_type r;								\
 										\
@@ -123,9 +127,11 @@ static void dbg_cfg_load_ ## _type(const char *name, const char *val,		\
 DBG_CFG_LOADER(u8)
 DBG_CFG_LOADER(u16)
 DBG_CFG_LOADER(u32)
+DBG_CFG_LOADER(int)
+DBG_CFG_LOADER(uint)
 
-static void __maybe_unused /* no users yet */
-dbg_cfg_load_bool(const char *name, const char *val, u32 *out, int min, int max)
+static void __maybe_unused
+dbg_cfg_load_bool(const char *name, const char *val, bool *out, int min, int max)
 {
 	u8 v;
 
@@ -138,7 +144,7 @@ dbg_cfg_load_bool(const char *name, const char *val, u32 *out, int min, int max)
 	}
 }
 
-static int __maybe_unused /* because nobody uses it yet */
+static int __maybe_unused
 dbg_cfg_load_bin(const char *name, const char *val, struct iwl_dbg_cfg_bin *out)
 {
 	int len = strlen(val);
@@ -164,32 +170,6 @@ error:
 	return -EINVAL;
 }
 
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
-void iwl_dbg_cfg_init_dbgfs(struct dentry *root)
-{
-	struct dentry *dbg_cfg_root = debugfs_create_dir("dbg_cfg", root);
-
-	/* not worried about errors as this is a debug tool */
-
-	if (!dbg_cfg_root)
-		return;
-
-#define IWL_DBG_CFG(type, name) \
-	debugfs_create_ ## type(#name, S_IRUSR | S_IWUSR, dbg_cfg_root, \
-				&current_dbg_config.name);
-#define IWL_DBG_CFG_NODEF(type, name) IWL_DBG_CFG(type, name)
-#define IWL_DBG_CFG_BIN(name) /* blobs can't be preconfigured in debugfs */
-#define IWL_DBG_CFG_BINA(name, max) /* ditto for blob arrays */
-#define IWL_DBG_CFG_RANGE(type, name, min, max) /* not supported yet */
-#include "iwl-dbg-cfg.h"
-#undef IWL_DBG_CFG
-#undef IWL_DBG_CFG_NODEF
-#undef IWL_DBG_CFG_BIN
-#undef IWL_DBG_CFG_BINA
-#undef IWL_DBG_CFG_RANGE
-}
-#endif /* CPTCFG_IWLWIFI_DEBUGFS */
-
 void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg)
 {
 #define IWL_DBG_CFG(t, n) /* nothing */
@@ -212,12 +192,14 @@ void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg)
 		dbgcfg->n_ ## n = 0;			\
 	} while (0);
 #define IWL_DBG_CFG_RANGE(t, n, min, max) /* nothing */
+#define IWL_MOD_PARAM(t, n) /* nothing */
 #include "iwl-dbg-cfg.h"
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_NODEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
+#undef IWL_MOD_PARAM
 }
 
 void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
@@ -225,6 +207,9 @@ void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
 	const struct firmware *fw;
 	char *data, *end, *pos;
 	int err;
+
+	if (dbgcfg->loaded)
+		return;
 
 	/* TODO: maybe add a per-device file? */
 	err = request_firmware(&fw, "iwl-dbg-cfg.ini", dev);
@@ -301,12 +286,20 @@ void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
 					 &dbgcfg->n, min, max);		\
 			continue;					\
 		}
+#define IWL_MOD_PARAM(t, n)						\
+		if (strncmp(#n, line, strlen(#n)) == 0 &&		\
+		    line[strlen(#n)] == '=') {				\
+			dbg_cfg_load_##t(#n, line + strlen(#n) + 1,	\
+					 &iwlwifi_mod_params.n, 0, 0);	\
+			continue;					\
+		}
 #include "iwl-dbg-cfg.h"
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_NODEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
+#undef IWL_MOD_PARAM
 		printk(KERN_INFO "iwlwifi debug config: failed to load line \"%s\"\n",
 		       line);
 	}
@@ -314,4 +307,5 @@ void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
 	kfree(data);
  release:
 	release_firmware(fw);
+	dbgcfg->loaded = true;
 }

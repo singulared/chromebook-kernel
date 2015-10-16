@@ -153,26 +153,28 @@ void iwl_mvm_set_tx_cmd(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	if (ieee80211_is_mgmt(fc)) {
 		if (ieee80211_is_assoc_req(fc) || ieee80211_is_reassoc_req(fc))
-			tx_cmd->pm_frame_timeout = cpu_to_le16(3);
+			tx_cmd->pm_frame_timeout = cpu_to_le16(PM_FRAME_ASSOC);
+		else if (ieee80211_is_action (fc))
+			tx_cmd->pm_frame_timeout = cpu_to_le16(PM_FRAME_NONE);
 		else
-			tx_cmd->pm_frame_timeout = cpu_to_le16(2);
+			tx_cmd->pm_frame_timeout = cpu_to_le16(PM_FRAME_MGMT);
 
 		/* The spec allows Action frames in A-MPDU, we don't support
 		 * it
 		 */
 		WARN_ON_ONCE(info->flags & IEEE80211_TX_CTL_AMPDU);
 	} else if (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO) {
-		tx_cmd->pm_frame_timeout = cpu_to_le16(2);
+		tx_cmd->pm_frame_timeout = cpu_to_le16(PM_FRAME_MGMT);
 	} else {
-		tx_cmd->pm_frame_timeout = 0;
+		tx_cmd->pm_frame_timeout = cpu_to_le16(PM_FRAME_NONE);
 	}
 
 	if (ieee80211_is_data(fc) && len > mvm->rts_threshold &&
 	    !is_multicast_ether_addr(ieee80211_get_DA(hdr)))
 		tx_flags |= TX_CMD_FLG_PROT_REQUIRE;
 
-	if ((mvm->fw->ucode_capa.capa[0] &
-	     IWL_UCODE_TLV_CAPA_TXPOWER_INSERTION_SUPPORT) &&
+	if (fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_TXPOWER_INSERTION_SUPPORT) &&
 	    ieee80211_action_contains_tpc(skb))
 		tx_flags |= TX_CMD_FLG_WRITE_TX_POWER;
 
@@ -366,18 +368,29 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 		IEEE80211_SKB_CB(skb)->hw_queue = mvm->aux_queue;
 
 	/*
-	 * If the interface on which frame is sent is the P2P_DEVICE
+	 * If the interface on which the frame is sent is the P2P_DEVICE
 	 * or an AP/GO interface use the broadcast station associated
-	 * with it; otherwise use the AUX station.
+	 * with it; otherwise if the interface is a managed interface
+	 * use the AP station associated with it for multicast traffic
+	 * (this is not possible for unicast packets as a TLDS discovery
+	 * response are sent without a station entry); otherwise use the
+	 * AUX station.
 	 */
-	if (info->control.vif &&
-	    (info->control.vif->type == NL80211_IFTYPE_P2P_DEVICE ||
-	     info->control.vif->type == NL80211_IFTYPE_AP)) {
+	sta_id = mvm->aux_sta.sta_id;
+	if (info->control.vif) {
 		struct iwl_mvm_vif *mvmvif =
 			iwl_mvm_vif_from_mac80211(info->control.vif);
-		sta_id = mvmvif->bcast_sta.sta_id;
-	} else {
-		sta_id = mvm->aux_sta.sta_id;
+
+		if (info->control.vif->type == NL80211_IFTYPE_P2P_DEVICE ||
+		    info->control.vif->type == NL80211_IFTYPE_AP)
+			sta_id = mvmvif->bcast_sta.sta_id;
+		else if (info->control.vif->type == NL80211_IFTYPE_STATION &&
+			 is_multicast_ether_addr(hdr->addr1)) {
+			u8 ap_sta_id = ACCESS_ONCE(mvmvif->ap_sta_id);
+
+			if (ap_sta_id != IWL_MVM_STATION_COUNT)
+				sta_id = ap_sta_id;
+		}
 	}
 
 	IWL_DEBUG_TX(mvm, "station Id %d, queue=%d\n", sta_id, info->hw_queue);
@@ -949,8 +962,7 @@ static void iwl_mvm_rx_tx_cmd_agg(struct iwl_mvm *mvm,
 	rcu_read_unlock();
 }
 
-int iwl_mvm_rx_tx_cmd(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
-		      struct iwl_device_cmd *cmd)
+void iwl_mvm_rx_tx_cmd(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_mvm_tx_resp *tx_resp = (void *)pkt->data;
@@ -959,8 +971,6 @@ int iwl_mvm_rx_tx_cmd(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
 		iwl_mvm_rx_tx_cmd_single(mvm, pkt);
 	else
 		iwl_mvm_rx_tx_cmd_agg(mvm, pkt);
-
-	return 0;
 }
 
 static void iwl_mvm_tx_info_from_ba_notif(struct ieee80211_tx_info *info,
@@ -980,8 +990,7 @@ static void iwl_mvm_tx_info_from_ba_notif(struct ieee80211_tx_info *info,
 		(void *)(uintptr_t)tid_data->rate_n_flags;
 }
 
-int iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
-			struct iwl_device_cmd *cmd)
+void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_mvm_ba_notif *ba_notif = (void *)pkt->data;
@@ -1003,7 +1012,7 @@ int iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
 	if (WARN_ONCE(sta_id >= IWL_MVM_STATION_COUNT ||
 		      tid >= IWL_MAX_TID_COUNT,
 		      "sta_id %d tid %d", sta_id, tid))
-		return 0;
+		return;
 
 	rcu_read_lock();
 
@@ -1012,7 +1021,7 @@ int iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
 	/* Reclaiming frames for a station that has been deleted ? */
 	if (WARN_ON_ONCE(IS_ERR_OR_NULL(sta))) {
 		rcu_read_unlock();
-		return 0;
+		return;
 	}
 
 	mvmsta = iwl_mvm_sta_from_mac80211(sta);
@@ -1023,7 +1032,7 @@ int iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb,
 			"invalid BA notification: Q %d, tid %d, flow %d\n",
 			tid_data->txq_id, tid, scd_flow);
 		rcu_read_unlock();
-		return 0;
+		return;
 	}
 
 	spin_lock_bh(&mvmsta->lock);
@@ -1114,8 +1123,6 @@ out:
 		skb = __skb_dequeue(&reclaimed_skbs);
 		ieee80211_tx_status(mvm->hw, skb);
 	}
-
-	return 0;
 }
 
 /*

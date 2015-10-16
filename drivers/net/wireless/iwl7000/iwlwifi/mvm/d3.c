@@ -70,6 +70,9 @@
 #include <net/ipv6.h>
 #include <net/tcp.h>
 #include <net/addrconf.h>
+#ifdef CPTCFG_IWLMVM_WAKELOCK
+#include <linux/wakelock.h>
+#endif
 #include "iwl-modparams.h"
 #include "fw-api.h"
 #include "mvm.h"
@@ -536,7 +539,7 @@ void iwl_mvm_set_last_nonqos_seq(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 
 static int iwl_mvm_switch_to_d3(struct iwl_mvm *mvm)
 {
-	iwl_mvm_cancel_scan(mvm);
+	iwl_mvm_scan_stop(mvm, IWL_MVM_SCAN_REGULAR, true);
 
 	iwl_trans_stop_device(mvm->trans);
 
@@ -894,6 +897,9 @@ static int __iwl_mvm_suspend(struct ieee80211_hw *hw,
  out:
 	if (ret < 0) {
 		iwl_mvm_ref(mvm, IWL_MVM_REF_UCODE_DOWN);
+#ifdef CPTCFG_IWLMVM_WAKELOCK
+		wake_lock(&mvm->recovery_wake_lock);
+#endif
 		ieee80211_restart_hw(mvm->hw);
 		iwl_mvm_free_nd(mvm);
 	}
@@ -906,7 +912,7 @@ static int __iwl_mvm_suspend(struct ieee80211_hw *hw,
 static int iwl_mvm_enter_d0i3_sync(struct iwl_mvm *mvm)
 {
 	struct iwl_notification_wait wait_d3;
-	static const u8 d3_notif[] = { D3_CONFIG_CMD };
+	static const u16 d3_notif[] = { D3_CONFIG_CMD };
 	int ret;
 
 	iwl_init_notification_wait(&mvm->notif_wait, &wait_d3,
@@ -931,6 +937,9 @@ int iwl_mvm_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	int ret;
 
+	/* make sure the d0i3 exit work is not pending */
+	flush_work(&mvm->d0i3_exit_work);
+
 	ret = iwl_trans_suspend(mvm->trans);
 	if (ret)
 		return ret;
@@ -948,6 +957,9 @@ int iwl_mvm_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 		mutex_lock(&mvm->d0i3_suspend_mutex);
 		__set_bit(D0I3_DEFER_WAKEUP, &mvm->d0i3_suspend_flags);
 		mutex_unlock(&mvm->d0i3_suspend_mutex);
+
+		iwl_trans_d3_suspend(mvm->trans, false);
+
 		return 0;
 	}
 
@@ -1701,6 +1713,9 @@ static int iwl_mvm_resume_d3(struct iwl_mvm *mvm)
 static int iwl_mvm_resume_d0i3(struct iwl_mvm *mvm)
 {
 	bool exit_now;
+	enum iwl_d3_status d3_status;
+
+	iwl_trans_d3_resume(mvm->trans, &d3_status, false);
 
 	/*
 	 * make sure to clear D0I3_DEFER_WAKEUP before
