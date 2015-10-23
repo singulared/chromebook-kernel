@@ -2587,6 +2587,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	struct s5p_jpeg *jpeg;
 	struct resource *res;
 	int ret;
+	DEFINE_DMA_ATTRS(attrs);
 
 	/* JPEG IP abstraction struct */
 	jpeg = devm_kzalloc(&pdev->dev, sizeof(struct s5p_jpeg), GFP_KERNEL);
@@ -2657,7 +2658,8 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		goto device_register_rollback;
 	}
 
-	jpeg->alloc_ctx = vb2_dma_contig_init_ctx(&pdev->dev);
+	dma_set_attr(DMA_ATTR_NON_CONSISTENT, &attrs);
+	jpeg->alloc_ctx = vb2_dma_contig_init_ctx_attrs(&pdev->dev, &attrs);
 	if (IS_ERR(jpeg->alloc_ctx)) {
 		v4l2_err(&jpeg->v4l2_dev, "Failed to init memory allocator\n");
 		ret = PTR_ERR(jpeg->alloc_ctx);
