@@ -96,7 +96,7 @@ enum exynos5250_clks {
 	sclk_mmc0, sclk_mmc1, sclk_mmc2, sclk_mmc3, sclk_sata, sclk_usb3,
 	sclk_jpeg, sclk_uart0, sclk_uart1, sclk_uart2, sclk_uart3, sclk_pwm,
 	sclk_audio1, sclk_audio2, sclk_spdif, sclk_spi0, sclk_spi1, sclk_spi2,
-	sclk_hdmiphy,
+	sclk_hdmiphy, mout_jpeg, sclk_cpll,
 
 	/* gate clocks */
 	gscl0 = 256, gscl1, gscl2, gscl3, gscl_wa, gscl_wb, smmu_gscl0,
@@ -259,7 +259,7 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 						CLK_SET_RATE_PARENT, 0),
 	MUX_F(sclk_epll, "sclk_epll", mout_epll_p, SRC_TOP2, 12, 1,
 						CLK_SET_RATE_PARENT, 0),
-	MUX(none, "sclk_cpll", mout_cpll_p, SRC_TOP2, 8, 1),
+	MUX(sclk_cpll, "sclk_cpll", mout_cpll_p, SRC_TOP2, 8, 1),
 	MUX(none, "sclk_mpll_user", mout_mpll_user_p, SRC_TOP2, 20, 1),
 	MUX(none, "sclk_bpll_user", mout_bpll_user_p, SRC_TOP2, 24, 1),
 	MUX(none, "mout_aclk166", mout_aclk166_p, SRC_TOP0, 8, 1),
@@ -304,7 +304,7 @@ struct samsung_mux_clock exynos5250_mux_clks[] __initdata = {
 	MUX(none, "mout_mmc3", mout_group1_p, SRC_FSYS, 12, 4),
 	MUX(none, "mout_sata", mout_aclk200_p, SRC_FSYS, 24, 1),
 	MUX(none, "mout_usb3", mout_usb3_p, SRC_FSYS, 28, 1),
-	MUX(none, "mout_jpeg", mout_group1_p, SRC_GEN, 0, 4),
+	MUX(mout_jpeg, "mout_jpeg", mout_group1_p, SRC_GEN, 0, 4),
 	MUX(none, "mout_uart0", mout_group1_p, SRC_PERIC0, 0, 4),
 	MUX(none, "mout_uart1", mout_group1_p, SRC_PERIC0, 4, 4),
 	MUX(none, "mout_uart2", mout_group1_p, SRC_PERIC0, 8, 4),
