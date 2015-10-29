@@ -763,6 +763,42 @@ static void exynos4_jpeg_set_huff_tbl(void __iomem *base)
 							ARRAY_SIZE(hactblg0));
 }
 
+static int exynos4_jpeg_set_sclk_rate(struct s5p_jpeg *jpeg)
+{
+	struct clk *mout_jpeg, *sclk_cpll;
+	int ret;
+
+	mout_jpeg = clk_get(jpeg->dev, "mout_jpeg");
+	if (IS_ERR(mout_jpeg)) {
+		dev_err(jpeg->dev, "mout_jpeg clock not available: %ld\n",
+			PTR_ERR(mout_jpeg));
+		return PTR_ERR(mout_jpeg);
+	}
+
+	sclk_cpll = clk_get(jpeg->dev, "sclk_cpll");
+	if (IS_ERR(sclk_cpll)) {
+		dev_err(jpeg->dev, "sclk_cpll clock not available: %ld\n",
+			PTR_ERR(sclk_cpll));
+		clk_put(mout_jpeg);
+		return PTR_ERR(sclk_cpll);
+	}
+
+	ret = clk_set_parent(mout_jpeg, sclk_cpll);
+	clk_put(sclk_cpll);
+	clk_put(mout_jpeg);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_parent failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = clk_set_rate(jpeg->sclk, 166500*1000);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_rate failed: %d\n", ret);
+		return ret;
+	}
+	return 0;
+}
+
 #ifdef CONFIG_EXYNOS_IOMMU
 static int jpeg_iommu_init(struct platform_device *pdev)
 {
@@ -812,6 +848,7 @@ static void jpeg_iommu_deinit(struct platform_device *pdev)
 	}
 }
 #endif
+
 /*
  * ============================================================================
  * Device file operations
@@ -2640,8 +2677,13 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "clock source %p\n", jpeg->clk);
 
 	jpeg->sclk = clk_get(&pdev->dev, "sclk");
-	if (IS_ERR(jpeg->sclk))
+	if (IS_ERR(jpeg->sclk)) {
 		dev_info(&pdev->dev, "sclk clock not available\n");
+	} else if (jpeg->variant->version == SJPEG_EXYNOS4) {
+		ret = exynos4_jpeg_set_sclk_rate(jpeg);
+		if (ret)
+			goto clk_get_rollback;
+	}
 
 	/* v4l2 device */
 	ret = v4l2_device_register(&pdev->dev, &jpeg->v4l2_dev);
