@@ -68,7 +68,8 @@ bool btmrvl_check_evtpkt(struct btmrvl_private *priv, struct sk_buff *skb)
 			wake_up_interruptible(&priv->adapter->cmd_wait_q);
 
 			if (hci_opcode_ogf(opcode) == 0x3F) {
-				BT_DBG("vendor event skipped: opcode=%#4.4x", opcode);
+				BT_DBG("vendor event skipped: opcode=%#4.4x",
+				       opcode);
 				kfree_skb(skb);
 				return false;
 			}
@@ -183,7 +184,7 @@ static int btmrvl_send_sync_cmd(struct btmrvl_private *priv, u16 opcode,
 	}
 
 	skb = bt_skb_alloc(HCI_COMMAND_HDR_SIZE + len, GFP_ATOMIC);
-	if (skb == NULL) {
+	if (!skb) {
 		BT_ERR("No free skb");
 		return -ENOMEM;
 	}
@@ -195,7 +196,7 @@ static int btmrvl_send_sync_cmd(struct btmrvl_private *priv, u16 opcode,
 	if (len)
 		memcpy(skb_put(skb, len), param, len);
 
-	bt_cb(skb)->pkt_type = MRVL_VENDOR_PKT;
+	hci_skb_pkt_type(skb) = MRVL_VENDOR_PKT;
 
 	skb_queue_head(&priv->adapter->tx_queue, skb);
 
@@ -376,20 +377,6 @@ static int btmrvl_tx_pkt(struct btmrvl_private *priv, struct sk_buff *skb)
 		return -EINVAL;
 	}
 
-	if (skb_headroom(skb) < BTM_HEADER_LEN) {
-		struct sk_buff *tmp = skb;
-
-		skb = skb_realloc_headroom(skb, BTM_HEADER_LEN);
-		if (!skb) {
-			BT_ERR("Tx Error: realloc_headroom failed %d",
-				BTM_HEADER_LEN);
-			skb = tmp;
-			return -EINVAL;
-		}
-
-		kfree_skb(tmp);
-	}
-
 	skb_push(skb, BTM_HEADER_LEN);
 
 	/* header type: byte[3]
@@ -400,7 +387,7 @@ static int btmrvl_tx_pkt(struct btmrvl_private *priv, struct sk_buff *skb)
 	skb->data[0] = (skb->len & 0x0000ff);
 	skb->data[1] = (skb->len & 0x00ff00) >> 8;
 	skb->data[2] = (skb->len & 0xff0000) >> 16;
-	skb->data[3] = bt_cb(skb)->pkt_type;
+	skb->data[3] = hci_skb_pkt_type(skb);
 
 	if (priv->hw_host_to_card)
 		ret = priv->hw_host_to_card(priv, skb->data, skb->len);
@@ -447,16 +434,9 @@ static int btmrvl_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct btmrvl_private *priv = hci_get_drvdata(hdev);
 
-	BT_DBG("type=%d, len=%d", skb->pkt_type, skb->len);
+	BT_DBG("type=%d, len=%d", hci_skb_pkt_type(skb), skb->len);
 
-	if (!test_bit(HCI_RUNNING, &hdev->flags)) {
-		BT_ERR("Failed testing HCI_RUNING, flags=%lx", hdev->flags);
-		print_hex_dump_bytes("data: ", DUMP_PREFIX_OFFSET,
-							skb->data, skb->len);
-		return -EBUSY;
-	}
-
-	switch (bt_cb(skb)->pkt_type) {
+	switch (hci_skb_pkt_type(skb)) {
 	case HCI_COMMAND_PKT:
 		hdev->stat.cmd_tx++;
 		break;
@@ -490,9 +470,6 @@ static int btmrvl_close(struct hci_dev *hdev)
 {
 	struct btmrvl_private *priv = hci_get_drvdata(hdev);
 
-	if (!test_and_clear_bit(HCI_RUNNING, &hdev->flags))
-		return 0;
-
 	skb_queue_purge(&priv->adapter->tx_queue);
 
 	return 0;
@@ -500,8 +477,6 @@ static int btmrvl_close(struct hci_dev *hdev)
 
 static int btmrvl_open(struct hci_dev *hdev)
 {
-	set_bit(HCI_RUNNING, &hdev->flags);
-
 	return 0;
 }
 
@@ -541,14 +516,17 @@ static int btmrvl_check_device_tree(struct btmrvl_private *priv)
 		ret = of_property_read_u8_array(dt_node, "btmrvl,cal-data",
 						cal_data + BT_CAL_HDR_LEN,
 						BT_CAL_DATA_SIZE);
-		if (ret)
+		if (ret) {
+			of_node_put(dt_node);
 			return ret;
+		}
 
 		BT_DBG("Use cal data from device tree");
 		ret = btmrvl_download_cal_data(priv, cal_data,
 					       BT_CAL_DATA_SIZE);
 		if (ret) {
 			BT_ERR("Fail to download calibrate data");
+			of_node_put(dt_node);
 			return ret;
 		}
 	}
