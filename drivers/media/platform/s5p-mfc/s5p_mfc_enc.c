@@ -1774,23 +1774,37 @@ static int vidioc_s_crop(struct file *file, void *priv,
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
 
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		int left, right, top, bottom;
-		left = round_down(a->c.left, 16);
-		right = ctx->img_width - (left + a->c.width);
-		top = round_down(a->c.top, 16);
-		bottom = ctx->img_height - (top + a->c.height);
-		if (left > ctx->img_width)
-			left = ctx->img_width;
-		if (right < 0)
-			right = 0;
-		if (top > ctx->img_height)
-			top = ctx->img_height;
-		if (bottom < 0)
-			bottom = 0;
-		p->crop_left_offset = left;
-		p->crop_right_offset = right;
-		p->crop_top_offset = top;
-		p->crop_bottom_offset = bottom;
+		int margin_l, margin_r, margin_t, margin_b;
+
+		/*
+		 * Make sure that left and top are inside image bounds
+		 * and round them down to full macroblocks as required
+		 * by hardware.
+		 */
+		margin_l = a->c.left;
+		margin_l = clamp(margin_l, 0, ctx->img_width);
+		margin_l = round_down(margin_l, 16);
+
+		margin_t = a->c.top;
+		margin_t = clamp(margin_t, 0, ctx->img_height);
+		margin_t = round_down(margin_t, 16);
+
+		/*
+		 * Find the original size of right/bottom margin based
+		 * on original value of left/top. Then adjust it to stay
+		 * between left/top margin and right/bottom image edges.
+		 */
+		margin_r = ctx->img_width - (a->c.left + a->c.width);
+		margin_r = clamp(margin_r, 0, ctx->img_width - margin_l);
+
+		margin_b = ctx->img_height - (a->c.top + a->c.height);
+		margin_b = round_down(margin_b, 2);
+		margin_b = clamp(margin_b, 0, ctx->img_height - margin_t);
+
+		p->crop_left_offset = margin_l;
+		p->crop_right_offset = margin_r;
+		p->crop_top_offset = margin_t;
+		p->crop_bottom_offset = margin_b;
 	} else {
 		mfc_err("Setting crop is only possible for the output queue\n");
 		return -EINVAL;
