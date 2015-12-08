@@ -2639,6 +2639,11 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	jpeg->variant = jpeg_get_drv_data(&pdev->dev);
+	if (!jpeg->variant) {
+		dev_err(&pdev->dev,
+			"Failed to probe, an expected error on Exynos4210.\n");
+		return -ENODEV;
+	}
 
 	mutex_init(&jpeg->lock);
 	spin_lock_init(&jpeg->slock);
@@ -2901,7 +2906,14 @@ static const struct of_device_id samsung_jpeg_match[] = {
 		.data = &exynos3250_jpeg_drvdata,
 	}, {
 		.compatible = "samsung,exynos4210-jpeg",
-		.data = &exynos4_jpeg_drvdata,
+		/*
+		 * This variant of the JPEG decoder can't properly signal JPEG
+		 * errors and the API currently assumes that JPEG errors will
+		 * be reported. We will effectively disable the driver on this
+		 * hardware until the API is extended to allow the JPEG decoder
+		 * to say that images are OK with errors going unreported.
+		 */
+		.data = NULL,
 	}, {
 		.compatible = "samsung,exynos4212-jpeg",
 		.data = &exynos4_jpeg_drvdata,
