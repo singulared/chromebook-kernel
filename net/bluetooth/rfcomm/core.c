@@ -281,7 +281,7 @@ static void rfcomm_dlc_clear_timer(struct rfcomm_dlc *d)
 {
 	BT_DBG("dlc %p state %ld", d, d->state);
 
-	if (del_timer(&d->timer))
+	if (timer_pending(&d->timer) && del_timer(&d->timer))
 		rfcomm_dlc_put(d);
 }
 
