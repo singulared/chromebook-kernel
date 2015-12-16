@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2014 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -15,18 +15,12 @@
 
 
 
+#ifndef _MIDG_COHERENCY_H_
+#define _MIDG_COHERENCY_H_
 
+#define COHERENCY_ACE_LITE 0
+#define COHERENCY_ACE      1
+#define COHERENCY_NONE     31
+#define COHERENCY_FEATURE_BIT(x) (1 << (x))
 
-#include <linux/atomic.h>
-#include <linux/mempool.h>
-#include <linux/slab.h>
-
-/* raw page handling */
-struct kbase_mem_allocator {
-	struct kbase_device *kbdev;
-	atomic_t            free_list_size;
-	unsigned int        free_list_max_size;
-	struct mutex        free_list_lock;
-	struct list_head    free_list_head;
-	struct shrinker     free_list_reclaimer;
-};
+#endif /* _MIDG_COHERENCY_H_ */
