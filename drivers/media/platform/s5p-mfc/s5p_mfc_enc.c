@@ -276,6 +276,14 @@ static struct mfc_control controls[] = {
 		.menu_skip_mask = 0,
 	},
 	{
+		.id = V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME,
+		.type = V4L2_CTRL_TYPE_BUTTON,
+		.minimum = 0,
+		.maximum = 0,
+		.step = 0,
+		.default_value = 0,
+	},
+	{
 		.id = V4L2_CID_MPEG_VIDEO_VBV_SIZE,
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
@@ -1454,6 +1462,12 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 			(1 << MFC_ENC_FRAME_INSERTION);
 		p->codec.runtime.force_frame_type = ctrl->val;
 		break;
+	case V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME:
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_FRAME_INSERTION);
+		p->codec.runtime.force_frame_type =
+			V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME;
+		break;
 	case V4L2_CID_MPEG_VIDEO_VBV_SIZE:
 		p->vbv_size = ctrl->val;
 		break;
@@ -2157,6 +2171,22 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 		runtime_params->params_changed = 0;
 		/* force_frame_type needs to revert to 0 after being sent. */
 		if (runtime_params->force_frame_type != 0) {
+			/*
+			 * If force_frame_type was set to != 0 from
+			 * V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME's handler, the
+			 * value of V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE
+			 * wasn't changed. If we were to call v4l2_ctrl_s_ctrl
+			 * for V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE with
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED, it
+			 * could have been ignored, as the value could have
+			 * already been DISABLED. Explicitly set it to
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME first,
+			 * in order for the change back to DISABLED not to be
+			 * ignored.
+			 */
+			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
+				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
+				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME);
 			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
 				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
 				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED);
