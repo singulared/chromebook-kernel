@@ -191,18 +191,20 @@ static void i915_gem_dmabuf_kunmap(struct dma_buf *dma_buf, unsigned long page_n
 static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
-	struct drm_device *dev = obj->base.dev;
+	int ret;
 
 	if (obj->base.size < vma->vm_end - vma->vm_start)
 		return -EINVAL;
 
-	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP;
-	vma->vm_ops = dev->driver->gem_vm_ops;
-	vma->vm_private_data = &obj->base;
-	vma->vm_page_prot =
-		pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
+	if (!obj->base.filp)
+		return -ENODEV;
 
-	vma->vm_ops->open(vma);
+	ret = obj->base.filp->f_op->mmap(obj->base.filp, vma);
+	if (ret)
+		return ret;
+
+	fput(vma->vm_file);
+	vma->vm_file = get_file(obj->base.filp);
 
 	return 0;
 }
