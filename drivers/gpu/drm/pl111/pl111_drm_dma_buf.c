@@ -382,7 +382,6 @@ static void *pl111_dma_buf_kmap(struct dma_buf *dma_buf, unsigned long pageno)
 }
 
 static int pl111_dma_buf_begin_cpu(struct dma_buf *dma_buf,
-					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
@@ -390,7 +389,6 @@ static int pl111_dma_buf_begin_cpu(struct dma_buf *dma_buf,
 }
 
 static void pl111_dma_buf_end_cpu(struct dma_buf *dma_buf,
-					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
