@@ -381,50 +381,10 @@ static void *pl111_dma_buf_kmap(struct dma_buf *dma_buf, unsigned long pageno)
 	return vaddr;
 }
 
-/*
- * Find a scatterlist that starts in "start" and has "len"
- * or return a NULL dma_handle.
- */
-static dma_addr_t pl111_find_matching_sg(struct sg_table *sgt, size_t start,
-					size_t len)
-{
-	struct scatterlist *sg;
-	unsigned int count;
-	size_t size = 0;
-	dma_addr_t dma_handle = 0;
-
-	/* Find a scatterlist that starts in "start" and has "len"
-	* or return error */
-	for_each_sg(sgt->sgl, sg, sgt->nents, count) {
-		if ((size == start) && (len == sg_dma_len(sg))) {
-			dma_handle = sg_dma_address(sg);
-			break;
-		}
-		size += sg_dma_len(sg);
-	}
-	return dma_handle;
-}
-
 static int pl111_dma_buf_begin_cpu(struct dma_buf *dma_buf,
 					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
-	struct pl111_gem_bo *bo = dma_buf->priv;
-	struct sg_table *sgt = bo->sgt;
-	dma_addr_t dma_handle;
-
-	if ((start + len) > bo->gem_object.size)
-		return -EINVAL;
-
-	if (!(bo->type & PL111_BOT_SHM)) {
-		struct device *dev = bo->gem_object.dev->dev;
-
-		dma_handle = pl111_find_matching_sg(sgt, start, len);
-		if (!dma_handle)
-			return -EINVAL;
-
-		dma_sync_single_range_for_cpu(dev, dma_handle, 0, len, dir);
-	}
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
 	return 0;
 }
@@ -433,22 +393,6 @@ static void pl111_dma_buf_end_cpu(struct dma_buf *dma_buf,
 					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
-	struct pl111_gem_bo *bo = dma_buf->priv;
-	struct sg_table *sgt = bo->sgt;
-	dma_addr_t dma_handle;
-
-	if ((start + len) > bo->gem_object.size)
-		return;
-
-	if (!(bo->type & PL111_BOT_DMA)) {
-		struct device *dev = bo->gem_object.dev->dev;
-
-		dma_handle = pl111_find_matching_sg(sgt, start, len);
-		if (!dma_handle)
-			return;
-
-		dma_sync_single_range_for_device(dev, dma_handle, 0, len, dir);
-	}
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
 }
 
