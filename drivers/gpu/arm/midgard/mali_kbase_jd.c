@@ -585,7 +585,6 @@ static int reservation_sync(struct kbase_jd_atom *katom,
 			return ret;
 		}
 	}
-	drm_reservation_cb_done(&katom->rcb);
 
 	for (r = 0; r < num_resvs; r++) {
 		if (test_bit(r, excl_resvs_bitmap))
@@ -595,6 +594,7 @@ static int reservation_sync(struct kbase_jd_atom *katom,
 			reservation_object_add_shared_fence(resvs[r],
 							katom->rendered_fence);
 	}
+	drm_reservation_cb_done(&katom->rcb);
 	drm_unlock_reservations(resvs, num_resvs, &ww_ctx);
 	kbase_jd_kds_waiters_add(katom);
 	return ret;
