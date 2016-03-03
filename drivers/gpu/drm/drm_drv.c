@@ -395,9 +395,6 @@ long drm_ioctl(struct file *filp,
 
 	dev = file_priv->minor->dev;
 
-	if (drm_device_is_unplugged(dev))
-		return -ENODEV;
-
 	atomic_inc(&dev->ioctl_count);
 	atomic_inc(&dev->counts[_DRM_STAT_IOCTLS]);
 	++file_priv->ioctl_count;

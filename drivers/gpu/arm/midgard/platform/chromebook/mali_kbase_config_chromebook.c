@@ -99,7 +99,6 @@ static void kbase_platform_dvfs_set_level(struct kbase_device *kbdev, int level)
 static int kbase_platform_dvfs_get_level(int freq);
 #endif
 
-#if defined(CONFIG_MALI_MIDGARD_DVFS) || defined(CONFIG_MALI_MIDGARD_DEBUG_SYS)
 struct mali_dvfs_info {
 	unsigned int voltage;
 	unsigned int clock;
@@ -109,7 +108,6 @@ struct mali_dvfs_info {
 	int down_cnt_threshold;
 };
 static struct mali_dvfs_info *mali_dvfs_infotbl;
-#endif
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 /*
@@ -318,15 +316,15 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control);
 void kbase_platform_remove_sysfs_file(struct device *dev);
 int kbase_platform_init(struct kbase_device *kbdev);
 void kbase_platform_term(struct kbase_device *kbdev);
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 static void kbase_platform_dvfs_set_max(struct kbase_device *kbdev);
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 static int kbase_platform_create_sysfs_file(struct device *dev);
 #ifdef CONFIG_MALI_HWC_TRACE
 static int mali_setup_system_tracing(struct device *dev);
 static void mali_cleanup_system_tracing(struct device *dev);
 #endif /* CONFIG_MALI_HWC_TRACE */
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 static struct mali_dvfs_status mali_dvfs_status_current;
@@ -362,9 +360,9 @@ int get_cpu_clock_speed(u32* cpu_clock)
  */
 static int pm_callback_power_on(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	pm_runtime_resume(kbdev->dev);
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 	return 0;
 }
 
@@ -373,9 +371,9 @@ static int pm_callback_power_on(struct kbase_device *kbdev)
  */
 static void pm_callback_power_off(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_PM_RUNTIME
+#ifdef KBASE_PM_RUNTIME
 	pm_schedule_suspend(kbdev->dev, RUNTIME_PM_DELAY_TIME);
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* KBASE_PM_RUNTIME */
 }
 
 /**
@@ -383,15 +381,28 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
  */
 static void pm_callback_suspend(struct kbase_device *kbdev)
 {
+#ifdef CONFIG_MALI_MIDGARD_DVFS
 	kbase_platform_dvfs_set_max(kbdev);
+#endif /* CONFIG_MALI_MIDGARD_DVFS */
 }
+
+#ifdef KBASE_PM_RUNTIME
+static int pm_callback_runtime_idle(struct kbase_device *kbdev)
+{
+	/* Avoid pm_runtime_suspend being called. */
+	return 1;
+}
+#endif /* KBASE_PM_RUNTIME */
 
 struct kbase_pm_callback_conf pm_callbacks =
 {
 	.power_on_callback = pm_callback_power_on,
 	.power_off_callback = pm_callback_power_off,
 	.power_suspend_callback = pm_callback_suspend,
-	.power_resume_callback = NULL
+	.power_resume_callback = NULL,
+#ifdef KBASE_PM_RUNTIME
+	.power_runtime_idle_callback = pm_callback_runtime_idle,
+#endif /* KBASE_PM_RUNTIME */
 };
 
 int kbase_platform_early_init(void)
@@ -411,13 +422,11 @@ int kbase_platform_exynos5_init(struct kbase_device *kbdev)
 	if (err)
 		return err;
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	err = kbase_platform_create_sysfs_file(kbdev->dev);
 	if (err) {
 		kbase_platform_term(kbdev);
 		return err;
 	}
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 	return 0;
 }
@@ -427,9 +436,7 @@ int kbase_platform_exynos5_init(struct kbase_device *kbdev)
  */
 void kbase_platform_exynos5_term(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 	kbase_platform_remove_sysfs_file(kbdev->dev);
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 	kbase_platform_term(kbdev);
 }
 
@@ -725,7 +732,6 @@ int kbase_platform_cmu_pmu_control(struct kbase_device *kbdev, int control)
 	return 0;
 }
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 /** The sysfs file @c clock, fbdev.
  *
  * This is used for obtaining information about the vithar
@@ -1128,7 +1134,6 @@ void kbase_platform_remove_sysfs_file(struct device *dev)
 	mali_cleanup_system_tracing(dev);
 #endif /* CONFIG_MALI_HWC_TRACE */
 }
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 int kbase_platform_init(struct kbase_device *kbdev)
 {
@@ -1557,7 +1562,6 @@ int kbase_platform_get_default_voltage(struct device *dev, int *vol)
 	return 0;
 }
 
-#ifdef CONFIG_MALI_MIDGARD_DEBUG_SYS
 int kbase_platform_get_voltage(struct device *dev, int *vol)
 {
 #ifdef CONFIG_REGULATOR
@@ -1573,7 +1577,6 @@ int kbase_platform_get_voltage(struct device *dev, int *vol)
 #endif /* CONFIG_REGULATOR */
 	return 0;
 }
-#endif /* CONFIG_MALI_MIDGARD_DEBUG_SYS */
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 static int kbase_platform_set_voltage(struct device *dev, int vol)
@@ -1751,7 +1754,7 @@ static int kbase_platform_asv_set(int enable)
 }
 #endif /* MALI_DVFS_ASV_ENABLE */
 
-#if defined (CONFIG_MALI_HWC_TRACE) && defined (CONFIG_MALI_MIDGARD_DEBUG_SYS)
+#ifdef CONFIG_MALI_HWC_TRACE
 /*
  * Mali hardware performance counter trace support.  Each counter
  * has a corresponding trace event.  To use, enable events and write
@@ -2519,4 +2522,4 @@ static void mali_cleanup_system_tracing(struct device *dev)
 	device_remove_file(dev, &dev_attr_hwc_enable);
 	mutex_destroy(&mali_hwcounter_mutex);
 }
-#endif /* CONFIG_MALI_HWC_TRACE && CONFIG_MALI_MIDGARD_DEBUG_SYS */
+#endif /* CONFIG_MALI_HWC_TRACE  */

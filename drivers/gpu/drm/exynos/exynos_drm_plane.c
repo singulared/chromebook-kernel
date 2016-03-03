@@ -335,9 +335,9 @@ static int exynos_drm_plane_update_sync(struct reservation_object *resv,
 		ww_mutex_unlock(&resv->lock);
 		return ret;
 	}
-	drm_reservation_cb_done(&cookie->rcb);
 	reservation_object_add_shared_fence(resv,
 					cookie->fence);
+	drm_reservation_cb_done(&cookie->rcb);
 	ww_mutex_unlock(&resv->lock);
 	return ret;
 }

@@ -86,8 +86,8 @@ enum {
 #define SCAN_BEACON_ENTRY_PAD			6
 
 #define MWIFIEX_PASSIVE_SCAN_CHAN_TIME	110
-#define MWIFIEX_ACTIVE_SCAN_CHAN_TIME	30
-#define MWIFIEX_SPECIFIC_SCAN_CHAN_TIME	30
+#define MWIFIEX_ACTIVE_SCAN_CHAN_TIME	40
+#define MWIFIEX_SPECIFIC_SCAN_CHAN_TIME	40
 #define MWIFIEX_DEF_SCAN_CHAN_GAP_TIME  50
 
 #define SCAN_RSSI(RSSI)					(0x100 - ((u8)(RSSI)))
@@ -773,6 +773,8 @@ struct mwifiex_adapter {
 	u8 more_task_flag;
 	u16 tx_buf_size;
 	u16 curr_tx_buf_size;
+	/* sdio single port rx aggregation capability */
+	bool host_disable_sdio_rx_aggr;
 	bool sdio_rx_aggr_enable;
 	u16 sdio_rx_block_size;
 	u32 ioport;

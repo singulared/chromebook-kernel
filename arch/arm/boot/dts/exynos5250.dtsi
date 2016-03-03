@@ -199,12 +199,14 @@
 		samsung,power-domain = <&mfc_pd>;
 	};
 
-	jpeg_codec@11E00000 {
+	jpeg_codec: jpeg_codec@11E00000 {
 		compatible = "samsung,exynos4210-jpeg";
 		reg = <0x11E00000 0x1000>;
 		interrupts = <0 89 0>;
-		clocks = <&clock 145>, <&clock 270>;
-		clock-names = "sclk", "jpeg";
+		clocks = <&clock 145>, <&clock 270>,
+			 <&clock 158>, <&clock 159>;
+		clock-names = "sclk", "jpeg",
+			      "mout_jpeg", "sclk_cpll";
 		status = "ok";
 	};
 
@@ -944,6 +946,9 @@
 		compatible = "samsung,exynos-sysmmu";
 		interrupt-parent = <&combiner>;
 		interrupts = <4 2>;
+		mmu-master = <&jpeg_codec>;
+		clocks = <&clock 273>, <&clock 270>;
+		clock-names = "sysmmu", "master";
 	};
 
 	sysmmu-flite0 {

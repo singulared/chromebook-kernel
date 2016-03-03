@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2012-2014 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -30,6 +30,12 @@
 #include <drm/drm_crtc_helper.h>
 
 #include "pl111_drm.h"
+
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 11, 0))
+#define export_dma_buf export_dma_buf
+#else
+#define export_dma_buf dma_buf
+#endif
 
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 static void obtain_kds_if_currently_displayed(struct drm_device *dev,
@@ -375,74 +381,16 @@ static void *pl111_dma_buf_kmap(struct dma_buf *dma_buf, unsigned long pageno)
 	return vaddr;
 }
 
-/*
- * Find a scatterlist that starts in "start" and has "len"
- * or return a NULL dma_handle.
- */
-static dma_addr_t pl111_find_matching_sg(struct sg_table *sgt, size_t start,
-					size_t len)
-{
-	struct scatterlist *sg;
-	unsigned int count;
-	size_t size = 0;
-	dma_addr_t dma_handle = 0;
-
-	/* Find a scatterlist that starts in "start" and has "len"
-	* or return error */
-	for_each_sg(sgt->sgl, sg, sgt->nents, count) {
-		if ((size == start) && (len == sg_dma_len(sg))) {
-			dma_handle = sg_dma_address(sg);
-			break;
-		}
-		size += sg_dma_len(sg);
-	}
-	return dma_handle;
-}
-
 static int pl111_dma_buf_begin_cpu(struct dma_buf *dma_buf,
-					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
-	struct pl111_gem_bo *bo = dma_buf->priv;
-	struct sg_table *sgt = bo->sgt;
-	dma_addr_t dma_handle;
-
-	if ((start + len) > bo->gem_object.size)
-		return -EINVAL;
-
-	if (!(bo->type & PL111_BOT_SHM)) {
-		struct device *dev = bo->gem_object.dev->dev;
-
-		dma_handle = pl111_find_matching_sg(sgt, start, len);
-		if (!dma_handle)
-			return -EINVAL;
-
-		dma_sync_single_range_for_cpu(dev, dma_handle, 0, len, dir);
-	}
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
 	return 0;
 }
 
 static void pl111_dma_buf_end_cpu(struct dma_buf *dma_buf,
-					size_t start, size_t len,
 					enum dma_data_direction dir)
 {
-	struct pl111_gem_bo *bo = dma_buf->priv;
-	struct sg_table *sgt = bo->sgt;
-	dma_addr_t dma_handle;
-
-	if ((start + len) > bo->gem_object.size)
-		return;
-
-	if (!(bo->type & PL111_BOT_DMA)) {
-		struct device *dev = bo->gem_object.dev->dev;
-
-		dma_handle = pl111_find_matching_sg(sgt, start, len);
-		if (!dma_handle)
-			return;
-
-		dma_sync_single_range_for_device(dev, dma_handle, 0, len, dir);
-	}
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
 }
 
@@ -529,12 +477,16 @@ struct drm_gem_object *pl111_gem_prime_import(struct drm_device *dev,
 		cont_phys += (PAGE_SIZE - sgl->offset);
 	}
 
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 11, 0))
 	ret = drm_gem_private_object_init(dev, &bo->gem_object,
 					  dma_buf->size);
 	if (ret != 0) {
 		DRM_ERROR("DRM could not import DMA GEM obj\n");
 		goto err_free_buffer;
 	}
+#else
+	drm_gem_private_object_init(dev, &bo->gem_object, dma_buf->size);
+#endif
 
 	if (bo->type & PL111_BOT_DMA) {
 		bo->backing_data.dma.fb_cpu_addr = sg_virt(sgt->sgl);
