@@ -859,7 +859,7 @@ struct samsung_div_clock exynos542x_div_clks[] __initdata = {
 	/* Psgen */
 	DIV(none, "dout_gen_blk", "mout_user_aclk266", DIV2_RATIO0, 8, 1),
 	/* Jpeg */
-	DIV(none, "dout_jpg_blk", "aclk166", DIV2_RATIO0, 20, 1),
+	DIV(none, "dout_jpg_blk", "mout_user_aclk166", DIV2_RATIO0, 20, 1),
 	/* isp */
 	DIV(none, "dout_pwm_isp", "mout_pwm_isp", SCLK_DIV_ISP1, 28, 4),
 	DIV(none, "dout_uart_isp", "mout_uart_isp", SCLK_DIV_ISP1, 24, 4),
