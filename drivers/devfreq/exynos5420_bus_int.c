@@ -460,7 +460,7 @@ EXYNOS5_INT_PM_CLK(aclk_400_mscl, "aclk400_mscl",
 			"aclk400_mscl_d", aclk_400_mscl);
 EXYNOS5_INT_PM_CLK(aclk_400_isp, "aclk400_isp",
 			"aclk400_isp_d", aclk_400_isp);
-EXYNOS5_INT_PM_CLK(aclk_166, "aclk166",
+EXYNOS5_INT_PM_CLK(aclk_166, "aclk166_m",
 			"aclk166_d", aclk_166);
 EXYNOS5_INT_PM_CLK(aclk_266, "aclk266",
 			"aclk266_d", aclk_266);
