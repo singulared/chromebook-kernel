@@ -388,10 +388,11 @@ static int pl111_dma_buf_begin_cpu(struct dma_buf *dma_buf,
 	return 0;
 }
 
-static void pl111_dma_buf_end_cpu(struct dma_buf *dma_buf,
+static int pl111_dma_buf_end_cpu(struct dma_buf *dma_buf,
 					enum dma_data_direction dir)
 {
 	/* PL111_BOT_DMA uses coherents mappings, no need to sync */
+	return 0;
 }
 
 static struct dma_buf_ops pl111_dma_buf_ops = {
