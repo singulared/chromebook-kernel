@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -81,5 +81,13 @@ void kbase_backend_gpuprops_get(struct kbase_device *kbdev,
 				GPU_CONTROL_REG(L2_PRESENT_LO), NULL);
 	regdump->l2_present_hi = kbase_reg_read(kbdev,
 				GPU_CONTROL_REG(L2_PRESENT_HI), NULL);
+}
+
+void kbase_backend_gpuprops_get_features(struct kbase_device *kbdev,
+					struct kbase_gpuprops_regdump *regdump)
+{
+		regdump->coherency_features =
+				COHERENCY_FEATURE_BIT(COHERENCY_NONE) |
+				COHERENCY_FEATURE_BIT(COHERENCY_ACE_LITE);
 }
 

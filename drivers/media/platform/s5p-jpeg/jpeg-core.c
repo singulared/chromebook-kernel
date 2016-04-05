@@ -763,6 +763,42 @@ static void exynos4_jpeg_set_huff_tbl(void __iomem *base)
 							ARRAY_SIZE(hactblg0));
 }
 
+static int exynos4_jpeg_set_sclk_rate(struct s5p_jpeg *jpeg)
+{
+	struct clk *mout_jpeg, *sclk_cpll;
+	int ret;
+
+	mout_jpeg = clk_get(jpeg->dev, "mout_jpeg");
+	if (IS_ERR(mout_jpeg)) {
+		dev_err(jpeg->dev, "mout_jpeg clock not available: %ld\n",
+			PTR_ERR(mout_jpeg));
+		return PTR_ERR(mout_jpeg);
+	}
+
+	sclk_cpll = clk_get(jpeg->dev, "sclk_cpll");
+	if (IS_ERR(sclk_cpll)) {
+		dev_err(jpeg->dev, "sclk_cpll clock not available: %ld\n",
+			PTR_ERR(sclk_cpll));
+		clk_put(mout_jpeg);
+		return PTR_ERR(sclk_cpll);
+	}
+
+	ret = clk_set_parent(mout_jpeg, sclk_cpll);
+	clk_put(sclk_cpll);
+	clk_put(mout_jpeg);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_parent failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = clk_set_rate(jpeg->sclk, 166500*1000);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_rate failed: %d\n", ret);
+		return ret;
+	}
+	return 0;
+}
+
 #ifdef CONFIG_EXYNOS_IOMMU
 static int jpeg_iommu_init(struct platform_device *pdev)
 {
@@ -812,6 +848,7 @@ static void jpeg_iommu_deinit(struct platform_device *pdev)
 	}
 }
 #endif
+
 /*
  * ============================================================================
  * Device file operations
@@ -2518,6 +2555,7 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	unsigned long payload_size = 0;
 	enum vb2_buffer_state state = VB2_BUF_STATE_DONE;
 	bool interrupt_timeout = false;
+	bool stream_error = false;
 	u32 irq_status;
 
 	spin_lock(&jpeg->slock);
@@ -2533,6 +2571,12 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	exynos3250_jpeg_clear_int_status(jpeg->regs, irq_status);
 
 	jpeg->irq_status |= irq_status;
+
+	if (irq_status & EXYNOS3250_STREAM_STAT) {
+		stream_error = true;
+		dev_err(jpeg->dev,
+			"Syntax error or unrecoverable error occurred.\n");
+	}
 
 	curr_ctx = v4l2_m2m_get_curr_priv(jpeg->m2m_dev);
 
@@ -2550,7 +2594,7 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 				EXYNOS3250_RDMA_DONE |
 				EXYNOS3250_RESULT_STAT))
 		payload_size = exynos3250_jpeg_compressed_size(jpeg->regs);
-	else if (interrupt_timeout)
+	else if (interrupt_timeout || stream_error)
 		state = VB2_BUF_STATE_ERROR;
 	else
 		goto exit_unlock;
@@ -2595,6 +2639,11 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	jpeg->variant = jpeg_get_drv_data(&pdev->dev);
+	if (!jpeg->variant) {
+		dev_err(&pdev->dev,
+			"Failed to probe, an expected error on Exynos4210.\n");
+		return -ENODEV;
+	}
 
 	mutex_init(&jpeg->lock);
 	spin_lock_init(&jpeg->slock);
@@ -2640,8 +2689,13 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "clock source %p\n", jpeg->clk);
 
 	jpeg->sclk = clk_get(&pdev->dev, "sclk");
-	if (IS_ERR(jpeg->sclk))
+	if (IS_ERR(jpeg->sclk)) {
 		dev_info(&pdev->dev, "sclk clock not available\n");
+	} else if (jpeg->variant->version == SJPEG_EXYNOS4) {
+		ret = exynos4_jpeg_set_sclk_rate(jpeg);
+		if (ret)
+			goto clk_get_rollback;
+	}
 
 	/* v4l2 device */
 	ret = v4l2_device_register(&pdev->dev, &jpeg->v4l2_dev);
@@ -2852,7 +2906,14 @@ static const struct of_device_id samsung_jpeg_match[] = {
 		.data = &exynos3250_jpeg_drvdata,
 	}, {
 		.compatible = "samsung,exynos4210-jpeg",
-		.data = &exynos4_jpeg_drvdata,
+		/*
+		 * This variant of the JPEG decoder can't properly signal JPEG
+		 * errors and the API currently assumes that JPEG errors will
+		 * be reported. We will effectively disable the driver on this
+		 * hardware until the API is extended to allow the JPEG decoder
+		 * to say that images are OK with errors going unreported.
+		 */
+		.data = NULL,
 	}, {
 		.compatible = "samsung,exynos4212-jpeg",
 		.data = &exynos4_jpeg_drvdata,

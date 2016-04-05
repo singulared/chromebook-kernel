@@ -93,31 +93,6 @@ struct drm_exynos_vidi_connection {
 	uint64_t edid;
 };
 
-/* acquire type definitions. */
-enum drm_exynos_gem_cpu_acquire_type {
-	DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED = 0x0,
-	DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE = 0x1,
-};
-
-/**
- * A structure for acquiring buffer for CPU access.
- *
- * @handle: a handle to gem object created.
- */
-struct drm_exynos_gem_cpu_acquire {
-	unsigned int handle;
-	unsigned int flags;
-};
-
-/*
- * A structure for releasing buffer for GPU access.
- *
- * @handle: a handle to gem object created.
- */
-struct drm_exynos_gem_cpu_release {
-	unsigned int handle;
-};
-
 /* memory type definitions. */
 enum drm_exynos_gem_mem_type {
 	/* Physically Continuous memory and used as default. */

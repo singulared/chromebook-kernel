@@ -231,8 +231,9 @@ static int vgem_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 {
 	struct drm_gem_object *gem_object;
 	uint64_t size;
+	uint64_t pitch = args->width * DIV_ROUND_UP(args->bpp, 8);
 
-	size = args->height * args->width * DIV_ROUND_UP(args->bpp, 8);
+	size = args->height * pitch;
 	if (size == 0)
 		return -EINVAL;
 
@@ -244,7 +245,7 @@ static int vgem_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 	}
 
 	args->size = gem_object->size;
-	args->pitch = args->width;
+	args->pitch = pitch;
 
 	DRM_DEBUG_DRIVER("Created object of size %lld\n", size);
 
@@ -304,9 +305,6 @@ int vgem_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_vgem_gem_object *vgem_obj;
 	struct drm_hash_item *hash;
 	int ret = 0;
-
-	if (drm_device_is_unplugged(dev))
-		return -ENODEV;
 
 	mutex_lock(&dev->struct_mutex);
 

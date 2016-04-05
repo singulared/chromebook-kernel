@@ -39,10 +39,15 @@
 /* Support UK8 IOCTLS */
 #define BASE_LEGACY_UK8_SUPPORT 1
 
+/* Support UK9 IOCTLS */
+#define BASE_LEGACY_UK9_SUPPORT 1
+
 typedef u64 base_mem_handle;
 
 #include "mali_base_mem_priv.h"
 #include "mali_kbase_profiling_gator_api.h"
+#include "mali_midg_coherency.h"
+#include "mali_kbase_gpu_id.h"
 
 /*
  * Dependency stuff, keep it private for now. May want to expose it if
@@ -154,10 +159,9 @@ enum {
 /* OUT */
 	BASE_MEM_NEED_MMAP = (1U << 14), /**< Must call mmap to aquire a GPU
 					     address for the alloc */
-
 /* IN */
 	BASE_MEM_COHERENT_SYSTEM_REQUIRED = (1U << 15), /**< Page coherence
-							Outer shareable, required. */
+					     Outer shareable, required. */
 	BASE_MEM_SECURE = (1U << 16)           /**< Secure memory */
 
 };
@@ -182,7 +186,13 @@ enum {
 
 
 /**
- * @brief Memory types supported by @a base_mem_import
+ * enum base_mem_import_type - Memory types supported by @a base_mem_import
+ *
+ * @BASE_MEM_IMPORT_TYPE_INVALID: Invalid type
+ * @BASE_MEM_IMPORT_TYPE_UMP: UMP import. Handle type is ump_secure_id.
+ * @BASE_MEM_IMPORT_TYPE_UMM: UMM import. Handle type is a file descriptor (int)
+ * @BASE_MEM_IMPORT_TYPE_USER_BUFFER: User buffer import. Handle is a
+ * base_mem_import_user_buffer
  *
  * Each type defines what the supported handle type is.
  *
@@ -194,17 +204,24 @@ enum {
  */
 typedef enum base_mem_import_type {
 	BASE_MEM_IMPORT_TYPE_INVALID = 0,
-	/** UMP import. Handle type is ump_secure_id. */
 	BASE_MEM_IMPORT_TYPE_UMP = 1,
-	/** UMM import. Handle type is a file descriptor (int) */
-	BASE_MEM_IMPORT_TYPE_UMM = 2
+	BASE_MEM_IMPORT_TYPE_UMM = 2,
+	BASE_MEM_IMPORT_TYPE_USER_BUFFER = 3
 } base_mem_import_type;
 
-/* legacy API wrappers */
-#define base_tmem_import_type          base_mem_import_type
-#define BASE_TMEM_IMPORT_TYPE_INVALID  BASE_MEM_IMPORT_TYPE_INVALID
-#define BASE_TMEM_IMPORT_TYPE_UMP      BASE_MEM_IMPORT_TYPE_UMP
-#define BASE_TMEM_IMPORT_TYPE_UMM      BASE_MEM_IMPORT_TYPE_UMM
+/**
+ * struct base_mem_import_user_buffer - Handle of an imported user buffer
+ *
+ * @ptr:	kbase_pointer to imported user buffer
+ * @length:	length of imported user buffer in bytes
+ *
+ * This structure is used to represent a handle of an imported user buffer.
+ */
+
+struct base_mem_import_user_buffer {
+	kbase_pointer ptr;
+	u64 length;
+};
 
 /**
  * @brief Invalid memory handle type.
@@ -219,6 +236,9 @@ typedef enum base_mem_import_type {
 #define BASE_MEM_COOKIE_BASE                   (64ul  << 12)
 #define BASE_MEM_FIRST_FREE_ADDRESS            ((BITS_PER_LONG << 12) + \
 						BASE_MEM_COOKIE_BASE)
+
+/* Mask to detect 4GB boundary alignment */
+#define BASE_MEM_MASK_4GB  0xfffff000UL
 
 /* Bit mask of cookies used for for memory allocation setup */
 #define KBASE_COOKIE_MASK  ~1UL /* bit 0 is reserved */
@@ -464,9 +484,6 @@ typedef u16 base_jd_core_req;
  *
  * In contrast to @ref BASE_JD_REQ_CS, this does \b not indicate that the Job
  * Chain contains 'Geometry Shader' or 'Vertex Shader' jobs.
- *
- * @note This is a more flexible variant of the @ref BASE_CONTEXT_HINT_ONLY_COMPUTE flag,
- * allowing specific jobs to be marked as 'Only Compute' instead of the entire context
  */
 #define BASE_JD_REQ_ONLY_COMPUTE    (1U << 10)
 
@@ -625,7 +642,7 @@ typedef struct base_jd_atom_v2 {
 	kbase_pointer extres_list;	    /**< list of external resources */
 	u16 nr_extres;			    /**< nr of external resources */
 	base_jd_core_req core_req;	    /**< core requirements */
-	const struct base_dependency pre_dep[2]; /**< pre-dependencies, one need to use SETTER function to assign this field,
+	struct base_dependency pre_dep[2];  /**< pre-dependencies, one need to use SETTER function to assign this field,
 	this is done in order to reduce possibility of improper assigment of a dependency field */
 	base_atom_id atom_number;	    /**< unique number to identify the atom */
 	base_jd_prio prio;                  /**< Atom priority. Refer to @ref base_jd_prio for more details */
@@ -665,16 +682,17 @@ typedef struct base_external_resource {
  * @param     dep_type     The dep_type to be assigned.
  *
  */
-static inline void base_jd_atom_dep_set(const struct base_dependency *const_dep, base_atom_id id, base_jd_dep_type dep_type)
+static inline void base_jd_atom_dep_set(struct base_dependency *dep,
+		base_atom_id id, base_jd_dep_type dep_type)
 {
-	struct base_dependency *dep;
+	LOCAL_ASSERT(dep != NULL);
 
-	LOCAL_ASSERT(const_dep != NULL);
-	/* make sure we don't set not allowed combinations of atom_id/dependency_type */
+	/*
+	 * make sure we don't set not allowed combinations
+	 * of atom_id/dependency_type.
+	 */
 	LOCAL_ASSERT((id == 0 && dep_type == BASE_JD_DEP_TYPE_INVALID) ||
 			(id > 0 && dep_type != BASE_JD_DEP_TYPE_INVALID));
-
-	dep = (struct base_dependency *)const_dep;
 
 	dep->atom_id = id;
 	dep->dependency_type = dep_type;
@@ -687,11 +705,12 @@ static inline void base_jd_atom_dep_set(const struct base_dependency *const_dep,
  * @param[in]     from         The dependency to make a copy from.
  *
  */
-static inline void base_jd_atom_dep_copy(const struct base_dependency *const_dep, const struct base_dependency *from)
+static inline void base_jd_atom_dep_copy(struct base_dependency *dep,
+		const struct base_dependency *from)
 {
-	LOCAL_ASSERT(const_dep != NULL);
+	LOCAL_ASSERT(dep != NULL);
 
-	base_jd_atom_dep_set(const_dep, from->atom_id, from->dependency_type);
+	base_jd_atom_dep_set(dep, from->atom_id, from->dependency_type);
 }
 
 /**
@@ -753,11 +772,12 @@ static inline void base_jd_fence_wait_setup_v2(struct base_jd_atom_v2 *atom, str
 /**
  * @brief External resource info initialization.
  *
- * Sets up a external resource object to reference
+ * Sets up an external resource object to reference
  * a memory allocation and the type of access requested.
  *
  * @param[in] res     The resource object to initialize
- * @param     handle  The handle to the imported memory object
+ * @param     handle  The handle to the imported memory object, must be
+ *                    obtained by calling @ref base_mem_as_import_handle().
  * @param     access  The type of access requested
  */
 static inline void base_external_resource_init(struct base_external_resource *res, struct base_import_handle handle, base_external_resource_access access)
@@ -967,26 +987,7 @@ typedef struct base_dump_cpu_gpu_counters {
 
 /** @} end group base_user_api_job_dispatch */
 
-#ifdef __KERNEL__
-/*
- * The following typedefs should be removed when a midg types header is added.
- * See MIDCOM-1657 for details.
- */
-typedef u32 gpu_product_id;
-typedef u32 gpu_cache_features;
-typedef u32 gpu_tiler_features;
-typedef u32 gpu_mem_features;
-typedef u32 gpu_mmu_features;
-typedef u32 gpu_js_features;
-typedef u32 gpu_as_present;
-typedef u32 gpu_js_present;
-
 #define GPU_MAX_JOB_SLOTS 16
-
-#else
-#include <gpu/mali_gpu_registers.h>
-#include <gpu/mali_gpu_props.h>
-#endif
 
 /**
  * @page page_base_user_api_gpuprops User-side Base GPU Property Query API
@@ -1211,7 +1212,7 @@ struct mali_base_gpu_core_props {
 	/**
 	 * Product specific value.
 	 */
-	gpu_product_id product_id;
+	u32 product_id;
 
 	/**
 	 * Status of the GPU release.
@@ -1353,7 +1354,7 @@ struct mali_base_gpu_coherent_group_info {
 	 * Coherency features of the memory, accessed by @ref gpu_mem_features
 	 * methods
 	 */
-	gpu_mem_features coherency;
+	u32 coherency;
 
 	u32 padding;
 
@@ -1385,16 +1386,16 @@ struct gpu_raw_gpu_props {
 	u64 l2_present;
 	u64 unused_1; /* keep for backward compatibility */
 
-	gpu_cache_features l2_features;
+	u32 l2_features;
 	u32 suspend_size; /* API 8.2+ */
-	gpu_mem_features mem_features;
-	gpu_mmu_features mmu_features;
+	u32 mem_features;
+	u32 mmu_features;
 
-	gpu_as_present as_present;
+	u32 as_present;
 
 	u32 js_present;
-	gpu_js_features js_features[GPU_MAX_JOB_SLOTS];
-	gpu_tiler_features tiler_features;
+	u32 js_features[GPU_MAX_JOB_SLOTS];
+	u32 tiler_features;
 	u32 texture_features[3];
 
 	u32 gpu_id;
@@ -1404,7 +1405,11 @@ struct gpu_raw_gpu_props {
 	u32 thread_max_barrier_size;
 	u32 thread_features;
 
-	u32 coherency_features;
+	/*
+	 * Note: This is the _selected_ coherency mode rather than the
+	 * available modes as exposed in the coherency_features register.
+	 */
+	u32 coherency_mode;
 };
 
 /**
@@ -1458,28 +1463,7 @@ enum base_context_create_flags {
 	/** Base context is a 'System Monitor' context for Hardware counters.
 	 *
 	 * One important side effect of this is that job submission is disabled. */
-	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED = (1u << 1),
-
-	/** Base context flag indicating a 'hint' that this context uses Compute
-	 * Jobs only.
-	 *
-	 * Specifially, this means that it only sends atoms that <b>do not</b>
-	 * contain the following @ref base_jd_core_req :
-	 * - BASE_JD_REQ_FS
-	 * - BASE_JD_REQ_T
-	 *
-	 * Violation of these requirements will cause the Job-Chains to be rejected.
-	 *
-	 * In addition, it is inadvisable for the atom's Job-Chains to contain Jobs
-	 * of the following @ref gpu_job_type (whilst it may work now, it may not
-	 * work in future) :
-	 * - @ref GPU_JOB_VERTEX
-	 * - @ref GPU_JOB_GEOMETRY
-	 *
-	 * @note An alternative to using this is to specify the BASE_JD_REQ_ONLY_COMPUTE
-	 * requirement in atoms.
-	 */
-	BASE_CONTEXT_HINT_ONLY_COMPUTE = (1u << 2)
+	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED = (1u << 1)
 };
 
 /**
@@ -1487,15 +1471,13 @@ enum base_context_create_flags {
  */
 #define BASE_CONTEXT_CREATE_ALLOWED_FLAGS \
 	(((u32)BASE_CONTEXT_CCTX_EMBEDDED) | \
-	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
+	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED))
 
 /**
  * Bitpattern describing the ::base_context_create_flags that can be passed to the kernel
  */
 #define BASE_CONTEXT_CREATE_KERNEL_FLAGS \
-	(((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) | \
-	  ((u32)BASE_CONTEXT_HINT_ONLY_COMPUTE))
+	((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED)
 
 /**
  * Private flags used on the base context

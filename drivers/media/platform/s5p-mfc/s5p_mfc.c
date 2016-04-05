@@ -920,6 +920,12 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	dev->mem_dev_l = &dev->plat_dev->dev;
 	dev->mem_dev_r = &dev->plat_dev->dev;
 #endif
+	/*
+	 * We'll do mostly sequential access, so sacrifice TLB efficiency for
+	 * faster allocation.
+	 */
+	dma_set_attr(DMA_ATTR_ALLOC_SINGLE_PAGES, &attrs);
+
 	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &attrs);
 
 	dev->alloc_ctx[0] = vb2_dma_contig_init_ctx_attrs(dev->mem_dev_l,
