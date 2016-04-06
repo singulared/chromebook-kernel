@@ -492,7 +492,6 @@ static void i915_repin_bound_fbs(struct drm_device *dev)
 static int i915_drm_freeze(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_crtc *crtc;
 
 	/* ignore lid events during suspend */
 	mutex_lock(&dev_priv->modeset_restore_lock);
@@ -517,12 +516,6 @@ static int i915_drm_freeze(struct drm_device *dev)
 		cancel_delayed_work_sync(&dev_priv->rps.delayed_resume_work);
 
 		drm_irq_uninstall(dev);
-		/*
-		 * Disable CRTCs directly since we want to preserve sw state
-		 * for _thaw.
-		 */
-		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-			dev_priv->display.crtc_disable(crtc);
 	}
 
 	i915_save_state(dev);
