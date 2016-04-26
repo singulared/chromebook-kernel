@@ -14,6 +14,8 @@
 #include <asm/uv/uv.h>
 #include <linux/debugfs.h>
 
+#ifdef CONFIG_SMP
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate)
 			= { &init_mm, 0, };
 
@@ -343,3 +345,4 @@ static int __cpuinit create_tlb_flushall_shift(void)
 }
 late_initcall(create_tlb_flushall_shift);
 #endif
+#endif /* CONFIG_SMP */
