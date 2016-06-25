@@ -101,6 +101,39 @@ struct dma_buf *vgem_gem_prime_export(struct drm_device *dev,
 			      NULL);
 }
 
+int vgem_gem_prime_mmap(struct drm_gem_object *gobj,
+			struct vm_area_struct *vma)
+{
+	struct drm_device *dev = gobj->dev;
+	struct drm_vgem_gem_object *obj = to_vgem_bo(gobj);
+	int ret;
+
+	mutex_lock(&dev->struct_mutex);
+
+	ret = vgem_gem_get_pages(obj);
+	if (ret)
+		goto out_unlock;
+
+	if (!gobj->dev->driver->gem_vm_ops) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	vma->vm_flags |= VM_IO | VM_MIXEDMAP | VM_DONTEXPAND | VM_DONTDUMP;
+	vma->vm_ops = gobj->dev->driver->gem_vm_ops;
+	vma->vm_private_data = obj;
+	vma->vm_page_prot =
+		pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
+
+	mutex_unlock(&dev->struct_mutex);
+	drm_gem_vm_open(vma);
+	return 0;
+
+out_unlock:
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
+}
+
 struct drm_gem_object *
 vgem_gem_prime_import_sg_table(struct drm_device *dev,
 			       size_t size,
