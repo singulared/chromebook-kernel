@@ -761,7 +761,7 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		break;
 	/* Context is to free instance ID */
 	case MFCINST_RETURN_INST:
-		return true;
+		return ctx->inst_no != MFC_NO_INSTANCE_SET;
 	default:
 		break;
 	}
