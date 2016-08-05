@@ -65,7 +65,14 @@ static inline void invpcid_flush_all_nonglobals(void)
 
 static inline void __native_flush_tlb(void)
 {
+	/*
+	 * If current->mm == NULL then we borrow a mm which may change during a
+	 * task switch and therefore we must not be preempted while we write CR3
+	 * back:
+	 */
+	preempt_disable();
 	native_write_cr3(native_read_cr3());
+	preempt_enable();
 }
 
 static inline void __native_flush_tlb_global(void)
