@@ -419,6 +419,7 @@ struct s5p_mfc_h264_enc_params {
 	u32 fmo_run_len[4];
 	u8 aso;
 	u32 aso_slice_order[8];
+	u8 sps_pps_before_idr;
 };
 
 /**

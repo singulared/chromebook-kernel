@@ -979,6 +979,11 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	/* hier qp enable */
 	reg &= ~(0x1 << 8);
 	reg |= ((p_h264->open_gop & 0x1) << 8);
+
+	/* Add SPS and PPS headers for each IDR. */
+	reg &= ~(0x1 << 29);
+	reg |= !!p_h264->sps_pps_before_idr << 29;
+
 	WRITEL(reg, mfc_regs->e_h264_options);
 
 	reg = 0;

@@ -459,6 +459,13 @@ static struct mfc_control controls[] = {
 		.default_value = 1,
 	},
 	{
+		.id = V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR,
+		.minimum = 0,
+		.maximum = 1,
+		.step = 1,
+		.default_value = 0,
+	},
+	{
 		.id = V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP,
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.name = "H263 I-Frame QP value",
@@ -1562,6 +1569,9 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP:
 		p->codec.h264.rc_b_frame_qp = ctrl->val;
+		break;
+	case V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR:
+		p->codec.h264.sps_pps_before_idr = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_MPEG4_I_FRAME_QP:
 	case V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP:
