@@ -17,9 +17,6 @@
 
 #include <drm/exynos_drm.h>
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-#include <linux/kds.h>
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 #include <drm/drm_sync_helper.h>
 #endif
@@ -272,13 +269,9 @@ static void exynos_drm_preclose(struct drm_device *dev,
 	DRM_DEBUG_DRIVER("\n");
 
 	mutex_lock(&dev->struct_mutex);
-	/* release kds resource sets for outstanding GEM object acquires */
+	/* release implicit fences for outstanding GEM object acquires */
 	list_for_each_entry_safe(cur, d,
 			&file_private->gem_cpu_acquire_list, list) {
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-		BUG_ON(cur->exynos_gem_obj->resource_set == NULL);
-		kds_resource_set_release(&cur->exynos_gem_obj->resource_set);
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 		BUG_ON(!cur->exynos_gem_obj->acquire_fence);
 		drm_fence_signal_and_put(&cur->exynos_gem_obj->acquire_fence);

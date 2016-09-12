@@ -19,9 +19,6 @@
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-#include <linux/kds.h>
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 #include "drm_sync_helper.h"
 #endif
@@ -95,10 +92,6 @@ struct exynos_drm_plane {
 	struct drm_framebuffer *fb;
 	struct drm_framebuffer *pending_fb;
 	struct drm_pending_vblank_event *pending_event;
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct kds_resource_set *kds;
-	struct kds_callback kds_cb;
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 	unsigned fence_context;
 	atomic_t fence_seqno;

@@ -15,9 +15,6 @@
 #include <linux/dma-buf.h>
 #include <linux/reservation.h>
 #include <linux/completion.h>
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-#include <linux/kds.h>
-#endif
 #include <drm/drm_sync_helper.h>
 #include <linux/shmem_fs.h>
 #include <drm/exynos_drm.h>
@@ -173,12 +170,6 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 
 	DRM_DEBUG_KMS("handle count = %d\n", atomic_read(&obj->handle_count));
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	if (exynos_gem_obj->resource_set != NULL) {
-		/* kds_resource_set_release NULLs the pointer */
-		kds_resource_set_release(&exynos_gem_obj->resource_set);
-	}
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 	drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
 #endif
