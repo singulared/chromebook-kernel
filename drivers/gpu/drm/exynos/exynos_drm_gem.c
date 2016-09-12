@@ -170,9 +170,6 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 
 	DRM_DEBUG_KMS("handle count = %d\n", atomic_read(&obj->handle_count));
 
-#ifdef CONFIG_DRM_DMA_SYNC
-	drm_fence_signal_and_put(&exynos_gem_obj->acquire_fence);
-#endif
 	/*
 	 * do not release memory region from exporter.
 	 *
