@@ -213,4 +213,6 @@ void *kbase_va_alloc(struct kbase_context *kctx, u32 size, struct kbase_hwc_dma_
  */
 void kbase_va_free(struct kbase_context *kctx, struct kbase_hwc_dma_mapping *handle);
 
+extern const struct vm_operations_struct kbase_vm_ops;
+
 #endif				/* _KBASE_MEM_LINUX_H_ */

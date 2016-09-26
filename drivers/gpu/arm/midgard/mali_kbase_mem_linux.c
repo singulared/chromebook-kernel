@@ -45,7 +45,6 @@
 #include <mali_kbase_tlstream.h>
 
 static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_struct *vma);
-static const struct vm_operations_struct kbase_vm_ops;
 
 /**
  * kbase_mem_shrink_cpu_mapping - Shrink the CPU mapping(s) of an allocation
@@ -54,14 +53,14 @@ static const struct vm_operations_struct kbase_vm_ops;
  * @new_pages: The number of pages after the shrink
  * @old_pages: The number of pages before the shrink
  *
- * Return: 0 on success, -errno on error.
- *
  * Shrink (or completely remove) all CPU mappings which reference the shrunk
  * part of the allocation.
  *
+ * Caller must ensure that @new_pages are equal to or larger than @old_pages.
+ *
  * Note: Caller must be holding the processes mmap_sem lock.
  */
-static int kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
+static void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
 		struct kbase_va_region *reg,
 		u64 new_pages, u64 old_pages);
 
@@ -700,21 +699,14 @@ void kbase_mem_evictable_unmark_reclaim(struct kbase_mem_phy_alloc *alloc)
 int kbase_mem_evictable_make(struct kbase_mem_phy_alloc *gpu_alloc)
 {
 	struct kbase_context *kctx = gpu_alloc->imported.kctx;
-	int err;
 
 	lockdep_assert_held(&kctx->reg_lock);
 
 	/* This alloction can't already be on a list. */
 	WARN_ON(!list_empty(&gpu_alloc->evict_node));
 
-	/*
-	 * Try to shrink the CPU mappings as required, if we fail then
-	 * fail the process of making this allocation evictable.
-	 */
-	err = kbase_mem_shrink_cpu_mapping(kctx, gpu_alloc->reg,
+	kbase_mem_shrink_cpu_mapping(kctx, gpu_alloc->reg,
 			0, gpu_alloc->nents);
-	if (err)
-		return -EINVAL;
 
 	/*
 	 * Add the allocation to the eviction list, after this point the shrink
@@ -1539,48 +1531,6 @@ bad_flags:
 	return -ENOMEM;
 }
 
-
-static int zap_range_nolock(struct mm_struct *mm,
-		const struct vm_operations_struct *vm_ops,
-		unsigned long start, unsigned long end)
-{
-	struct vm_area_struct *vma;
-	int err = -EINVAL; /* in case end < start */
-
-	while (start < end) {
-		unsigned long local_start;
-		unsigned long local_end;
-
-		vma = find_vma_intersection(mm, start, end);
-		if (!vma)
-			break;
-
-		/* is it ours? */
-		if (vma->vm_ops != vm_ops)
-			goto try_next;
-
-		local_start = vma->vm_start;
-
-		if (start > local_start)
-			local_start = start;
-
-		local_end = vma->vm_end;
-
-		if (end < local_end)
-			local_end = end;
-
-		err = zap_vma_ptes(vma, local_start, local_end - local_start);
-		if (unlikely(err))
-			break;
-
-try_next:
-		/* go to next vma, if any */
-		start = vma->vm_end;
-	}
-
-	return err;
-}
-
 int kbase_mem_grow_gpu_mapping(struct kbase_context *kctx,
 		struct kbase_va_region *reg,
 		u64 new_pages, u64 old_pages)
@@ -1599,52 +1549,21 @@ int kbase_mem_grow_gpu_mapping(struct kbase_context *kctx,
 	return ret;
 }
 
-static int kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
+static void kbase_mem_shrink_cpu_mapping(struct kbase_context *kctx,
 		struct kbase_va_region *reg,
 		u64 new_pages, u64 old_pages)
 {
-	struct kbase_mem_phy_alloc *cpu_alloc = reg->cpu_alloc;
-	struct kbase_cpu_mapping *mapping;
-	int err;
+	u64 gpu_va_start = reg->start_pfn;
 
 	lockdep_assert_held(&kctx->process_mm->mmap_sem);
 
-	list_for_each_entry(mapping, &cpu_alloc->mappings, mappings_list) {
-		unsigned long mapping_size;
+	if (new_pages == old_pages)
+		/* Nothing to do */
+		return;
 
-		mapping_size = (mapping->vm_end - mapping->vm_start)
-				>> PAGE_SHIFT;
-
-		/* is this mapping affected ?*/
-		if ((mapping->page_off + mapping_size) > new_pages) {
-			unsigned long first_bad = 0;
-
-			if (new_pages > mapping->page_off)
-				first_bad = new_pages - mapping->page_off;
-
-			err = zap_range_nolock(current->mm,
-					&kbase_vm_ops,
-					mapping->vm_start +
-					(first_bad << PAGE_SHIFT),
-					mapping->vm_end);
-
-			WARN(err,
-			     "Failed to zap VA range (0x%lx - 0x%lx);\n",
-			     mapping->vm_start +
-			     (first_bad << PAGE_SHIFT),
-			     mapping->vm_end
-			     );
-
-			/* The zap failed, give up and exit */
-			if (err)
-				goto failed;
-		}
-	}
-
-	return 0;
-
-failed:
-	return err;
+	unmap_mapping_range(kctx->filp->f_path.dentry->d_inode->i_mapping,
+			(gpu_va_start + new_pages) << PAGE_SHIFT,
+			(old_pages - new_pages) << PAGE_SHIFT, 1);
 }
 
 static int kbase_mem_shrink_gpu_mapping(struct kbase_context *kctx,
@@ -1775,12 +1694,8 @@ int kbase_mem_commit(struct kbase_context *kctx, u64 gpu_addr, u64 new_pages, en
 		delta = old_pages - new_pages;
 
 		/* Update all CPU mapping(s) */
-		res = kbase_mem_shrink_cpu_mapping(kctx, reg,
+		kbase_mem_shrink_cpu_mapping(kctx, reg,
 				new_pages, old_pages);
-		if (res) {
-			*failure_reason = BASE_BACKING_THRESHOLD_ERROR_OOM;
-			goto out_unlock;
-		}
 
 		/* Update the GPU mapping */
 		res = kbase_mem_shrink_gpu_mapping(kctx, reg,
@@ -1831,7 +1746,7 @@ static void kbase_cpu_vm_close(struct vm_area_struct *vma)
 
 	kbase_gpu_vm_lock(map->kctx);
 
-	if (map->region) {
+	if (map->free_on_close) {
 		KBASE_DEBUG_ASSERT((map->region->flags & KBASE_REG_ZONE_MASK) ==
 				KBASE_REG_ZONE_SAME_VA);
 		/* Avoid freeing memory on the process death which results in
@@ -1857,19 +1772,17 @@ static int kbase_cpu_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	struct kbase_cpu_mapping *map = vma->vm_private_data;
 	pgoff_t rel_pgoff;
 	size_t i;
+	pgoff_t addr;
 
 	KBASE_DEBUG_ASSERT(map);
 	KBASE_DEBUG_ASSERT(map->count > 0);
 	KBASE_DEBUG_ASSERT(map->kctx);
 	KBASE_DEBUG_ASSERT(map->alloc);
 
-	/* we don't use vmf->pgoff as it's affected by our mmap with
-	 * offset being a GPU VA or a cookie */
-	rel_pgoff = ((unsigned long)vmf->virtual_address - map->vm_start)
-			>> PAGE_SHIFT;
+	rel_pgoff = vmf->pgoff - map->region->start_pfn;
 
 	kbase_gpu_vm_lock(map->kctx);
-	if (map->page_off + rel_pgoff >= map->alloc->nents)
+	if (rel_pgoff >= map->alloc->nents)
 		goto locked_bad_fault;
 
 	/* Fault on access to DONT_NEED regions */
@@ -1877,13 +1790,15 @@ static int kbase_cpu_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 		goto locked_bad_fault;
 
 	/* insert all valid pages from the fault location */
-	for (i = rel_pgoff;
-	     i < MIN((vma->vm_end - vma->vm_start) >> PAGE_SHIFT,
-	     map->alloc->nents - map->page_off); i++) {
-		int ret = vm_insert_pfn(vma, map->vm_start + (i << PAGE_SHIFT),
-		    PFN_DOWN(map->alloc->pages[map->page_off + i]));
+	i = rel_pgoff;
+	addr = (pgoff_t)((uintptr_t)vmf->virtual_address >> PAGE_SHIFT);
+	while (i < map->alloc->nents && (addr < vma->vm_end >> PAGE_SHIFT)) {
+		int ret = vm_insert_pfn(vma, addr << PAGE_SHIFT,
+		    PFN_DOWN(map->alloc->pages[i]));
 		if (ret < 0 && ret != -EBUSY)
 			goto locked_bad_fault;
+
+		i++; addr++;
 	}
 
 	kbase_gpu_vm_unlock(map->kctx);
@@ -1895,7 +1810,7 @@ locked_bad_fault:
 	return VM_FAULT_SIGBUS;
 }
 
-static const struct vm_operations_struct kbase_vm_ops = {
+const struct vm_operations_struct kbase_vm_ops = {
 	.open  = kbase_cpu_vm_open,
 	.close = kbase_cpu_vm_close,
 	.fault = kbase_cpu_vm_fault
@@ -1904,7 +1819,6 @@ static const struct vm_operations_struct kbase_vm_ops = {
 static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vma, void *kaddr, size_t nr_pages, unsigned long aligned_offset, int free_on_close)
 {
 	struct kbase_cpu_mapping *map;
-	u64 start_off = vma->vm_pgoff - reg->start_pfn;
 	phys_addr_t *page_array;
 	int err = 0;
 	int i;
@@ -1954,6 +1868,8 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 
 	if (!kaddr) {
 		unsigned long addr = vma->vm_start + aligned_offset;
+		u64 start_off = vma->vm_pgoff - reg->start_pfn +
+			(aligned_offset >> PAGE_SHIFT);
 
 		vma->vm_flags |= VM_PFNMAP;
 		for (i = 0; i < nr_pages; i++) {
@@ -1979,16 +1895,9 @@ static int kbase_cpu_mmap(struct kbase_va_region *reg, struct vm_area_struct *vm
 		goto out;
 	}
 
-	map->page_off = start_off;
-	map->region = free_on_close ? reg : NULL;
+	map->region = reg;
+	map->free_on_close = free_on_close;
 	map->kctx = reg->kctx;
-	map->vm_start = vma->vm_start + aligned_offset;
-	if (aligned_offset) {
-		KBASE_DEBUG_ASSERT(!start_off);
-		map->vm_end = map->vm_start + (reg->nr_pages << PAGE_SHIFT);
-	} else {
-		map->vm_end = vma->vm_end;
-	}
 	map->alloc = kbase_mem_phy_alloc_get(reg->cpu_alloc);
 	map->count = 1; /* start with one ref */
 
@@ -2355,7 +2264,7 @@ int kbase_mmap(struct file *file, struct vm_area_struct *vma)
 		 * region start_pfn, so we effectively
 		 * map from offset 0 in the region.
 		 */
-		vma->vm_pgoff = reg->start_pfn;
+		vma->vm_pgoff = reg->start_pfn - (aligned_offset >> PAGE_SHIFT);
 
 		/* free the region on munmap */
 		free_on_close = 1;
@@ -2429,9 +2338,6 @@ dma_map:
 		if (map) {
 			map->kctx     = reg->kctx;
 			map->region   = NULL;
-			map->page_off = vma->vm_pgoff;
-			map->vm_start = vma->vm_start;
-			map->vm_end   = vma->vm_end;
 			map->count    = 1; /* start with one ref */
 
 			vma->vm_ops          = &kbase_dma_mmap_ops;

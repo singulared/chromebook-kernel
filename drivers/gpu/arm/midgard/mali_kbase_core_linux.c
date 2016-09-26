@@ -927,9 +927,8 @@ copy_failed:
 
 				err = kbasep_find_enclosing_cpu_mapping_offset(
 						kctx,
-						find->gpu_addr,
-						(uintptr_t) find->cpu_addr,
-						(size_t) find->size,
+						find->cpu_addr,
+						find->size,
 						&find->offset);
 
 				if (err)

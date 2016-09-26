@@ -933,54 +933,54 @@ int kbase_gpu_munmap(struct kbase_context *kctx, struct kbase_va_region *reg)
 	return err;
 }
 
-static struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping_of_region(const struct kbase_va_region *reg, unsigned long uaddr, size_t size)
+static struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(
+		struct kbase_context *kctx,
+		unsigned long uaddr, size_t size, u64 *offset)
 {
+	struct vm_area_struct *vma;
 	struct kbase_cpu_mapping *map;
-	struct list_head *pos;
 
-	KBASE_DEBUG_ASSERT(NULL != reg);
-	KBASE_DEBUG_ASSERT(reg->cpu_alloc);
+	lockdep_assert_held(&current->mm->mmap_sem);
 
 	if ((uintptr_t) uaddr + size < (uintptr_t) uaddr) /* overflow check */
 		return NULL;
 
-	list_for_each(pos, &reg->cpu_alloc->mappings) {
-		map = list_entry(pos, struct kbase_cpu_mapping, mappings_list);
-		if (map->vm_start <= uaddr && map->vm_end >= uaddr + size)
-			return map;
-	}
+	vma = find_vma_intersection(current->mm, uaddr, uaddr + size);
 
-	return NULL;
+	if (!vma || vma->vm_start > uaddr)
+		return NULL;
+	if (vma->vm_ops != &kbase_vm_ops)
+		/* Not ours! */
+		return NULL;
+
+	map = vma->vm_private_data;
+
+	if (map->kctx != kctx)
+		/* Not from this context! */
+		return NULL;
+
+	*offset = (uaddr - vma->vm_start) +
+		((vma->vm_pgoff - map->region->start_pfn) << PAGE_SHIFT);
+
+	return map;
 }
 
-KBASE_EXPORT_TEST_API(kbasep_find_enclosing_cpu_mapping_of_region);
-
 int kbasep_find_enclosing_cpu_mapping_offset(
-	struct kbase_context *kctx, u64 gpu_addr,
-	unsigned long uaddr, size_t size, u64 * offset)
+		struct kbase_context *kctx,
+		unsigned long uaddr, size_t size, u64 *offset)
 {
-	struct kbase_cpu_mapping *map = NULL;
-	const struct kbase_va_region *reg;
-	int err = -EINVAL;
+	struct kbase_cpu_mapping *map;
 
-	KBASE_DEBUG_ASSERT(kctx != NULL);
+	kbase_os_mem_map_lock(kctx);
 
-	kbase_gpu_vm_lock(kctx);
+	map = kbasep_find_enclosing_cpu_mapping(kctx, uaddr, size, offset);
 
-	reg = kbase_region_tracker_find_region_enclosing_address(kctx, gpu_addr);
-	if (reg && !(reg->flags & KBASE_REG_FREE)) {
-		map = kbasep_find_enclosing_cpu_mapping_of_region(reg, uaddr,
-				size);
-		if (map) {
-			*offset = (uaddr - PTR_TO_U64(map->vm_start)) +
-						 (map->page_off << PAGE_SHIFT);
-			err = 0;
-		}
-	}
+	kbase_os_mem_map_unlock(kctx);
 
-	kbase_gpu_vm_unlock(kctx);
+	if (!map)
+		return -EINVAL;
 
-	return err;
+	return 0;
 }
 
 KBASE_EXPORT_TEST_API(kbasep_find_enclosing_cpu_mapping_offset);
@@ -1049,7 +1049,7 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	phys_addr_t *gpu_pa;
 	u64 page_off, page_count;
 	u64 i;
-	off_t offset;
+	u64 offset;
 
 	kbase_os_mem_map_lock(kctx);
 	kbase_gpu_vm_lock(kctx);
@@ -1070,7 +1070,7 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	start = (uintptr_t)sset->user_addr;
 	size = (size_t)sset->size;
 
-	map = kbasep_find_enclosing_cpu_mapping_of_region(reg, start, size);
+	map = kbasep_find_enclosing_cpu_mapping(kctx, start, size, &offset);
 	if (!map) {
 		dev_warn(kctx->kbdev->dev, "Can't find CPU mapping 0x%016lX for VA 0x%016llX",
 				start, sset->mem_handle.basep.handle);
@@ -1078,11 +1078,17 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 		goto out_unlock;
 	}
 
-	offset = start & (PAGE_SIZE - 1);
-	page_off = map->page_off + ((start - map->vm_start) >> PAGE_SHIFT);
+	page_off = offset >> PAGE_SHIFT;
+	offset &= ~PAGE_MASK;
 	page_count = (size + offset + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
 	cpu_pa = kbase_get_cpu_phy_pages(reg);
 	gpu_pa = kbase_get_gpu_phy_pages(reg);
+
+	if (page_off + page_count > reg->nr_pages) {
+		/* Sync overflows the region */
+		err = -EINVAL;
+		goto out_unlock;
+	}
 
 	/* Sync first page */
 	if (cpu_pa[page_off]) {
