@@ -475,6 +475,35 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	memset(dev_cmd, 0, sizeof(*dev_cmd));
 	dev_cmd->hdr.cmd = TX_CMD;
+
+	if (iwl_mvm_has_new_tx_api(mvm)) {
+		struct iwl_tx_cmd_gen2 *cmd = (void *)dev_cmd->payload;
+		u16 offload_assist = iwl_mvm_tx_csum(mvm, skb, hdr, info);
+
+		/* padding is inserted later in transport */
+		if (ieee80211_hdrlen(hdr->frame_control) % 4 &&
+		    !(offload_assist & BIT(TX_CMD_OFFLD_AMSDU)))
+			offload_assist |= BIT(TX_CMD_OFFLD_PAD);
+
+		cmd->offload_assist |= cpu_to_le16(offload_assist);
+
+		/* Total # bytes to be transmitted */
+		cmd->len = cpu_to_le16((u16)skb->len);
+
+		/* Copy MAC header from skb into command buffer */
+		memcpy(cmd->hdr, hdr, hdrlen);
+
+		/* For data packets rate info comes from the fw */
+		if (ieee80211_is_data(hdr->frame_control) && sta)
+			goto out;
+
+		cmd->flags |= cpu_to_le32(IWL_TX_FLAGS_CMD_RATE);
+		cmd->rate_n_flags =
+			cpu_to_le32(iwl_mvm_get_tx_rate(mvm, info, sta));
+
+		goto out;
+	}
+
 	tx_cmd = (struct iwl_tx_cmd *)dev_cmd->payload;
 
 	if (info->control.hw_key)
@@ -484,6 +513,10 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	iwl_mvm_set_tx_cmd_rate(mvm, tx_cmd, info, sta, hdr->frame_control);
 
+	/* Copy MAC header from skb into command buffer */
+	memcpy(tx_cmd->hdr, hdr, hdrlen);
+
+out:
 	return dev_cmd;
 }
 
@@ -539,7 +572,6 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 	struct ieee80211_tx_info *skb_info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_tx_info info;
 	struct iwl_device_cmd *dev_cmd;
-	struct iwl_tx_cmd *tx_cmd;
 	u8 sta_id;
 	int hdrlen = ieee80211_hdrlen(hdr->frame_control);
 	int queue;
@@ -612,11 +644,6 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 
 	/* From now on, we cannot access info->control */
 	iwl_mvm_skb_prepare_status(skb, dev_cmd);
-
-	tx_cmd = (struct iwl_tx_cmd *)dev_cmd->payload;
-
-	/* Copy MAC header from skb into command buffer */
-	memcpy(tx_cmd->hdr, hdr, hdrlen);
 
 	if (iwl_trans_tx(mvm->trans, skb, dev_cmd, queue)) {
 		iwl_trans_free_tx_cmd(mvm->trans, dev_cmd);
@@ -906,7 +933,6 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct iwl_mvm_sta *mvmsta;
 	struct iwl_device_cmd *dev_cmd;
-	struct iwl_tx_cmd *tx_cmd;
 	__le16 fc;
 	u16 seq_number = 0;
 	u8 tid = IWL_MAX_TID_COUNT;
@@ -928,8 +954,6 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 					sta, mvmsta->sta_id);
 	if (!dev_cmd)
 		goto drop;
-
-	tx_cmd = (struct iwl_tx_cmd *)dev_cmd->payload;
 
 	/*
 	 * we handle that entirely ourselves -- for uAPSD the firmware
@@ -963,15 +987,13 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	if (iwl_mvm_is_dqa_supported(mvm) || is_ampdu)
 		txq_id = mvmsta->tid_data[tid].txq_id;
+
 	if (sta->tdls && !iwl_mvm_is_dqa_supported(mvm)) {
 		/* default to TID 0 for non-QoS packets */
 		u8 tdls_tid = tid == IWL_MAX_TID_COUNT ? 0 : tid;
 
 		txq_id = mvmsta->hw_queue[tid_to_mac80211_ac[tdls_tid]];
 	}
-
-	/* Copy MAC header from skb into command buffer */
-	memcpy(tx_cmd->hdr, hdr, hdrlen);
 
 	WARN_ON_ONCE(info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM);
 
