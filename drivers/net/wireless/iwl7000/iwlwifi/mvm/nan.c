@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,7 +25,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -99,10 +99,13 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 
 	IWL_DEBUG_MAC80211(IWL_MAC80211_GET_MVM(hw), "Start NAN\n");
 
-	/* apparently the FW doesn't support 5GHz without 2GHz */
-	if ((conf->dual & NL80211_NAN_BAND_5GHZ) &&
-	    !(conf->dual & NL80211_NAN_BAND_2GHZ))
-	    return -EOPNOTSUPP;
+	/* 2GHz is mandatory and nl80211 should make sure it is set.
+	 * Warn and add 2GHz if this happens anyway.
+	 */
+	if (WARN_ON(conf->bands && !(conf->bands & BIT(NL80211_BAND_2GHZ))))
+		return -EINVAL;
+
+	conf->bands |= BIT(NL80211_BAND_2GHZ);
 
 	mutex_lock(&mvm->mutex);
 
@@ -114,7 +117,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	cmd.sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
 	cmd.master_pref = conf->master_pref;
 
-	if (conf->dual & (NL80211_NAN_BAND_2GHZ | NL80211_NAN_BAND_DEFAULT)) {
+	if (conf->bands & BIT(NL80211_BAND_2GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_2GHZ,
 					NAN_CHANNEL_24)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_24);
@@ -128,7 +131,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		cdw |= 1;
 	}
 
-	if (conf->dual & NL80211_NAN_BAND_5GHZ) {
+	if (conf->bands & BIT(NL80211_BAND_5GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_5GHZ,
 					NAN_CHANNEL_52)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_52);
@@ -146,8 +149,8 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	cmd.op_bands = 3;
 	cmd.cdw = cpu_to_le16(cdw);
 
-	if ((conf->dual & NL80211_NAN_BAND_2GHZ) &&
-	    (conf->dual & NL80211_NAN_BAND_5GHZ))
+	if ((conf->bands & BIT(NL80211_BAND_2GHZ)) &&
+	    (conf->bands & BIT(NL80211_BAND_5GHZ)))
 		cmd.dual_band = cpu_to_le32(1);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_CONFIG_CMD,

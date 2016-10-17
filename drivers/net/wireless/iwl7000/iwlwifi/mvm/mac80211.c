@@ -627,6 +627,15 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		hw->wiphy->iface_combinations = iwl_mvm_iface_combinations_nan;
 		hw->wiphy->n_iface_combinations =
 			ARRAY_SIZE(iwl_mvm_iface_combinations_nan);
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
+		hw->wiphy->nan_supported_bands = BIT(NL80211_BAND_2GHZ);
+#endif
+		if (mvm->nvm_data->bands[NL80211_BAND_5GHZ].n_channels) {
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
+			hw->wiphy->nan_supported_bands |=
+				BIT(NL80211_BAND_5GHZ);
+#endif
+		}
 		hw->max_nan_de_entries = NAN_MAX_SUPPORTED_DE_ENTRIES;
 	} else {
 		hw->wiphy->iface_combinations = iwl_mvm_iface_combinations;
