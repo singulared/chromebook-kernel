@@ -614,6 +614,8 @@ static int iwl_store_ucode_sec(struct iwl_firmware_pieces *pieces,
 	sec_parse = (struct fw_sec_parsing *)data;
 
 	img = &pieces->img[type];
+	if (WARN_ON(img->sec_counter >= ARRAY_SIZE(img->sec)))
+		return -1;
 	sec = &img->sec[img->sec_counter];
 
 	sec->offset = le32_to_cpu(sec_parse->offset);
