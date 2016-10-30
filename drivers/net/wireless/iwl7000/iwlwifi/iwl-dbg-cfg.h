@@ -249,6 +249,7 @@ struct iwl_dbg_cfg {
 #endif /* CPTCFG_IWLWIFI_DEVICE_TESTMODE */
 	IWL_DBG_CFG_BIN(hw_address)
 	IWL_DBG_CFG_STR(fw_dbg_conf)
+	IWL_DBG_CFG_STR(nvm_file)
 	IWL_DBG_CFG_NODEF(u8, wakelock_mode)
 	IWL_DBG_CFG_NODEF(u32, d0i3_debug)
 	IWL_DBG_CFG_NODEF(u32, valid_ants)
