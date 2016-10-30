@@ -117,7 +117,7 @@ static int iwl_xvt_fill_paging_mem(struct iwl_xvt *xvt,
 	 * CPU2 paging CSS
 	 * CPU2 paging image (including instruction and data)
 	 */
-	for (sec_idx = 0; sec_idx < IWL_UCODE_SECTION_MAX; sec_idx++) {
+	for (sec_idx = 0; sec_idx < image->num_sec; sec_idx++) {
 		if (image->sec[sec_idx].offset == PAGING_SEPARATOR_SECTION) {
 			sec_idx++;
 			break;
@@ -128,7 +128,7 @@ static int iwl_xvt_fill_paging_mem(struct iwl_xvt *xvt,
 	 * If paging is enabled there should be at least 2 more sections left
 	 * (one for CSS and one for Paging data)
 	 */
-	if (sec_idx >= ARRAY_SIZE(image->sec) - 1) {
+	if (sec_idx >= image->num_sec - 1) {
 		IWL_ERR(xvt, "Paging: Missing CSS and/or paging sections\n");
 		iwl_xvt_free_fw_paging(xvt);
 		return -EINVAL;
