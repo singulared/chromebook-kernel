@@ -327,6 +327,8 @@ static const struct iwl_rx_handlers iwl_mvm_rx_handlers[] = {
 		       iwl_mvm_tof_responder_stats, RX_HANDLER_ASYNC_LOCKED),
 	RX_HANDLER_GRP(TOF_GROUP, TOF_LC_NOTIF,
 		       iwl_mvm_tof_lc_notif, RX_HANDLER_ASYNC_LOCKED),
+	RX_HANDLER_GRP(DEBUG_GROUP, MFU_ASSERT_DUMP_NTF,
+		       iwl_mvm_mfu_assert_dump_notif, RX_HANDLER_SYNC),
 	RX_HANDLER_GRP(PROT_OFFLOAD_GROUP, STORED_BEACON_NTF,
 		       iwl_mvm_rx_stored_beacon_notif, RX_HANDLER_SYNC),
 	RX_HANDLER_GRP(DATA_PATH_GROUP, MU_GROUP_MGMT_NOTIF,
@@ -510,6 +512,13 @@ static const struct iwl_hcmd_names iwl_mvm_data_path_names[] = {
 	HCMD_NAME(STA_PM_NOTIF),
 	HCMD_NAME(MU_GROUP_MGMT_NOTIF),
 	HCMD_NAME(RX_QUEUES_NOTIFICATION),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search
+ */
+static const struct iwl_hcmd_names iwl_mvm_debug_names[] = {
+	HCMD_NAME(MFU_ASSERT_DUMP_NTF),
 };
 
 /* Please keep this array *SORTED* by hex value.
