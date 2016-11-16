@@ -454,13 +454,6 @@ static int iwl_mvm_remove_sta_queue_marking(struct iwl_mvm *mvm, int queue)
 
 	rcu_read_unlock();
 
-	spin_lock_bh(&mvm->queue_info_lock);
-	/* Unmap MAC queues and TIDs from this queue */
-	mvm->queue_info[queue].hw_queue_to_mac80211 = 0;
-	mvm->queue_info[queue].hw_queue_refcount = 0;
-	mvm->queue_info[queue].tid_bitmap = 0;
-	spin_unlock_bh(&mvm->queue_info_lock);
-
 	return disable_agg_tids;
 }
 
