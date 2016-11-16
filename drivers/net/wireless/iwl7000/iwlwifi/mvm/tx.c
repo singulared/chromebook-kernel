@@ -106,9 +106,9 @@ static u16 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 			   struct ieee80211_hdr *hdr,
 			   struct ieee80211_tx_info *info)
 {
+	u16 offload_assist = 0;
 #if IS_ENABLED(CONFIG_INET)
 	u16 mh_len = ieee80211_hdrlen(hdr->frame_control);
-	u16 offload_assist = 0;
 	u8 protocol = 0;
 
 	/*
@@ -191,8 +191,8 @@ static u16 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 	offload_assist |= mh_len << TX_CMD_OFFLD_MH_SIZE;
 
 out:
-	return offload_assist;
 #endif
+	return offload_assist;
 }
 
 /*
