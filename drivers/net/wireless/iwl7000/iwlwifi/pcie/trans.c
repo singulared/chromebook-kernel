@@ -3197,10 +3197,18 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 			iwl_write_prph_no_grab(trans, WFPM_CTRL_REG, val);
 			val = iwl_read_prph_no_grab(trans, SD_REG_VER);
 
-			if ((val & 0xff00) == REG_VER_RF_ID_LC)
+			val &= 0xff00;
+			switch (val) {
+			case REG_VER_RF_ID_LC:
 				trans->hw_rf_id = CSR_HW_RF_ID_TYPE_LC;
-			else
+				break;
+			case REG_VER_RF_ID_JF:
 				trans->hw_rf_id = CSR_HW_RF_ID_TYPE_JF;
+				break;
+			/* TODO: get value for REG_VER_RF_ID_HR */
+			default:
+				trans->hw_rf_id = CSR_HW_RF_ID_TYPE_HR;
+			}
 			iwl_trans_release_nic_access(trans, &flags);
 		}
 	}
