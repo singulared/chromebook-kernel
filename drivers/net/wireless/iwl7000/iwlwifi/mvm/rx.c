@@ -670,10 +670,6 @@ static void iwl_mvm_stat_iterator(void *_data, u8 *mac,
 
 	}
 
-#ifdef CPTCFG_IWLMVM_TCM
-		/* TODO: TCM, rogue AP detection */
-#endif
-
 	if (mvmvif->id != id)
 		return;
 
