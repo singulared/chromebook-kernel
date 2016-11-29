@@ -1935,7 +1935,10 @@ void iwl_trans_pcie_free(struct iwl_trans *trans)
 #endif
 	iwl_pcie_synchronize_irqs(trans);
 
-	iwl_pcie_tx_free(trans);
+	if (trans->cfg->gen2)
+		iwl_pcie_gen2_tx_free(trans);
+	else
+		iwl_pcie_tx_free(trans);
 	iwl_pcie_rx_free(trans);
 
 	if (trans_pcie->msix_enabled) {
