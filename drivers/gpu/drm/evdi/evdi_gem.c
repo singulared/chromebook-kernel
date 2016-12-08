@@ -131,6 +131,10 @@ int evdi_gem_get_pages(struct evdi_gem_object *obj, gfp_t gfpmask)
 		obj->pages[i] = page;
 	}
 
+#if defined(CONFIG_X86)
+	drm_clflush_pages(obj->pages, page_count);
+#endif
+
 	return 0;
 err_pages:
 	while (i--)
