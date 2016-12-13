@@ -106,7 +106,6 @@ static struct dentry *iwl_dbgfs_root;
  * @op_mode: the running op_mode
  * @trans: transport layer
  * @dev: for debug prints only
- * @cfg: configuration struct
  * @fw_index: firmware revision to try loading
  * @firmware_name: composite filename of ucode file to load
  * @request_firmware_complete: the firmware has been obtained from user space
@@ -118,7 +117,6 @@ struct iwl_drv {
 	struct iwl_op_mode *op_mode;
 	struct iwl_trans *trans;
 	struct device *dev;
-	const struct iwl_cfg *cfg;
 #if IS_ENABLED(CPTCFG_IWLXVT)
 	bool xvt_mode_on;
 #endif
@@ -408,7 +406,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw,
 
 static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 {
-	const char *name_pre = drv->cfg->fw_name_pre;
+	const char *name_pre = drv->trans->cfg->fw_name_pre;
 	char tag[8];
 #if defined(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) && \
 	defined(CPTCFG_IWLWIFI_DEVICE_TESTMODE)
@@ -416,7 +414,7 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 #endif
 
 	if (first) {
-		drv->fw_index = drv->cfg->ucode_api_max;
+		drv->fw_index = drv->trans->cfg->ucode_api_max;
 		sprintf(tag, "%d", drv->fw_index);
 	} else {
 		drv->fw_index--;
@@ -428,14 +426,14 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 	 * here we always load the 'api_max' version, and once that
 	 * has returned we load the dbg-cfg file.
 	 */
-	if ((drv->fw_index != drv->cfg->ucode_api_max
+	if ((drv->fw_index != drv->trans->cfg->ucode_api_max
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	     && !drv->trans->dbg_cfg.load_old_fw
 #endif
 	    ) ||
-	    drv->fw_index < drv->cfg->ucode_api_min) {
+	    drv->fw_index < drv->trans->cfg->ucode_api_min) {
 #else
-	if (drv->fw_index < drv->cfg->ucode_api_min) {
+	if (drv->fw_index < drv->trans->cfg->ucode_api_min) {
 #endif
 		IWL_ERR(drv, "no suitable firmware found!\n");
 		return -ENOENT;
@@ -1451,7 +1449,7 @@ _iwl_op_mode_start(struct iwl_drv *drv, struct iwlwifi_opmode_table *op)
 	dbgfs_dir = drv->dbgfs_op_mode;
 #endif
 
-	op_mode = ops->start(drv->trans, drv->cfg, &drv->fw, dbgfs_dir);
+	op_mode = ops->start(drv->trans, drv->trans->cfg, &drv->fw, dbgfs_dir);
 
 	if (!op_mode) {
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
@@ -1492,8 +1490,8 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	struct iwlwifi_opmode_table *op;
 	int err;
 	struct iwl_firmware_pieces *pieces;
-	const unsigned int api_max = drv->cfg->ucode_api_max;
-	const unsigned int api_min = drv->cfg->ucode_api_min;
+	const unsigned int api_max = drv->trans->cfg->ucode_api_max;
+	const unsigned int api_min = drv->trans->cfg->ucode_api_min;
 	size_t trigger_tlv_sz[FW_DBG_TRIGGER_MAX];
 	u32 api_ver;
 	int i;
@@ -1578,7 +1576,8 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	 * In mvm uCode there is no difference between data and instructions
 	 * sections.
 	 */
-	if (fw->type == IWL_FW_DVM && validate_sec_sizes(drv, pieces, drv->cfg))
+	if (fw->type == IWL_FW_DVM && validate_sec_sizes(drv, pieces,
+							 drv->trans->cfg))
 		goto try_again;
 
 	/* Allocate ucode buffers for card's bus-master loading ... */
@@ -1676,14 +1675,14 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 		fw->init_evtlog_size = (pieces->init_evtlog_size - 16)/12;
 	else
 		fw->init_evtlog_size =
-			drv->cfg->base_params->max_event_log_size;
+			drv->trans->cfg->base_params->max_event_log_size;
 	fw->init_errlog_ptr = pieces->init_errlog_ptr;
 	fw->inst_evtlog_ptr = pieces->inst_evtlog_ptr;
 	if (pieces->inst_evtlog_size)
 		fw->inst_evtlog_size = (pieces->inst_evtlog_size - 16)/12;
 	else
 		fw->inst_evtlog_size =
-			drv->cfg->base_params->max_event_log_size;
+			drv->trans->cfg->base_params->max_event_log_size;
 	fw->inst_errlog_ptr = pieces->inst_errlog_ptr;
 
 	/*
@@ -1797,7 +1796,6 @@ struct iwl_drv *iwl_drv_start(struct iwl_trans *trans)
 
 	drv->trans = trans;
 	drv->dev = trans->dev;
-	drv->cfg = trans->cfg;
 
 	init_completion(&drv->request_firmware_complete);
 	INIT_LIST_HEAD(&drv->list);
