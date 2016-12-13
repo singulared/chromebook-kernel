@@ -1784,8 +1784,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	kfree(pieces);
 }
 
-struct iwl_drv *iwl_drv_start(struct iwl_trans *trans,
-			      const struct iwl_cfg *cfg)
+struct iwl_drv *iwl_drv_start(struct iwl_trans *trans)
 {
 	struct iwl_drv *drv;
 	int ret;
@@ -1798,7 +1797,7 @@ struct iwl_drv *iwl_drv_start(struct iwl_trans *trans,
 
 	drv->trans = trans;
 	drv->dev = trans->dev;
-	drv->cfg = cfg;
+	drv->cfg = trans->cfg;
 
 	init_completion(&drv->request_firmware_complete);
 	INIT_LIST_HEAD(&drv->list);
