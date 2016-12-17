@@ -168,12 +168,14 @@ struct s5p_jpeg_fmt {
  * @w:		image width
  * @h:		image height
  * @size:	image buffer size in bytes
+ * @type:	buffer type of the queue (enum v4l2_buf_type)
  */
 struct s5p_jpeg_q_data {
 	struct s5p_jpeg_fmt	*fmt;
 	u32			w;
 	u32			h;
 	u32			size;
+	u32			type;
 };
 
 /**
