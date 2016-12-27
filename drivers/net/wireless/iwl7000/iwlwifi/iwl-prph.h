@@ -422,7 +422,6 @@ enum {
 #define UREG_CHICK_MSIX_ENABLE	BIT(25)
 
 #define SD_REG_VER			0xA29600
-#define REG_VER_RF_ID_LC		0x2200
 #define REG_VER_RF_ID_JF		0x4900
 
 #endif				/* __iwl_prph_h__ */

@@ -3228,9 +3228,6 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 
 			val &= 0xff00;
 			switch (val) {
-			case REG_VER_RF_ID_LC:
-				trans->hw_rf_id = CSR_HW_RF_ID_TYPE_LC;
-				break;
 			case REG_VER_RF_ID_JF:
 				trans->hw_rf_id = CSR_HW_RF_ID_TYPE_JF;
 				break;
