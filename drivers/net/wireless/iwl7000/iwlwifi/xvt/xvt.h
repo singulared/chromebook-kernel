@@ -32,7 +32,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2015 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -281,7 +281,7 @@ struct iwl_xvt {
 	u8 *dma_cpu_addr;
 	dma_addr_t dma_addr;
 	/* TX done conter */
-	u32 tx_counter;
+	u64 tx_counter;
 	u32 tot_tx;
 	wait_queue_head_t mod_tx_done_wq;
 
@@ -293,6 +293,8 @@ struct iwl_xvt {
 	bool is_nvm_mac_override;
 	u8 nvm_hw_addr[ETH_ALEN];
 	u8 nvm_mac_addr[ETH_ALEN];
+	struct task_struct *tx_mod_thread;
+	bool tx_task_operating;
 };
 
 #define IWL_OP_MODE_GET_XVT(_op_mode) \
