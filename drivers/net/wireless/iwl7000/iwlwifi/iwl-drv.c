@@ -406,7 +406,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw,
 
 static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 {
-	const char *name_pre = drv->trans->cfg->fw_name_pre;
+	const struct iwl_cfg *cfg = drv->trans->cfg;
 	char tag[8];
 #if defined(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) && \
 	defined(CPTCFG_IWLWIFI_DEVICE_TESTMODE)
@@ -414,7 +414,7 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 #endif
 
 	if (first) {
-		drv->fw_index = drv->trans->cfg->ucode_api_max;
+		drv->fw_index = cfg->ucode_api_max;
 		sprintf(tag, "%d", drv->fw_index);
 	} else {
 		drv->fw_index--;
@@ -426,21 +426,36 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 	 * here we always load the 'api_max' version, and once that
 	 * has returned we load the dbg-cfg file.
 	 */
-	if ((drv->fw_index != drv->trans->cfg->ucode_api_max
+	if ((drv->fw_index != cfg->ucode_api_max
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	     && !drv->trans->dbg_cfg.load_old_fw
 #endif
 	    ) ||
-	    drv->fw_index < drv->trans->cfg->ucode_api_min) {
+	    drv->fw_index < cfg->ucode_api_min) {
 #else
-	if (drv->fw_index < drv->trans->cfg->ucode_api_min) {
+	if (drv->fw_index < cfg->ucode_api_min) {
 #endif
 		IWL_ERR(drv, "no suitable firmware found!\n");
+
+		if (cfg->ucode_api_min == cfg->ucode_api_max) {
+			IWL_ERR(drv, "%s%d is required\n", cfg->fw_name_pre,
+				cfg->ucode_api_max);
+		} else {
+			IWL_ERR(drv, "minimum version required: %s%d\n",
+				cfg->fw_name_pre,
+				cfg->ucode_api_min);
+			IWL_ERR(drv, "maximum version supported: %s%d\n",
+				cfg->fw_name_pre,
+				cfg->ucode_api_max);
+		}
+
+		IWL_ERR(drv,
+			"check git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git\n");
 		return -ENOENT;
 	}
 
 	snprintf(drv->firmware_name, sizeof(drv->firmware_name), "%s%s.ucode",
-		 name_pre, tag);
+		 cfg->fw_name_pre, tag);
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
