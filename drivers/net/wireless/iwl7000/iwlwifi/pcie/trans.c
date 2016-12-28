@@ -1572,6 +1572,13 @@ static void iwl_trans_pcie_d3_suspend(struct iwl_trans *trans, bool test,
 	}
 
 	iwl_pcie_set_pwr(trans, true);
+
+	/*
+	 * Set all bits upon suspend. On resume reading the values that were
+	 * zeored can provide debug data on the resume flow.
+	 * This is for debugging only and has no functional impact.
+	 */
+	iwl_write_prph(trans, WFPM_GP2, 0xFFFFFFFF);
 }
 
 static int iwl_trans_pcie_d3_resume(struct iwl_trans *trans,
@@ -1632,6 +1639,9 @@ static int iwl_trans_pcie_d3_resume(struct iwl_trans *trans,
 			return ret;
 		}
 	}
+
+	IWL_DEBUG_POWER(trans, "WFPM value upon resume = 0x%08X\n",
+			iwl_read_prph(trans, WFPM_GP2));
 
 	val = iwl_read32(trans, CSR_RESET);
 	if (val & CSR_RESET_REG_FLAG_NEVO_RESET)
