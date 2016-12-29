@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -387,6 +387,18 @@ struct iwl_tof_range_req_cmd {
 	struct iwl_tof_range_req_ap_entry ap[IWL_MVM_TOF_MAX_APS];
 } __packed;
 /* LOCATION_RANGE_REQ_CMD_API_S_VER_5 */
+
+/*
+ * enum iwl_tof_range_request_status - status of the sent request
+ * @IWL_TOF_RANGE_REQUEST_STATUS_SUCCESSFUL - FW successfully received the
+ *	request
+ * @IWL_TOF_RANGE_REQUEST_STATUS_BUSY - FW is busy with a previous request, the
+ *	sent request will not be handled
+ */
+enum iwl_tof_range_request_status {
+	IWL_TOF_RANGE_REQUEST_STATUS_SUCCESS,
+	IWL_TOF_RANGE_REQUEST_STATUS_BUSY,
+};
 
 /**
  * enum iwl_tof_entry_status
