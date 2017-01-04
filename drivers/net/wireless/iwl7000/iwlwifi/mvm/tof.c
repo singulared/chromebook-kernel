@@ -94,7 +94,7 @@ void iwl_mvm_tof_init(struct iwl_mvm *mvm)
 
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	if (IWL_MVM_TOF_IS_RESPONDER) {
-		tof_data->responder_cfg.sta_id = IWL_MVM_STATION_COUNT;
+		tof_data->responder_cfg.sta_id = IWL_MVM_INVALID_STA;
 	}
 #endif
 
