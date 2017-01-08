@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -408,10 +408,17 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 {
 	const struct iwl_cfg *cfg = drv->trans->cfg;
 	char tag[8];
+	const char *fw_pre_name;
 #if defined(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) && \
 	defined(CPTCFG_IWLWIFI_DEVICE_TESTMODE)
 	char fw_name_temp[64];
 #endif
+
+	if (drv->trans->cfg->device_family == IWL_DEVICE_FAMILY_8000 &&
+	    CSR_HW_REV_STEP(drv->trans->hw_rev) == SILICON_A_STEP)
+		fw_pre_name = cfg->fw_name_pre_a_step;
+	else
+		fw_pre_name = cfg->fw_name_pre;
 
 	if (first) {
 		drv->fw_index = cfg->ucode_api_max;
@@ -438,14 +445,14 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 		IWL_ERR(drv, "no suitable firmware found!\n");
 
 		if (cfg->ucode_api_min == cfg->ucode_api_max) {
-			IWL_ERR(drv, "%s%d is required\n", cfg->fw_name_pre,
+			IWL_ERR(drv, "%s%d is required\n", fw_pre_name,
 				cfg->ucode_api_max);
 		} else {
 			IWL_ERR(drv, "minimum version required: %s%d\n",
-				cfg->fw_name_pre,
+				fw_pre_name,
 				cfg->ucode_api_min);
 			IWL_ERR(drv, "maximum version supported: %s%d\n",
-				cfg->fw_name_pre,
+				fw_pre_name,
 				cfg->ucode_api_max);
 		}
 
@@ -455,7 +462,7 @@ static int iwl_request_firmware(struct iwl_drv *drv, bool first)
 	}
 
 	snprintf(drv->firmware_name, sizeof(drv->firmware_name), "%s%s.ucode",
-		 cfg->fw_name_pre, tag);
+		 fw_pre_name, tag);
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
