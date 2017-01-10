@@ -1935,9 +1935,13 @@ int iwl_mvm_dbgfs_register(struct iwl_mvm *mvm, struct dentry *dbgfs_dir)
 	 * Create a symlink with mac80211. It will be removed when mac80211
 	 * exists (before the opmode exists which removes the target.)
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+	snprintf(buf, 100, "../../%pd2", dbgfs_dir->d_parent);
+#else
 	snprintf(buf, 100, "../../%s/%s",
 		 dbgfs_dir->d_parent->d_parent->d_name.name,
 		 dbgfs_dir->d_parent->d_name.name);
+#endif
 	if (!debugfs_create_symlink("iwlwifi", mvm->hw->wiphy->debugfsdir, buf))
 		goto err;
 
