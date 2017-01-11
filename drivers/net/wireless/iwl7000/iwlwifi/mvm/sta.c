@@ -1955,8 +1955,8 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mvm_int_sta *msta = &mvmvif->mcast_sta;
-	static const u8 _baddr[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	const u8 *baddr = _baddr;
+	static const u8 _maddr[] = {0x03, 0x00, 0x00, 0x00, 0x00, 0x00};
+	const u8 *maddr = _maddr;
 	struct iwl_trans_txq_scd_cfg cfg = {
 		.fifo = IWL_MVM_TX_FIFO_MCAST,
 		.sta_id = msta->sta_id,
@@ -1975,7 +1975,7 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (WARN_ON(vif->type != NL80211_IFTYPE_AP))
 		return -ENOTSUPP;
 
-	ret = iwl_mvm_add_int_sta_common(mvm, msta, baddr,
+	ret = iwl_mvm_add_int_sta_common(mvm, msta, maddr,
 					 mvmvif->id, mvmvif->color);
 	if (ret) {
 		iwl_mvm_dealloc_int_sta(mvm, msta);
@@ -2007,12 +2007,12 @@ int iwl_mvm_rm_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (!iwl_mvm_is_dqa_supported(mvm))
 		return 0;
 
+	iwl_mvm_disable_txq(mvm, vif->cab_queue, vif->cab_queue,
+			    IWL_MAX_TID_COUNT, 0);
+
 	ret = iwl_mvm_rm_sta_common(mvm, mvmvif->mcast_sta.sta_id);
 	if (ret)
 		IWL_WARN(mvm, "Failed sending remove station\n");
-
-	iwl_mvm_disable_txq(mvm, vif->cab_queue, vif->cab_queue,
-			    IWL_MAX_TID_COUNT, 0);
 
 	return ret;
 }
