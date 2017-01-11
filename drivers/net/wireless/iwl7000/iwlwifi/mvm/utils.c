@@ -1472,10 +1472,32 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 	mvm->tcm.result.global_change = load != mvm->tcm.result.global_load;
 	mvm->tcm.result.global_load = load;
 
+	/*
+	 * If the current load isn't low we need to force re-evaluation
+	 * in the TCM period, so that we can return to low load if there
+	 * was no traffic at all (and thus iwl_mvm_recalc_tcm didn't get
+	 * triggered by traffic).
+	 */
 	if (load != IWL_MVM_VENDOR_LOAD_LOW)
 		return MVM_TCM_PERIOD;
+	/*
+	 * If low-latency is active we need to force re-evaluation after
+	 * (the longer) MVM_LL_PERIOD, so that we can disable low-latency
+	 * when there's no traffic at all.
+	 */
 	if (low_latency)
 		return MVM_LL_PERIOD;
+	/*
+	 * Otherwise, we don't need to run the work struct because we're
+	 * in the default "idle" state - traffic indication is low (which
+	 * also covers the "no traffic" case) and low-latency is disabled
+	 * so there's no state that may need to be disabled when there's
+	 * no traffic at all.
+	 *
+	 * Note that this has no impact on the regular scheduling of the
+	 * updates triggered by traffic - those happen whenever one of the
+	 * two timeouts expire (if there's traffic at all.)
+	 */
 	return 0;
 }
 
