@@ -1685,6 +1685,7 @@ static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
 			mvm->noa_duration = 0;
 		}
 #endif
+		iwl_mvm_dealloc_int_sta(mvm, &mvmvif->mcast_sta);
 		iwl_mvm_dealloc_bcast_sta(mvm, vif);
 		goto out_release;
 	}
@@ -1697,7 +1698,6 @@ static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
 	if (vif->type == NL80211_IFTYPE_P2P_DEVICE) {
 		mvm->p2p_device_vif = NULL;
 		iwl_mvm_rm_bcast_sta(mvm, vif);
-		iwl_mvm_dealloc_int_sta(mvm, &mvmvif->mcast_sta);
 		iwl_mvm_binding_remove_vif(mvm, vif);
 		iwl_mvm_phy_ctxt_unref(mvm, mvmvif->phy_ctxt);
 		mvmvif->phy_ctxt = NULL;
