@@ -406,6 +406,8 @@ enum aux_misc_master1_en {
 #define SB_MODIFY_CFG_FLAG		0xA03088
 #define SB_CPU_1_STATUS			0xA01E30
 #define SB_CPU_2_STATUS			0xA01E34
+#define UMAG_SB_CPU_1_STATUS		0xA038C0
+#define UMAG_SB_CPU_2_STATUS		0xA038C4
 
 /* FW chicken bits */
 #define LMPM_CHICK			0xA01FF8
