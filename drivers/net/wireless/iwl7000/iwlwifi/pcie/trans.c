@@ -1068,6 +1068,16 @@ static int iwl_pcie_load_given_ucode_8000(struct iwl_trans *trans,
 	iwl_pcie_override_secure_boot_cfg(trans);
 #endif
 
+	IWL_DEBUG_POWER(trans, "Original WFPM value = 0x%08X\n",
+			iwl_read_prph(trans, WFPM_GP2));
+
+	/*
+	 * Set default value. On resume reading the values that were
+	 * zeored can provide debug data on the resume flow.
+	 * This is for debugging only and has no functional impact.
+	 */
+	iwl_write_prph(trans, WFPM_GP2, 0x01010101);
+
 	/* configure the ucode to be ready to get the secured image */
 	/* release CPU reset */
 	iwl_write_prph(trans, RELEASE_CPU_RESET, RELEASE_CPU_RESET_BIT);
@@ -1544,13 +1554,6 @@ static void iwl_trans_pcie_d3_suspend(struct iwl_trans *trans, bool test,
 	}
 
 	iwl_pcie_set_pwr(trans, true);
-
-	/*
-	 * Set all bits upon suspend. On resume reading the values that were
-	 * zeored can provide debug data on the resume flow.
-	 * This is for debugging only and has no functional impact.
-	 */
-	iwl_write_prph(trans, WFPM_GP2, 0xFFFFFFFF);
 }
 
 static int iwl_trans_pcie_d3_resume(struct iwl_trans *trans,
