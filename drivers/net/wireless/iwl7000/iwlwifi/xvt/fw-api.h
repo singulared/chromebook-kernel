@@ -6,7 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -32,7 +32,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,10 +74,13 @@
 
 /* command groups */
 enum {
+	LEGACY_GROUP = 0x0,
+	LONG_GROUP = 0x1,
 	PHY_OPS_GROUP = 0x4,
 	CMD_GROUP_LOCATION = 0x8,
 };
 
+/* commands and notifications */
 enum {
 	XVT_ALIVE = 0x1,
 	INIT_COMPLETE_NOTIF = 0x4,
@@ -85,13 +88,6 @@ enum {
 
 	/* ToF */
 	LOCATION_GROUP_NOTIFICATION = 0x11,
-	LOCATION_MCSI_NOTIFICATION = 0xFE,
-	LOCATION_RANGE_RESPONSE_NOTIFICATION = 0xFF,
-	LOCATION_MCSI_NOTIFICATION_WITH_GRP =
-		WIDE_ID(CMD_GROUP_LOCATION, LOCATION_MCSI_NOTIFICATION),
-	LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP =
-		WIDE_ID(CMD_GROUP_LOCATION,
-			LOCATION_RANGE_RESPONSE_NOTIFICATION),
 
 	/* Tx */
 	TX_CMD = 0x1C,
@@ -129,7 +125,19 @@ enum {
 };
 
 enum iwl_phy_ops_subcmd_ids {
-	DTS_MEASUREMENT_NOTIF_WIDE = WIDE_ID(PHY_OPS_GROUP, 0xFF),
+	DTS_MEASUREMENT_NOTIF = 0XFF,
+	DTS_MEASUREMENT_NOTIF_WITH_GRP = WIDE_ID(PHY_OPS_GROUP,
+						 DTS_MEASUREMENT_NOTIF),
+};
+
+enum iwl_location_subcmd_ids {
+	LOCATION_MCSI_NOTIFICATION = 0xFE,
+	LOCATION_RANGE_RESPONSE_NOTIFICATION = 0xFF,
+	LOCATION_MCSI_NOTIFICATION_WITH_GRP =
+		WIDE_ID(CMD_GROUP_LOCATION, LOCATION_MCSI_NOTIFICATION),
+	LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP =
+		WIDE_ID(CMD_GROUP_LOCATION,
+			LOCATION_RANGE_RESPONSE_NOTIFICATION),
 };
 
 /*

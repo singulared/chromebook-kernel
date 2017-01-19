@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright (C) 2015 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright (C) 2015 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,7 +110,7 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 					data, size, GFP_ATOMIC);
 		break;
 	case DTS_MEASUREMENT_NOTIFICATION:
-	case DTS_MEASUREMENT_NOTIF_WIDE:
+	case DTS_MEASUREMENT_NOTIF_WITH_GRP:
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_DTS_MEASUREMENTS,
 					data, size, GFP_ATOMIC);

@@ -6,7 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -109,13 +109,39 @@ static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
 	HCMD_NAME(FW_PAGING_BLOCK_CMD),
 	HCMD_NAME(PHY_CONFIGURATION_CMD),
 	HCMD_NAME(CALIB_RES_NOTIF_PHY_DB),
+	HCMD_NAME(NVM_ACCESS_CMD),
+	HCMD_NAME(GET_SET_PHY_DB_CMD),
+	HCMD_NAME(REPLY_HD_PARAMS_CMD),
+	HCMD_NAME(NVM_COMMIT_COMPLETE_NOTIFICATION),
 	HCMD_NAME(REPLY_RX_PHY_CMD),
 	HCMD_NAME(REPLY_RX_MPDU_CMD),
 	HCMD_NAME(REPLY_RX_DSP_EXT_INFO),
+	HCMD_NAME(DTS_MEASUREMENT_NOTIFICATION),
+	HCMD_NAME(REPLY_DEBUG_XVT_CMD),
+	HCMD_NAME(DEBUG_LOG_MSG),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
+	HCMD_NAME(DTS_MEASUREMENT_NOTIF),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_tof_names[] = {
+	HCMD_NAME(LOCATION_GROUP_NOTIFICATION),
+	HCMD_NAME(LOCATION_MCSI_NOTIFICATION),
+	HCMD_NAME(LOCATION_RANGE_RESPONSE_NOTIFICATION),
 };
 
 static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
-	[0x0] = HCMD_ARR(iwl_xvt_cmd_names),
+	[LEGACY_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[LONG_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
+	[CMD_GROUP_LOCATION] = HCMD_ARR(iwl_xvt_tof_names),
 };
 
 static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
