@@ -345,4 +345,12 @@ static inline bool iwl_xvt_is_dqa_supported(struct iwl_xvt *xvt)
 			   IWL_UCODE_TLV_CAPA_DQA_SUPPORT) &&
 	       IWL_XVT_ENABLE_DQA;
 }
+
+/* Based on mvm function: iwl_mvm_has_new_tx_api */
+static inline bool iwl_xvt_is_unified_fw(struct iwl_xvt *xvt)
+{
+	/* TODO - replace with TLV once defined */
+	return xvt->trans->cfg->use_tfh;
+}
+
 #endif

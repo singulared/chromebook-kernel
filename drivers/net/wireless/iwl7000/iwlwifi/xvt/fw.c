@@ -70,7 +70,7 @@
 #include "xvt.h"
 #include "iwl-dnt-cfg.h"
 
-#define XVT_UCODE_ALIVE_TIMEOUT	HZ
+#define XVT_UCODE_ALIVE_TIMEOUT	(HZ * CPTCFG_IWL_TIMEOUT_FACTOR)
 
 struct iwl_xvt_alive_data {
 	bool valid;
@@ -515,8 +515,9 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	 * configure and operate fw paging mechanism.
 	 * driver configures the paging flow only once, CPU2 paging image
 	 * included in the IWL_UCODE_INIT image.
+	 * In unified image paging mechanism is done out of the xvt op
 	 */
-	if (fw->paging_mem_size) {
+	if (fw->paging_mem_size && !iwl_xvt_is_unified_fw(xvt)) {
 		/*
 		 * When dma is not enabled, the driver needs to copy / write
 		 * the downloaded / uploaded page to / from the smem.
@@ -547,7 +548,12 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 			if (ret)
 				return ret;
 		}
-
+	}
+	/*
+	 * Starting from A000 tx queue allocation must be done after add
+	 * station, so it is not part of the init flow.
+	 */
+	if (!iwl_xvt_is_unified_fw(xvt)) {
 		iwl_trans_txq_enable_cfg(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE,
 					 0, NULL, 0);
 

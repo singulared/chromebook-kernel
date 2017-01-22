@@ -82,6 +82,7 @@ enum {
 	PHY_OPS_GROUP = 0x4,
 	DATA_PATH_GROUP = 0x5,
 	CMD_GROUP_LOCATION = 0x8,
+	REGULATORY_AND_NVM_GROUP = 0xc,
 };
 
 /* commands and notifications */
@@ -135,6 +136,10 @@ enum iwl_phy_ops_subcmd_ids {
 	DTS_MEASUREMENT_NOTIF = 0XFF,
 	DTS_MEASUREMENT_NOTIF_WITH_GRP = WIDE_ID(PHY_OPS_GROUP,
 						 DTS_MEASUREMENT_NOTIF),
+};
+
+enum iwl_regulatory_and_nvm_subcmd_ids {
+	NVM_ACCESS_COMPLETE = 0x0,
 };
 
 enum iwl_location_subcmd_ids {
@@ -255,6 +260,13 @@ struct xvt_alive_resp_ver3 {
 	__le32 error_info_addr;		/* SRAM address for UMAC error log */
 	__le32 dbg_print_buff_addr;
 } __packed; /* ALIVE_RES_API_S_VER_3 */
+
+/**
+ * struct iwl_nvm_access_complete_cmd - NVM_ACCESS commands are completed
+ */
+struct iwl_nvm_access_complete_cmd {
+	__le32 reserved;
+} __packed; /* NVM_ACCESS_COMPLETE_CMD_API_S_VER_1 */
 
 #define TX_CMD_LIFE_TIME_INFINITE	0xFFFFFFFF
 
