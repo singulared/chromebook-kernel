@@ -2551,6 +2551,9 @@ static void __iwl_mvm_mac_sta_notify(struct ieee80211_hw *hw,
 		    tid_data->state != IWL_EMPTYING_HW_QUEUE_DELBA)
 			continue;
 
+		if (tid_data->txq_id == IEEE80211_INVAL_HW_QUEUE)
+			continue;
+
 		__set_bit(tid_data->txq_id, &txqs);
 
 		if (iwl_mvm_tid_queued(tid_data) == 0)
