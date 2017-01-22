@@ -88,7 +88,7 @@
 #include "iwl-dnt-dispatch.h"
 #include "iwl-trans.h"
 
-#define XVT_UCODE_CALIB_TIMEOUT (2*HZ)
+#define XVT_UCODE_CALIB_TIMEOUT (CPTCFG_IWL_TIMEOUT_FACTOR * HZ)
 #define XVT_SCU_BASE	(0xe6a00000)
 #define XVT_SCU_SNUM1	(XVT_SCU_BASE + 0x300)
 #define XVT_SCU_SNUM2	(XVT_SCU_SNUM1 + 0x4)
@@ -160,6 +160,10 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 	case REPLY_RX_PHY_CMD:
 		IWL_DEBUG_INFO(xvt,
 			       "REPLY_RX_PHY_CMD received but not handled\n");
+		break;
+	case INIT_COMPLETE_NOTIF:
+		IWL_DEBUG_INFO(xvt, "received INIT_COMPLETE_NOTIF\n");
+		break;
 	default:
 		IWL_DEBUG_INFO(xvt, "xVT mode RX command 0x%x not handled\n",
 			       pkt->hdr.cmd);
@@ -614,6 +618,45 @@ static int iwl_xvt_send_phy_cfg_cmd(struct iwl_xvt *xvt, u32 ucode_type)
 	return err;
 }
 
+static int iwl_xvt_continue_init_unified(struct iwl_xvt *xvt)
+{
+	struct iwl_nvm_access_complete_cmd nvm_complete = {};
+	struct iwl_notification_wait init_complete_wait;
+	static const u16 init_complete[] = { INIT_COMPLETE_NOTIF };
+	int err;
+
+	err = iwl_xvt_send_cmd_pdu(xvt,
+				   WIDE_ID(REGULATORY_AND_NVM_GROUP,
+					   NVM_ACCESS_COMPLETE), 0,
+				   sizeof(nvm_complete), &nvm_complete);
+	if (err)
+		goto init_error;
+
+	xvt->state = IWL_XVT_STATE_OPERATIONAL;
+
+	iwl_init_notification_wait(&xvt->notif_wait,
+				   &init_complete_wait,
+				   init_complete,
+				   sizeof(init_complete),
+				   NULL,
+				   NULL);
+
+	err = iwl_xvt_send_phy_cfg_cmd(xvt, IWL_UCODE_REGULAR);
+	if (err) {
+		iwl_remove_notification(&xvt->notif_wait, &init_complete_wait);
+		goto init_error;
+	}
+
+	err = iwl_wait_notification(&xvt->notif_wait, &init_complete_wait,
+				    XVT_UCODE_CALIB_TIMEOUT);
+	if (err)
+		goto init_error;
+	return 0;
+init_error:
+	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
+	iwl_trans_stop_device(xvt->trans);
+	return err;
+}
 static int iwl_xvt_run_runtime_fw(struct iwl_xvt *xvt, bool cont_run)
 {
 	int err;
@@ -623,6 +666,15 @@ static int iwl_xvt_run_runtime_fw(struct iwl_xvt *xvt, bool cont_run)
 		goto fw_error;
 
 	xvt->state = IWL_XVT_STATE_OPERATIONAL;
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		err = iwl_xvt_nvm_init(xvt);
+		if (err) {
+			IWL_ERR(xvt, "Failed to read NVM: %d\n", err);
+			return err;
+		}
+		return iwl_xvt_continue_init_unified(xvt);
+	}
 
 	/* Send phy db control command and then phy db calibration*/
 	err = iwl_send_phy_db_data(xvt->phy_db);
@@ -667,6 +719,7 @@ static bool iwl_xvt_wait_phy_db_entry(struct iwl_notif_wait_data *notif_wait,
 static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 {
 	int err = 0;
+	u32 ucode_type = IWL_UCODE_INIT;
 
 	/*
 	 * If init FW and runtime FW are both enabled,
@@ -696,7 +749,10 @@ static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 		return err;
 	}
 
-	err = iwl_xvt_run_fw(xvt, IWL_UCODE_INIT, false);
+	/* when fw image is unified, only regular ucode is loaded. */
+	if (iwl_xvt_is_unified_fw(xvt))
+		ucode_type = IWL_UCODE_REGULAR;
+	err = iwl_xvt_run_fw(xvt, ucode_type, false);
 	if (err)
 		return err;
 
@@ -752,6 +808,9 @@ static int iwl_xvt_continue_init(struct iwl_xvt *xvt)
 
 	if (xvt->state != IWL_XVT_STATE_INIT_STARTED)
 		return -EINVAL;
+
+	if (iwl_xvt_is_unified_fw(xvt))
+		return iwl_xvt_continue_init_unified(xvt);
 
 	iwl_init_notification_wait(&xvt->notif_wait,
 				   &calib_wait,
