@@ -82,7 +82,6 @@
 #ifdef CONFIG_PROVE_LOCKING
 #define lockdep_rht_mutex_is_held __iwl7000_lockdep_rht_mutex_is_held
 #define lockdep_rht_bucket_is_held __iwl7000_lockdep_rht_bucket_is_held
-#else
 #endif
 #define rhashtable_insert_slow __iwl7000_rhashtable_insert_slow
 #define rhashtable_walk_enter __iwl7000_rhashtable_walk_enter
