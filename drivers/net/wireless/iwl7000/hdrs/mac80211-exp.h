@@ -77,8 +77,10 @@
 #define rate_control_send_low __iwl7000_rate_control_send_low
 #define ieee80211_get_tx_rates __iwl7000_ieee80211_get_tx_rates
 #define rate_control_set_rates __iwl7000_rate_control_set_rates
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 #define regulatory_set_wiphy_regd __iwl7000_regulatory_set_wiphy_regd
 #define regulatory_set_wiphy_regd_sync_rtnl __iwl7000_regulatory_set_wiphy_regd_sync_rtnl
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 #ifdef CONFIG_PROVE_LOCKING
 #define lockdep_rht_mutex_is_held __iwl7000_lockdep_rht_mutex_is_held
 #define lockdep_rht_bucket_is_held __iwl7000_lockdep_rht_bucket_is_held

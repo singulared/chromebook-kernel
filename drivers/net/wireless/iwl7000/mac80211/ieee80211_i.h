@@ -1130,6 +1130,7 @@ enum mac80211_scan_state {
 	SCAN_ABORT,
 };
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 /* private copy of a cfg80211 structure */
 struct cfg80211_registered_device {
 	struct list_head list;
@@ -1141,6 +1142,7 @@ struct cfg80211_registered_device {
 	 */
 	const struct ieee80211_regdomain *requested_regd;
 };
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 struct ieee80211_local {
 	/* embed the driver visible part.
@@ -1148,8 +1150,10 @@ struct ieee80211_local {
 	 * it first anyway so they become a no-op */
 	struct ieee80211_hw hw;
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 	/* used for internal mac80211 LAR implementation */
 	struct cfg80211_registered_device rdev;
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 	struct fq fq;
 	struct codel_vars *cvars;
@@ -2133,9 +2137,11 @@ enum nl80211_chan_width ieee80211_get_sta_bw(struct ieee80211_sta *sta);
 void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 				       struct ieee80211_chanctx *ctx);
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 /* LAR private implementation */
 void intel_regulatory_deregister(struct ieee80211_local *local);
 void intel_regulatory_register(struct ieee80211_local *local);
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 /* TDLS */
 int ieee80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,

@@ -1133,7 +1133,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		goto fail_ifa6;
 #endif
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 	intel_regulatory_register(local);
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 	return 0;
 
@@ -1173,7 +1175,9 @@ void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 	tasklet_kill(&local->tx_pending_tasklet);
 	tasklet_kill(&local->tasklet);
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 	intel_regulatory_deregister(local);
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 #ifdef CONFIG_INET
 	unregister_inetaddr_notifier(&local->ifa_notifier);

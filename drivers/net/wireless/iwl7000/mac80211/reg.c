@@ -19,7 +19,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 /**
  * DOC: Wireless regulatory infrastructure
  *
@@ -711,3 +711,4 @@ void intel_regulatory_deregister(struct ieee80211_local *local)
 
 	flush_work(&reg_work);
 }
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
