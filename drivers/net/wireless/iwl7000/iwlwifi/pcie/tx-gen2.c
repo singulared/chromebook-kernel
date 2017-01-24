@@ -98,88 +98,23 @@ static void iwl_pcie_gen2_update_byte_tbl(struct iwl_trans *trans,
 static void iwl_pcie_gen2_txq_inc_wr_ptr(struct iwl_trans *trans,
 					 struct iwl_txq *txq)
 {
-	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	u32 reg = 0;
-	int txq_id = txq->id;
-
 	lockdep_assert_held(&txq->lock);
 
-	/*
-	 * explicitly wake up the NIC if:
-	 * 1. shadow registers aren't enabled
-	 * 2. NIC is woken up for CMD regardless of shadow outside this function
-	 * 3. there is a chance that the NIC is asleep
-	 */
-	if (!trans->cfg->base_params->shadow_reg_enable &&
-	    txq_id != trans_pcie->cmd_queue &&
-	    test_bit(STATUS_TPOWER_PMI, &trans->status)) {
-		/*
-		 * wake up nic if it's powered down ...
-		 * uCode will wake up, and interrupt us again, so next
-		 * time we'll skip this part.
-		 */
-		reg = iwl_read32(trans, CSR_UCODE_DRV_GP1);
-
-		if (reg & CSR_UCODE_DRV_GP1_BIT_MAC_SLEEP) {
-			IWL_DEBUG_INFO(trans,
-				       "Tx queue %d requesting wakeup, GP1 = 0x%x\n",
-				       txq_id, reg);
-			iwl_set_bit(trans, CSR_GP_CNTRL,
-				    CSR_GP_CNTRL_REG_FLAG_MAC_ACCESS_REQ);
-			txq->need_update = true;
-			return;
-		}
-	}
+	IWL_DEBUG_TX(trans, "Q:%d WR: 0x%x\n", txq->id, txq->write_ptr);
 
 	/*
 	 * if not in power-save mode, uCode will never sleep when we're
 	 * trying to tx (during RFKILL, we're not trying to tx).
 	 */
-	IWL_DEBUG_TX(trans, "Q:%d WR: 0x%x\n", txq_id, txq->write_ptr);
 	if (!txq->block)
 		iwl_write32(trans, HBUS_TARG_WRPTR,
-			    txq->write_ptr | (txq_id << 8));
+			    txq->write_ptr | (txq->id << 8));
 }
 
-static inline u8 iwl_pcie_gen2_get_num_tbs(struct iwl_trans *trans, void *_tfd)
+static u8 iwl_pcie_gen2_get_num_tbs(struct iwl_trans *trans,
+				    struct iwl_tfh_tfd *tfd)
 {
-	if (trans->cfg->use_tfh) {
-		struct iwl_tfh_tfd *tfd = _tfd;
-
-		return le16_to_cpu(tfd->num_tbs) & 0x1f;
-	} else {
-		struct iwl_tfd *tfd = _tfd;
-
-		return tfd->num_tbs & 0x1f;
-	}
-}
-
-static inline dma_addr_t iwl_pcie_gen2_tb_get_addr(struct iwl_trans *trans,
-						   void *_tfd, u8 idx)
-{
-	if (trans->cfg->use_tfh) {
-		struct iwl_tfh_tfd *tfd = _tfd;
-		struct iwl_tfh_tb *tb = &tfd->tbs[idx];
-
-		return (dma_addr_t)(le64_to_cpu(tb->addr));
-	} else {
-		struct iwl_tfd *tfd = _tfd;
-		struct iwl_tfd_tb *tb = &tfd->tbs[idx];
-		dma_addr_t addr = get_unaligned_le32(&tb->lo);
-		dma_addr_t hi_len;
-
-		if (sizeof(dma_addr_t) <= sizeof(u32))
-			return addr;
-
-		hi_len = le16_to_cpu(tb->hi_n_len) & 0xF;
-
-		/*
-		 * shift by 16 twice to avoid warnings on 32-bit
-		 * (where this code never runs anyway due to the
-		 * if statement above)
-		 */
-		return addr | ((hi_len << 16) << 16);
-	}
+	return le16_to_cpu(tfd->num_tbs) & 0x1f;
 }
 
 static void iwl_pcie_gen2_tfd_unmap(struct iwl_trans *trans,
@@ -188,45 +123,31 @@ static void iwl_pcie_gen2_tfd_unmap(struct iwl_trans *trans,
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	int i, num_tbs;
-	void *tfd = iwl_pcie_get_tfd(trans_pcie, txq, index);
+	struct iwl_tfh_tfd *tfd = iwl_pcie_get_tfd(trans_pcie, txq, index);
 
 	/* Sanity check on number of chunks */
 	num_tbs = iwl_pcie_gen2_get_num_tbs(trans, tfd);
 
 	if (num_tbs >= trans_pcie->max_tbs) {
 		IWL_ERR(trans, "Too many chunks: %i\n", num_tbs);
-		/* @todo issue fatal error, it is quite serious situation */
 		return;
 	}
 
 	/* first TB is never freed - it's the bidirectional DMA data */
-
 	for (i = 1; i < num_tbs; i++) {
 		if (meta->tbs & BIT(i))
 			dma_unmap_page(trans->dev,
-				       iwl_pcie_gen2_tb_get_addr(trans, tfd,
-								 i),
-				       iwl_pcie_gen2_tb_get_addr(trans, tfd,
-								 i),
+				       le64_to_cpu(tfd->tbs[i].addr),
+				       le16_to_cpu(tfd->tbs[i].tb_len),
 				       DMA_TO_DEVICE);
 		else
 			dma_unmap_single(trans->dev,
-					 iwl_pcie_gen2_tb_get_addr(trans, tfd,
-								   i),
-					 iwl_pcie_gen2_tb_get_addr(trans, tfd,
-								   i),
+					 le64_to_cpu(tfd->tbs[i].addr),
+					 le16_to_cpu(tfd->tbs[i].tb_len),
 					 DMA_TO_DEVICE);
 	}
 
-	if (trans->cfg->use_tfh) {
-		struct iwl_tfh_tfd *tfd_fh = (void *)tfd;
-
-		tfd_fh->num_tbs = 0;
-	} else {
-		struct iwl_tfd *tfd_fh = (void *)tfd;
-
-		tfd_fh->num_tbs = 0;
-	}
+	tfd->num_tbs = 0;
 }
 
 void iwl_pcie_gen2_free_tfd(struct iwl_trans *trans, struct iwl_txq *txq)
@@ -264,27 +185,13 @@ void iwl_pcie_gen2_free_tfd(struct iwl_trans *trans, struct iwl_txq *txq)
 static inline void iwl_pcie_gen2_set_tb(struct iwl_trans *trans, void *tfd,
 					u8 idx, dma_addr_t addr, u16 len)
 {
-	if (trans->cfg->use_tfh) {
-		struct iwl_tfh_tfd *tfd_fh = (void *)tfd;
-		struct iwl_tfh_tb *tb = &tfd_fh->tbs[idx];
+	struct iwl_tfh_tfd *tfd_fh = (void *)tfd;
+	struct iwl_tfh_tb *tb = &tfd_fh->tbs[idx];
 
-		put_unaligned_le64(addr, &tb->addr);
-		tb->tb_len = cpu_to_le16(len);
+	put_unaligned_le64(addr, &tb->addr);
+	tb->tb_len = cpu_to_le16(len);
 
-		tfd_fh->num_tbs = cpu_to_le16(idx + 1);
-	} else {
-		struct iwl_tfd *tfd_fh = (void *)tfd;
-		struct iwl_tfd_tb *tb = &tfd_fh->tbs[idx];
-
-		u16 hi_n_len = len << 4;
-
-		put_unaligned_le32(addr, &tb->lo);
-		hi_n_len |= iwl_get_dma_hi_addr(addr);
-
-		tb->hi_n_len = cpu_to_le16(hi_n_len);
-
-		tfd_fh->num_tbs = idx + 1;
-	}
+	tfd_fh->num_tbs = cpu_to_le16(idx + 1);
 }
 
 int iwl_pcie_gen2_build_tfd(struct iwl_trans *trans, struct iwl_txq *txq,
@@ -391,7 +298,6 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	void *tb1_addr;
 	void *tfd;
 	u16 len, tb1_len;
-	bool wait_write_ptr;
 	__le16 fc;
 	u8 hdr_len;
 	u16 wifi_seq;
@@ -536,8 +442,6 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	iwl_pcie_gen2_update_byte_tbl(trans, txq, le16_to_cpu(tx_cmd->len),
 				      iwl_pcie_gen2_get_num_tbs(trans, tfd));
 
-	wait_write_ptr = ieee80211_has_morefrags(fc);
-
 	/* start timer if queue currently empty */
 	if (txq->read_ptr == txq->write_ptr) {
 		if (txq->wd_timeout) {
@@ -559,8 +463,7 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 
 	/* Tell device the write index *just past* this latest filled TFD */
 	txq->write_ptr = iwl_queue_inc_wrap(txq->write_ptr);
-	if (!wait_write_ptr)
-		iwl_pcie_gen2_txq_inc_wr_ptr(trans, txq);
+	iwl_pcie_gen2_txq_inc_wr_ptr(trans, txq);
 
 	/*
 	 * At this point the frame is "transmitted" successfully
@@ -586,7 +489,7 @@ void iwl_pcie_gen2_txq_unmap(struct iwl_trans *trans, int txq_id)
 		IWL_DEBUG_TX_REPLY(trans, "Q %d Free %d\n",
 				   txq_id, txq->read_ptr);
 
-		iwl_pcie_txq_free_tfd(trans, txq);
+		iwl_pcie_gen2_free_tfd(trans, txq);
 		txq->read_ptr = iwl_queue_inc_wrap(txq->read_ptr);
 
 		if (txq->read_ptr == txq->write_ptr) {
