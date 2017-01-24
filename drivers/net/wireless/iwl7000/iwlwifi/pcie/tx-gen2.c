@@ -301,28 +301,12 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	__le16 fc;
 	u8 hdr_len;
 	u16 wifi_seq;
-	bool amsdu;
 
 	txq = &trans_pcie->txq[txq_id];
 
 	if (WARN_ONCE(!test_bit(txq_id, trans_pcie->queue_used),
 		      "TX on unused queue %d\n", txq_id))
 		return -EINVAL;
-
-	if (unlikely(trans_pcie->sw_csum_tx &&
-		     skb->ip_summed == CHECKSUM_PARTIAL)) {
-		int offs = skb_checksum_start_offset(skb);
-		int csum_offs = offs + skb->csum_offset;
-		__wsum csum;
-
-		if (skb_ensure_writable(skb, csum_offs + sizeof(__sum16)))
-			return -1;
-
-		csum = skb_checksum(skb, offs, skb->len - offs, 0);
-		*(__sum16 *)(skb->data + csum_offs) = csum_fold(csum);
-
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-	}
 
 	if (skb_is_nonlinear(skb) &&
 	    skb_shinfo(skb)->nr_frags > IWL_PCIE_MAX_FRAGS(trans_pcie) &&
@@ -337,24 +321,6 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	hdr_len = ieee80211_hdrlen(fc);
 
 	spin_lock(&txq->lock);
-
-	if (iwl_queue_space(txq) < txq->high_mark) {
-		iwl_stop_queue(trans, txq);
-
-		/* don't put the packet on the ring, if there is no room */
-		if (unlikely(iwl_queue_space(txq) < 3)) {
-			struct iwl_device_cmd **dev_cmd_ptr;
-
-			dev_cmd_ptr = (void *)((u8 *)skb->cb +
-					       trans_pcie->dev_cmd_offs);
-
-			*dev_cmd_ptr = dev_cmd;
-			__skb_queue_tail(&txq->overflow_q, skb);
-
-			spin_unlock(&txq->lock);
-			return 0;
-		}
-	}
 
 	/* In AGG mode, the index in the ring must correspond to the WiFi
 	 * sequence number. This is a HW requirements to help the SCD to parse
@@ -394,18 +360,10 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	 */
 	len = sizeof(struct iwl_tx_cmd) + sizeof(struct iwl_cmd_header) +
 	      hdr_len - IWL_FIRST_TB_SIZE;
-	/* do not align A-MSDU to dword as the subframe header aligns it */
-	amsdu = ieee80211_is_data_qos(fc) &&
-		(*ieee80211_get_qos_ctl(hdr) &
-		 IEEE80211_QOS_CTL_A_MSDU_PRESENT);
-	if (trans_pcie->sw_csum_tx || !amsdu) {
-		tb1_len = ALIGN(len, 4);
-		/* Tell NIC about any 2-byte padding after MAC header */
-		if (tb1_len != len)
-			tx_cmd->tx_flags |= TX_CMD_FLG_MH_PAD_MSK;
-	} else {
-		tb1_len = len;
-	}
+	tb1_len = ALIGN(len, 4);
+	/* Tell NIC about any 2-byte padding after MAC header */
+	if (tb1_len != len)
+		tx_cmd->tx_flags |= TX_CMD_FLG_MH_PAD_MSK;
 
 	/*
 	 * The first TB points to bi-directional DMA data, we'll
@@ -423,15 +381,9 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 		goto out_err;
 	iwl_pcie_gen2_build_tfd(trans, txq, tb1_phys, tb1_len, false);
 
-	if (amsdu) {
-		if (unlikely(iwl_fill_data_tbs_amsdu(trans, skb, txq, hdr_len,
-						     out_meta, dev_cmd,
-						     tb1_len)))
-			goto out_err;
-	} else if (unlikely(iwl_fill_data_tbs(trans, skb, txq, hdr_len,
-				       out_meta, dev_cmd, tb1_len))) {
+	if (unlikely(iwl_fill_data_tbs(trans, skb, txq, hdr_len,
+				       out_meta, dev_cmd, tb1_len)))
 		goto out_err;
-	}
 
 	/* building the A-MSDU might have changed this data, so memcpy it now */
 	memcpy(&txq->first_tb_bufs[txq->write_ptr], &dev_cmd->hdr,
@@ -464,6 +416,8 @@ int iwl_trans_pcie_gen2_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	/* Tell device the write index *just past* this latest filled TFD */
 	txq->write_ptr = iwl_queue_inc_wrap(txq->write_ptr);
 	iwl_pcie_gen2_txq_inc_wr_ptr(trans, txq);
+	if (iwl_queue_space(txq) < txq->high_mark)
+		iwl_stop_queue(trans, txq);
 
 	/*
 	 * At this point the frame is "transmitted" successfully
