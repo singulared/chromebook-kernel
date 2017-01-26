@@ -662,10 +662,15 @@ struct iwl_mvm_tcm {
 };
 #endif
 
+#define MAX_NUM_LMAC 2
 struct iwl_mvm_shared_mem_cfg {
+	int num_lmacs;
 	int num_txfifo_entries;
-	u32 txfifo_size[TX_FIFO_MAX_NUM];
-	u32 rxfifo_size[RX_FIFO_MAX_NUM];
+	struct {
+		u32 txfifo_size[TX_FIFO_MAX_NUM];
+		u32 rxfifo1_size;
+	} lmac[MAX_NUM_LMAC];
+	u32 rxfifo2_size;
 	u32 internal_txfifo_addr;
 	u32 internal_txfifo_size[TX_FIFO_INTERNAL_MAX_NUM];
 };
@@ -1146,7 +1151,7 @@ struct iwl_mvm {
 	struct iwl_dev_tx_power_cmd txp_cmd;
 #endif
 
-	struct iwl_mvm_shared_mem_cfg shared_mem_cfg;
+	struct iwl_mvm_shared_mem_cfg smem_cfg;
 #ifdef CPTCFG_IWLMVM_P2P_OPPPS_TEST_WA
 	/*
 	 * Add the following as part of a WA to pass P2P OPPPS certification
