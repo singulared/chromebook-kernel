@@ -620,7 +620,7 @@ static void iwl_pcie_clear_cmd_in_flight(struct iwl_trans *trans)
 /*
  * iwl_pcie_txq_unmap -  Unmap any remaining DMA mappings and free skb's
  */
-void iwl_pcie_txq_unmap(struct iwl_trans *trans, int txq_id)
+static void iwl_pcie_txq_unmap(struct iwl_trans *trans, int txq_id)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct iwl_txq *txq = trans_pcie->txq[txq_id];

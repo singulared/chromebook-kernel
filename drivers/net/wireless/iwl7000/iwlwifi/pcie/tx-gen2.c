@@ -212,7 +212,7 @@ static int iwl_pcie_gen2_set_tb(struct iwl_trans *trans,
 	struct iwl_tfh_tb *tb = &tfd->tbs[idx];
 
 	/* Each TFD can point to a maximum max_tbs Tx buffers */
-	if (tfd->num_tbs >= trans_pcie->max_tbs) {
+	if (le16_to_cpu(tfd->num_tbs) >= trans_pcie->max_tbs) {
 		IWL_ERR(trans, "Error can not send more than %d chunks\n",
 			trans_pcie->max_tbs);
 		return -EINVAL;
@@ -863,6 +863,7 @@ int iwl_trans_pcie_dyn_txq_alloc(struct iwl_trans *trans,
 		.flags = 0,
 	};
 	int ret, qid = cmd->scd_queue;
+	u16 ssn = le16_to_cpu(cmd->ssn);
 
 	txq = kzalloc(sizeof(*txq), GFP_KERNEL);
 	if (!txq)
@@ -899,17 +900,17 @@ int iwl_trans_pcie_dyn_txq_alloc(struct iwl_trans *trans,
 	 * Place first TFD at index corresponding to start sequence number.
 	 * Assumes that ssn_idx is valid (!= 0xFFF)
 	 */
-	txq->read_ptr = (cmd->ssn & 0xff);
-	txq->write_ptr = (cmd->ssn & 0xff);
+	txq->read_ptr = (ssn & 0xff);
+	txq->write_ptr = (ssn & 0xff);
 	iwl_write_direct32(trans, HBUS_TARG_WRPTR,
-			   (cmd->ssn & 0xff) | (cmd->scd_queue << 16));
+			   (ssn & 0xff) | (cmd->scd_queue << 16));
 
 	IWL_DEBUG_TX_QUEUES(trans, "Activate queue %d WrPtr: %d\n",
-			    cmd->scd_queue, cmd->ssn & 0xff);
+			    cmd->scd_queue, ssn & 0xff);
 
 	cmd->tfdq_addr = cpu_to_le64(txq->dma_addr);
 	cmd->byte_cnt_addr = cpu_to_le64(txq->bc_tbl.dma);
-	cmd->cb_size = cpu_to_le64(TFD_QUEUE_CB_SIZE(TFD_QUEUE_SIZE_MAX));
+	cmd->cb_size = cpu_to_le32(TFD_QUEUE_CB_SIZE(TFD_QUEUE_SIZE_MAX));
 
 	return iwl_trans_send_cmd(trans, &hcmd);
 
