@@ -168,7 +168,7 @@ static void iwl_pcie_gen2_tfd_unmap(struct iwl_trans *trans,
 	tfd->num_tbs = 0;
 }
 
-void iwl_pcie_gen2_free_tfd(struct iwl_trans *trans, struct iwl_txq *txq)
+static void iwl_pcie_gen2_free_tfd(struct iwl_trans *trans, struct iwl_txq *txq)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
