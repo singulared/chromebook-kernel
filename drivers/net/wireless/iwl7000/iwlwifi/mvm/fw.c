@@ -307,11 +307,13 @@ void iwl_mvm_mfu_assert_dump_notif(struct iwl_mvm *mvm,
 		IWL_INFO(mvm, "MFUART assert id 0x%x occurred\n",
 			 le32_to_cpu(mfu_dump_notif->assert_id));
 
-	for (i = 0; i < mfu_dump_notif->data_size / sizeof(__le32); i++)
+	for (i = 0; i < le32_to_cpu(mfu_dump_notif->data_size) /
+			sizeof(__le32); i++)
 		IWL_DEBUG_INFO(mvm,
 			       "MFUART assert dump, dword %lu: 0x%08x\n",
-			       (mfu_dump_notif->index_num *
-				mfu_dump_notif->data_size / sizeof(__le32)) + i,
+			       (le16_to_cpu(mfu_dump_notif->index_num) *
+				le32_to_cpu(mfu_dump_notif->data_size) /
+				sizeof(__le32)) + i,
 			       le32_to_cpu(dump_data[i]));
 }
 
