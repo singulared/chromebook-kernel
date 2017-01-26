@@ -654,8 +654,8 @@ int iwl_mvm_reconfig_scd(struct iwl_mvm *mvm, int queue, int fifo, int sta_id,
 	return ret;
 }
 
-bool iwl_mvm_update_txq_mapping(struct iwl_mvm *mvm, int queue,
-				int mac80211_queue, u8 sta_id, u8 tid)
+static bool iwl_mvm_update_txq_mapping(struct iwl_mvm *mvm, int queue,
+				       int mac80211_queue, u8 sta_id, u8 tid)
 {
 	bool enable_queue = true;
 
