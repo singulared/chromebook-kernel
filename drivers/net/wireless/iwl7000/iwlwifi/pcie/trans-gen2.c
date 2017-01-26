@@ -111,7 +111,7 @@ static int iwl_pcie_gen2_apm_init(struct iwl_trans *trans)
 	return 0;
 }
 
-void iwl_pcie_gen2_apm_stop(struct iwl_trans *trans, bool op_mode_leave)
+static void iwl_pcie_gen2_apm_stop(struct iwl_trans *trans, bool op_mode_leave)
 {
 	IWL_DEBUG_INFO(trans, "Stop card, put in low power state\n");
 
