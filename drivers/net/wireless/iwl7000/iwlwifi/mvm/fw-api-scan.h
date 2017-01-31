@@ -531,6 +531,8 @@ struct iwl_scan_config_v1 {
 } __packed; /* SCAN_CONFIG_DB_CMD_API_S */
 
 #define SCAN_TWO_LMACS 2
+#define SCAN_LB_LMAC_IDX 0
+#define SCAN_HB_LMAC_IDX 1
 
 struct iwl_scan_config {
 	__le32 flags;
