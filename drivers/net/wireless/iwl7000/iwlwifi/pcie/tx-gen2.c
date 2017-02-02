@@ -1007,6 +1007,7 @@ int iwl_pcie_gen2_tx_init(struct iwl_trans *trans)
 		goto error;
 	}
 	trans_pcie->txq[txq_id]->id = txq_id;
+	set_bit(txq_id, trans_pcie->queue_used);
 
 	return 0;
 
