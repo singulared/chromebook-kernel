@@ -30,6 +30,7 @@
 #include "driver-ops.h"
 #include "rate.h"
 #include "led.h"
+#include "fils_aead.h"
 
 #define IEEE80211_AUTH_TIMEOUT		(CPTCFG_IWL_TIMEOUT_FACTOR * HZ / 5)
 #define IEEE80211_AUTH_TIMEOUT_LONG	(CPTCFG_IWL_TIMEOUT_FACTOR * HZ / 2)
@@ -652,6 +653,7 @@ static void ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 			2 + sizeof(struct ieee80211_ht_cap) + /* HT */
 			2 + sizeof(struct ieee80211_vht_cap) + /* VHT */
 			assoc_data->ie_len + /* extra IEs */
+			(assoc_data->fils_kek_len ? 16 /* AES-SIV */ : 0) +
 			9, /* WMM */
 			GFP_KERNEL);
 	if (!skb)
@@ -873,6 +875,12 @@ static void ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 		noffset = assoc_data->ie_len;
 		pos = skb_put(skb, noffset - offset);
 		memcpy(pos, assoc_data->ie + offset, noffset - offset);
+	}
+
+	if (assoc_data->fils_kek_len &&
+	    fils_encrypt_assoc_req(skb, assoc_data) < 0) {
+		dev_kfree_skb(skb);
+		return;
 	}
 
 	drv_mgd_prepare_tx(local, sdata);
@@ -1458,10 +1466,6 @@ void ieee80211_recalc_ps(struct ieee80211_local *local)
 
 	if (count == 1 && ieee80211_powersave_allowed(found)) {
 		u8 dtimper = found->u.mgd.dtim_period;
-		s32 beaconint_us;
-
-		beaconint_us = ieee80211_tu_to_usec(
-					found->vif.bss_conf.beacon_int);
 
 		timeout = local->dynamic_ps_forced_timeout;
 		if (timeout < 0)
@@ -2601,6 +2605,9 @@ static void ieee80211_rx_mgmt_auth(struct ieee80211_sub_if_data *sdata,
 	case WLAN_AUTH_LEAP:
 	case WLAN_AUTH_FT:
 	case WLAN_AUTH_SAE:
+	case WLAN_AUTH_FILS_SK:
+	case WLAN_AUTH_FILS_SK_PFS:
+	case WLAN_AUTH_FILS_PK:
 		break;
 	case WLAN_AUTH_SHARED_KEY:
 		if (ifmgd->auth_data->expected_transaction != 4) {
@@ -3125,6 +3132,10 @@ static void ieee80211_rx_mgmt_assoc_resp(struct ieee80211_sub_if_data *sdata,
 		   "RX %sssocResp from %pM (capab=0x%x status=%d aid=%d)\n",
 		   reassoc ? "Rea" : "A", mgmt->sa,
 		   capab_info, status_code, (u16)(aid & ~(BIT(15) | BIT(14))));
+
+	if (assoc_data->fils_kek_len &&
+	    fils_decrypt_assoc_resp(sdata, (u8 *)mgmt, &len, assoc_data) < 0)
+		return;
 
 	pos = mgmt->u.assoc_resp.variable;
 	ieee802_11_parse_elems(pos, len - (pos - (u8 *) mgmt), false, &elems);
@@ -4462,24 +4473,42 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	case NL80211_AUTHTYPE_SAE:
 		auth_alg = WLAN_AUTH_SAE;
 		break;
+#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
+	case NL80211_AUTHTYPE_FILS_SK:
+		auth_alg = WLAN_AUTH_FILS_SK;
+		break;
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
+	case NL80211_AUTHTYPE_FILS_SK_PFS:
+		auth_alg = WLAN_AUTH_FILS_SK_PFS;
+		break;
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(4,10,0)
+	case NL80211_AUTHTYPE_FILS_PK:
+		auth_alg = WLAN_AUTH_FILS_PK;
+		break;
+#endif
 	default:
 		return -EOPNOTSUPP;
 	}
 
-	auth_data = kzalloc(sizeof(*auth_data) + req->sae_data_len +
+	auth_data = kzalloc(sizeof(*auth_data) + iwl7000_get_auth_data_len(req) +
 			    req->ie_len, GFP_KERNEL);
 	if (!auth_data)
 		return -ENOMEM;
 
 	auth_data->bss = req->bss;
 
-	if (req->sae_data_len >= 4) {
-		__le16 *pos = (__le16 *) req->sae_data;
-		auth_data->sae_trans = le16_to_cpu(pos[0]);
-		auth_data->sae_status = le16_to_cpu(pos[1]);
-		memcpy(auth_data->data, req->sae_data + 4,
-		       req->sae_data_len - 4);
-		auth_data->data_len += req->sae_data_len - 4;
+	if (iwl7000_get_auth_data_len(req) >= 4) {
+		if (req->auth_type == NL80211_AUTHTYPE_SAE) {
+			__le16 *pos = (__le16 *) iwl7000_get_auth_data(req);
+
+			auth_data->sae_trans = le16_to_cpu(pos[0]);
+			auth_data->sae_status = le16_to_cpu(pos[1]);
+		}
+		memcpy(auth_data->data, iwl7000_get_auth_data(req) + 4,
+		       iwl7000_get_auth_data_len(req) - 4);
+		auth_data->data_len += iwl7000_get_auth_data_len(req) - 4;
 	}
 
 	if (req->ie && req->ie_len) {
@@ -4705,6 +4734,21 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		memcpy(assoc_data->ie, req->ie, req->ie_len);
 		assoc_data->ie_len = req->ie_len;
 	}
+
+	if (iwl7000_get_fils_kek(req)) {
+		/* should already be checked in cfg80211 - so warn */
+		if (WARN_ON(iwl7000_get_fils_kek_len(req) > FILS_MAX_KEK_LEN)) {
+			err = -EINVAL;
+			goto err_free;
+		}
+		memcpy(assoc_data->fils_kek, iwl7000_get_fils_kek(req),
+		       iwl7000_get_fils_kek_len(req));
+		assoc_data->fils_kek_len = iwl7000_get_fils_kek_len(req);
+	}
+
+	if (iwl7000_get_fils_nonces(req))
+		memcpy(assoc_data->fils_nonces, iwl7000_get_fils_nonces(req),
+		       2 * FILS_NONCE_LEN);
 
 	assoc_data->bss = req->bss;
 

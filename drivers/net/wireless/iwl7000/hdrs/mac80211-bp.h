@@ -938,6 +938,56 @@ static inline bool iwl7000_wiphy_ext_feature_isset(struct wiphy *wiphy,
 #define wiphy_ext_feature_set iwl7000_wiphy_ext_feature_set
 #define wiphy_ext_feature_isset iwl7000_wiphy_ext_feature_isset
 
+static inline
+size_t iwl7000_get_auth_data_len(struct cfg80211_auth_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return req->sae_data_len;
+#else
+	return req->auth_data_len;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_auth_data(struct cfg80211_auth_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return req->sae_data;
+#else
+	return req->auth_data;
+#endif
+}
+
+static inline
+size_t iwl7000_get_fils_kek_len(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return 0;
+#else
+	return req->fils_kek_len;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_fils_kek(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return NULL;
+#else
+	return req->fils_kek;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_fils_nonces(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return NULL;
+#else
+	return req->fils_nonces;
+#endif
+}
+
 #if CFG80211_VERSION < KERNEL_VERSION(4,1,0)
 size_t ieee80211_ie_split_ric(const u8 *ies, size_t ielen,
 			      const u8 *ids, int n_ids,
@@ -1690,4 +1740,48 @@ static inline void cfg80211_abandon_assoc(struct net_device *dev,
 	 */
 	WARN_ONCE(1, "BSS entry for %pM leaked\n", bss->bssid);
 }
+
+#define NL80211_EXT_FEATURE_FILS_STA -1
+
+static inline bool wdev_running(struct wireless_dev *wdev)
+{
+	if (wdev->netdev)
+		return netif_running(wdev->netdev);
+	return wdev->p2p_started;
+}
+
+struct iface_combination_params {
+	int num_different_channels;
+	u8 radar_detect;
+	int iftype_num[NUM_NL80211_IFTYPES];
+	u32 new_beacon_int;
+};
+
+static inline
+int iwl7000_check_combinations(struct wiphy *wiphy,
+			       struct iface_combination_params *params)
+{
+	return cfg80211_check_combinations(wiphy,
+					   params->num_different_channels,
+					   params->radar_detect,
+					   params->iftype_num);
+}
+
+#define cfg80211_check_combinations iwl7000_check_combinations
+
+static inline
+int iwl7000_iter_combinations(struct wiphy *wiphy,
+			      struct iface_combination_params *params,
+			      void (*iter)(const struct ieee80211_iface_combination *c,
+					   void *data),
+			      void *data)
+{
+	return cfg80211_iter_combinations(wiphy, params->num_different_channels,
+					  params->radar_detect,
+					  params->iftype_num,
+					  iter, data);
+}
+
+#define cfg80211_iter_combinations iwl7000_iter_combinations
+
 #endif
