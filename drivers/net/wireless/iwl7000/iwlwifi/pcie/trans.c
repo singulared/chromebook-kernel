@@ -1119,7 +1119,7 @@ static int iwl_trans_pcie_power_device_on(struct iwl_trans_pcie *trans_pcie)
 	return 0;
 }
 
-static int iwl_trans_pcie_power_device_off(struct iwl_trans_pcie *trans_pcie)
+int iwl_trans_pcie_power_device_off(struct iwl_trans_pcie *trans_pcie)
 {
 	struct iwl_trans_platform_ops *ops = trans_pcie->platform_ops;
 

@@ -787,6 +787,7 @@ int iwl_pcie_txq_alloc(struct iwl_trans *trans,
 int iwl_pcie_alloc_dma_ptr(struct iwl_trans *trans,
 			   struct iwl_dma_ptr *ptr, size_t size);
 void iwl_pcie_free_dma_ptr(struct iwl_trans *trans, struct iwl_dma_ptr *ptr);
+int iwl_trans_pcie_power_device_off(struct iwl_trans_pcie *trans_pcie);
 
 /* transport gen 2 exported functions */
 int iwl_trans_pcie_gen2_start_fw(struct iwl_trans *trans,

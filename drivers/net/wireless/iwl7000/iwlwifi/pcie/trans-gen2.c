@@ -51,6 +51,7 @@
 #include "iwl-trans.h"
 #include "iwl-context-info.h"
 #include "internal.h"
+#include "iwl-constants.h"
 
 /*
  * Start up NIC's basic functionality after it has been reset
