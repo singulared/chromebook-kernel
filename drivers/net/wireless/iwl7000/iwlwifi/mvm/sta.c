@@ -77,9 +77,11 @@
  */
 static inline int iwl_mvm_add_sta_cmd_size(struct iwl_mvm *mvm)
 {
-	return iwl_mvm_has_new_rx_api(mvm) ?
-		sizeof(struct iwl_mvm_add_sta_cmd) :
-		sizeof(struct iwl_mvm_add_sta_cmd_v7);
+	if (iwl_mvm_has_new_rx_api(mvm) ||
+	    fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_STA_TYPE))
+		return sizeof(struct iwl_mvm_add_sta_cmd);
+	else
+		return sizeof(struct iwl_mvm_add_sta_cmd_v7);
 }
 
 static int iwl_mvm_find_free_sta_id(struct iwl_mvm *mvm,
@@ -125,6 +127,9 @@ int iwl_mvm_sta_send_to_fw(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 	int ret;
 	u32 status;
 	u32 agg_size = 0, mpdu_dens = 0;
+
+	if (fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_STA_TYPE))
+		add_sta_cmd.station_type = mvm_sta->sta_type;
 
 	if (!update || (flags & STA_MODIFY_QUEUES)) {
 		memcpy(&add_sta_cmd.addr, sta->addr, ETH_ALEN);
@@ -1342,6 +1347,7 @@ int iwl_mvm_add_sta(struct iwl_mvm *mvm,
 	mvm_sta->max_agg_bufsize = LINK_QUAL_AGG_FRAME_LIMIT_DEF;
 	mvm_sta->tx_protection = 0;
 	mvm_sta->tt_tx_protection = false;
+	mvm_sta->sta_type = sta->tdls ? IWL_STA_TDLS_LINK : IWL_STA_LINK;
 
 	/* HW restart, don't assume the memory has been zeroed */
 	atomic_set(&mvm->pending_frames[sta_id], 0);
@@ -1725,7 +1731,8 @@ int iwl_mvm_rm_sta_id(struct iwl_mvm *mvm,
 
 int iwl_mvm_allocate_int_sta(struct iwl_mvm *mvm,
 			     struct iwl_mvm_int_sta *sta,
-			     u32 qmask, enum nl80211_iftype iftype)
+			     u32 qmask, enum nl80211_iftype iftype,
+			     enum iwl_sta_type type)
 {
 	if (!test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status)) {
 		sta->sta_id = iwl_mvm_find_free_sta_id(mvm, iftype);
@@ -1734,6 +1741,7 @@ int iwl_mvm_allocate_int_sta(struct iwl_mvm *mvm,
 	}
 
 	sta->tfd_queue_msk = qmask;
+	sta->type = type;
 
 	/* put a non-NULL value so iterating over the stations won't stop */
 	rcu_assign_pointer(mvm->fw_id_to_mac_id[sta->sta_id], ERR_PTR(-EINVAL));
@@ -1762,6 +1770,8 @@ static int iwl_mvm_add_int_sta_common(struct iwl_mvm *mvm,
 	cmd.sta_id = sta->sta_id;
 	cmd.mac_id_n_color = cpu_to_le32(FW_CMD_ID_AND_COLOR(mac_id,
 							     color));
+	if (fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_STA_TYPE))
+		cmd.station_type = sta->type;
 
 	if (!iwl_mvm_has_new_tx_api(mvm))
 		cmd.tfd_queue_msk = cpu_to_le32(sta->tfd_queue_msk);
@@ -1826,7 +1836,8 @@ int iwl_mvm_add_aux_sta(struct iwl_mvm *mvm)
 
 	/* Allocate aux station and assign to it the aux queue */
 	ret = iwl_mvm_allocate_int_sta(mvm, &mvm->aux_sta, BIT(mvm->aux_queue),
-				       NL80211_IFTYPE_UNSPECIFIED);
+				       NL80211_IFTYPE_UNSPECIFIED,
+				       IWL_STA_AUX_ACTIVITY);
 	if (ret)
 		return ret;
 
@@ -2019,7 +2030,8 @@ int iwl_mvm_alloc_bcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	}
 
 	return iwl_mvm_allocate_int_sta(mvm, &mvmvif->bcast_sta, qmask,
-					ieee80211_vif_type_p2p(vif));
+					ieee80211_vif_type_p2p(vif),
+					IWL_STA_GENERAL_PURPOSE);
 }
 
 /* Allocate a new station entry for the broadcast station to the given vif,
@@ -2105,6 +2117,18 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (WARN_ON(vif->type != NL80211_IFTYPE_AP))
 		return -ENOTSUPP;
 
+	if (!iwl_mvm_has_new_tx_api(mvm)) {
+		iwl_mvm_enable_txq(mvm, vif->cab_queue, vif->cab_queue, 0,
+				   &cfg, timeout);
+
+		/*
+		 * While in previous FWs we had to exclude cab queue from
+		 * TFD queue mask, now it is needed as any other queue.
+		 */
+		if (fw_has_api(&mvm->fw->ucode_capa,
+			       IWL_UCODE_TLV_API_STA_TYPE))
+			msta->tfd_queue_msk |= BIT(vif->cab_queue);
+	}
 	ret = iwl_mvm_add_int_sta_common(mvm, msta, maddr,
 					 mvmvif->id, mvmvif->color);
 	if (ret) {
@@ -2123,9 +2147,6 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 						    IWL_MAX_TID_COUNT,
 						    timeout);
 		mvmvif->cab_queue = queue;
-	} else {
-		iwl_mvm_enable_txq(mvm, vif->cab_queue, vif->cab_queue, 0,
-				   &cfg, timeout);
 	}
 
 	return 0;
@@ -3529,6 +3550,27 @@ void iwl_mvm_sta_modify_disable_tx_ap(struct iwl_mvm *mvm,
 	spin_unlock_bh(&mvm_sta->lock);
 }
 
+static void iwl_mvm_int_sta_modify_disable_tx(struct iwl_mvm *mvm,
+					      struct iwl_mvm_vif *mvmvif,
+					      struct iwl_mvm_int_sta *sta,
+					      bool disable)
+{
+	u32 id = FW_CMD_ID_AND_COLOR(mvmvif->id, mvmvif->color);
+	struct iwl_mvm_add_sta_cmd cmd = {
+		.add_modify = STA_MODE_MODIFY,
+		.sta_id = sta->sta_id,
+		.station_flags = disable ? cpu_to_le32(STA_FLG_DISABLE_TX) : 0,
+		.station_flags_msk = cpu_to_le32(STA_FLG_DISABLE_TX),
+		.mac_id_n_color = cpu_to_le32(id),
+	};
+	int ret;
+
+	ret = iwl_mvm_send_cmd_pdu(mvm, ADD_STA, 0,
+				   iwl_mvm_add_sta_cmd_size(mvm), &cmd);
+	if (ret)
+		IWL_ERR(mvm, "Failed to send ADD_STA command (%d)\n", ret);
+}
+
 void iwl_mvm_modify_all_sta_disable_tx(struct iwl_mvm *mvm,
 				       struct iwl_mvm_vif *mvmvif,
 				       bool disable)
@@ -3553,6 +3595,22 @@ void iwl_mvm_modify_all_sta_disable_tx(struct iwl_mvm *mvm,
 
 		iwl_mvm_sta_modify_disable_tx_ap(mvm, sta, disable);
 	}
+
+	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_STA_TYPE))
+		return;
+
+	/* Need to block/unblock also multicast station */
+	if (mvmvif->mcast_sta.sta_id != IWL_MVM_INVALID_STA)
+		iwl_mvm_int_sta_modify_disable_tx(mvm, mvmvif,
+						  &mvmvif->mcast_sta, disable);
+
+	/*
+	 * Only unblock the broadcast station (FW blocks it for immediate
+	 * quiet, not the driver)
+	 */
+	if (!disable && mvmvif->bcast_sta.sta_id != IWL_MVM_INVALID_STA)
+		iwl_mvm_int_sta_modify_disable_tx(mvm, mvmvif,
+						  &mvmvif->bcast_sta, disable);
 }
 
 void iwl_mvm_csa_client_absent(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
