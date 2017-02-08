@@ -66,10 +66,11 @@
 #ifndef __fw_api_h__
 #define __fw_api_h__
 
-#define IWL_XVT_DEFAULT_TX_QUEUE	0
-#define IWL_XVT_CMD_QUEUE	9
+#define IWL_XVT_DEFAULT_TX_QUEUE	1
+#define IWL_XVT_CMD_QUEUE		9
+#define IWL_XVT_DQA_CMD_QUEUE		0
 
-#define IWL_XVT_DEFAULT_TX_FIFO	0
+#define IWL_XVT_DEFAULT_TX_FIFO	3
 #define IWL_XVT_CMD_FIFO	7
 
 #define IWL_XVT_TX_STA_ID_DEFAULT	0
@@ -79,6 +80,7 @@ enum {
 	LEGACY_GROUP = 0x0,
 	LONG_GROUP = 0x1,
 	PHY_OPS_GROUP = 0x4,
+	DATA_PATH_GROUP = 0x5,
 	CMD_GROUP_LOCATION = 0x8,
 };
 
@@ -143,6 +145,10 @@ enum iwl_location_subcmd_ids {
 	LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP =
 		WIDE_ID(CMD_GROUP_LOCATION,
 			LOCATION_RANGE_RESPONSE_NOTIFICATION),
+};
+
+enum iwl_data_path_subcmd_ids {
+	DQA_ENABLE_CMD = 0x0,
 };
 
 /*
@@ -399,6 +405,14 @@ struct iwl_nvm_access_resp {
 	__le16 status;
 	u8 data[];
 } __packed; /* NVM_ACCESS_CMD_RESP_API_S_VER_2 */
+
+/**
+ * struct iwl_dqa_enable_cmd
+ * @cmd_queue: the TXQ number of the command queue
+ */
+struct iwl_dqa_enable_cmd {
+	__le32 cmd_queue;
+} __packed; /* DQA_CONTROL_CMD_API_S_VER_1 */
 
 /* Available options for the SCD_QUEUE_CFG HCMD */
 enum iwl_scd_cfg_actions {

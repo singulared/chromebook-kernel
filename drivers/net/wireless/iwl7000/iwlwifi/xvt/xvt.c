@@ -32,6 +32,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2017   Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -132,6 +133,13 @@ static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
 /* Please keep this array *SORTED* by hex value.
  * Access is done through binary search.
  */
+static const struct iwl_hcmd_names iwl_xvt_data_path_names[] = {
+	HCMD_NAME(DQA_ENABLE_CMD),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
 static const struct iwl_hcmd_names iwl_xvt_tof_names[] = {
 	HCMD_NAME(LOCATION_GROUP_NOTIFICATION),
 	HCMD_NAME(LOCATION_MCSI_NOTIFICATION),
@@ -142,6 +150,7 @@ static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
 	[LEGACY_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
 	[LONG_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
 	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
+	[DATA_PATH_GROUP] = HCMD_ARR(iwl_xvt_data_path_names),
 	[CMD_GROUP_LOCATION] = HCMD_ARR(iwl_xvt_tof_names),
 };
 
@@ -182,8 +191,12 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	trans_cfg.n_no_reclaim_cmds = ARRAY_SIZE(no_reclaim_cmds);
 	trans_cfg.command_groups = iwl_xvt_cmd_groups;
 	trans_cfg.command_groups_size = ARRAY_SIZE(iwl_xvt_cmd_groups);
-
-	trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
+	if (iwl_xvt_is_dqa_supported(xvt)) {
+		trans_cfg.cmd_queue = IWL_XVT_DQA_CMD_QUEUE;
+		IWL_DEBUG_INFO(xvt, "dqa supported\n");
+	} else {
+		trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
+	}
 	trans_cfg.cmd_fifo = IWL_XVT_CMD_FIFO;
 	trans_cfg.bc_table_dword = true;
 	trans_cfg.scd_set_active = true;
