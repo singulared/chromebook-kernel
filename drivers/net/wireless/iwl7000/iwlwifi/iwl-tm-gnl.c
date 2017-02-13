@@ -522,7 +522,7 @@ enum iwl_tm_gnl_cmd_attr_t {
 };
 
 /* TM GNL family definition */
-static struct genl_family iwl_tm_gnl_family = {
+static struct genl_family iwl_tm_gnl_family __genl_ro_after_init = {
 	.id		= GENL_ID_GENERATE,
 	.hdrsize	= 0,
 	.name		= IWL_TM_GNL_FAMILY_NAME,

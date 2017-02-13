@@ -443,4 +443,11 @@ void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 		    size_t datalen, gfp_t gfp);
 #endif /* < 4.7 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
+/* on earlier kernels, genl_unregister_family() modifies the struct */
+#define __genl_ro_after_init
+#else
+#define __genl_ro_after_init __ro_after_init
+#endif
+
 #endif /* __IWL_CHROME */
