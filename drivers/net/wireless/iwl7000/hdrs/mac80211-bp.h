@@ -8,6 +8,7 @@
 #include <generated/utsrelease.h>
 /* ipv6_addr_is_multicast moved - include old header */
 #include <net/addrconf.h>
+#include <net/ieee80211_radiotap.h>
 
 /* common backward compat code */
 
@@ -1471,7 +1472,9 @@ struct wiphy_ftm_initiator_capa {
 	u32 preamble;
 	u32 bw;
 };
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,10,0) */
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
 static inline bool ieee80211_viftype_nan(unsigned int iftype)
 {
 	return false;
@@ -1557,8 +1560,8 @@ enum nl80211_nan_publish_type {
 	NL80211_NAN_SOLICITED_PUBLISH = 1 << 0,
 	NL80211_NAN_UNSOLICITED_PUBLISH = 1 << 1,
 };
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,9,0) */
 
-#endif /* CFG80211_VERSION < KERNEL_VERSION(4,8,0) */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
 static inline long ktime_get_seconds(void)
