@@ -1840,3 +1840,22 @@ static inline u8 ieee80211_nan_bands(struct cfg80211_nan_conf *conf)
 
 #define CFG80211_NAN_CONF_CHANGED_BANDS CFG80211_NAN_CONF_CHANGED_DUAL
 #endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(4,11,0)
+static inline
+void iwl7000_cqm_rssi_notify(struct net_device *dev,
+			     enum nl80211_cqm_rssi_threshold_event rssi_event,
+			     s32 rssi_level, gfp_t gfp)
+{
+	cfg80211_cqm_rssi_notify(dev, rssi_event, gfp);
+}
+
+#define cfg80211_cqm_rssi_notify iwl7000_cqm_rssi_notify
+#endif
+
+#ifndef SHASH_DESC_ON_STACK
+#define SHASH_DESC_ON_STACK(shash, ctx)				 \
+	char __##shash##_desc[sizeof(struct shash_desc) +	 \
+	       crypto_shash_descsize(ctx)] CRYPTO_MINALIGN_ATTR; \
+	struct shash_desc *shash = (struct shash_desc *)__##shash##_desc
+#endif

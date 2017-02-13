@@ -1145,7 +1145,7 @@ static u16 ieee80211_netdev_select_queue(struct net_device *dev,
 	return ieee80211_select_queue(IEEE80211_DEV_TO_SUB_IF(dev), skb);
 }
 
-static struct rtnl_link_stats64 *
+static void
 ieee80211_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
 	int i;
@@ -1170,9 +1170,15 @@ ieee80211_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 		stats->rx_bytes   += rx_bytes;
 		stats->tx_bytes   += tx_bytes;
 	}
-
+}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
+static struct rtnl_link_stats64 *
+bp_ieee80211_get_stats64(struct net_device *dev,
+			 struct rtnl_link_stats64 *stats){
+	ieee80211_get_stats64(dev, stats);
 	return stats;
 }
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
 static int __change_mtu(struct net_device *ndev, int new_mtu){
