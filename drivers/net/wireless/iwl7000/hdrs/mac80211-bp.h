@@ -1294,7 +1294,7 @@ cfg80211_inform_bss_frame_data(struct wiphy *wiphy,
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,4,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 struct cfg80211_ftm_target {
 	u64 cookie;
 	struct cfg80211_chan_def chan_def;
@@ -1472,7 +1472,7 @@ struct wiphy_ftm_initiator_capa {
 	u32 preamble;
 	u32 bw;
 };
-#endif /* CFG80211_VERSION < KERNEL_VERSION(4,10,0) */
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
 #if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
 static inline bool ieee80211_viftype_nan(unsigned int iftype)
