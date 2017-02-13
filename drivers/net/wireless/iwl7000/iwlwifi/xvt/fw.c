@@ -365,31 +365,20 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 	struct iwl_xvt *xvt =
 		container_of(notif_wait, struct iwl_xvt, notif_wait);
 	struct iwl_xvt_alive_data *alive_data = data;
-	struct xvt_alive_resp *palive;
 	struct xvt_alive_resp_ver2 *palive2;
 	struct xvt_alive_resp_ver3 *palive3;
-
+	struct xvt_alive_resp_ver4 *palive4;
+	struct iwl_lmac_alive *lmac1, *lmac2;
+	struct iwl_umac_alive *umac;
+	u32 rx_packet_payload_size = iwl_rx_packet_payload_len(pkt);
+	u16 status, flags;
 	xvt->support_umac_log = false;
 
-	if (iwl_rx_packet_payload_len(pkt) == sizeof(*palive)) {
-		palive = (void *)pkt->data;
-		xvt->error_event_table = le32_to_cpu(
-						palive->error_event_table_ptr);
-		alive_data->scd_base_addr = le32_to_cpu(
-						palive->scd_base_ptr);
-		alive_data->valid = le16_to_cpu(palive->status) ==
-							IWL_ALIVE_STATUS_OK;
-		xvt->fw_major_ver = palive->ucode_major;
-		xvt->fw_minor_ver = palive->ucode_minor;
-
-		IWL_DEBUG_FW(xvt, "Alive ucode status 0x%04x revision 0x%01X "
-			     "0x%01X\n", le16_to_cpu(palive->status),
-			     palive->ver_type, palive->ver_subtype);
-	} else if (iwl_rx_packet_payload_len(pkt) == sizeof(*palive2)) {
+	if (rx_packet_payload_size == sizeof(*palive2)) {
 
 		palive2 = (void *)pkt->data;
 
-		xvt->error_event_table =
+		xvt->error_event_table[0] =
 			le32_to_cpu(palive2->error_event_table_ptr);
 		alive_data->scd_base_addr = le32_to_cpu(palive2->scd_base_ptr);
 		xvt->sf_space.addr = le32_to_cpu(palive2->st_fwrd_addr);
@@ -414,31 +403,50 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 			     "UMAC version: Major - 0x%x, Minor - 0x%x\n",
 			     palive2->umac_major, palive2->umac_minor);
 	} else {
+		if (rx_packet_payload_size == sizeof(*palive3)) {
 		palive3 = (void *)pkt->data;
+			status = le16_to_cpu(palive3->status);
+			flags = le16_to_cpu(palive3->flags);
+			lmac1 = &palive3->lmac_data;
+			umac = &palive3->umac_data;
 
-		xvt->error_event_table =
-			le32_to_cpu(palive3->error_event_table_ptr);
-		alive_data->scd_base_addr = le32_to_cpu(palive3->scd_base_ptr);
-		xvt->sf_space.addr = le32_to_cpu(palive3->st_fwrd_addr);
-		xvt->sf_space.size = le32_to_cpu(palive3->st_fwrd_size);
+			IWL_DEBUG_FW(xvt, "Alive VER3\n");
+		} else if (rx_packet_payload_size == sizeof(*palive4)) {
+			palive4 = (void *)pkt->data;
+			status = le16_to_cpu(palive4->status);
+			flags = le16_to_cpu(palive4->flags);
+			lmac1 = &palive4->lmac_data[0];
+			lmac2 = &palive4->lmac_data[1];
+			umac = &palive4->umac_data;
+			xvt->error_event_table[1] =
+				le32_to_cpu(lmac2->error_event_table_ptr);
 
-		alive_data->valid = le16_to_cpu(palive3->status) ==
-				    IWL_ALIVE_STATUS_OK;
-		xvt->fw_major_ver = le32_to_cpu(palive3->ucode_major);
-		xvt->fw_minor_ver = le32_to_cpu(palive3->ucode_minor);
+			IWL_DEBUG_FW(xvt, "Alive VER4 CDB\n");
+		} else {
+			IWL_ERR(xvt, "unrecognized alive notificatio\n");
+			return false;
+		}
+
+		alive_data->valid = status == IWL_ALIVE_STATUS_OK;
+		xvt->error_event_table[0] =
+			le32_to_cpu(lmac1->error_event_table_ptr);
+		alive_data->scd_base_addr = le32_to_cpu(lmac1->scd_base_ptr);
+		xvt->sf_space.addr = le32_to_cpu(lmac1->st_fwrd_addr);
+		xvt->sf_space.size = le32_to_cpu(lmac1->st_fwrd_size);
+		xvt->fw_major_ver = le32_to_cpu(lmac1->ucode_major);
+		xvt->fw_minor_ver = le32_to_cpu(lmac1->ucode_minor);
 		xvt->umac_error_event_table =
-			le32_to_cpu(palive3->error_info_addr);
+			le32_to_cpu(umac->error_info_addr);
 		if (xvt->umac_error_event_table)
 			xvt->support_umac_log = true;
 
 		IWL_DEBUG_FW(xvt,
-			     "Alive VER3 ucode status 0x%04x revision 0x%01X 0x%01X flags 0x%01X\n",
-			     le16_to_cpu(palive3->status), palive3->ver_type,
-			     palive3->ver_subtype, palive3->flags);
-
+			     "status 0x%04x rev 0x%01X 0x%01X flags 0x%01X\n",
+			     status, lmac1->ver_type, lmac1->ver_subtype,
+			     flags);
 		IWL_DEBUG_FW(xvt,
 			     "UMAC version: Major - 0x%x, Minor - 0x%x\n",
-			     palive3->umac_major, palive3->umac_minor);
+			     umac->umac_major, umac->umac_minor);
 	}
 
 	return true;

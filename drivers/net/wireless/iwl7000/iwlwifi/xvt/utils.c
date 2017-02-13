@@ -6,7 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2016 Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -135,8 +135,8 @@ void iwl_xvt_get_nic_error_log_v1(struct iwl_xvt *xvt,
 {
 	struct iwl_trans *trans = xvt->trans;
 	u32 base;
-
-	base = xvt->error_event_table;
+	/* TODO: support CDB */
+	base = xvt->error_event_table[0];
 	if (xvt->cur_ucode == IWL_UCODE_INIT) {
 		if (!base)
 			base = xvt->fw->init_errlog_ptr;
@@ -192,8 +192,8 @@ void iwl_xvt_get_nic_error_log_v2(struct iwl_xvt *xvt,
 {
 	struct iwl_trans *trans = xvt->trans;
 	u32 base;
-
-	base = xvt->error_event_table;
+	/* TODO: support CDB */
+	base = xvt->error_event_table[0];
 	if (xvt->cur_ucode == IWL_UCODE_INIT) {
 		if (!base)
 			base = xvt->fw->init_errlog_ptr;
