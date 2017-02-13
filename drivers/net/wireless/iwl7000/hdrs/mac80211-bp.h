@@ -1480,7 +1480,10 @@ static inline bool ieee80211_viftype_nan(unsigned int iftype)
 	return false;
 }
 
-#define ieee80211_has_nan_iftype(x)	0
+static inline bool ieee80211_has_nan_iftype(unsigned int iftype)
+{
+	return false;
+}
 
 struct cfg80211_nan_conf {
 	u8 master_pref;
@@ -1560,6 +1563,17 @@ enum nl80211_nan_publish_type {
 	NL80211_NAN_SOLICITED_PUBLISH = 1 << 0,
 	NL80211_NAN_UNSOLICITED_PUBLISH = 1 << 1,
 };
+#else
+static inline bool ieee80211_viftype_nan(unsigned int iftype)
+{
+	return iftype == NL80211_IFTYPE_NAN;
+}
+
+static inline
+bool ieee80211_has_nan_iftype(unsigned int iftype)
+{
+	return iftype & BIT(NL80211_IFTYPE_NAN);
+}
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,9,0) */
 
 
@@ -1781,4 +1795,48 @@ int iwl7000_iter_combinations(struct wiphy *wiphy,
 
 #define cfg80211_iter_combinations iwl7000_iter_combinations
 
+#endif
+
+#if CFG80211_VERSION >= KERNEL_VERSION(4,11,0) || \
+     CFG80211_VERSION < KERNEL_VERSION(4,9,0)
+static inline
+bool ieee80211_nan_has_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	return conf->bands & BIT(band);
+}
+
+static inline
+void ieee80211_nan_set_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	conf->bands |= BIT(band);
+}
+
+static inline u8 ieee80211_nan_bands(struct cfg80211_nan_conf *conf)
+{
+	return conf->bands;
+}
+#else
+static inline
+bool ieee80211_nan_has_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	return (band == NL80211_BAND_2GHZ) ||
+		(band == NL80211_BAND_5GHZ && conf->dual);
+}
+
+static inline
+void ieee80211_nan_set_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	if (band == NL80211_BAND_2GHZ)
+		return;
+
+	conf->dual = (band == NL80211_BAND_5GHZ);
+}
+
+static inline u8 ieee80211_nan_bands(struct cfg80211_nan_conf *conf)
+{
+	return BIT(NL80211_BAND_2GHZ) |
+		(conf->dual ? BIT(NL80211_BAND_5GHZ) : 0);
+}
+
+#define CFG80211_NAN_CONF_CHANGED_BANDS CFG80211_NAN_CONF_CHANGED_DUAL
 #endif

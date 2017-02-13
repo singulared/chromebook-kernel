@@ -220,8 +220,13 @@ static int ieee80211_nan_change_conf(struct wiphy *wiphy,
 	if (changes & CFG80211_NAN_CONF_CHANGED_PREF)
 		new_conf.master_pref = conf->master_pref;
 
-	if (changes & CFG80211_NAN_CONF_CHANGED_BANDS)
-		new_conf.bands = conf->bands;
+	if (changes & CFG80211_NAN_CONF_CHANGED_BANDS) {
+#if CFG80211_VERSION < KERNEL_VERSION(4,9,0) || CFG80211_VERSION >= KERNEL_VERSION(4,11,0)
+		new_conf.bands = ieee80211_nan_bands(conf);
+#else
+		new_conf.dual = conf->dual;
+#endif
+	}
 
 	ret = drv_nan_change_conf(sdata->local, sdata, &new_conf, changes);
 	if (!ret)
