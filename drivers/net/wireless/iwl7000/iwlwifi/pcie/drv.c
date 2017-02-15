@@ -495,8 +495,8 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	if (iwl_trans->cfg->rf_id &&
-	    (cfg == &iwla000_2ac_cfg_hr &&
-	     iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_JF)) {
+	    (cfg == &iwla000_2ac_cfg_hr || cfg == &iwla000_2ac_cfg_hr_cdb) &&
+	     iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_JF) {
 		cfg = &iwla000_2ac_cfg_jf;
 		iwl_trans->cfg = cfg;
 	}
