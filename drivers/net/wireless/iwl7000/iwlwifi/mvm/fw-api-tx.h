@@ -136,7 +136,7 @@ enum iwl_tx_cmd_flags {
 	IWL_TX_FLAGS_CMD_RATE		= BIT(0),
 	IWL_TX_FLAGS_ENCRYPT_DIS	= BIT(1),
 	IWL_TX_FLAGS_HIGH_PRI		= BIT(2),
-} __packed; /* TX_FLAGS_BITS_API_S_VER_3 */
+}; /* TX_FLAGS_BITS_API_S_VER_3 */
 
 /**
  * enum iwl_tx_pm_timeouts - pm timeout values in TX command

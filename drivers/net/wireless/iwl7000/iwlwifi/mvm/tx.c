@@ -481,6 +481,7 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 		u16 offload_assist = iwl_mvm_tx_csum(mvm, skb, hdr, info);
 
 		/* padding is inserted later in transport */
+		/* FIXME - check for AMSDU may need to be removed */
 		if (ieee80211_hdrlen(hdr->frame_control) % 4 &&
 		    !(offload_assist & BIT(TX_CMD_OFFLD_AMSDU)))
 			offload_assist |= BIT(TX_CMD_OFFLD_PAD);
@@ -492,6 +493,9 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 		/* Copy MAC header from skb into command buffer */
 		memcpy(cmd->hdr, hdr, hdrlen);
+
+		if (!info->control.hw_key)
+			cmd->flags |= cpu_to_le32(IWL_TX_FLAGS_ENCRYPT_DIS);
 
 		/* For data packets rate info comes from the fw */
 		if (ieee80211_is_data(hdr->frame_control) && sta)
@@ -978,14 +982,21 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 		if (WARN_ON_ONCE(tid >= IWL_MAX_TID_COUNT))
 			goto drop_unlock_sta;
 
-		seq_number = mvmsta->tid_data[tid].seq_number;
-		seq_number &= IEEE80211_SCTL_SEQ;
-		hdr->seq_ctrl &= cpu_to_le16(IEEE80211_SCTL_FRAG);
-		hdr->seq_ctrl |= cpu_to_le16(seq_number);
 		is_ampdu = info->flags & IEEE80211_TX_CTL_AMPDU;
 		if (WARN_ON_ONCE(is_ampdu &&
 				 mvmsta->tid_data[tid].state != IWL_AGG_ON))
 			goto drop_unlock_sta;
+
+		if (!iwl_mvm_has_new_tx_api(mvm)) {
+			struct iwl_tx_cmd *tx_cmd = (void *)dev_cmd->payload;
+
+			seq_number = mvmsta->tid_data[tid].seq_number;
+			seq_number &= IEEE80211_SCTL_SEQ;
+			hdr->seq_ctrl &= cpu_to_le16(IEEE80211_SCTL_FRAG);
+			hdr->seq_ctrl |= cpu_to_le16(seq_number);
+			/* update the tx_cmd hdr as it was already copied */
+			tx_cmd->hdr->seq_ctrl = hdr->seq_ctrl;
+		}
 	}
 
 	if (iwl_mvm_is_dqa_supported(mvm) || is_ampdu)
