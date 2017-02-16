@@ -617,7 +617,7 @@ void iwl_mvm_fw_error_dump(struct iwl_mvm *mvm)
 
 				/* Add header info */
 				fifo_data_len +=
-					mem_cfg->lmac[i].txfifo_size[i] +
+					mem_cfg->lmac[i].txfifo_size[j] +
 					sizeof(*dump_data) +
 					sizeof(struct iwl_fw_error_dump_fifo);
 			}
