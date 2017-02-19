@@ -633,9 +633,9 @@ struct iwl_mvm_ba_notif {
  */
 struct iwl_mvm_compressed_ba_tfd {
 	__le16 q_num;
-	u8 reserved;
 	__le16 tfd_index;
 	u8 scd_queue;
+	u8 reserved;
 	__le16 reserved2;
 } __packed; /* COMPRESSED_BA_TFD_API_S_VER_1 */
 
