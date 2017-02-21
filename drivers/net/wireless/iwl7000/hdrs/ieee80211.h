@@ -2353,7 +2353,6 @@ enum ieee80211_sa_query_action {
 #define WLAN_AKM_SUITE_8021X_SUITE_B_192	SUITE(0x000FAC, 12)
 
 #define WLAN_MAX_KEY_LEN		32
-#define WLAN_PSK_LEN			32
 
 #define WLAN_PMK_NAME_LEN		16
 #define WLAN_PMKID_LEN			16
