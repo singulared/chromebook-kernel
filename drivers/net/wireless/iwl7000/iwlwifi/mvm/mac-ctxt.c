@@ -471,7 +471,12 @@ static int iwl_mvm_mac_ctxt_allocate_resources(struct iwl_mvm *mvm,
 			queue = IWL_MVM_DQA_GCAST_QUEUE;
 		}
 
-		vif->cab_queue = queue;
+		/*
+		 * For TVQM this will be overwritten later with the FW assigned
+		 * queue value (when queue is enabled).
+		 */
+		mvmvif->cab_queue = queue;
+		vif->cab_queue = IWL_MVM_DQA_GCAST_QUEUE;
 	} else {
 		vif->cab_queue = IEEE80211_INVAL_HW_QUEUE;
 	}
