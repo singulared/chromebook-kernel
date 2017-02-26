@@ -100,7 +100,7 @@ enum {
 	/* Tx */
 	TX_CMD = 0x1C,
 
-	/* scheduler config */
+	/* scheduler config, also called TX_QUEUE_CFG */
 	SCD_QUEUE_CFG = 0x1d,
 
 	/* Paging block to FW cpu2 */

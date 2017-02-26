@@ -96,6 +96,7 @@
 #define XVT_MAX_TX_COUNT (ULLONG_MAX)
 #define XVT_LMAC_0_STA_ID (0) /* must be aligned with station id added in USC */
 #define XVT_LMAC_1_STA_ID (3) /* must be aligned with station id added in USC */
+#define TX_QUEUE_CFG_TID (6)
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb)
@@ -1131,6 +1132,67 @@ static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
 	return err;
 }
 
+static int iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
+{
+	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
+
+	xvt->tx_meta_data[lmac_id].queue = -1;
+
+	return 0;
+}
+
+static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+				     u8 lmac_id) {
+	int queue;
+	struct iwl_tx_queue_cfg_cmd cmd = {
+			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
+			.sta_id = sta_id,
+			.tid = TX_QUEUE_CFG_TID };
+
+	queue = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
+	if (queue > 0)
+		xvt->tx_meta_data[lmac_id].queue = queue;
+	else
+		IWL_ERR(xvt, "failed to allocate queue\n");
+
+	return queue;
+}
+
+static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
+{
+	switch (sta_id) {
+	case XVT_LMAC_0_STA_ID:
+		return XVT_LMAC_0_ID;
+	case XVT_LMAC_1_STA_ID:
+		return XVT_LMAC_1_ID;
+	default:
+		IWL_ERR(xvt, "wrong sta id, can't match queue\n");
+		return -EINVAL;
+	}
+}
+
+static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
+				struct iwl_tm_data *data_in)
+{
+	struct iwl_xvt_tx_queue_cfg *input =
+			(struct iwl_xvt_tx_queue_cfg *)data_in->data;
+	u8 sta_id = input->sta_id;
+	u8 lmac_id = map_sta_to_lmac(xvt, sta_id);
+
+	if (lmac_id < 0)
+		return -EINVAL;
+
+	switch (input->operation) {
+	case TX_QUEUE_CFG_ADD:
+		return iwl_xvt_allocate_tx_queue(xvt, sta_id, lmac_id);
+	case TX_QUEUE_CFG_REMOVE:
+		return iwl_xvt_free_tx_queue(xvt, lmac_id);
+	default:
+		IWL_ERR(xvt, "failed in tx config - wrong operation\n");
+		return -EINVAL;
+	}
+}
+
 static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
 				     struct iwl_tm_data *data_in)
 {
@@ -1146,22 +1208,19 @@ static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
 	task_data.xvt = xvt;
 	memcpy(&task_data.tx_req, data_in->data, size);
 
-	/* check if tx queue is allocated. if not - return */
 	sta_id = task_data.tx_req.sta_id;
-	switch (sta_id) {
-	case XVT_LMAC_0_STA_ID:
-		lmac_id = XVT_LMAC_0_ID;
-		break;
-	case XVT_LMAC_1_STA_ID:
-		lmac_id = XVT_LMAC_1_ID;
-		break;
-	default:
-		IWL_ERR(xvt, "wrong sta id, can't match queue\n");
+	lmac_id = map_sta_to_lmac(xvt, sta_id);
+	if (lmac_id < 0)
 		return -EINVAL;
-	}
 
 	task_data.lmac_id = lmac_id;
 	xvt_tx = &xvt->tx_meta_data[lmac_id];
+
+	/* check if tx queue is allocated. if not - return */
+	if (xvt_tx->queue < 0) {
+		IWL_ERR(xvt, "failed in tx - queue is not allocated\n");
+		return -EIO;
+	}
 
 	xvt_tx->tx_mod_thread = kthread_run(iwl_xvt_modulated_tx_handler,
 					   &task_data, "tx mod infinite");
@@ -1524,6 +1583,10 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 
 	case IWL_XVT_CMD_MOD_TX_STOP:
 		ret = iwl_xvt_modulated_tx_infinite_stop(xvt, data_in);
+		break;
+
+	case IWL_XVT_CMD_TX_QUEUE_CFG:
+		ret = iwl_xvt_tx_queue_cfg(xvt, data_in);
 		break;
 
 	default:
