@@ -173,6 +173,7 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	static const u8 no_reclaim_cmds[] = {
 		TX_CMD,
 	};
+	u8 i, num_of_lmacs;
 
 	op_mode = kzalloc(sizeof(struct iwl_op_mode) +
 			  sizeof(struct iwl_xvt), GFP_KERNEL);
@@ -247,8 +248,15 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 
 	iwl_dnt_init(xvt->trans, dbgfs_dir);
 
-	init_waitqueue_head(&xvt->mod_tx_wq);
-	init_waitqueue_head(&xvt->mod_tx_done_wq);
+	num_of_lmacs = iwl_xvt_is_cdb_supported(xvt) ? NUM_OF_LMACS : 1;
+
+	for (i = 0; i < num_of_lmacs; i++) {
+		init_waitqueue_head(&xvt->tx_meta_data[i].mod_tx_wq);
+		init_waitqueue_head(&xvt->tx_meta_data[i].mod_tx_done_wq);
+		xvt->tx_meta_data[i].queue = -1;
+		xvt->tx_meta_data[i].tx_mod_thread = NULL;
+		xvt->tx_meta_data[i].txq_full = false;
+	};
 
 	IWL_INFO(xvt, "Detected %s, REV=0x%X, xVT operation mode\n",
 		 xvt->cfg->name, xvt->trans->hw_rev);
@@ -290,21 +298,37 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 	struct sk_buff_head skbs;
 	struct sk_buff *skb;
 	struct iwl_device_cmd **cb_dev_cmd;
+	struct tx_meta_data *tx_data;
 
 	__skb_queue_head_init(&skbs);
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		txq_id = le16_to_cpu(tx_resp->v6.tx_queue);
+
+		if (txq_id == xvt->tx_meta_data[XVT_LMAC_0_ID].queue) {
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+		} else if (txq_id == xvt->tx_meta_data[XVT_LMAC_1_ID].queue) {
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+		} else {
+			IWL_ERR(xvt, "got TX_CMD from unidentified queque\n");
+			return;
+		}
+	} else {
+		tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+	}
 
 	iwl_trans_reclaim(xvt->trans, txq_id, ssn, &skbs);
 
 	while (!skb_queue_empty(&skbs)) {
 		skb = __skb_dequeue(&skbs);
 		cb_dev_cmd = (void *)skb->cb;
-		xvt->tx_counter++;
+		tx_data->tx_counter++;
 		if (cb_dev_cmd && *cb_dev_cmd)
 			iwl_trans_free_tx_cmd(xvt->trans, *cb_dev_cmd);
 		kfree_skb(skb);
 	}
-	if (xvt->tot_tx == xvt->tx_counter)
-		wake_up_interruptible(&xvt->mod_tx_done_wq);
+	if (tx_data->tot_tx == tx_data->tx_counter)
+		wake_up_interruptible(&tx_data->mod_tx_done_wq);
 }
 
 static void iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
@@ -352,7 +376,7 @@ static void iwl_xvt_nic_error(struct iwl_op_mode *op_mode)
 	int err, table_size;
 
 	xvt->fw_error = true;
-	wake_up_interruptible(&xvt->mod_tx_wq);
+	wake_up_interruptible(&xvt->tx_meta_data[XVT_LMAC_0_ID].mod_tx_wq);
 
 	iwl_xvt_get_nic_error_log_v2(xvt, &table_v2);
 	iwl_xvt_dump_nic_error_log_v2(xvt, &table_v2);
@@ -424,16 +448,28 @@ static void iwl_xvt_free_skb(struct iwl_op_mode *op_mode, struct sk_buff *skb)
 static void iwl_xvt_stop_sw_queue(struct iwl_op_mode *op_mode, int queue)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
+	u8 i;
 
-	xvt->txq_full = true;
+	for (i = 0; i < NUM_OF_LMACS; i++) {
+		if (queue == xvt->tx_meta_data[i].queue) {
+			xvt->tx_meta_data[i].txq_full = true;
+			break;
+		}
+	}
 }
 
 static void iwl_xvt_wake_sw_queue(struct iwl_op_mode *op_mode, int queue)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
+	u8 i;
 
-	xvt->txq_full = false;
-	wake_up_interruptible(&xvt->mod_tx_wq);
+	for (i = 0; i < NUM_OF_LMACS; i++) {
+		if (queue == xvt->tx_meta_data[i].queue) {
+			xvt->tx_meta_data[i].txq_full = false;
+			wake_up_interruptible(&xvt->tx_meta_data[i].mod_tx_wq);
+			break;
+		}
+	}
 }
 
 static const struct iwl_op_mode_ops iwl_xvt_ops = {
