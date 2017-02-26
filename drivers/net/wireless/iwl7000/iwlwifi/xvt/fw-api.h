@@ -260,6 +260,8 @@ struct iwl_nvm_access_complete_cmd {
 #define TX_CMD_LIFE_TIME_INFINITE	0xFFFFFFFF
 
 #define TX_CMD_FLG_ACK_MSK cpu_to_le32(1 << 3)
+#define TX_CMD_OFFLD_PAD	BIT(13) /* TX_CMD_OFLD_ASSIST_PAD */
+#define TX_CMD_FLAGS_CMD_RATE	BIT(0) /* TX_CMD_FLG_RATE_FROM_CMD */
 
 struct iwl_tx_cmd {
 	__le16 len;
@@ -289,11 +291,67 @@ struct iwl_tx_cmd {
 	struct ieee80211_hdr hdr[0];
 } __packed; /* TX_CMD_API_S_VER_3 */
 
+struct iwl_dram_sec_info {
+	__le32 pn_low;
+	__le16 pn_high;
+	__le16 aux_info;
+} __packed; /* DRAM_SEC_INFO_API_S_VER_1 */
+
+/**
+ * struct iwl_tx_cmd_gen2 - TX command struct to FW for a000 devices
+ * ( TX_CMD = 0x1c )
+ * @len: in bytes of the payload, see below for details
+ * @offload_assist: TX offload configuration
+ * @flags: combination of &iwl_tx_cmd_flags
+ * @dram_info: FW internal DRAM storage
+ * @rate_n_flags: rate for *all* Tx attempts, if TX_CMD_FLG_STA_RATE_MSK is
+ *	cleared. Combination of RATE_MCS_*
+ * @hdr: 802.11 header
+ */
+struct iwl_tx_cmd_gen2 {
+	__le16 len;
+	__le16 offload_assist;
+	__le32 flags;
+	struct iwl_dram_sec_info dram_info;
+	__le32 rate_n_flags;
+	struct ieee80211_hdr hdr[0];
+} __packed; /* TX_CMD_API_S_VER_7 */
+
 struct agg_tx_status {
 	__le16 status;
 	__le16 sequence;
 } __packed;
 
+/**
+ * struct iwl_xvt_tx_resp - notifies that fw is TXing a packet
+ * ( REPLY_TX = 0x1c )
+ * @frame_count: 1 no aggregation, >1 aggregation
+ * @bt_kill_count: num of times blocked by bluetooth (unused for agg)
+ * @failure_rts: num of failures due to unsuccessful RTS
+ * @failure_frame: num failures due to no ACK (unused for agg)
+ * @initial_rate: for non-agg: rate of the successful Tx. For agg: rate of the
+ *	Tx of all the batch. RATE_MCS_*
+ * @wireless_media_time: for non-agg: RTS + CTS + frame tx attempts time + ACK.
+ *	for agg: RTS + CTS + aggregation tx time + block-ack time.
+ *	in usec.
+ * @pa_status: tx power info
+ * @pa_integ_res_a: tx power info
+ * @pa_integ_res_b: tx power info
+ * @pa_integ_res_c: tx power info
+ * @measurement_req_id: tx power info
+ * @reduced_tpc: transmit power reduction used
+ * @tfd_info: TFD information set by the FH
+ * @seq_ctl: sequence control from the Tx cmd
+ * @byte_cnt: byte count from the Tx cmd
+ * @tlc_info: TLC rate info
+ * @ra_tid: bits [3:0] = ra, bits [7:4] = tid
+ * @frame_ctrl: frame control
+ * @tx_queue: TX queue for this response
+ * @status: for non-agg:  frame status TX_STATUS_*
+ *	for agg: status of 1st frame, AGG_TX_STATE_*; other frame status fields
+ *	follow this one, up to frame_count.
+ *	For version 6 TX response isn't received for aggregation at all.
+ */
 struct iwl_xvt_tx_resp {
 	u8 frame_count;
 	u8 bt_kill_count;
@@ -307,7 +365,8 @@ struct iwl_xvt_tx_resp {
 	u8 pa_integ_res_b[3];
 	u8 pa_integ_res_c[3];
 	__le16 measurement_req_id;
-	__le16 reserved;
+	u8 reduced_tpc;
+	u8 reserved;
 
 	__le32 tfd_info;
 	__le16 seq_ctl;
@@ -315,9 +374,17 @@ struct iwl_xvt_tx_resp {
 	u8 tlc_info;
 	u8 ra_tid;
 	__le16 frame_ctrl;
-
-	struct agg_tx_status status;
-} __packed; /* TX_RSP_API_S_VER_3 */
+	union {
+		struct {
+			struct agg_tx_status status;
+		} v3;/* TX_RSP_API_S_VER_3 */
+		struct {
+			__le16 tx_queue;
+			__le16 reserved2;
+			struct agg_tx_status status;
+		} v6;
+	};
+} __packed; /* TX_RSP_API_S_VER_6 */
 
 enum {
 	XVT_DBG_GET_SVDROP_VER_OP = 0x01,
@@ -332,12 +399,6 @@ struct xvt_debug_res {
 	__le32 dw_num;
 	__le32 data[0];
 }; /* DEBUG_XVT_RES_API_S_VER_1 */
-
-static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt_tx_resp *tx_resp)
-{
-	return le32_to_cpup((__le32 *)&tx_resp->status +
-			    tx_resp->frame_count) & 0xfff;
-}
 
 /* Section types for NVM_ACCESS_CMD */
 enum {

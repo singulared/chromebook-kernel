@@ -890,6 +890,43 @@ static int iwl_xvt_get_phy_db(struct iwl_xvt *xvt,
 	return 0;
 }
 
+static struct iwl_device_cmd *
+iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
+			       u32 rate_flags)
+{
+	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
+	struct iwl_tx_cmd_gen2 *tx_cmd;
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	dev_cmd = iwl_trans_alloc_tx_cmd(xvt->trans);
+	if (unlikely(!dev_cmd))
+		return NULL;
+
+	memset(dev_cmd, 0, sizeof(*dev_cmd));
+	dev_cmd->hdr.cmd = TX_CMD;
+
+	tx_cmd = (struct iwl_tx_cmd_gen2 *)dev_cmd->payload;
+
+	tx_cmd->len = cpu_to_le16((u16)skb->len);
+
+	tx_cmd->offload_assist |= (ieee80211_hdrlen(hdr->frame_control) % 4) ?
+				   cpu_to_le16(TX_CMD_OFFLD_PAD) : 0;
+
+	tx_cmd->flags |= cpu_to_le32(TX_CMD_FLAGS_CMD_RATE);
+
+	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
+
+	/* Copy MAC header from skb into command buffer */
+	memcpy(tx_cmd->hdr, hdr, sizeof(*hdr));
+
+	 /* Saving device command address itself in the
+	  * control buffer, to be used when reclaiming
+	  * the command. */
+	*cb_dev_cmd = dev_cmd;
+
+	return dev_cmd;
+}
+
 /*
  * Allocates and sets the Tx cmd the driver data pointers in the skb
  */
@@ -949,9 +986,15 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	}
 	memcpy(skb_put(skb, tx_req->len), tx_req->data, tx_req->len);
 
-	dev_cmd = iwl_xvt_set_mod_tx_params(xvt, skb,
-					    tx_req->sta_id,
-					    tx_req->rate_flags);
+	if (iwl_xvt_is_unified_fw(xvt))
+		dev_cmd = iwl_xvt_set_mod_tx_params_gen2(xvt,
+							 skb,
+							 tx_req->rate_flags);
+	else
+		dev_cmd = iwl_xvt_set_mod_tx_params(xvt,
+						    skb,
+						    tx_req->sta_id,
+						    tx_req->rate_flags);
 	if (!dev_cmd) {
 		kfree_skb(skb);
 		*status = XVT_TX_DRIVER_ABORTED;
