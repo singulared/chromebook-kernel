@@ -161,6 +161,7 @@ enum {
 	IWL_XVT_CMD_APMG_PD_MODE,
 	IWL_XVT_CMD_GET_MAC_ADDR_INFO,
 	IWL_XVT_CMD_MOD_TX_STOP,
+	IWL_XVT_CMD_TX_QUEUE_CFG,
 
 	/* Driver notifications */
 	IWL_XVT_CMD_SEND_REPLY_ALIVE = XVT_CMD_NOTIF_BASE,
@@ -571,6 +572,21 @@ struct iwl_tm_crash_data {
  */
 struct iwl_xvt_mac_addr_info {
 	__u8 mac_addr[ETH_ALEN];
+} __packed __aligned(4);
+
+enum {
+	TX_QUEUE_CFG_REMOVE,
+	TX_QUEUE_CFG_ADD,
+};
+
+/**
+ * iwl_xvt_tx_queue_cfg - add/remove tx queue
+ * @ sta_id: station ID associated with queue
+ * @ flags: 0 - remove queue, 1 - add queue
+ */
+struct iwl_xvt_tx_queue_cfg {
+	__u8 sta_id;
+	__u8 operation;
 } __packed __aligned(4);
 
 #endif
