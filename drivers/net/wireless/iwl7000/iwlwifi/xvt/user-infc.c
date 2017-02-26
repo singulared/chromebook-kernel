@@ -94,7 +94,8 @@
 #define XVT_SCU_SNUM2	(XVT_SCU_SNUM1 + 0x4)
 #define XVT_SCU_SNUM3	(XVT_SCU_SNUM2 + 0x4)
 #define XVT_MAX_TX_COUNT (ULLONG_MAX)
-
+#define XVT_LMAC_0_STA_ID (0) /* must be aligned with station id added in USC */
+#define XVT_LMAC_1_STA_ID (3) /* must be aligned with station id added in USC */
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb)
@@ -967,7 +968,7 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 
 static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 			       struct iwl_tm_mod_tx_request *tx_req,
-			       u32 *status)
+			       u32 *status, struct tx_meta_data *meta_tx)
 {
 	struct sk_buff *skb;
 	struct iwl_device_cmd *dev_cmd;
@@ -1005,12 +1006,12 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 		iwl_xvt_led_enable(xvt);
 
 	/* wait until the tx queue isn't full */
-	time_remain = wait_event_interruptible_timeout(xvt->mod_tx_wq,
-						       !xvt->txq_full, HZ);
+	time_remain = wait_event_interruptible_timeout(meta_tx->mod_tx_wq,
+						       !meta_tx->txq_full, HZ);
 
 	if (time_remain <= 0) {
 		/* This should really not happen */
-		WARN_ON_ONCE(xvt->txq_full);
+		WARN_ON_ONCE(meta_tx->txq_full);
 		IWL_ERR(xvt, "Error while sending Tx\n");
 		*status = XVT_TX_DRIVER_QUEUE_FULL;
 		err = -EIO;
@@ -1018,7 +1019,7 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	}
 
 	if (xvt->fw_error) {
-		WARN_ON_ONCE(xvt->txq_full);
+		WARN_ON_ONCE(meta_tx->txq_full);
 		IWL_ERR(xvt, "FW Error while sending Tx\n");
 		*status = XVT_TX_DRIVER_ABORTED;
 		err = -ENODEV;
@@ -1032,8 +1033,7 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 
 	local_bh_disable();
 
-	err = iwl_trans_tx(xvt->trans, skb, dev_cmd,
-			   IWL_XVT_DEFAULT_TX_QUEUE);
+	err = iwl_trans_tx(xvt->trans, skb, dev_cmd, meta_tx->queue);
 
 	local_bh_enable();
 	if (err) {
@@ -1061,19 +1061,22 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 	u32 status = XVT_TX_DRIVER_SUCCESSFUL;
 	struct iwl_xvt_tx_mod_task_data *task_data =
 		(struct iwl_xvt_tx_mod_task_data *)data;
+	struct tx_meta_data *xvt_tx;
 
 	xvt = task_data->xvt;
-	xvt->tx_task_operating = true;
+	xvt_tx = &xvt->tx_meta_data[task_data->lmac_id];
+	xvt_tx->tx_task_operating = true;
 	num_of_packets = task_data->tx_req.times;
 	max_tx = (num_of_packets == IWL_XVT_TX_MODULATED_INFINITE) ?
 		  XVT_MAX_TX_COUNT : num_of_packets;
-	xvt->tot_tx = num_of_packets;
-	xvt->tx_counter = 0;
+	xvt_tx->tot_tx = num_of_packets;
+	xvt_tx->tx_counter = 0;
 
 	for (tx_count = 0;
 	    (tx_count < max_tx) && (!kthread_should_stop());
 	     tx_count++){
-		err = iwl_xvt_send_packet(xvt, &task_data->tx_req, &status);
+		err = iwl_xvt_send_packet(xvt, &task_data->tx_req,
+					  &status, xvt_tx);
 		if (err) {
 			IWL_ERR(xvt, "stop send packets due to err %d\n", err);
 			break;
@@ -1082,23 +1085,24 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 
 	if (!err) {
 		time_remain = wait_event_interruptible_timeout(
-						 xvt->mod_tx_done_wq,
-						 xvt->tx_counter == tx_count,
-						 5 * HZ);
+						xvt_tx->mod_tx_done_wq,
+						xvt_tx->tx_counter == tx_count,
+						5 * HZ);
 		if (time_remain <= 0) {
 			IWL_ERR(xvt, "Not all Tx messages were sent\n");
-			xvt->tx_task_operating = false;
+			xvt_tx->tx_task_operating = false;
 			status = XVT_TX_DRIVER_TIMEOUT;
 		}
 	}
 
 	done_notif = kmalloc(sizeof(*done_notif), GFP_KERNEL);
 	if (!done_notif) {
-		xvt->tx_task_operating = false;
+		xvt_tx->tx_task_operating = false;
 		return -ENOMEM;
 	}
-	done_notif->num_of_packets = xvt->tx_counter;
+	done_notif->num_of_packets = xvt_tx->tx_counter;
 	done_notif->status = status;
+	done_notif->lmac_id = task_data->lmac_id;
 	err = iwl_xvt_user_send_notif(xvt,
 				      IWL_XVT_CMD_SEND_MOD_TX_DONE,
 				      (void *)done_notif,
@@ -1108,20 +1112,65 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 		kfree(done_notif);
 	}
 
-	xvt->tx_task_operating = false;
+	xvt_tx->tx_task_operating = false;
 	do_exit(err);
 }
 
-static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt)
+static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
+					      struct iwl_tm_data *data_in)
 {
 	int err = 0;
+	u32 lmac_id = ((struct iwl_xvt_tx_mod_stop *)data_in->data)->lmac_id;
+	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[lmac_id];
 
-	if (xvt->tx_mod_thread && xvt->tx_task_operating) {
-		err = kthread_stop(xvt->tx_mod_thread);
-		xvt->tx_mod_thread = NULL;
+	if (xvt_tx->tx_mod_thread && xvt_tx->tx_task_operating) {
+		err = kthread_stop(xvt_tx->tx_mod_thread);
+		xvt_tx->tx_mod_thread = NULL;
 	}
 
 	return err;
+}
+
+static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
+				     struct iwl_tm_data *data_in)
+{
+	static struct iwl_xvt_tx_mod_task_data task_data;
+	u32 size = sizeof(struct iwl_tm_mod_tx_request);
+	struct tx_meta_data *xvt_tx;
+	u8 sta_id, lmac_id;
+
+	/*
+	* no need to check whether tx already operating on lmac, since check
+	* is already done in the USC
+	*/
+	task_data.xvt = xvt;
+	memcpy(&task_data.tx_req, data_in->data, size);
+
+	/* check if tx queue is allocated. if not - return */
+	sta_id = task_data.tx_req.sta_id;
+	switch (sta_id) {
+	case XVT_LMAC_0_STA_ID:
+		lmac_id = XVT_LMAC_0_ID;
+		break;
+	case XVT_LMAC_1_STA_ID:
+		lmac_id = XVT_LMAC_1_ID;
+		break;
+	default:
+		IWL_ERR(xvt, "wrong sta id, can't match queue\n");
+		return -EINVAL;
+	}
+
+	task_data.lmac_id = lmac_id;
+	xvt_tx = &xvt->tx_meta_data[lmac_id];
+
+	xvt_tx->tx_mod_thread = kthread_run(iwl_xvt_modulated_tx_handler,
+					   &task_data, "tx mod infinite");
+	if (!xvt_tx->tx_mod_thread) {
+		xvt_tx->tx_task_operating = false;
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 static int iwl_xvt_modulated_tx(struct iwl_xvt *xvt,
@@ -1129,15 +1178,16 @@ static int iwl_xvt_modulated_tx(struct iwl_xvt *xvt,
 {
 	static struct iwl_xvt_tx_mod_task_data task_data;
 	u32 size = sizeof(struct iwl_tm_mod_tx_request);
+	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[XVT_LMAC_0_ID];
 
 	task_data.xvt = xvt;
 	memcpy(&task_data.tx_req, data_in->data, size);
 
-	xvt->tx_mod_thread =
+	xvt_tx->tx_mod_thread =
 		kthread_run(iwl_xvt_modulated_tx_handler,
 			    &task_data, "tx mod infinite");
-	if (!xvt->tx_mod_thread) {
-		xvt->tx_task_operating = false;
+	if (!xvt_tx->tx_mod_thread) {
+		xvt_tx->tx_task_operating = false;
 		return -ENOMEM;
 	}
 
@@ -1439,7 +1489,10 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 		break;
 
 	case IWL_XVT_CMD_MOD_TX:
-		ret = iwl_xvt_modulated_tx(xvt, data_in);
+		if (iwl_xvt_is_unified_fw(xvt))
+			ret = iwl_xvt_modulated_tx_gen2(xvt, data_in);
+		else
+			ret = iwl_xvt_modulated_tx(xvt, data_in);
 		break;
 
 	case IWL_XVT_CMD_RX_HDRS_MODE:
@@ -1470,7 +1523,7 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 		break;
 
 	case IWL_XVT_CMD_MOD_TX_STOP:
-		ret = iwl_xvt_modulated_tx_infinite_stop(xvt);
+		ret = iwl_xvt_modulated_tx_infinite_stop(xvt, data_in);
 		break;
 
 	default:

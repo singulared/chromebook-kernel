@@ -75,6 +75,9 @@
 
 #define IWL_XVT_TX_STA_ID_DEFAULT	0
 
+#define XVT_LMAC_0_ID (0)
+#define XVT_LMAC_1_ID (1)
+
 /* command groups */
 enum {
 	LEGACY_GROUP = 0x0,

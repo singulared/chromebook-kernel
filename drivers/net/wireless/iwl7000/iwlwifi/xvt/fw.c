@@ -569,6 +569,8 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 					  &cmd),
 		     "Failed to configure queue %d on FIFO %d\n",
 		     IWL_XVT_DEFAULT_TX_QUEUE, IWL_XVT_DEFAULT_TX_FIFO);
+		xvt->tx_meta_data[XVT_LMAC_0_ID].queue =
+					IWL_XVT_DEFAULT_TX_QUEUE;
 	}
 
 	xvt->fw_running = true;
