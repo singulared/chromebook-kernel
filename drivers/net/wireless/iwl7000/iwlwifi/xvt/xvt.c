@@ -286,7 +286,7 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 {
 	struct iwl_xvt_tx_resp *tx_resp = (void *)pkt->data;
 	int txq_id = SEQ_TO_QUEUE(le16_to_cpu(pkt->hdr.sequence));
-	u16 ssn = iwl_xvt_get_scd_ssn(tx_resp);
+	u16 ssn = iwl_xvt_get_scd_ssn(xvt, tx_resp);
 	struct sk_buff_head skbs;
 	struct sk_buff *skb;
 	struct iwl_device_cmd **cb_dev_cmd;
