@@ -1935,7 +1935,7 @@ int iwl_mvm_dbgfs_register(struct iwl_mvm *mvm, struct dentry *dbgfs_dir)
 	 * Create a symlink with mac80211. It will be removed when mac80211
 	 * exists (before the opmode exists which removes the target.)
 	 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,12,0)
+#if LINUX_VERSION_IS_GEQ(3,12,0)
 	snprintf(buf, 100, "../../%pd2", dbgfs_dir->d_parent);
 #else
 	snprintf(buf, 100, "../../%s/%s",
