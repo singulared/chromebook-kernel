@@ -3102,7 +3102,6 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 	 * PCI Tx retries from interfering with C3 CPU state */
 	pci_write_config_byte(pdev, PCI_CFG_RETRY_TIMEOUT, 0x00);
 
-	trans->dev = &pdev->dev;
 	trans_pcie->pci_dev = pdev;
 	iwl_disable_interrupts(trans);
 
