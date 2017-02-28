@@ -554,6 +554,12 @@ void iwl_mvm_fw_error_dump(struct iwl_mvm *mvm)
 	    !mvm->trans->dbg_dest_tlv)
 		return;
 
+	/* TODO: remove this once dumping is supported in gen2 */
+	if (mvm->trans->cfg->gen2) {
+		IWL_ERR(mvm, "Skip FW dump until supported by gen2\n");
+		return;
+	}
+
 	lockdep_assert_held(&mvm->mutex);
 
 	/* there's no point in fw dump if the bus is dead */
