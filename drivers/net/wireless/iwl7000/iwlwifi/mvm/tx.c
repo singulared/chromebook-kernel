@@ -989,11 +989,12 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 				 mvmsta->tid_data[tid].state != IWL_AGG_ON))
 			goto drop_unlock_sta;
 
+		seq_number = mvmsta->tid_data[tid].seq_number;
+		seq_number &= IEEE80211_SCTL_SEQ;
+
 		if (!iwl_mvm_has_new_tx_api(mvm)) {
 			struct iwl_tx_cmd *tx_cmd = (void *)dev_cmd->payload;
 
-			seq_number = mvmsta->tid_data[tid].seq_number;
-			seq_number &= IEEE80211_SCTL_SEQ;
 			hdr->seq_ctrl &= cpu_to_le16(IEEE80211_SCTL_FRAG);
 			hdr->seq_ctrl |= cpu_to_le16(seq_number);
 			/* update the tx_cmd hdr as it was already copied */
