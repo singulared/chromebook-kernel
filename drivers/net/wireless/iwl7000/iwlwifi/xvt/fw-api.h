@@ -82,6 +82,7 @@
 enum {
 	LEGACY_GROUP = 0x0,
 	LONG_GROUP = 0x1,
+	SYSTEM_GROUP = 0x2,
 	PHY_OPS_GROUP = 0x4,
 	DATA_PATH_GROUP = 0x5,
 	CMD_GROUP_LOCATION = 0x8,
@@ -157,6 +158,10 @@ enum iwl_location_subcmd_ids {
 
 enum iwl_data_path_subcmd_ids {
 	DQA_ENABLE_CMD = 0x0,
+};
+
+enum iwl_system_subcmd_ids {
+	INIT_EXTENDED_CFG_CMD = 0x03,
 };
 
 /*
@@ -511,4 +516,26 @@ struct iwl_scd_txq_cfg_cmd {
 	__le16 ssn;
 	__le16 reserved;
 } __packed; /* SCD_QUEUE_CFG_CMD_API_S_VER_1 */
+
+ /* enum iwl_extended_cfg_flags - commands driver may send before
+ *	finishing init flow
+ * @IWL_INIT_DEBUG_CFG: driver is going to send debug config command
+ * @IWL_INIT_NVM: driver is going to send NVM_ACCESS commands
+ * @IWL_INIT_PHY: driver is going to send PHY_DB commands */
+enum iwl_extended_cfg_flags {
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_DEBUG_CFG */
+	IWL_INIT_DEBUG_CFG = BIT(0),
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_NVM_CFG */
+	IWL_INIT_NVM = BIT(1),
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_PHY_CFG */
+	IWL_INIT_PHY = BIT(2),
+};
+
+ /* struct iwl_extended_cfg_cmd - mark what commands ucode should wait for
+ * before finishing init flows
+ * @init_flags: values from &enum iwl_extended_cfg_flags */
+struct iwl_init_extended_cfg_cmd {
+	__le32 init_flags;
+} __packed; /* INIT_EXTENDED_CFG_CMD_API_S_VER_1 */
+
 #endif /* __fw_api_h__ */

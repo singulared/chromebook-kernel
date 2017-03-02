@@ -578,6 +578,24 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	return 0;
 }
 
+static int iwl_xvt_send_extended_config(struct iwl_xvt *xvt)
+{
+	/*
+	 * TODO: once WRT will be implemented in xVT, IWL_INIT_DEBUG_CFG
+	 * flag will not always be set
+	 */
+	struct iwl_init_extended_cfg_cmd ext_cfg = {
+		.init_flags = cpu_to_le32(IWL_INIT_NVM | IWL_INIT_DEBUG_CFG),
+	};
+
+	if (xvt->sw_stack_cfg.load_mask & IWL_XVT_LOAD_MASK_RUNTIME)
+		ext_cfg.init_flags |= cpu_to_le32(IWL_INIT_PHY);
+
+	return iwl_xvt_send_cmd_pdu(xvt, WIDE_ID(SYSTEM_GROUP,
+						 INIT_EXTENDED_CFG_CMD), 0,
+				    sizeof(ext_cfg), &ext_cfg);
+}
+
 int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 {
 	int ret;
@@ -617,6 +635,16 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 	if (ret) {
 		IWL_ERR(xvt, "Failed to start ucode: %d\n", ret);
 		iwl_trans_stop_device(xvt->trans);
+	}
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		ret = iwl_xvt_send_extended_config(xvt);
+		if (ret) {
+			IWL_ERR(xvt, "Failed to send extended_config: %d\n",
+				ret);
+			iwl_trans_stop_device(xvt->trans);
+			return ret;
+		}
 	}
 	iwl_dnt_start(xvt->trans);
 
