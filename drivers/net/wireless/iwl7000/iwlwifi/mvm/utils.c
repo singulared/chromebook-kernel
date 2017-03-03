@@ -73,7 +73,7 @@
 #include "mvm.h"
 #include "fw-api-rs.h"
 #ifdef CPTCFG_IWLMVM_TCM
-#include "vendor-cmd.h"
+#include "iwl-vendor-cmd.h"
 #endif
 
 /*

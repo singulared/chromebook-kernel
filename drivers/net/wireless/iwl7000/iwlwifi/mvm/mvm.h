@@ -86,7 +86,7 @@
 #include "sta.h"
 #include "fw-api.h"
 #include "constants.h"
-#include "vendor-cmd.h"
+#include "iwl-vendor-cmd.h"
 #include "tof.h"
 
 #ifdef CPTCFG_IWLMVM_TCM

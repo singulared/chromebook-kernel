@@ -72,7 +72,7 @@
 #include "fw-api-scan.h"
 #include "iwl-io.h"
 #ifdef CPTCFG_IWLMVM_TCM
-#include "vendor-cmd.h"
+#include "iwl-vendor-cmd.h"
 #endif
 
 #define IWL_DENSE_EBS_SCAN_RATIO 5

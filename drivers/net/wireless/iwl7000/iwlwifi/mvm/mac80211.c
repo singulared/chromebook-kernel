@@ -84,7 +84,7 @@
 #include "iwl-eeprom-parse.h"
 #include "iwl-phy-db.h"
 #include "testmode.h"
-#include "vendor-cmd.h"
+#include "iwl-vendor-cmd.h"
 #include "iwl-fw-error-dump.h"
 #include "iwl-prph.h"
 #include "iwl-nvm-parse.h"
