@@ -703,7 +703,7 @@ struct iwl_trans_ops {
 	void (*txq_set_shared_mode)(struct iwl_trans *trans, u32 txq_id,
 				    bool shared);
 
-	int (*wait_tx_queue_empty)(struct iwl_trans *trans, u32 txq_bm);
+	int (*wait_tx_queues_empty)(struct iwl_trans *trans, u32 txq_bm);
 	void (*freeze_txq_timer)(struct iwl_trans *trans, unsigned long txqs,
 				 bool freeze);
 	void (*block_txq_ptrs)(struct iwl_trans *trans, bool block);
@@ -1237,15 +1237,15 @@ static inline void iwl_trans_block_txq_ptrs(struct iwl_trans *trans,
 		trans->ops->block_txq_ptrs(trans, block);
 }
 
-static inline int iwl_trans_wait_tx_queue_empty(struct iwl_trans *trans,
-						u32 txqs)
+static inline int iwl_trans_wait_tx_queues_empty(struct iwl_trans *trans,
+						 u32 txqs)
 {
 	if (WARN_ON_ONCE(trans->state != IWL_TRANS_FW_ALIVE)) {
 		IWL_ERR(trans, "%s bad state = %d\n", __func__, trans->state);
 		return -EIO;
 	}
 
-	return trans->ops->wait_tx_queue_empty(trans, txqs);
+	return trans->ops->wait_tx_queues_empty(trans, txqs);
 }
 
 #if IS_ENABLED(CPTCFG_IWLXVT)
