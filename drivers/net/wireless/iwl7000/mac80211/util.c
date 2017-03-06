@@ -1314,6 +1314,7 @@ static int ieee80211_build_preq_ies_band(struct ieee80211_local *local,
 					 size_t *offset)
 {
 	struct ieee80211_supported_band *sband;
+	const struct ieee80211_sta_he_cap *he_cap;
 	u8 *pos = buffer, *end = buffer + buffer_len;
 	size_t noffset;
 	int supp_rates_len, i;
@@ -1418,11 +1419,6 @@ static int ieee80211_build_preq_ies_band(struct ieee80211_local *local,
 						sband->ht_cap.cap);
 	}
 
-	/*
-	 * If adding more here, adjust code in main.c
-	 * that calculates local->scan_ies_len.
-	 */
-
 	/* insert custom IEs that go before VHT */
 	if (ie && ie_len) {
 		static const u8 before_vht[] = {
@@ -1467,6 +1463,19 @@ static int ieee80211_build_preq_ies_band(struct ieee80211_local *local,
 		pos = ieee80211_ie_build_vht_cap(pos, &sband->vht_cap,
 						 sband->vht_cap.cap);
 	}
+
+	/* TODO: Take care of IE order and do a split of IEs */
+	he_cap = ieee80211_get_he_sta_cap(sband);
+	if (he_cap) {
+		pos = ieee80211_ie_build_he_cap(pos, he_cap, end);
+		if (!pos)
+			goto out_err;
+	}
+
+	/*
+	 * If adding more here, adjust code in main.c
+	 * that calculates local->scan_ies_len.
+	 */
 
 	return pos - buffer;
  out_err:
@@ -2383,6 +2392,95 @@ u8 *ieee80211_ie_build_vht_cap(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,
 	memcpy(pos, &vht_cap->vht_mcs, sizeof(vht_cap->vht_mcs));
 	pos += sizeof(vht_cap->vht_mcs);
 
+	return pos;
+}
+
+u8 *ieee80211_ie_build_he_cap(u8 *pos,
+			      const struct ieee80211_sta_he_cap *he_cap,
+			      u8 *end)
+{
+	u8 n;
+	u8 ie_len;
+	u8 *orig_pos = pos;
+
+	/* Make sure we have place for the IE */
+	/*
+	 * TODO: the 1 added is because this temporarily is under the EXTENSION
+	 * IE. Get rid of it when it moves.
+	 */
+	if (!he_cap)
+		return orig_pos;
+
+	ie_len = 2 + 1 +
+		 sizeof(he_cap->he_cap_elem) +
+		 ieee80211_he_mcs_nss_size(he_cap->he_mcs_nss_supp.mcs_hdr) +
+		 ieee80211_he_ppe_size(he_cap->ppe_thres[0],
+				       he_cap->he_cap_elem.phy_cap_info);
+
+	if ((end - pos) < ie_len)
+		return orig_pos;
+
+	*pos++ = WLAN_EID_EXTENSION;
+	pos++; /* We'll set the size later below */
+	*pos++ = WLAN_EID_EXT_HE_CAPABILITY;
+
+	/* Fixed data */
+	memcpy(pos, &he_cap->he_cap_elem, sizeof(he_cap->he_cap_elem));
+	pos += sizeof(he_cap->he_cap_elem);
+
+	/*
+	 * There is a NSS desc per bit turned on in either tx_bw_bitmap
+	 * or rx_bw_bitmap, so get all turned on bits and copy in accordingly.
+	 * This data is optional, so it might not appear at all.
+	 */
+	n = hweight16(le16_to_cpu(he_cap->he_mcs_nss_supp.mcs_hdr) &
+		      IEEE80211_TX_RX_MCS_NSS_SUPP_TX_BITMAP_MASK);
+
+	/* Add in header first */
+	put_unaligned_le16(le16_to_cpu(he_cap->he_mcs_nss_supp.mcs_hdr),
+			   pos);
+	pos += 2;
+
+	if (n > 0) {
+		memcpy(pos, &he_cap->he_mcs_nss_supp.nss_tx_desc[0], n);
+		pos += n;
+	}
+
+	n = hweight16(le16_to_cpu(he_cap->he_mcs_nss_supp.mcs_hdr) &
+		      IEEE80211_TX_RX_MCS_NSS_SUPP_RX_BITMAP_MASK);
+
+	if (n > 0) {
+		memcpy(pos, &he_cap->he_mcs_nss_supp.nss_rx_desc[0], n);
+		pos += n;
+	}
+
+	/* Check if PPE Threshold should be present */
+	if ((he_cap->he_cap_elem.phy_cap_info[7] &
+	     IEEE80211_HE_PHY_CAP8_PPE_THRESHOLD_PRESENT) == 0)
+		goto end;
+
+	/*
+	 * Calculate how many PPET16/PPET8 pairs are to come. Algorithm:
+	 * (NSS_M1 + 1) x (num of 1 bits in RU_INDEX_BITMASK)
+	 */
+	n = hweight8(he_cap->ppe_thres[0] &
+		     IEEE80211_PPE_THRES_RU_INDEX_BITMASK_MASK);
+	n *= (1 + ((he_cap->ppe_thres[0] & IEEE80211_PPE_THRES_NSS_M1_MASK) >>
+		   IEEE80211_PPE_THRES_NSS_M1_POS));
+
+	/*
+	 * Each pair is 6 bits, and we need to add the 7 "header" bits to the
+	 * total size.
+	 */
+	n = (n * IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE * 2) + 7;
+	n = DIV_ROUND_UP(n, 8);
+
+	/* Copy PPE Thresholds */
+	memcpy(pos, &he_cap->ppe_thres, n);
+	pos += n;
+
+end:
+	orig_pos[1] = (pos - orig_pos) - 2;
 	return pos;
 }
 

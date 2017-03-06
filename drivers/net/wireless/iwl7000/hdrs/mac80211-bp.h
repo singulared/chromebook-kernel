@@ -1840,6 +1840,91 @@ void iwl7000_cqm_rssi_notify(struct net_device *dev,
 #define cfg80211_cqm_rssi_notify iwl7000_cqm_rssi_notify
 #endif
 
+/*
+ * TODO: When we know the minimal kernel version to support HE - update below
+ */
+#if CFG80211_VERSION < KERNEL_VERSION(99,0,0)
+#define IEEE80211_HE_PPE_THRES_MAX_LEN		25
+
+/**
+ * struct ieee80211_sta_he_cap - STA's HE capabilities
+ *
+ * This structure describes most essential parameters needed
+ * to describe 802.11ax HE capabilities for a STA.
+ *
+ * @has_he: true iff HE data is valid.
+ * @he_cap_elem: Fixed portion of the HE capabilities element.
+ * @he_mcs_nss_supp: The supported NSS/MCS combinations.
+ * @ppe_thres: Holds the PPE Thresholds data.
+ */
+struct ieee80211_sta_he_cap {
+	bool has_he;
+	struct ieee80211_he_cap_elem he_cap_elem;
+	struct ieee80211_he_mcs_nss_supp he_mcs_nss_supp;
+	u8 ppe_thres[IEEE80211_HE_PPE_THRES_MAX_LEN];
+};
+
+/**
+ * struct ieee80211_sband_iftype_data
+ *
+ * This structure encapsulates sband data that is relevant for the interface
+ * types defined in %types
+ *
+ * @types: interface types (bits)
+ * @he_cap: holds the HE capabilities
+ */
+struct ieee80211_sband_iftype_data {
+	u16 types;
+	struct ieee80211_sta_he_cap he_cap;
+};
+
+static inline void
+ieee80211_sband_set_num_iftypes_data(struct ieee80211_supported_band *sband,
+				     u16 n)
+{
+}
+
+static inline u16
+ieee80211_sband_get_num_iftypes_data(struct ieee80211_supported_band *sband)
+{
+	return 0;
+}
+
+static inline void
+ieee80211_sband_set_iftypes_data(struct ieee80211_supported_band *sband,
+				 const struct ieee80211_sband_iftype_data *data)
+{
+}
+
+static inline struct ieee80211_sband_iftype_data *
+ieee80211_sband_get_iftypes_data(struct ieee80211_supported_band *sband)
+{
+	return NULL;
+}
+
+static inline struct ieee80211_sband_iftype_data *
+ieee80211_sband_get_iftypes_data_entry(struct ieee80211_supported_band *sband,
+				       u16 i)
+{
+	WARN_ONCE(1,
+		  "Tried to use unsupported sband iftype data\n");
+	return NULL;
+}
+
+/**
+ * ieee80211_get_he_sta_cap - return HE capabilities for an sband's STA
+ * @sband: the sband to search for the STA on
+ *
+ * Return: pointer to the struct ieee80211_sta_he_cap, or NULL is none found
+ *	Currently, not supported
+ */
+static inline const struct ieee80211_sta_he_cap *
+ieee80211_get_he_sta_cap(const struct ieee80211_supported_band *sband)
+{
+	return NULL;
+}
+#endif
+
 #ifndef SHASH_DESC_ON_STACK
 #define SHASH_DESC_ON_STACK(shash, ctx)				 \
 	char __##shash##_desc[sizeof(struct shash_desc) +	 \

@@ -1831,6 +1831,17 @@ enum ieee80211_he_highest_mcs_supported_subfield_enc {
 	HIGHEST_MCS_SUPPORTED_MCS11,
 };
 
+/* Calculate 802.11ax HE capabilities IE Tx/Rx HE MCS NSS Support Field size */
+static inline u8
+ieee80211_he_mcs_nss_size(__le16 mcs_hdr)
+{
+	return sizeof(mcs_hdr) +
+	       hweight16(le16_to_cpu(mcs_hdr) &
+			 IEEE80211_TX_RX_MCS_NSS_SUPP_TX_BITMAP_MASK) +
+	       hweight16(le16_to_cpu(mcs_hdr) &
+			 IEEE80211_TX_RX_MCS_NSS_SUPP_RX_BITMAP_MASK);
+}
+
 /* 802.11ax HE PPE Thresholds */
 #define IEEE80211_PPE_THRES_NSS_M1_SUPPORT_2NSS			(1)
 #define IEEE80211_PPE_THRES_NSS_M1_POS				(0)
@@ -1841,6 +1852,34 @@ enum ieee80211_he_highest_mcs_supported_subfield_enc {
 #define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET16			(0)
 #define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET8			(7)
 #define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE		(3)
+
+/*
+ * Calculate 802.11ax HE capabilities IE PPE field size
+ * Input: Header byte of ppe_thres (first byte), and HE capa IE's PHY cap u8*
+ */
+static inline u8
+ieee80211_he_ppe_size(u8 ppe_thres_hdr, const u8 *phy_cap_info)
+{
+	u8 n;
+
+	if ((phy_cap_info[7] &
+	     IEEE80211_HE_PHY_CAP8_PPE_THRESHOLD_PRESENT) == 0)
+		return 0;
+
+	n = hweight8(ppe_thres_hdr &
+		     IEEE80211_PPE_THRES_RU_INDEX_BITMASK_MASK);
+	n *= (1 + ((ppe_thres_hdr & IEEE80211_PPE_THRES_NSS_M1_MASK) >>
+		   IEEE80211_PPE_THRES_NSS_M1_POS));
+
+	/*
+	 * Each pair is 6 bits, and we need to add the 7 "header" bits to the
+	 * total size.
+	 */
+	n = (n * IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE * 2) + 7;
+	n = DIV_ROUND_UP(n, 8);
+
+	return n;
+}
 
 /* Authentication algorithms */
 #define WLAN_AUTH_OPEN 0
