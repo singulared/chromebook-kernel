@@ -430,6 +430,192 @@ static void iwl_init_vht_hw_capab(const struct iwl_cfg *cfg,
 	vht_cap->vht_mcs.tx_mcs_map = vht_cap->vht_mcs.rx_mcs_map;
 }
 
+static const struct ieee80211_sband_iftype_data iwl_he_capa_2ghz = {
+	.types = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP),
+	.he_cap = {
+		.has_he = true,
+		.he_cap_elem = {
+			.mac_cap_info[0] =
+				IEEE80211_HE_MAC_CAP1_HTC_HE |
+				IEEE80211_HE_MAC_CAP1_DYNAMIC_FRAG_LEVEL_2 |
+				IEEE80211_HE_MAC_CAP1_MAX_NUM_FRAG_MSDU_4,
+			.mac_cap_info[1] =
+				IEEE80211_HE_MAC_CAP2_TF_MAC_PAD_DUR_16US |
+				IEEE80211_HE_MAC_CAP2_MULTI_TID_AGG_QOS_8,
+			.mac_cap_info[2] =
+				IEEE80211_HE_MAC_CAP3_UL_MU_RESP_SCHED |
+				IEEE80211_HE_MAC_CAP3_A_BSR |
+				IEEE80211_HE_MAC_CAP3_MU_CASCADE |
+				IEEE80211_HE_MAC_CAP3_ACK_EN_MULTI_TID_ADD,
+			.mac_cap_info[3] =
+				IEEE80211_HE_MAC_CAP4_GRP_ADDR_MULTI_STA_BA_DL_MU |
+				IEEE80211_HE_MAC_CAP4_OMI_A_CONTROL |
+				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_1,
+			.mac_cap_info[4] = 0,
+			.phy_cap_info[0] =
+				IEEE80211_HE_PHY_CAP1_DUAL_BAND |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_40MHZ_IN_2G |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_160MHZ_IN_5G,
+			.phy_cap_info[1] =
+				IEEE80211_HE_PHY_CAP2_PREAMBLE_PUNC_RX_MASK |
+				IEEE80211_HE_PHY_CAP2_DEVICE_CLASS_A |
+				IEEE80211_HE_PHY_CAP2_LDPC_CODING_IN_PAYLOAD |
+				IEEE80211_HE_PHY_CAP2_HE_LTF_AND_GI_FOR_HE_PPDUS_MASK,
+			.phy_cap_info[2] =
+				IEEE80211_HE_PHY_CAP3_HE_LTF_AND_GI_FOR_NDP_MASK |
+				IEEE80211_HE_PHY_CAP3_STBC_TX |
+				IEEE80211_HE_PHY_CAP3_STBC_RX |
+				IEEE80211_HE_PHY_CAP3_UL_MU_MASK,
+			.phy_cap_info[3] =
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_TX_BPSK |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_TX_1_SPS |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_RX_BPSK |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_RX_1_SPS |
+				IEEE80211_HE_PHY_CAP4_UL_HE_MU_PPDU_PAYLOAD_OVER_106TONE_RU,
+			.phy_cap_info[4] =
+				IEEE80211_HE_PHY_CAP5_SU_BEAMFORMEE |
+				IEEE80211_HE_PHY_CAP5_BEAMFORMEE_MAX_STS_UNDER_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP5_BEAMFORMEE_NSTS_TOTAL_UNDER_80MHZ_8,
+			.phy_cap_info[5] =
+				IEEE80211_HE_PHY_CAP6_BEAMFORMEE_MAX_STS_ABOVE_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP6_BEAMFORMEE_NSTS_TOTAL_ABOVE_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP6_BEAMFORMER_SND_DIMS_UNDER_80MHZ_2,
+			.phy_cap_info[6] =
+				IEEE80211_HE_PHY_CAP7_BEAMFORMER_SND_DIMS_ABOVE_80MHZ_2 |
+				IEEE80211_HE_PHY_CAP7_NG16_FOR_SU_FEEDBACK |
+				IEEE80211_HE_PHY_CAP7_NG16_FOR_MU_FEEDBACK |
+				IEEE80211_HE_PHY_CAP7_CODEBOOK_SIZE_42_FOR_SU |
+				IEEE80211_HE_PHY_CAP7_CODEBOOK_SIZE_75_FOR_MU,
+			.phy_cap_info[7] =
+				IEEE80211_HE_PHY_CAP8_BEAMFORM_FB_TRIG_FRAME_MASK |
+				IEEE80211_HE_PHY_CAP8_HE_ER_SU_PPDU_PAYLOAD |
+				IEEE80211_HE_PHY_CAP8_DL_MUMIMO_ON_PARTIAL_BANDWIDTH |
+				IEEE80211_HE_PHY_CAP8_PPE_THRESHOLD_PRESENT |
+				IEEE80211_HE_PHY_CAP8_POWER_BOOST_FACTOR_AR,
+			.phy_cap_info[8] =
+				IEEE80211_HE_PHY_CAP9_4X_HE_LTF_AND_08_US_GI_SUPP_HE_PPDUS,
+		},
+		/*
+		 * Set default Tx/Rx HE MCS NSS Support field. Indicate support
+		 * for up to 2 spatial streams and all MCS, without any special
+		 * cases
+		 */
+		.he_mcs_nss_supp = {
+			.mcs_hdr = cpu_to_le16(0x1 |
+					       (HIGHEST_MCS_SUPPORTED_MCS11 <<
+						IEEE80211_TX_RX_MCS_NSS_SUPP_HIGHEST_MCS_POS)),
+		},
+		/*
+		 * Set default PPE thresholds, with PPET16 set to 0, PPET8 set
+		 * to 7
+		 */
+		.ppe_thres[0] = 0x61,
+		.ppe_thres[1] = 0x38,
+		.ppe_thres[2] = 0xe3,
+		.ppe_thres[3] = 0x8e,
+	},
+};
+
+static const struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
+	.types = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP),
+	.he_cap = {
+		.has_he = true,
+		.he_cap_elem = {
+			.mac_cap_info[0] =
+				IEEE80211_HE_MAC_CAP1_HTC_HE |
+				IEEE80211_HE_MAC_CAP1_DYNAMIC_FRAG_LEVEL_2 |
+				IEEE80211_HE_MAC_CAP1_MAX_NUM_FRAG_MSDU_4,
+			.mac_cap_info[1] =
+				IEEE80211_HE_MAC_CAP2_TF_MAC_PAD_DUR_16US |
+				IEEE80211_HE_MAC_CAP2_MULTI_TID_AGG_QOS_8,
+			.mac_cap_info[2] =
+				IEEE80211_HE_MAC_CAP3_UL_MU_RESP_SCHED |
+				IEEE80211_HE_MAC_CAP3_A_BSR |
+				IEEE80211_HE_MAC_CAP3_MU_CASCADE |
+				IEEE80211_HE_MAC_CAP3_ACK_EN_MULTI_TID_ADD,
+			.mac_cap_info[3] =
+				IEEE80211_HE_MAC_CAP4_GRP_ADDR_MULTI_STA_BA_DL_MU |
+				IEEE80211_HE_MAC_CAP4_OMI_A_CONTROL |
+				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_1,
+			.mac_cap_info[4] = 0,
+			.phy_cap_info[0] =
+				IEEE80211_HE_PHY_CAP1_DUAL_BAND |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_40MHZ_IN_2G |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G |
+				IEEE80211_HE_PHY_CAP1_CHANNEL_WIDTH_SET_160MHZ_IN_5G,
+			.phy_cap_info[1] =
+				IEEE80211_HE_PHY_CAP2_PREAMBLE_PUNC_RX_MASK |
+				IEEE80211_HE_PHY_CAP2_DEVICE_CLASS_A |
+				IEEE80211_HE_PHY_CAP2_LDPC_CODING_IN_PAYLOAD |
+				IEEE80211_HE_PHY_CAP2_HE_LTF_AND_GI_FOR_HE_PPDUS_MASK,
+			.phy_cap_info[2] =
+				IEEE80211_HE_PHY_CAP3_HE_LTF_AND_GI_FOR_NDP_MASK |
+				IEEE80211_HE_PHY_CAP3_STBC_TX |
+				IEEE80211_HE_PHY_CAP3_STBC_RX |
+				IEEE80211_HE_PHY_CAP3_UL_MU_MASK,
+			.phy_cap_info[3] =
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_TX_BPSK |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_TX_1_SPS |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_RX_BPSK |
+				IEEE80211_HE_PHY_CAP4_DCM_ENC_RX_1_SPS |
+				IEEE80211_HE_PHY_CAP4_UL_HE_MU_PPDU_PAYLOAD_OVER_106TONE_RU,
+			.phy_cap_info[4] =
+				IEEE80211_HE_PHY_CAP5_SU_BEAMFORMEE |
+				IEEE80211_HE_PHY_CAP5_BEAMFORMEE_MAX_STS_UNDER_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP5_BEAMFORMEE_NSTS_TOTAL_UNDER_80MHZ_8,
+			.phy_cap_info[5] =
+				IEEE80211_HE_PHY_CAP6_BEAMFORMEE_MAX_STS_ABOVE_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP6_BEAMFORMEE_NSTS_TOTAL_ABOVE_80MHZ_8 |
+				IEEE80211_HE_PHY_CAP6_BEAMFORMER_SND_DIMS_UNDER_80MHZ_2,
+			.phy_cap_info[6] =
+				IEEE80211_HE_PHY_CAP7_BEAMFORMER_SND_DIMS_ABOVE_80MHZ_2 |
+				IEEE80211_HE_PHY_CAP7_NG16_FOR_SU_FEEDBACK |
+				IEEE80211_HE_PHY_CAP7_NG16_FOR_MU_FEEDBACK |
+				IEEE80211_HE_PHY_CAP7_CODEBOOK_SIZE_42_FOR_SU |
+				IEEE80211_HE_PHY_CAP7_CODEBOOK_SIZE_75_FOR_MU,
+			.phy_cap_info[7] =
+				IEEE80211_HE_PHY_CAP8_BEAMFORM_FB_TRIG_FRAME_MASK |
+				IEEE80211_HE_PHY_CAP8_HE_ER_SU_PPDU_PAYLOAD |
+				IEEE80211_HE_PHY_CAP8_DL_MUMIMO_ON_PARTIAL_BANDWIDTH |
+				IEEE80211_HE_PHY_CAP8_PPE_THRESHOLD_PRESENT |
+				IEEE80211_HE_PHY_CAP8_POWER_BOOST_FACTOR_AR,
+			.phy_cap_info[8] =
+				IEEE80211_HE_PHY_CAP9_4X_HE_LTF_AND_08_US_GI_SUPP_HE_PPDUS,
+		},
+		/*
+		 * Set default Tx/Rx HE MCS NSS Support field. Indicate support
+		 * for up to 2 spatial streams and all MCS, without any special
+		 * cases
+		 */
+		.he_mcs_nss_supp = {
+			.mcs_hdr = cpu_to_le16(0x1 |
+					       (HIGHEST_MCS_SUPPORTED_MCS11 <<
+						IEEE80211_TX_RX_MCS_NSS_SUPP_HIGHEST_MCS_POS)),
+		},
+		/*
+		 * Set default PPE thresholds, with PPET16 set to 0, PPET8 set
+		 * to 7
+		 */
+		.ppe_thres[0] = 0x61,
+		.ppe_thres[1] = 0x38,
+		.ppe_thres[2] = 0xe3,
+		.ppe_thres[3] = 0x8e,
+	},
+};
+
+static void iwl_init_he_hw_capab(struct ieee80211_supported_band *sband)
+{
+	if (sband->band == NL80211_BAND_2GHZ)
+		ieee80211_sband_set_iftypes_data(sband, &iwl_he_capa_2ghz);
+	else if (sband->band == NL80211_BAND_5GHZ)
+		ieee80211_sband_set_iftypes_data(sband, &iwl_he_capa_5ghz);
+	else
+		return;
+
+	ieee80211_sband_set_num_iftypes_data(sband, 1);
+}
+
 void iwl_init_sbands(struct device *dev, const struct iwl_cfg *cfg,
 		     struct iwl_nvm_data *data, const __le16 *nvm_ch_flags,
 		     u8 tx_chains, u8 rx_chains, bool lar_supported)
@@ -449,6 +635,10 @@ void iwl_init_sbands(struct device *dev, const struct iwl_cfg *cfg,
 	iwl_init_ht_hw_capab(cfg, data, &sband->ht_cap, NL80211_BAND_2GHZ,
 			     tx_chains, rx_chains);
 
+	/* TODO: HE support should take NVM into account */
+	if (!iwlwifi_mod_params.disable_11ax)
+		iwl_init_he_hw_capab(sband);
+
 	sband = &data->bands[NL80211_BAND_5GHZ];
 	sband->band = NL80211_BAND_5GHZ;
 	sband->bitrates = &iwl_cfg80211_rates[RATES_52_OFFS];
@@ -460,6 +650,10 @@ void iwl_init_sbands(struct device *dev, const struct iwl_cfg *cfg,
 	if (data->sku_cap_11ac_enable && !iwlwifi_mod_params.disable_11ac)
 		iwl_init_vht_hw_capab(cfg, data, &sband->vht_cap,
 				      tx_chains, rx_chains);
+
+	/* TODO: HE support should take NVM into account */
+	if (!iwlwifi_mod_params.disable_11ax)
+		iwl_init_he_hw_capab(sband);
 
 	if (n_channels != n_used)
 		IWL_ERR_DEV(dev, "NVM: used only %d of %d channels\n",
