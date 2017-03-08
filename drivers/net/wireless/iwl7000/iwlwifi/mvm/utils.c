@@ -1044,7 +1044,7 @@ static void iwl_mvm_ll_iter(void *_data, u8 *mac, struct ieee80211_vif *vif)
 
 bool iwl_mvm_low_latency(struct iwl_mvm *mvm)
 {
-	struct iwl_mvm_low_latency_iter data;
+	struct iwl_mvm_low_latency_iter data = {};
 
 	ieee80211_iterate_active_interfaces_atomic(
 			mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
@@ -1055,7 +1055,7 @@ bool iwl_mvm_low_latency(struct iwl_mvm *mvm)
 
 bool iwl_mvm_low_latency_band(struct iwl_mvm *mvm, enum nl80211_band band)
 {
-	struct iwl_mvm_low_latency_iter data;
+	struct iwl_mvm_low_latency_iter data = {};
 
 	ieee80211_iterate_active_interfaces_atomic(
 			mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
@@ -1564,10 +1564,10 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 
 	mvm->tcm.result.elapsed = elapsed;
 
-	ieee80211_iterate_active_interfaces(mvm->hw,
-					    IEEE80211_IFACE_ITER_NORMAL,
-					    iwl_mvm_tcm_iterator,
-					    &band);
+	ieee80211_iterate_active_interfaces_atomic(mvm->hw,
+						   IEEE80211_IFACE_ITER_NORMAL,
+						   iwl_mvm_tcm_iterator,
+						   &band);
 
 	for (mac = 0; mac < NUM_MAC_INDEX_DRIVER; mac++) {
 		struct iwl_mvm_tcm_mac *mdata = &mvm->tcm.data[mac];
