@@ -465,4 +465,8 @@ void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 #define LINUX_VERSION_IN_RANGE(x1,x2,x3, y1,y2,y3) \
         (LINUX_VERSION_IS_GEQ(x1,x2,x3) && LINUX_VERSION_IS_LESS(y1,y2,y3))
 
+#ifndef __BUILD_BUG_ON_NOT_POWER_OF_2
+#define __BUILD_BUG_ON_NOT_POWER_OF_2(...)
+#endif
+
 #endif /* __IWL_CHROME */
