@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,7 +25,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,8 +87,9 @@ struct iwl_fw_chan_avail {
 } __packed;
 
 /**
- * NAN configuration command. This command starts/stops/modifies NAN
- * sync engine.
+ * struct iwl_nan_cfg_cmd - NAN configuration command
+ *
+ * This command starts/stops/modifies NAN sync engine.
  *
  * @action: one of the FW_CTXT_ACTION_*
  * @tsf_id: tsf id to use in beacons
@@ -165,7 +166,7 @@ enum iwl_fw_nan_func_flags {
 };
 
 /**
- * NAN add/remove function command
+ * struct iwl_nan_add_func_cmd - NAN add/remove function command
  *
  * @action: one of the FW_CTXT_ACTION_ADD/REMOVE
  * @instance_id: instance id of the DE function to remove
@@ -216,10 +217,10 @@ enum iwl_nan_add_func_resp_status {
 };
 
 /**
- * Add NAN function response
+ * struct iwl_nan_add_func_res - Add NAN function response
  *
  * @instance_id: assigned instance_id (if added)
- * @status: status of the command (NAN_DE_FUNC_STATUS_*)
+ * @status: status of the command (&enum iwl_nan_add_func_resp_status)
  */
 struct iwl_nan_add_func_res {
 	u8 instance_id;
@@ -228,7 +229,7 @@ struct iwl_nan_add_func_res {
 } __packed; /* NAN_DISCO_FUNC_CMD_API_S_VER_1 */
 
 /**
- * NaN discovery event
+ * struct iwl_nan_disc_evt_notify - NaN discovery event
  *
  * @peer_mac_addr: peer address
  * @type: Type of matching function
@@ -257,11 +258,11 @@ enum iwl_fw_nan_de_term_reason {
 };
 
 /**
- * NAN function termination event
+ * struct iwl_nan_de_term - NAN function termination event
  *
- * @type: type of terminated function (enum %iwl_fw_nan_func_type)
+ * @type: type of terminated function (&enum iwl_fw_nan_func_type)
  * @instance_id: instance id
- * @reason: termination reason (enum %iwl_fw_nan_de_term_reason)
+ * @reason: termination reason (&enum iwl_fw_nan_de_term_reason)
  */
 struct iwl_nan_de_term {
 	u8 type;
@@ -283,7 +284,7 @@ enum iwl_fw_config_flags {
 };
 
 /**
- * NAN further availability configuration command
+ * struct iwl_nan_faw_config - NAN further availability configuration command
  *
  * @id_n_color: id and color of the mac used for further availability
  * @faw_ci: channel to be available on
