@@ -323,13 +323,29 @@ struct iwl_notif_statistics_cdb {
 	struct mvm_statistics_load_cdb load_stats;
 } __packed; /* STATISTICS_NTFY_API_S_VER_12 */
 
-#define IWL_STATISTICS_REPLY_FLG_CLEAR	        0x1
-#define IWL_STATISTICS_FLG_CLEAR		0x1
-#define IWL_STATISTICS_FLG_DISABLE_NOTIF	0x2
+/**
+ * enum iwl_statistics_notif_flags - flags used in statistics notification
+ * @IWL_STATISTICS_REPLY_FLG_CLEAR: statistics were cleared after this report
+ */
+enum iwl_statistics_notif_flags {
+	IWL_STATISTICS_REPLY_FLG_CLEAR		= 0x1,
+};
+
+/**
+ * enum iwl_statistics_cmd_flags - flags used in statistics command
+ * @IWL_STATISTICS_FLG_CLEAR: request to clear statistics after the report
+ *	that's sent after this command
+ * @IWL_STATISTICS_FLG_DISABLE_NOTIF: disable unilateral statistics
+ *	notifications
+ */
+enum iwl_statistics_cmd_flags {
+	IWL_STATISTICS_FLG_CLEAR		= 0x1,
+	IWL_STATISTICS_FLG_DISABLE_NOTIF	= 0x2,
+};
 
 /**
  * struct iwl_statistics_cmd - statistics config command
- * @flags: flags from &enum iwl_statistics_flags
+ * @flags: flags from &enum iwl_statistics_cmd_flags
  */
 struct iwl_statistics_cmd {
 	__le32 flags;
