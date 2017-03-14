@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,7 +25,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -104,6 +104,26 @@ enum iwl_gscan_band {
 #define GSCAN_MAX_CHANNELS 16
 
 /**
+ * enum iwl_mvm_gscan_report_mode - gscan scan results report modes
+ * @IWL_MVM_GSCAN_REPORT_BUFFER_FULL: report that scan results are
+ *	available only when the scan results buffer reaches the report
+ *	threshold. The report threshold is set for each bucket.
+ * @IWL_MVM_GSCAN_REPORT_BUFFER_EACH_SCAN: report that scan results are
+ *	available when scanning of this bucket is complete.
+ * @IWL_MVM_GSCAN_REPORT_BUFFER_FULL_RESULTS: forward scan results
+ *	(beacons/probe responses) in real time to userspace.
+ * @IWL_MVM_GSCAN_REPORT_HISTORY_RESERVED: reserved.
+ * @IWL_MVM_GSCAN_REPORT_NO_BATCH: do not fill scan history buffer.
+ */
+enum iwl_mvm_gscan_report_mode {
+	IWL_MVM_GSCAN_REPORT_BUFFER_FULL,
+	IWL_MVM_GSCAN_REPORT_BUFFER_EACH_SCAN,
+	IWL_MVM_GSCAN_REPORT_BUFFER_FULL_RESULTS,
+	IWL_MVM_GSCAN_REPORT_HISTORY_RESERVED,
+	IWL_MVM_GSCAN_REPORT_NO_BATCH,
+};
+
+/**
  * struct iwl_gscan_bucket_spec - gscan bucket specification
  * @scan_period: scan period for this bucket. In milliseconds.
  * @max_scan_period: for exponential back off bucket: scan_period
@@ -121,7 +141,7 @@ enum iwl_gscan_band {
  * @band: the band to scan as specified in &enum iwl_gscan_band.
  *	If %IWL_GSCAN_BAND_UNSPECIFIED, use the channel list.
  * @report_policy: report policy for this bucket
- *	&enum iwl_mvm_vendor_gscan_report_mode.
+ *	&enum iwl_mvm_gscan_report_mode.
  * @index: bucket index.
  * @channel_count: number of channels in channels array.
  * @reserved: reserved.
@@ -259,9 +279,21 @@ struct iwl_gscan_cached_scan_result {
 } __packed;/* GSCAN_SCHED_SCAN_RESULT_S_VER_1 */
 
 /**
+ * enum iwl_mvm_results_event_type - scan results available event type
+ * @IWL_MVM_RESULTS_NOTIF_BUFFER_FULL: scan results available was
+ *	reported because scan results buffer has reached the report threshold.
+ * @IWL_MVM_RESULTS_NOTIF_BUCKET_END: scan results available was reported
+ *	because scan of a bucket was completed.
+ */
+enum iwl_mvm_results_event_type {
+	IWL_MVM_RESULTS_NOTIF_BUFFER_FULL,
+	IWL_MVM_RESULTS_NOTIF_BUCKET_END,
+};
+
+/**
  * struct iwl_gscan_results_event - gscan results available event.
  * @event_type: scan results available event type as specified in &enum
- *	iwl_mvm_vendor_results_event_type.
+ *	iwl_mvm_results_event_type.
  * @offset_ssid: SSIDs table offset in the notification buffer.
  * @num_ssid: number of SSIDs in SSID table.
  * @reserved1: reserved
@@ -332,9 +364,21 @@ struct iwl_gscan_significant_change_cmd {
 } __packed; /* GSCAN_SIGNIFICANT_CHANGE_PARAMS_S_VER_1 */
 
 /**
+ * enum iwl_mvm_hotlist_ap_status - whether an AP was found or lost
+ * @IWL_MVM_HOTLIST_AP_FOUND: beacon from this AP was received with RSSI
+ *	above the configured high threshold.
+ * @IWL_MVM_HOTLIST_AP_LOST: beacon from this AP was received with RSSI
+ *	below the configured low threshold.
+ */
+enum iwl_mvm_hotlist_ap_status {
+	IWL_MVM_HOTLIST_AP_FOUND,
+	IWL_MVM_HOTLIST_AP_LOST,
+};
+
+/**
  * struct iwl_gscan_hotlist_change_event - hotlist AP lost or found event
  * @status: whether this AP was lost or found as specified in &enum
- *	iwl_mvm_vendor_hotlist_ap_status.
+ *	iwl_mvm_hotlist_ap_status.
  * @num_res: number of scan results in results array.
  * @results: scan results for the reported AP.
  */

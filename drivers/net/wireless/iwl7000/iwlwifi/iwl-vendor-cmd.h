@@ -194,6 +194,8 @@ enum iwl_mvm_vendor_load {
  * @IWL_MVM_VENDOR_GSCAN_REPORT_HISTORY_RESERVED: reserved.
  * @IWL_MVM_VENDOR_GSCAN_REPORT_NO_BATCH: do not fill scan history buffer.
  * @NUM_IWL_MVM_VENDOR_GSCAN_REPORT: number of report mode attributes.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_gscan_report_mode {
 	IWL_MVM_VENDOR_GSCAN_REPORT_BUFFER_FULL,
@@ -275,6 +277,8 @@ enum iwl_mvm_vendor_gscan_bucket_spec {
  *	because scan of a bucket was completed.
  * @NUM_IWL_VENDOR_RESULTS_NOTIF_EVENT_TYPE: number of defined gscan results
  *	notification event types.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_results_event_type {
 	IWL_MVM_VENDOR_RESULTS_NOTIF_BUFFER_FULL,
@@ -364,6 +368,8 @@ enum iwl_mvm_vendor_ap_threshold_param {
  * @IWL_MVM_VENDOR_HOTLIST_AP_LOST: beacon from this AP was received with RSSI
  *	below the configured low threshold.
  * @NUM_IWL_MVM_VENDOR_HOTLIST_AP_STATUS: number of defined AP statuses.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_hotlist_ap_status {
 	IWL_MVM_VENDOR_HOTLIST_AP_FOUND,
