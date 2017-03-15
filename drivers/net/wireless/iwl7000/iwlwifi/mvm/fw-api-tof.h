@@ -167,11 +167,17 @@ enum iwl_tof_responder_cfg_flags {
  * @rate: current AP rate
  * @channel_num: current AP Channel
  * @ctrl_ch_position: coding of the control channel position relative to
- *	     the center frequency.
- *	     40MHz  0 below center, 1 above center
- *	     80MHz  bits [0..1]: 0  the near 20MHz to the center,
- *				 1  the far  20MHz to the center
- *		    bit[2]  as above 40MHz
+ *	the center frequency:
+ *
+ *	40 MHz
+ *		0 below center, 1 above center
+ *
+ *	80 MHz
+ *		bits [0..1]
+ *		 * 0  the near 20MHz to the center,
+ *		 * 1  the far  20MHz to the center
+ *		bit[2]
+ *		 as above 40MHz
  * @sta_id: index of the AP STA when in AP mode
  * @toa_offset: Artificial addition [pSec] for the ToA - to be used for debug
  *		purposes, simulating station movement by adding various values

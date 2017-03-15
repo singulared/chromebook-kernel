@@ -175,7 +175,7 @@ enum iwl_fw_nan_func_flags {
  * @flags: a combination of %iwl_fw_nan_func_flags
  * @flw_up_id: follow up id
  * @flw_up_req_id: follow up requestor id
- * @flw_up_addr[6]: follow up destination address
+ * @flw_up_addr: follow up destination address
  * @ttl: ttl in DW's or 0 for infinite
  * @faw_ci: struct %iwl_fw_channel_info for furher availability
  * @faw_attrtype: further availability bitmap
@@ -184,7 +184,7 @@ enum iwl_fw_nan_func_flags {
  * @rx_filter_len: length of rx filter
  * @tx_filter_len: length of tx filter
  * @dw_interval: awake dw interval
- * data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter
+ * @data: dw aligned fields -service_info, srf, rxFilter, txFilter
  */
 struct iwl_nan_add_func_cmd {
 	__le32 action;
