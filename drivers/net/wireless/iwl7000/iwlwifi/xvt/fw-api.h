@@ -430,7 +430,7 @@ enum iwl_scd_cfg_actions {
  * @action: 1 queue enable, 0 queue disable, 2 change txq's tid owner
  *	Value is one of %iwl_scd_cfg_actions options
  * @aggregate: 1 aggregated queue, 0 otherwise
- * @tx_fifo: %enum iwl_mvm_tx_fifo
+ * @tx_fifo: &enum iwl_mvm_tx_fifo
  * @window: BA window size
  * @ssn: SSN for the BA agreement
  */

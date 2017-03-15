@@ -449,7 +449,7 @@ enum iwl_tof_entry_status {
 /**
  * struct iwl_tof_range_rsp_ap_entry_ntfy - AP parameters (response)
  * @measure_status: current APs measurement status, one of
- *	%enum iwl_tof_entry_status.
+ *	&enum iwl_tof_entry_status.
  * @measure_bw: Current AP Bandwidth: 0  20MHz, 1  40MHz, 2  80MHz
  * @rtt: The Round Trip Time that took for the last measurement for
  *	 current AP [pSec]

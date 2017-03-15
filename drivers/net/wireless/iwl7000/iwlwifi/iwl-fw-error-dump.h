@@ -118,7 +118,7 @@ enum iwl_fw_error_dump_type {
 
 /**
  * struct iwl_fw_error_dump_data - data for one type
- * @type: %enum iwl_fw_error_dump_type
+ * @type: &enum iwl_fw_error_dump_type
  * @len: the length starting from %data
  * @data: the data itself
  */
@@ -132,7 +132,7 @@ struct iwl_fw_error_dump_data {
  * struct iwl_fw_error_dump_file - the layout of the header of the file
  * @barker: must be %IWL_FW_ERROR_DUMP_BARKER
  * @file_len: the length of all the file starting from %barker
- * @data: array of %struct iwl_fw_error_dump_data
+ * @data: array of &struct iwl_fw_error_dump_data
  */
 struct iwl_fw_error_dump_file {
 	__le32 barker;
@@ -227,7 +227,7 @@ enum iwl_fw_error_dump_mem_type {
 
 /**
  * struct iwl_fw_error_dump_mem - chunk of memory
- * @type: %enum iwl_fw_error_dump_mem_type
+ * @type: &enum iwl_fw_error_dump_mem_type
  * @offset: the offset from which the memory was read
  * @data: the content of the memory
  */
@@ -329,7 +329,7 @@ enum iwl_fw_dbg_trigger {
 
 /**
  * struct iwl_fw_error_dump_trigger_desc - describes the trigger condition
- * @type: %enum iwl_fw_dbg_trigger
+ * @type: &enum iwl_fw_dbg_trigger
  * @data: raw data about what happened
  */
 struct iwl_fw_error_dump_trigger_desc {

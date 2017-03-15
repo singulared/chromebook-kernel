@@ -586,7 +586,7 @@ enum iwl_mvm_vendor_lqm_result {
  *	measurement can take. Required for
  *	&IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS. This is a u32.
  * @IWL_MVM_VENDOR_ATTR_LQM_RESULT: result of the measurement. Nested attribute
- *	see %enum iwl_mvm_vendor_lqm_result.
+ *	see &enum iwl_mvm_vendor_lqm_result.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM: report that scan results
  *	are available when buffer is that much full. In number of scans.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_CACHED_RESULTS: array of gscan cached results.
