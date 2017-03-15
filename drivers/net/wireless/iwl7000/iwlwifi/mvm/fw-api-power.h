@@ -358,7 +358,6 @@ struct iwl_dev_tx_power_cmd {
  * @IWL_PER_CHAIN_OFFSET_SET_TABLES: send the tables from the host to the FW.
  * @IWL_PER_CHAIN_OFFSET_GET_CURRENT_TABLE: retrieve the last configured table.
  */
-
 enum iwl_geo_per_chain_offset_operation {
 	IWL_PER_CHAIN_OFFSET_SET_TABLES,
 	IWL_PER_CHAIN_OFFSET_GET_CURRENT_TABLE,
@@ -383,10 +382,11 @@ struct iwl_per_chain_offset_group {
 
 /**
  * struct iwl_geo_tx_power_profile_cmd - struct for GEO_TX_POWER_LIMIT cmd.
- * @struct iwl_per_chain_offset_group: offset profile per band.
+ * @ops: operations, value from &enum iwl_geo_per_chain_offset_operation
+ * @table: offset profile per band.
  */
 struct iwl_geo_tx_power_profiles_cmd {
-	enum iwl_geo_per_chain_offset_operation ops;
+	__le32 ops;
 	struct iwl_per_chain_offset_group table[IWL_NUM_GEO_PROFILES];
 } __packed; /* GEO_TX_POWER_LIMIT */
 
