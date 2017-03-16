@@ -789,6 +789,9 @@ int iwl_pcie_alloc_dma_ptr(struct iwl_trans *trans,
 void iwl_pcie_free_dma_ptr(struct iwl_trans *trans, struct iwl_dma_ptr *ptr);
 int iwl_trans_pcie_power_device_off(struct iwl_trans_pcie *trans_pcie);
 void iwl_pcie_apply_destination(struct iwl_trans *trans);
+#ifdef CONFIG_INET
+struct iwl_tso_hdr_page *get_page_hdr(struct iwl_trans *trans, size_t len);
+#endif
 
 /* transport gen 2 exported functions */
 int iwl_trans_pcie_gen2_start_fw(struct iwl_trans *trans,
