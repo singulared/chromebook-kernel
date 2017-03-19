@@ -2148,17 +2148,15 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (WARN_ON(vif->type != NL80211_IFTYPE_AP))
 		return -ENOTSUPP;
 
-	if (!iwl_mvm_has_new_tx_api(mvm)) {
+	/*
+	 * While in previous FWs we had to exclude cab queue from TFD queue
+	 * mask, now it is needed as any other queue.
+	 */
+	if (!iwl_mvm_has_new_tx_api(mvm) &&
+	    fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_STA_TYPE)) {
 		iwl_mvm_enable_txq(mvm, vif->cab_queue, vif->cab_queue, 0,
 				   &cfg, timeout);
-
-		/*
-		 * While in previous FWs we had to exclude cab queue from
-		 * TFD queue mask, now it is needed as any other queue.
-		 */
-		if (fw_has_api(&mvm->fw->ucode_capa,
-			       IWL_UCODE_TLV_API_STA_TYPE))
-			msta->tfd_queue_msk |= BIT(vif->cab_queue);
+		msta->tfd_queue_msk |= BIT(vif->cab_queue);
 	}
 	ret = iwl_mvm_add_int_sta_common(mvm, msta, maddr,
 					 mvmvif->id, mvmvif->color);
@@ -2170,7 +2168,9 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	/*
 	 * Enable cab queue after the ADD_STA command is sent.
 	 * This is needed for a000 firmware which won't accept SCD_QUEUE_CFG
-	 * command with unknown station id.
+	 * command with unknown station id, and for FW that doesn't support
+	 * station API since the cab queue is not included in the
+	 * tfd_queue_mask.
 	 */
 	if (iwl_mvm_has_new_tx_api(mvm)) {
 		int queue = iwl_mvm_tvqm_enable_txq(mvm, vif->cab_queue,
@@ -2178,6 +2178,10 @@ int iwl_mvm_add_mcast_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 						    IWL_MAX_TID_COUNT,
 						    timeout);
 		mvmvif->cab_queue = queue;
+	} else if (!fw_has_api(&mvm->fw->ucode_capa,
+			       IWL_UCODE_TLV_API_STA_TYPE)) {
+		iwl_mvm_enable_txq(mvm, vif->cab_queue, vif->cab_queue, 0,
+				   &cfg, timeout);
 	}
 
 	return 0;
