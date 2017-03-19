@@ -206,6 +206,26 @@ static int iwl_drv_get_op_mode_idx(struct iwl_drv *drv)
 	return -EINVAL;
 }
 
+static bool iwl_drv_xvt_mode_supported(enum iwl_fw_type fw_type, int mode_idx)
+{
+	/* xVT mode is available only with 16 FW */
+	switch (fw_type) {
+	case IWL_FW_MVM:
+		break;
+	default:
+		return false;
+	}
+
+	/* check whether the requested operation mode is supported */
+	switch (mode_idx) {
+	case XVT_OP_MODE:
+	case MVM_OP_MODE:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /*
  * iwl_drv_switch_op_mode - Switch between operation modes
  * Checks if the desired operation mode is valid, if it
@@ -238,17 +258,10 @@ int iwl_drv_switch_op_mode(struct iwl_drv *drv, const char *new_op_name)
 	if (idx == iwl_drv_get_op_mode_idx(drv))
 		return 0;
 
-	/* Checking if the device supports the desired operation mode */
-
-	/* xVT mode is available only with 16 FW */
-	if (drv->fw.type == IWL_FW_MVM) {
-		if ((idx != XVT_OP_MODE) && (idx != MVM_OP_MODE)) {
-			IWL_ERR(drv, "Op mode %s not supported by device\n",
-				new_op_name);
-			return -ENOTSUPP;
-		}
-	} else {
-		IWL_ERR(drv, "Switching op modes is not supported by device\n");
+	/* Check if the desired operation mode is supported by the device/fw */
+	if (!iwl_drv_xvt_mode_supported(drv->fw.type, idx)) {
+		IWL_ERR(drv, "Op mode %s is not supported by the loaded fw\n",
+			new_op_name);
 		return -ENOTSUPP;
 	}
 
