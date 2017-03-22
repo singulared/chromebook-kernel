@@ -925,7 +925,7 @@ static void iwl_mvm_tx_airtime(struct iwl_mvm *mvm,
 		return;
 
 	if (time_after(jiffies, mvm->tcm.ts + MVM_TCM_PERIOD))
-		queue_delayed_work(system_wq, &mvm->tcm.work, 0);
+		schedule_delayed_work(&mvm->tcm.work, 0);
 
 	mdata->tx.airtime += airtime;
 }

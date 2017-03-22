@@ -1675,8 +1675,7 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 		smp_mb();
 		mvm->tcm.ts = ts;
 		if (work_delay)
-			queue_delayed_work(system_wq, &mvm->tcm.work,
-					   work_delay);
+			schedule_delayed_work(&mvm->tcm.work, work_delay);
 	}
 	spin_unlock(&mvm->tcm.lock);
 

@@ -821,7 +821,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 
 #ifdef CPTCFG_IWLMVM_TCM
 	if (time_after(jiffies, mvm->tcm.ts + MVM_TCM_PERIOD))
-		queue_delayed_work(system_wq, &mvm->tcm.work, 0);
+		schedule_delayed_work(&mvm->tcm.work, 0);
 #endif
 
 	/*
