@@ -3521,13 +3521,13 @@ void iwl_mvm_sta_modify_sleep_tx_count(struct iwl_mvm *mvm,
 
 	/* Note: this is ignored by firmware not supporting GO uAPSD */
 	if (more_data)
-		cmd.sleep_state_flags |= cpu_to_le16(STA_SLEEP_STATE_MOREDATA);
+		cmd.sleep_state_flags |= STA_SLEEP_STATE_MOREDATA;
 
 	if (reason == IEEE80211_FRAME_RELEASE_PSPOLL) {
 		mvmsta->next_status_eosp = true;
-		cmd.sleep_state_flags |= cpu_to_le16(STA_SLEEP_STATE_PS_POLL);
+		cmd.sleep_state_flags |= STA_SLEEP_STATE_PS_POLL;
 	} else {
-		cmd.sleep_state_flags |= cpu_to_le16(STA_SLEEP_STATE_UAPSD);
+		cmd.sleep_state_flags |= STA_SLEEP_STATE_UAPSD;
 	}
 
 	/* block the Tx queues until the FW updated the sleep Tx count */
