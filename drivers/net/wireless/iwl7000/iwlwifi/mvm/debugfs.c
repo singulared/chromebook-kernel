@@ -657,7 +657,11 @@ iwl_dbgfs_bt_force_ant_write(struct iwl_mvm *mvm, char *buf,
 	mvm->bt_force_ant_mode = bt_force_ant_mode;
 	IWL_DEBUG_COEX(mvm, "Force mode: %s\n",
 		       modes_str[mvm->bt_force_ant_mode]);
-	ret = iwl_send_bt_init_conf(mvm);
+
+	if (iwl_mvm_firmware_running(mvm))
+		ret = iwl_send_bt_init_conf(mvm);
+	else
+		ret = 0;
 
 out:
 	mutex_unlock(&mvm->mutex);
@@ -874,6 +878,9 @@ static ssize_t iwl_dbgfs_fw_restart_write(struct iwl_mvm *mvm, char *buf,
 {
 	int __maybe_unused ret;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
 	mutex_lock(&mvm->mutex);
 
 	/* allow one more restart that we're provoking here */
@@ -891,7 +898,12 @@ static ssize_t iwl_dbgfs_fw_restart_write(struct iwl_mvm *mvm, char *buf,
 static ssize_t iwl_dbgfs_fw_nmi_write(struct iwl_mvm *mvm, char *buf,
 				      size_t count, loff_t *ppos)
 {
-	int ret = iwl_mvm_ref_sync(mvm, IWL_MVM_REF_NMI);
+	int ret;
+
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
+	ret = iwl_mvm_ref_sync(mvm, IWL_MVM_REF_NMI);
 	if (ret)
 		return ret;
 
@@ -930,6 +942,9 @@ iwl_dbgfs_scan_ant_rxchain_write(struct iwl_mvm *mvm, char *buf,
 				 size_t count, loff_t *ppos)
 {
 	u8 scan_rx_ant;
+
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
 
 	if (sscanf(buf, "%hhx", &scan_rx_ant) != 1)
 		return -EINVAL;
@@ -985,7 +1000,11 @@ static ssize_t iwl_dbgfs_indirection_tbl_write(struct iwl_mvm *mvm,
 	netdev_rss_key_fill(cmd.secret_key, sizeof(cmd.secret_key));
 
 	mutex_lock(&mvm->mutex);
-	ret = iwl_mvm_send_cmd_pdu(mvm, RSS_CONFIG_CMD, 0, sizeof(cmd), &cmd);
+	if (iwl_mvm_firmware_running(mvm))
+		ret = iwl_mvm_send_cmd_pdu(mvm, RSS_CONFIG_CMD, 0,
+					   sizeof(cmd), &cmd);
+	else
+		ret = 0;
 	mutex_unlock(&mvm->mutex);
 
 	return ret ?: count;
@@ -1004,6 +1023,9 @@ static ssize_t iwl_dbgfs_inject_packet_write(struct iwl_mvm *mvm,
 	struct iwl_rx_mpdu_desc *desc;
 	int bin_len = count / 2;
 	int ret = -EINVAL;
+
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
 
 	/* supporting only 9000 descriptor */
 	if (!mvm->trans->cfg->mq_rx_supported)
@@ -1078,6 +1100,9 @@ static ssize_t iwl_dbgfs_cont_recording_write(struct iwl_mvm *mvm,
 	struct iwl_continuous_record_cmd cont_rec = {};
 	int ret, rec_mode;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
 	if (!dest)
 		return -EOPNOTSUPP;
 
@@ -1108,6 +1133,9 @@ static ssize_t iwl_dbgfs_fw_dbg_conf_write(struct iwl_mvm *mvm,
 	unsigned int conf_id;
 	int ret;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
 	ret = kstrtouint(buf, 0, &conf_id);
 	if (ret)
 		return ret;
@@ -1126,8 +1154,12 @@ static ssize_t iwl_dbgfs_fw_dbg_collect_write(struct iwl_mvm *mvm,
 					      char *buf, size_t count,
 					      loff_t *ppos)
 {
-	int ret = iwl_mvm_ref_sync(mvm, IWL_MVM_REF_PRPH_WRITE);
+	int ret;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
+	ret = iwl_mvm_ref_sync(mvm, IWL_MVM_REF_PRPH_WRITE);
 	if (ret)
 		return ret;
 	if (count == 0)
@@ -1258,7 +1290,8 @@ static ssize_t iwl_dbgfs_bcast_filters_write(struct iwl_mvm *mvm, char *buf,
 	       &filter, sizeof(filter));
 
 	/* send updated bcast filtering configuration */
-	if (mvm->dbgfs_bcast_filtering.override &&
+	if (iwl_mvm_firmware_running(mvm) &&
+	    mvm->dbgfs_bcast_filtering.override &&
 	    iwl_mvm_bcast_filter_build_cmd(mvm, &cmd))
 		err = iwl_mvm_send_cmd_pdu(mvm, BCAST_FILTER_CMD, 0,
 					   sizeof(cmd), &cmd);
@@ -1330,7 +1363,8 @@ static ssize_t iwl_dbgfs_bcast_filters_macs_write(struct iwl_mvm *mvm,
 	       &mac, sizeof(mac));
 
 	/* send updated bcast filtering configuration */
-	if (mvm->dbgfs_bcast_filtering.override &&
+	if (iwl_mvm_firmware_running(mvm) &&
+	    mvm->dbgfs_bcast_filtering.override &&
 	    iwl_mvm_bcast_filter_build_cmd(mvm, &cmd))
 		err = iwl_mvm_send_cmd_pdu(mvm, BCAST_FILTER_CMD, 0,
 					   sizeof(cmd), &cmd);
@@ -1547,6 +1581,9 @@ iwl_dbgfs_send_echo_cmd_write(struct iwl_mvm *mvm, char *buf,
 {
 	int ret;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
 	mutex_lock(&mvm->mutex);
 	ret = iwl_mvm_send_cmd_pdu(mvm, ECHO_CMD, 0, 0, NULL);
 	mutex_unlock(&mvm->mutex);
@@ -1676,6 +1713,9 @@ static ssize_t iwl_dbgfs_mem_read(struct file *file, char __user *user_buf,
 	size_t delta;
 	ssize_t ret, len;
 
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
+
 	hcmd.id = iwl_cmd_id(*ppos >> 24 ? UMAC_RD_WR : LMAC_RD_WR,
 			     DEBUG_GROUP, 0);
 	cmd.op = cpu_to_le32(DEBUG_MEM_OP_READ);
@@ -1727,6 +1767,9 @@ static ssize_t iwl_dbgfs_mem_write(struct file *file,
 	size_t data_size;
 	u32 op, len;
 	ssize_t ret;
+
+	if (!iwl_mvm_firmware_running(mvm))
+		return -EIO;
 
 	hcmd.id = iwl_cmd_id(*ppos >> 24 ? UMAC_RD_WR : LMAC_RD_WR,
 			     DEBUG_GROUP, 0);
