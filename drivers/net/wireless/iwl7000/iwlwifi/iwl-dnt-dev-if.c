@@ -231,28 +231,15 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	/* If we're running a device that supports DBGC.... */
-	if (trans->cfg->dbgc_supported) {
-		if (CSR_HW_REV_STEP(trans->hw_rev) == 0) /* A-step */
-			/*
-			 * Here the write pointer points to the chunk previously
-			 * written, and in this function we refer to it as
-			 * pointing to the oldest data in the buffer, so we
-			 * need to also increment the value we're using by a
-			 * chunk (256 bytes).
-			 */
-			wr_ptr = ((wr_ptr - (dnt->mon_base_addr >> 6)) << 6) +
-				 256;
-		else
-			/*
-			 * In the B-step, wr_ptr is given relative to the base
-			 * address, in DWORD granularity, and points to the
-			 * next chunk to write to - i.e., the oldest data in
-			 * the buffer.
-			 */
-			wr_ptr <<= 2;
-	} else {
+	if (trans->cfg->dbgc_supported)
+		/*
+		 * wr_ptr is given relative to the base address, in
+		 * DWORD granularity, and points to the next chunk to
+		 * write to - i.e., the oldest data in the buffer.
+		 */
+		wr_ptr <<= 2;
+	else
 		wr_ptr = (wr_ptr << 4) - dnt->mon_base_addr;
-	}
 
 	/* Misunderstanding wr_ptr can cause a page fault, so validate it... */
 	if (wr_ptr > dnt->mon_buf_size) {
