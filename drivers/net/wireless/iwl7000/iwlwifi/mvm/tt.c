@@ -633,7 +633,8 @@ static int iwl_mvm_tzone_get_temp(struct thermal_zone_device *device,
 
 	mutex_lock(&mvm->mutex);
 
-	if (!mvm->ucode_loaded || !(mvm->cur_ucode == IWL_UCODE_REGULAR)) {
+	if (!iwl_mvm_firmware_running(mvm) ||
+	    mvm->cur_ucode != IWL_UCODE_REGULAR) {
 		ret = -EIO;
 		goto out;
 	}
@@ -693,7 +694,8 @@ static int iwl_mvm_tzone_set_trip_temp(struct thermal_zone_device *device,
 
 	mutex_lock(&mvm->mutex);
 
-	if (!mvm->ucode_loaded || !(mvm->cur_ucode == IWL_UCODE_REGULAR)) {
+	if (!iwl_mvm_firmware_running(mvm) ||
+	    mvm->cur_ucode != IWL_UCODE_REGULAR) {
 		ret = -EIO;
 		goto out;
 	}
@@ -807,7 +809,8 @@ static int iwl_mvm_tcool_set_cur_state(struct thermal_cooling_device *cdev,
 
 	mutex_lock(&mvm->mutex);
 
-	if (!mvm->ucode_loaded || !(mvm->cur_ucode == IWL_UCODE_REGULAR)) {
+	if (!iwl_mvm_firmware_running(mvm) ||
+	    mvm->cur_ucode != IWL_UCODE_REGULAR) {
 		ret = -EIO;
 		goto unlock;
 	}
