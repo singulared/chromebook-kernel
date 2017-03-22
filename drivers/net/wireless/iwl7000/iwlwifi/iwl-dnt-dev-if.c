@@ -176,7 +176,7 @@ static void iwl_dnt_dev_if_configure_dbgm_registers(struct iwl_trans *trans,
 	struct iwl_dbg_cfg *cfg = &trans->dbg_cfg;
 
 	/* If we're running a device that supports DBGC - use it */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) {
+	if (trans->cfg->dbgc_supported) {
 		iwl_dnt_dev_if_configure_dbgc_registers(trans, base_addr,
 							end_addr);
 		return;
@@ -219,7 +219,7 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	/* If we're running a device that supports DBGC - use it */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000)
+	if (trans->cfg->dbgc_supported)
 		wr_ptr = iwl_read_prph(trans, cfg->dbgc_dram_wrptr_addr);
 	else
 		wr_ptr = iwl_read_prph(trans, cfg->dbg_mon_wr_ptr_addr);
@@ -231,7 +231,7 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	/* If we're running a device that supports DBGC.... */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) {
+	if (trans->cfg->dbgc_supported) {
 		if (CSR_HW_REV_STEP(trans->hw_rev) == 0) /* A-step */
 			/*
 			 * Here the write pointer points to the chunk previously
