@@ -704,7 +704,7 @@ int iwl_mvm_tvqm_enable_txq(struct iwl_mvm *mvm, int mac80211_queue,
 			    u8 sta_id, u8 tid, unsigned int timeout)
 {
 	struct iwl_tx_queue_cfg_cmd cmd = {
-		.flags = TX_QUEUE_CFG_ENABLE_QUEUE,
+		.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
 		.sta_id = sta_id,
 		.tid = tid,
 	};
