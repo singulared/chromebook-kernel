@@ -84,9 +84,9 @@ enum wkp_nvm_offsets {
 	HW_ADDR = 0x15,
 };
 
-enum family_8000_nvm_offsets {
+enum ext_nvm_offsets {
 	/* NVM HW-Section offset (in words) definitions */
-	MAC_ADDRESS_OVERRIDE_FAMILY_8000 = 1,
+	MAC_ADDRESS_OVERRIDE_EXT_NVM = 1,
 };
 
 /*
@@ -175,8 +175,8 @@ static int iwl_xvt_load_external_nvm(struct iwl_xvt *xvt)
 
 #define NVM_WORD1_LEN(x) (8 * (x & 0x03FF))
 #define NVM_WORD2_ID(x) (x >> 12)
-#define NVM_WORD2_LEN_FAMILY_8000(x) (2 * ((x & 0xFF) << 8 | x >> 8))
-#define NVM_WORD1_ID_FAMILY_8000(x) (x >> 4)
+#define EXT_NVM_WORD2_LEN(x) (2 * (((x) & 0xFF) << 8 | (x) >> 8))
+#define EXT_NVM_WORD1_ID(x) ((x) >> 4)
 #define NVM_HEADER_0	(0x2A504C54)
 #define NVM_HEADER_1	(0x4E564D2A)
 #define NVM_HEADER_SIZE	(4 * sizeof(u32))
@@ -239,14 +239,14 @@ static int iwl_xvt_load_external_nvm(struct iwl_xvt *xvt)
 			break;
 		}
 
-		if (xvt->trans->cfg->device_family != IWL_DEVICE_FAMILY_8000) {
+		if (!xvt->trans->cfg->ext_nvm) {
 			section_size =
 				2 * NVM_WORD1_LEN(le16_to_cpu(file_sec->word1));
 			section_id = NVM_WORD2_ID(le16_to_cpu(file_sec->word2));
 		} else {
-			section_size = 2 * NVM_WORD2_LEN_FAMILY_8000(
+			section_size = 2 * EXT_NVM_WORD2_LEN(
 						le16_to_cpu(file_sec->word2));
-			section_id = NVM_WORD1_ID_FAMILY_8000(
+			section_id = EXT_NVM_WORD1_ID(
 						le16_to_cpu(file_sec->word1));
 		}
 
@@ -286,7 +286,7 @@ static int iwl_xvt_load_external_nvm(struct iwl_xvt *xvt)
 		if (section_id == NVM_SECTION_TYPE_MAC_OVERRIDE) {
 			xvt->is_nvm_mac_override = true;
 			hw_addr = (const u8 *)((const __le16 *)file_sec->data +
-				   MAC_ADDRESS_OVERRIDE_FAMILY_8000);
+				   MAC_ADDRESS_OVERRIDE_EXT_NVM);
 
 			/*
 			 * Store the MAC address from MAO section.

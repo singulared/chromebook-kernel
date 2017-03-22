@@ -1230,7 +1230,7 @@ static int iwl_xvt_get_mac_addr_info(struct iwl_xvt *xvt,
 
 	memset(mac_addr_info, 0, sizeof(*mac_addr_info));
 
-	if (xvt->cfg->device_family != IWL_DEVICE_FAMILY_8000) {
+	if (!xvt->cfg->ext_nvm) {
 		memcpy(mac_addr_info->mac_addr, xvt->nvm_hw_addr,
 		       sizeof(mac_addr_info->mac_addr));
 	} else {
