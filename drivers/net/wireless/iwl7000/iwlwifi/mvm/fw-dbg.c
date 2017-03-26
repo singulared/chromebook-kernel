@@ -554,12 +554,6 @@ void iwl_mvm_fw_error_dump(struct iwl_mvm *mvm)
 	    !mvm->trans->dbg_dest_tlv)
 		return;
 
-	/* TODO: remove this once dumping is supported in gen2 */
-	if (mvm->trans->cfg->gen2) {
-		IWL_ERR(mvm, "Skip FW dump until supported by gen2\n");
-		return;
-	}
-
 	lockdep_assert_held(&mvm->mutex);
 
 	/* there's no point in fw dump if the bus is dead */
@@ -646,18 +640,21 @@ void iwl_mvm_fw_error_dump(struct iwl_mvm *mvm)
 		}
 
 		/* Make room for PRPH registers */
-		for (i = 0; i < ARRAY_SIZE(iwl_prph_dump_addr_comm); i++) {
-			/* The range includes both boundaries */
-			int num_bytes_in_chunk =
-				iwl_prph_dump_addr_comm[i].end -
-				iwl_prph_dump_addr_comm[i].start + 4;
+		if (!mvm->trans->cfg->gen2) {
+			for (i = 0; i < ARRAY_SIZE(iwl_prph_dump_addr_comm);
+			     i++) {
+				/* The range includes both boundaries */
+				int num_bytes_in_chunk =
+					iwl_prph_dump_addr_comm[i].end -
+					iwl_prph_dump_addr_comm[i].start + 4;
 
-			prph_len += sizeof(*dump_data) +
-				sizeof(struct iwl_fw_error_dump_prph) +
-				num_bytes_in_chunk;
+				prph_len += sizeof(*dump_data) +
+					sizeof(struct iwl_fw_error_dump_prph) +
+					num_bytes_in_chunk;
+			}
 		}
 
-		if (mvm->cfg->mq_rx_supported) {
+		if (!mvm->trans->cfg->gen2 && mvm->cfg->mq_rx_supported) {
 			for (i = 0; i <
 				ARRAY_SIZE(iwl_prph_dump_addr_9000); i++) {
 				/* The range includes both boundaries */
