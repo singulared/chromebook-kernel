@@ -1351,36 +1351,39 @@ static void iwl_mvm_fw_error_dump_wk(struct work_struct *work)
 {
 	struct iwl_mvm *mvm =
 		container_of(work, struct iwl_mvm, fw_dump_wk.work);
-	u32 in_sample, out_ctrl;
 
 	if (iwl_mvm_ref_sync(mvm, IWL_MVM_REF_FW_DBG_COLLECT))
 		return;
 
 	mutex_lock(&mvm->mutex);
 
-	/* stop recording */
 	if (mvm->cfg->device_family == IWL_DEVICE_FAMILY_7000) {
+		/* stop recording */
 		iwl_set_bits_prph(mvm->trans, MON_BUFF_SAMPLE_CTL, 0x100);
-	} else {
-		in_sample = iwl_read_prph(mvm->trans, DBGC_IN_SAMPLE);
-		out_ctrl = iwl_read_prph(mvm->trans, DBGC_OUT_CTRL);
 
+		iwl_mvm_fw_error_dump(mvm);
+
+		/* start recording again if the firmware is not crashed */
+		if (!test_bit(STATUS_FW_ERROR, &mvm->trans->status) &&
+		    mvm->fw->dbg_dest_tlv)
+			iwl_clear_bits_prph(mvm->trans,
+					    MON_BUFF_SAMPLE_CTL, 0x100);
+	} else {
+		u32 in_sample = iwl_read_prph(mvm->trans, DBGC_IN_SAMPLE);
+		u32 out_ctrl = iwl_read_prph(mvm->trans, DBGC_OUT_CTRL);
+
+		/* stop recording */
 		iwl_write_prph(mvm->trans, DBGC_IN_SAMPLE, 0);
 		udelay(100);
 		iwl_write_prph(mvm->trans, DBGC_OUT_CTRL, 0);
 		/* wait before we collect the data till the DBGC stop */
 		udelay(500);
-	}
 
-	iwl_mvm_fw_error_dump(mvm);
+		iwl_mvm_fw_error_dump(mvm);
 
-	/* start recording again if the firmware is not crashed */
-	if (!test_bit(STATUS_FW_ERROR, &mvm->trans->status) &&
-	    mvm->fw->dbg_dest_tlv) {
-		if (mvm->cfg->device_family == IWL_DEVICE_FAMILY_7000) {
-			iwl_clear_bits_prph(mvm->trans,
-					    MON_BUFF_SAMPLE_CTL, 0x100);
-		} else {
+		/* start recording again if the firmware is not crashed */
+		if (!test_bit(STATUS_FW_ERROR, &mvm->trans->status) &&
+		    mvm->fw->dbg_dest_tlv) {
 			iwl_write_prph(mvm->trans, DBGC_IN_SAMPLE, in_sample);
 			iwl_write_prph(mvm->trans, DBGC_OUT_CTRL, out_ctrl);
 		}
