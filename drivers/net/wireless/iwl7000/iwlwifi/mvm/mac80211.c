@@ -1272,10 +1272,6 @@ static void iwl_mvm_restart_complete(struct iwl_mvm *mvm)
 	iwl_mvm_teardown_tdls_peers(mvm);
 
 	mutex_unlock(&mvm->mutex);
-
-#ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-	iwl_mvm_gscan_reconfig(mvm);
-#endif
 }
 
 static void iwl_mvm_resume_complete(struct iwl_mvm *mvm)
@@ -1672,16 +1668,6 @@ static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
 
 #ifdef CPTCFG_IWLMVM_TCM
 	iwl_mvm_tcm_rm_vif(mvm, vif);
-#endif
-
-#ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-	if (mvm->gscan.wdev && mvm->gscan.wdev == ieee80211_vif_to_wdev(vif)) {
-		struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
-
-		iwl_mvm_vendor_stop_gscan(wdev->wiphy, wdev, NULL, 0);
-		iwl_mvm_vendor_send_reset_hotlist_cmd(mvm, wdev);
-		iwl_mvm_vendor_send_reset_sig_change_cmd(mvm, wdev);
-	}
 #endif
 
 	mutex_lock(&mvm->mutex);

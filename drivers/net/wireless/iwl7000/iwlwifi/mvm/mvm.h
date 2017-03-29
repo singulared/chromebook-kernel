@@ -694,26 +694,6 @@ struct iwl_mvm_tdls_peer_counter {
 };
 #endif
 
-#ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-struct gscan_data {
-	struct wireless_dev *wdev;
-	struct iwl_gscan_start_cmd scan_params;
-	struct iwl_gscan_bssid_hotlist_cmd hotlist_params;
-	struct iwl_gscan_significant_change_cmd sc_params;
-	u32 gp2;
-	u64 timestamp;	/* monotonic time, in usecs. */
-};
-
-struct iwl_mvm_gscan_beacon {
-	struct list_head list;
-	u32 gp2_ts;
-	s8 signal;
-	u8 channel;
-	u32 len;
-	struct ieee80211_mgmt mgmt[0];
-};
-#endif
-
 /**
  * struct iwl_mvm_reorder_buffer - per ra/tid/queue reorder buffer
  * @head_sn: reorder window head sn
@@ -1184,13 +1164,6 @@ struct iwl_mvm {
 	struct iwl_mvm_tof_data tof_data;
 
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-	struct gscan_data gscan;
-
-	/* protects the gscan beacons list */
-	spinlock_t gscan_beacons_lock;
-	struct list_head gscan_beacons_list;
-	struct work_struct gscan_beacons_work;
-
 	struct iwl_mcast_filter_cmd *mcast_active_filter_cmd;
 	u8 rx_filters;
 #endif
@@ -2057,32 +2030,6 @@ void iwl_mvm_connection_loss(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 			     const char *errmsg);
 
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
-int iwl_mvm_vendor_stop_gscan(struct wiphy *wiphy, struct wireless_dev *wdev,
-			      const void *data, int data_len);
-
-void iwl_mvm_rx_gscan_results_available(struct iwl_mvm *mvm,
-					struct iwl_rx_cmd_buffer *rxb);
-
-int iwl_mvm_vendor_send_reset_hotlist_cmd(struct iwl_mvm *mvm,
-					  struct wireless_dev *wdev);
-
-int iwl_mvm_vendor_send_reset_sig_change_cmd(struct iwl_mvm *mvm,
-					     struct wireless_dev *wdev);
-
-void iwl_mvm_rx_gscan_hotlist_change_event(struct iwl_mvm *mvm,
-					   struct iwl_rx_cmd_buffer *rxb);
-
-void iwl_mvm_rx_gscan_significant_change_event(struct iwl_mvm *mvm,
-					       struct iwl_rx_cmd_buffer *rxb);
-
-void iwl_mvm_gscan_reconfig(struct iwl_mvm *mvm);
-
-void iwl_mvm_gscan_beacons_work(struct work_struct *work);
-
-void iwl_mvm_handle_gscan_beacon_probe(struct iwl_mvm *mvm, u32 len,
-				       struct ieee80211_rx_status *rx_status,
-				       struct ieee80211_mgmt *mgmt);
-
 void iwl_mvm_recalc_multicast(struct iwl_mvm *mvm);
 int iwl_mvm_configure_bcast_filter(struct iwl_mvm *mvm);
 

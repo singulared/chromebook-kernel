@@ -785,19 +785,4 @@ struct iwl_umac_scan_iter_complete_notif {
 	struct iwl_scan_results_notif results[];
 } __packed; /* SCAN_ITER_COMPLETE_NTF_UMAC_API_S_VER_2 */
 
-/* Please keep this enum *SORTED* by hex value.
- * Needed for binary search, otherwise a warning will be triggered.
- */
-enum iwl_scan_subcmd_ids {
-	GSCAN_START_CMD = 0x0,
-	GSCAN_STOP_CMD = 0x1,
-	GSCAN_SET_HOTLIST_CMD = 0x2,
-	GSCAN_RESET_HOTLIST_CMD = 0x3,
-	GSCAN_SET_SIGNIFICANT_CHANGE_CMD = 0x4,
-	GSCAN_RESET_SIGNIFICANT_CHANGE_CMD = 0x5,
-	GSCAN_SIGNIFICANT_CHANGE_EVENT = 0xFD,
-	GSCAN_HOTLIST_CHANGE_EVENT = 0xFE,
-	GSCAN_RESULTS_AVAILABLE_EVENT = 0xFF,
-};
-
 #endif

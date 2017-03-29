@@ -79,7 +79,6 @@
 #include "fw-api-scan.h"
 #include "fw-api-stats.h"
 #include "fw-api-tof.h"
-#include "fw-api-gscan.h"
 
 /* Tx queue numbers for non-DQA mode */
 enum {
