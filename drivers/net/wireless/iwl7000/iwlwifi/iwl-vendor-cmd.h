@@ -544,6 +544,10 @@ enum iwl_mvm_vendor_phy_type {
  *	Binary attribute.
  * @IWL_MVM_VENDOR_NEIGHBOR_CIVIC: the CIVIC info of the neighbor AP. Optional.
  *	Binary attribute.
+ * @NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT: num of neighbor report attributes
+ * @MAX_IWL_MVM_VENDOR_NEIGHBOR_REPORT: highest neighbor report attribute
+ *	number.
+
  */
 enum iwl_mvm_vendor_neighbor_report {
 	__IWL_MVM_VENDOR_NEIGHBOR_INVALID,
@@ -557,6 +561,10 @@ enum iwl_mvm_vendor_neighbor_report {
 	IWL_MVM_VENDOR_NEIGHBOR_CENTER_FREQ_IDX_1,
 	IWL_MVM_VENDOR_NEIGHBOR_LCI,
 	IWL_MVM_VENDOR_NEIGHBOR_CIVIC,
+
+	NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT,
+	MAX_IWL_MVM_VENDOR_NEIGHBOR_REPORT =
+		NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT - 1,
 };
 
 /**
