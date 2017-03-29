@@ -1003,47 +1003,6 @@ size_t ieee80211_ie_split(const u8 *ies, size_t ielen,
 	cfg80211_reg_can_beacon(wiphy, chandef, iftype)
 #endif
 
-#ifndef DECLARE_EWMA
-#define DECLARE_EWMA(name, _factor, _weight)				\
-	struct ewma_##name {						\
-		unsigned long internal;					\
-	};								\
-	static inline void ewma_##name##_init(struct ewma_##name *e)	\
-	{								\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-		e->internal = 0;					\
-	}								\
-	static inline unsigned long					\
-	ewma_##name##_read(struct ewma_##name *e)			\
-	{								\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-		return e->internal >> ilog2(_factor);			\
-	}								\
-	static inline void ewma_##name##_add(struct ewma_##name *e,	\
-					     unsigned long val)		\
-	{								\
-		unsigned long internal = ACCESS_ONCE(e->internal);	\
-		unsigned long weight = ilog2(_weight);			\
-		unsigned long factor = ilog2(_factor);			\
-									\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-									\
-		ACCESS_ONCE(e->internal) = internal ?			\
-			(((internal << weight) - internal) +		\
-				(val << factor)) >> weight :		\
-			(val << factor);				\
-	}
-#endif /* DECLARE_EWMA */
-
 #if CFG80211_VERSION < KERNEL_VERSION(4,4,0)
 #define CFG80211_STA_AP_CLIENT_UNASSOC CFG80211_STA_AP_CLIENT
 #define NL80211_FEATURE_FULL_AP_CLIENT_STATE 0
@@ -1867,4 +1826,12 @@ void iwl7000_cqm_rssi_notify(struct net_device *dev,
 	char __##shash##_desc[sizeof(struct shash_desc) +	 \
 	       crypto_shash_descsize(ctx)] CRYPTO_MINALIGN_ATTR; \
 	struct shash_desc *shash = (struct shash_desc *)__##shash##_desc
+
+static inline void *backport_idr_remove(struct idr *idr, int id)
+{
+	void *item = idr_find(idr, id);
+	idr_remove(idr, id);
+	return item;
+}
+#define idr_remove     backport_idr_remove
 #endif

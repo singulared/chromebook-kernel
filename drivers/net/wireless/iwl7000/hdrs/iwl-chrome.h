@@ -51,8 +51,10 @@ static inline u64 ktime_get_real_ns(void)
 #include <hdrs/mac80211-exp.h>
 #include <hdrs/ieee80211.h>
 #include <hdrs/mac80211-bp.h>
-/* need to include mac80211 here, otherwise we get the regular kernel one */
+/* need to include these here, otherwise we get the regular kernel one */
 #include <hdrs/mac80211.h>
+#include <hdrs/average.h>
+#include <hdrs/bitfield.h>
 
 /* include rhashtable this way to get our copy if another exists */
 #include <linux/list_nulls.h>
