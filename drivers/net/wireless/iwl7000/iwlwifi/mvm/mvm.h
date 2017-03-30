@@ -1284,6 +1284,12 @@ static inline bool iwl_mvm_is_dqa_supported(struct iwl_mvm *mvm)
 	       IWL_MVM_ENABLE_DQA;
 }
 
+static inline bool iwl_mvm_is_adaptive_dwell_supported(struct iwl_mvm *mvm)
+{
+	return IWL_MVM_ADWELL_ENABLE &&
+	     fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_ADAPTIVE_DWELL);
+}
+
 static inline bool iwl_mvm_enter_d0i3_on_suspend(struct iwl_mvm *mvm)
 {
 	/* For now we only use this mode to differentiate between
