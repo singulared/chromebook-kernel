@@ -1143,19 +1143,22 @@ static int iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
 
 static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
 				     u8 lmac_id) {
-	int queue;
+	int ret;
 	struct iwl_tx_queue_cfg_cmd cmd = {
 			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
 			.sta_id = sta_id,
 			.tid = TX_QUEUE_CFG_TID };
 
-	queue = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
-	if (queue > 0)
-		xvt->tx_meta_data[lmac_id].queue = queue;
-	else
+	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
+	/* ret is positive when func returns the allocated the queue number */
+	if (ret > 0) {
+		xvt->tx_meta_data[lmac_id].queue = ret;
+		ret = 0;
+	} else {
 		IWL_ERR(xvt, "failed to allocate queue\n");
+	}
 
-	return queue;
+	return ret;
 }
 
 static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
