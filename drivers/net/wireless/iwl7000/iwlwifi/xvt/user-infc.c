@@ -352,9 +352,15 @@ static int iwl_xvt_read_sv_drop(struct iwl_xvt *xvt)
 
 	/* Get response data */
 	debug_res = (struct xvt_debug_res *)pkt->data;
-	if (le32_to_cpu(debug_res->dw_num) < 1)
-		return -ENODATA;
-	return le32_to_cpu(debug_res->data[0]) & 0xFF;
+	if (le32_to_cpu(debug_res->dw_num) < 1) {
+		ret = -ENODATA;
+		goto out;
+	}
+	ret = le32_to_cpu(debug_res->data[0]) & 0xFF;
+
+out:
+	iwl_free_resp(&host_cmd);
+	return ret;
 }
 
 static int iwl_xvt_get_dev_info(struct iwl_xvt *xvt,

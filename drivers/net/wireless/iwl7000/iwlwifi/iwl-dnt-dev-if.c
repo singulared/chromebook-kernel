@@ -477,7 +477,6 @@ static int iwl_dnt_dev_if_send_dbgm(struct iwl_dnt *dnt,
 		.data[0] = cfg->dbg_conf_monitor_host_command.data,
 		.len[0] = cfg->dbg_conf_monitor_host_command.len,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
 	int ret;
 
@@ -500,9 +499,7 @@ static int iwl_dnt_dev_if_send_ldbg(struct iwl_dnt *dnt,
 		.data[0] = cfg->ldbg_cmd[cmd_index].data,
 		.len[0] = DNT_LDBG_CMD_SIZE,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
-
 
 	return iwl_trans_send_cmd(trans, &host_cmd);
 }
@@ -542,7 +539,6 @@ int iwl_dnt_dev_if_set_log_level(struct iwl_dnt *dnt,
 		.data[0] = cfg->log_level_cmd.data,
 		.len[0] = cfg->log_level_cmd.len,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
 	int ret;
 

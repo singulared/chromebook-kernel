@@ -574,20 +574,25 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 
 	if (WARN(iwl_rx_packet_payload_len(hcmd.resp_pkt) != sizeof(*rsp),
 		 "Invalid payload len in NVM response from FW %d",
-		 iwl_rx_packet_payload_len(hcmd.resp_pkt)))
-		return -EINVAL;
+		 iwl_rx_packet_payload_len(hcmd.resp_pkt))) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	rsp = (void *)hcmd.resp_pkt->data;
 	if (le32_to_cpu(rsp->general.flags)) {
 		IWL_ERR(mvm, "Invalid NVM data from FW\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	mvm->nvm_data = kzalloc(sizeof(*mvm->nvm_data) +
 				sizeof(struct ieee80211_channel) *
 				IWL_NUM_CHANNELS, GFP_KERNEL);
-	if (!mvm->nvm_data)
-		return -ENOMEM;
+	if (!mvm->nvm_data) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	if (trans->dbg_cfg.hw_address.len) {
@@ -595,7 +600,8 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 		    is_valid_ether_addr(trans->dbg_cfg.hw_address.data)) {
 			memcpy(mvm->nvm_data->hw_addr,
 			       trans->dbg_cfg.hw_address.data, ETH_ALEN);
-			return 0;
+			ret = 0;
+			goto out;
 		}
 		IWL_ERR(trans, "mac address from config file is invalid\n");
 	}
@@ -605,7 +611,8 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 	iwl_set_hw_address_from_csr(trans, mvm->nvm_data);
 	if (!is_valid_ether_addr(mvm->nvm_data->hw_addr)) {
 		IWL_ERR(trans, "no valid mac address was found\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	/* Initialize general data */
@@ -637,7 +644,10 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 			mvm->nvm_data->valid_rx_ant & mvm->fw->valid_rx_ant,
 			rsp->regulatory.lar_enabled && lar_fw_supported);
 
-	return 0;
+	ret = 0;
+out:
+	iwl_free_resp(&hcmd);
+	return ret;
 }
 
 int iwl_nvm_init(struct iwl_mvm *mvm, bool read_nvm_from_nic)
