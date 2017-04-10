@@ -219,10 +219,6 @@ static int iwl_xvt_send_hcmd(struct iwl_xvt *xvt,
 
 	/* Retrieve response packet */
 	pkt = host_cmd.resp_pkt;
-	if (!pkt) {
-		IWL_ERR(xvt->trans, "HCMD received a null response packet\n");
-		return -ENOMSG;
-	}
 	reply_len = iwl_rx_packet_len(pkt);
 
 	/* Set response data */
@@ -345,10 +341,6 @@ static int iwl_xvt_read_sv_drop(struct iwl_xvt *xvt)
 
 	/* Retrieve response packet */
 	pkt = host_cmd.resp_pkt;
-	if (!pkt) {
-		IWL_ERR(xvt->trans, "HCMD received a null response packet\n");
-		return -ENOMSG;
-	}
 
 	/* Get response data */
 	debug_res = (struct xvt_debug_res *)pkt->data;

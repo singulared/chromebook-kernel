@@ -466,10 +466,6 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	}
 
 	pkt = hcmd.resp_pkt;
-	if (WARN_ON(!pkt)) {
-		ret = -EIO;
-		goto out_free_resp;
-	}
 
 	if (WARN_ON(iwl_rx_packet_payload_len(pkt) != sizeof(*resp))) {
 		ret = -EIO;

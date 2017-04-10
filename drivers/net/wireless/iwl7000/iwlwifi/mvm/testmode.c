@@ -134,10 +134,6 @@ static int iwl_mvm_tm_send_hcmd(struct iwl_mvm *mvm,
 
 	/* Retrieve response packet */
 	pkt = host_cmd.resp_pkt;
-	if (!pkt) {
-		IWL_ERR(mvm->trans, "HCMD received a null response packet\n");
-		return -ENOMSG;
-	}
 	reply_len = iwl_rx_packet_len(pkt);
 
 	/* Set response data */
