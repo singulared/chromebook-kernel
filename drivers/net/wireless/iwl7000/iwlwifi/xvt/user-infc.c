@@ -1124,13 +1124,14 @@ static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
 	return err;
 }
 
-static int iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
+static void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
 {
+	if (xvt->tx_meta_data[lmac_id].queue == -1)
+		return;
+
 	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
 
 	xvt->tx_meta_data[lmac_id].queue = -1;
-
-	return 0;
 }
 
 static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
@@ -1181,11 +1182,14 @@ static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
 	case TX_QUEUE_CFG_ADD:
 		return iwl_xvt_allocate_tx_queue(xvt, sta_id, lmac_id);
 	case TX_QUEUE_CFG_REMOVE:
-		return iwl_xvt_free_tx_queue(xvt, lmac_id);
+		iwl_xvt_free_tx_queue(xvt, lmac_id);
+		break;
 	default:
 		IWL_ERR(xvt, "failed in tx config - wrong operation\n");
 		return -EINVAL;
 	}
+
+	return 0;
 }
 
 static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
