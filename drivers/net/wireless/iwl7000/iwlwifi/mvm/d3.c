@@ -2090,9 +2090,6 @@ static int __iwl_mvm_resume(struct iwl_mvm *mvm, bool test)
 	bool unified_image = fw_has_capa(&mvm->fw->ucode_capa,
 					 IWL_UCODE_TLV_CAPA_CNSLDTD_D3_D0_IMG);
 
-	u32 flags = CMD_ASYNC | CMD_HIGH_PRIO | CMD_SEND_IN_IDLE |
-				    CMD_WAKE_UP_TRANS;
-
 	mutex_lock(&mvm->mutex);
 
 	/* get the BSS vif pointer again */
@@ -2158,7 +2155,7 @@ out_iterate:
 
 out:
 	if (unified_image && !ret) {
-		ret = iwl_mvm_send_cmd_pdu(mvm, D0I3_END_CMD, flags, 0, NULL);
+		ret = iwl_mvm_send_cmd_pdu(mvm, D0I3_END_CMD, 0, 0, NULL);
 		if (!ret) /* D3 ended successfully - no need to reset device */
 			return 0;
 	}
