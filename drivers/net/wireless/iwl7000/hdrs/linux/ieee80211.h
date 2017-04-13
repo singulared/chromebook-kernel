@@ -1590,6 +1590,32 @@ struct ieee80211_he_operation {
 	u8 vht_op_info_chan_center_freq_seg1_idx;
 } __packed;
 
+/**
+ * struct ieee80211_he_mu_edca_param_ac_rec - MU AC Parameter Record field
+ *
+ * This structure is the "MU AC Parameter Record" fields as
+ * described in P802.11ax_D1.0 section 9.4.2.221
+ */
+struct ieee80211_he_mu_edca_param_ac_rec {
+	u8 aifsn;
+	u8 ecw_min_max;
+	u8 mu_edca_timer;
+} __packed;
+
+/**
+ * struct ieee80211_mu_edca_param_set - MU EDCA Parameter Set element
+ *
+ * This structure is the "MU EDCA Parameter Set element" fields as
+ * described in P802.11ax_D1.0 section 9.4.2.221
+ */
+struct ieee80211_mu_edca_param_set {
+	u8 mu_qos_info;
+	struct ieee80211_he_mu_edca_param_ac_rec ac_be;
+	struct ieee80211_he_mu_edca_param_ac_rec ac_bk;
+	struct ieee80211_he_mu_edca_param_ac_rec ac_vi;
+	struct ieee80211_he_mu_edca_param_ac_rec ac_vo;
+} __packed;
+
 /* 802.11ac VHT Capabilities */
 #define IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_3895			0x00000000
 #define IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_7991			0x00000001

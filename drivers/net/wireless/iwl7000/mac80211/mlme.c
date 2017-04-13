@@ -1732,9 +1732,11 @@ static void ieee80211_sta_handle_tspec_ac_params_wk(struct work_struct *work)
 }
 
 /* MLME */
-static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
-				     struct ieee80211_sub_if_data *sdata,
-				     const u8 *wmm_param, size_t wmm_param_len)
+static bool
+ieee80211_sta_wmm_params(struct ieee80211_local *local,
+			 struct ieee80211_sub_if_data *sdata,
+			 const u8 *wmm_param, size_t wmm_param_len,
+			 const struct ieee80211_mu_edca_param_set *mu_edca)
 {
 	struct ieee80211_tx_queue_params params[IEEE80211_NUM_ACS];
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
@@ -1781,6 +1783,9 @@ static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
 				sdata->wmm_acm |= BIT(1) | BIT(2); /* BK/- */
 			if (uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_BK)
 				uapsd = true;
+			params[ac].mu_edca = !!mu_edca;
+			if (mu_edca)
+				params[ac].mu_edca_param_rec = mu_edca->ac_bk;
 			break;
 		case 2: /* AC_VI */
 			ac = IEEE80211_AC_VI;
@@ -1788,6 +1793,9 @@ static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
 				sdata->wmm_acm |= BIT(4) | BIT(5); /* CL/VI */
 			if (uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_VI)
 				uapsd = true;
+			params[ac].mu_edca = !!mu_edca;
+			if (mu_edca)
+				params[ac].mu_edca_param_rec = mu_edca->ac_vi;
 			break;
 		case 3: /* AC_VO */
 			ac = IEEE80211_AC_VO;
@@ -1795,6 +1803,9 @@ static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
 				sdata->wmm_acm |= BIT(6) | BIT(7); /* VO/NC */
 			if (uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_VO)
 				uapsd = true;
+			params[ac].mu_edca = !!mu_edca;
+			if (mu_edca)
+				params[ac].mu_edca_param_rec = mu_edca->ac_vo;
 			break;
 		case 0: /* AC_BE */
 		default:
@@ -1803,6 +1814,9 @@ static bool ieee80211_sta_wmm_params(struct ieee80211_local *local,
 				sdata->wmm_acm |= BIT(0) | BIT(3); /* BE/EE */
 			if (uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_BE)
 				uapsd = true;
+			params[ac].mu_edca = !!mu_edca;
+			if (mu_edca)
+				params[ac].mu_edca_param_rec = mu_edca->ac_be;
 			break;
 		}
 
@@ -3114,7 +3128,8 @@ static bool ieee80211_assoc_success(struct ieee80211_sub_if_data *sdata,
 	if (ifmgd->flags & IEEE80211_STA_DISABLE_WMM) {
 		ieee80211_set_wmm_default(sdata, false, false);
 	} else if (!ieee80211_sta_wmm_params(local, sdata, elems.wmm_param,
-					     elems.wmm_param_len)) {
+					     elems.wmm_param_len,
+					     elems.mu_edca_param_set)) {
 		/* still enable QoS since we might have HT/VHT */
 		ieee80211_set_wmm_default(sdata, false, true);
 		/* set the disable-WMM flag in this case to disable
@@ -3616,7 +3631,8 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_sub_if_data *sdata,
 
 	if (!(ifmgd->flags & IEEE80211_STA_DISABLE_WMM) &&
 	    ieee80211_sta_wmm_params(local, sdata, elems.wmm_param,
-				     elems.wmm_param_len))
+				     elems.wmm_param_len,
+				     elems.mu_edca_param_set))
 		changed |= BSS_CHANGED_QOS;
 
 	/*

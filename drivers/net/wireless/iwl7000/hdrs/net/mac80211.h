@@ -161,6 +161,8 @@ enum ieee80211_ac_numbers {
  * @txop: maximum burst time in units of 32 usecs, 0 meaning disabled
  * @acm: is mandatory admission control required for the access category
  * @uapsd: is U-APSD mode enabled for the queue
+ * @mu_edca: is the MU EDCA configured
+ * @mu_edca_param_rec: MU EDCA Parameter Record for HE
  */
 struct ieee80211_tx_queue_params {
 	u16 txop;
@@ -169,6 +171,8 @@ struct ieee80211_tx_queue_params {
 	u8 aifs;
 	bool acm;
 	bool uapsd;
+	bool mu_edca;
+	struct ieee80211_he_mu_edca_param_ac_rec mu_edca_param_rec;
 };
 
 struct ieee80211_low_level_stats {
