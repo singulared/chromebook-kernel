@@ -461,6 +461,7 @@ struct ieee80211_mu_group_data {
  * This structure keeps information about a BSS (and an association
  * to that BSS) that can change during the lifetime of the BSS.
  *
+ * @bss_color: 6-bit value to mark inter-BSS frame, if BSS supports HE
  * @assoc: association status
  * @ibss_joined: indicates whether this station is part of an IBSS
  *	or not
@@ -548,6 +549,7 @@ struct ieee80211_mu_group_data {
  */
 struct ieee80211_bss_conf {
 	const u8 *bssid;
+	u8 bss_color;
 	/* association related data */
 	bool assoc, ibss_joined;
 	bool ibss_creator;
@@ -1771,6 +1773,7 @@ struct ieee80211_sta_rates {
  * @supp_rates: Bitmap of supported rates (per band)
  * @ht_cap: HT capabilities of this STA; restricted to our own capabilities
  * @vht_cap: VHT capabilities of this STA; restricted to our own capabilities
+ * @he_cap: HE capabilities of this STA
  * @max_rx_aggregation_subframes: maximal amount of frames in a single AMPDU
  *	that this station is allowed to transmit to us.
  *	Can be modified by driver.
@@ -1806,6 +1809,7 @@ struct ieee80211_sta {
 	u16 aid;
 	struct ieee80211_sta_ht_cap ht_cap;
 	struct ieee80211_sta_vht_cap vht_cap;
+	struct ieee80211_sta_he_cap he_cap;
 	u8 max_rx_aggregation_subframes;
 	bool wme;
 	u8 uapsd_queues;

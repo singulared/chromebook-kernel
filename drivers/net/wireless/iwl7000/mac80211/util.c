@@ -1094,6 +1094,17 @@ u32 ieee802_11_parse_elems_crc(const u8 *start, size_t len, bool action,
 			if (elen >= sizeof(*elems->max_idle_period_ie))
 				elems->max_idle_period_ie = (void *)pos;
 			break;
+		case WLAN_EID_EXTENSION:
+			/* TODO: move to final place */
+			/* TODO: parse the rest of the elements */
+			if (pos[0] == WLAN_EID_EXT_HE_CAPABILITY) {
+				elems->he_cap = (void *)&pos[1];
+				elems->he_cap_len = elen - 1;
+			} else if (pos[0] == WLAN_EID_EXT_HE_OPERATION &&
+				   elen >= sizeof(*elems->he_operation)) {
+				elems->he_operation = (void *)&pos[1];
+			}
+			break;
 		default:
 			break;
 		}

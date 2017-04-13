@@ -3004,6 +3004,22 @@ static bool ieee80211_assoc_success(struct ieee80211_sub_if_data *sdata,
 		goto out;
 	}
 
+	/*
+	 * If AP doesn't support VHT, or it doesn't have HE mandatory IEs, mark
+	 * HE as disabled
+	 */
+	if (ifmgd->flags & IEEE80211_STA_DISABLE_VHT ||
+	    (!elems.he_cap && !elems.he_operation))
+		ifmgd->flags |= IEEE80211_STA_DISABLE_HE;
+
+	if (!(ifmgd->flags & IEEE80211_STA_DISABLE_HE) &&
+	    (!elems.he_cap || !elems.he_operation)) {
+		sdata_info(sdata,
+			   "HE AP is missing HE capability/operation\n");
+		ret = false;
+		goto out;
+	}
+
 	mutex_lock(&sdata->local->sta_mtx);
 	/*
 	 * station info was already allocated and inserted before
@@ -3026,6 +3042,18 @@ static bool ieee80211_assoc_success(struct ieee80211_sub_if_data *sdata,
 	if (elems.vht_cap_elem && !(ifmgd->flags & IEEE80211_STA_DISABLE_VHT))
 		ieee80211_vht_cap_ie_to_sta_vht_cap(sdata, sband,
 						    elems.vht_cap_elem, sta);
+
+	if (elems.he_operation && !(ifmgd->flags & IEEE80211_STA_DISABLE_HE)) {
+		bss_conf->bss_color = elems.he_operation->he_oper_params &
+				      IEEE80211_HE_OPERATION_BSS_COLOR_MASK;
+
+		/* TODO: OPEN: what happens if BSS color disable is set? */
+
+		ieee80211_he_cap_ie_to_sta_he_cap(sdata, sband,
+						  elems.he_cap,
+						  elems.he_cap_len,
+						  sta);
+	}
 
 	/*
 	 * Some APs, e.g. Netgear WNDR3700, report invalid HT operation data

@@ -1576,6 +1576,20 @@ struct ieee80211_he_mcs_nss_supp {
 	u8 nss_rx_desc[IEEE80211_TX_RX_MCS_NSS_DESC_MAX_LEN];
 } __packed;
 
+/**
+ * struct ieee80211_he_operation - HE capabilities element
+ *
+ * This structure is the "HE operation element" fields as
+ * described in P802.11ax_D1.0 section 9.4.2.219
+ */
+struct ieee80211_he_operation {
+	u32 he_oper_params;
+	u8 he_mcs_nss_set[3];
+	u8 vht_op_info_chwidth;
+	u8 vht_op_info_chan_center_freq_seg0_idx;
+	u8 vht_op_info_chan_center_freq_seg1_idx;
+} __packed;
+
 /* 802.11ac VHT Capabilities */
 #define IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_3895			0x00000000
 #define IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_7991			0x00000001
@@ -1880,6 +1894,20 @@ ieee80211_he_ppe_size(u8 ppe_thres_hdr, const u8 *phy_cap_info)
 
 	return n;
 }
+
+/* HE Operation defines */
+#define IEEE80211_HE_OPERATION_BSS_COLOR_MASK			0x0000003f
+#define IEEE80211_HE_OPERATION_DFLT_PE_DURATION_MASK		0x000001c0
+#define IEEE80211_HE_OPERATION_DFLT_PE_DURATION_OFFSET		6
+#define IEEE80211_HE_OPERATION_TWT_REQUIRED			0x00000200
+#define IEEE80211_HE_OPERATION_RTS_THRESHOLD_MASK		0x000ffc00
+#define IEEE80211_HE_OPERATION_RTS_THRESHOLD_OFFSET		10
+#define IEEE80211_HE_OPERATION_PARTIAL_BSS_COLOR		0x000100000
+#define IEEE80211_HE_OPERATION_MAX_BSSID_INDICATOR_MASK		0x1fe00000
+#define IEEE80211_HE_OPERATION_MAX_BSSID_INDICATOR_OFFSET	21
+#define IEEE80211_HE_OPERATION_TX_BSSID_INDICATOR		0x20000000
+#define IEEE80211_HE_OPERATION_BSS_COLOR_DISABLED		0x40000000
+#define IEEE80211_HE_OPERATION_BSS_DUAL_BEACON			0x80000000
 
 /* Authentication algorithms */
 #define WLAN_AUTH_OPEN 0
