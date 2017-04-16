@@ -609,9 +609,7 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 		if (xvt->fw_running) {
 			xvt->fw_running = false;
 			if (xvt->cur_ucode == IWL_UCODE_REGULAR)
-				iwl_trans_txq_disable(xvt->trans,
-						      IWL_XVT_DEFAULT_TX_QUEUE,
-						      true);
+				iwl_xvt_txq_disable(xvt);
 		}
 		_iwl_trans_stop_device(xvt->trans, !cont_run);
 	}

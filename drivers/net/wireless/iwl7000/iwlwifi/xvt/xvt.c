@@ -82,6 +82,8 @@ MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_COPYRIGHT " " DRV_AUTHOR);
 MODULE_LICENSE("GPL");
 
+#define TX_QUEUE_CFG_TID (6)
+
 static const struct iwl_op_mode_ops iwl_xvt_ops;
 
 /*
@@ -283,9 +285,7 @@ static void iwl_xvt_stop(struct iwl_op_mode *op_mode)
 
 	if (xvt->state != IWL_XVT_STATE_UNINITIALIZED) {
 		if (xvt->fw_running) {
-			iwl_trans_txq_disable(xvt->trans,
-					      IWL_XVT_DEFAULT_TX_QUEUE,
-					      true);
+			iwl_xvt_txq_disable(xvt);
 			xvt->fw_running = false;
 		}
 		iwl_trans_stop_device(xvt->trans);
@@ -495,3 +495,46 @@ static const struct iwl_op_mode_ops iwl_xvt_ops = {
 		.valid_hw_addr = iwl_xvt_valid_hw_addr,
 	},
 };
+
+void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
+{
+	if (xvt->tx_meta_data[lmac_id].queue == -1)
+		return;
+
+	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
+
+	xvt->tx_meta_data[lmac_id].queue = -1;
+}
+
+int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+			      u8 lmac_id)
+{
+	int ret;
+	struct iwl_tx_queue_cfg_cmd cmd = {
+			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
+			.sta_id = sta_id,
+			.tid = TX_QUEUE_CFG_TID };
+
+	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
+	/* ret is positive when func returns the allocated the queue number */
+	if (ret > 0) {
+		xvt->tx_meta_data[lmac_id].queue = ret;
+		ret = 0;
+	} else {
+		IWL_ERR(xvt, "failed to allocate queue\n");
+	}
+
+	return ret;
+}
+
+void iwl_xvt_txq_disable(struct iwl_xvt *xvt)
+{
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		iwl_xvt_free_tx_queue(xvt, XVT_LMAC_0_ID);
+		iwl_xvt_free_tx_queue(xvt, XVT_LMAC_1_ID);
+	} else {
+		iwl_trans_txq_disable(xvt->trans,
+				      IWL_XVT_DEFAULT_TX_QUEUE,
+				      true);
+	}
+}

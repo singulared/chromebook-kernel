@@ -402,4 +402,11 @@ static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt *xvt,
 			    tx_resp->frame_count) & 0xfff;
 }
 
+void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id);
+
+int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+			      u8 lmac_id);
+
+void iwl_xvt_txq_disable(struct iwl_xvt *xvt);
+
 #endif

@@ -96,7 +96,6 @@
 #define XVT_MAX_TX_COUNT (ULLONG_MAX)
 #define XVT_LMAC_0_STA_ID (0) /* must be aligned with station id added in USC */
 #define XVT_LMAC_1_STA_ID (3) /* must be aligned with station id added in USC */
-#define TX_QUEUE_CFG_TID (6)
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb)
@@ -775,8 +774,7 @@ static void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
 		return;
 
 	if (xvt->fw_running) {
-		iwl_trans_txq_disable(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE,
-				      true);
+		iwl_xvt_txq_disable(xvt);
 		xvt->fw_running = false;
 	}
 	iwl_trans_stop_device(xvt->trans);
@@ -838,7 +836,7 @@ static int iwl_xvt_continue_init(struct iwl_xvt *xvt)
 
 error:
 	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
-	iwl_trans_txq_disable(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE, true);
+	iwl_xvt_txq_disable(xvt);
 	iwl_trans_stop_device(xvt->trans);
 
 cont_init_end:
@@ -1122,36 +1120,6 @@ static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
 	}
 
 	return err;
-}
-
-static void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
-{
-	if (xvt->tx_meta_data[lmac_id].queue == -1)
-		return;
-
-	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
-
-	xvt->tx_meta_data[lmac_id].queue = -1;
-}
-
-static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
-				     u8 lmac_id) {
-	int ret;
-	struct iwl_tx_queue_cfg_cmd cmd = {
-			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
-			.sta_id = sta_id,
-			.tid = TX_QUEUE_CFG_TID };
-
-	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
-	/* ret is positive when func returns the allocated the queue number */
-	if (ret > 0) {
-		xvt->tx_meta_data[lmac_id].queue = ret;
-		ret = 0;
-	} else {
-		IWL_ERR(xvt, "failed to allocate queue\n");
-	}
-
-	return ret;
 }
 
 static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
