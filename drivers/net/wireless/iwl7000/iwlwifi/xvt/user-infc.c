@@ -1180,10 +1180,10 @@ static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
 	struct iwl_xvt_tx_queue_cfg *input =
 			(struct iwl_xvt_tx_queue_cfg *)data_in->data;
 	u8 sta_id = input->sta_id;
-	u8 lmac_id = map_sta_to_lmac(xvt, sta_id);
+	int lmac_id = map_sta_to_lmac(xvt, sta_id);
 
 	if (lmac_id < 0)
-		return -EINVAL;
+		return lmac_id;
 
 	switch (input->operation) {
 	case TX_QUEUE_CFG_ADD:
@@ -1202,7 +1202,8 @@ static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
 	static struct iwl_xvt_tx_mod_task_data task_data;
 	u32 size = sizeof(struct iwl_tm_mod_tx_request);
 	struct tx_meta_data *xvt_tx;
-	u8 sta_id, lmac_id;
+	u8 sta_id;
+	int lmac_id;
 
 	/*
 	* no need to check whether tx already operating on lmac, since check
@@ -1214,7 +1215,7 @@ static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
 	sta_id = task_data.tx_req.sta_id;
 	lmac_id = map_sta_to_lmac(xvt, sta_id);
 	if (lmac_id < 0)
-		return -EINVAL;
+		return lmac_id;
 
 	task_data.lmac_id = lmac_id;
 	xvt_tx = &xvt->tx_meta_data[lmac_id];
