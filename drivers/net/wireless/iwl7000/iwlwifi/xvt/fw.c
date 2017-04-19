@@ -404,7 +404,7 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 			     palive2->umac_major, palive2->umac_minor);
 	} else {
 		if (rx_packet_payload_size == sizeof(*palive3)) {
-		palive3 = (void *)pkt->data;
+			palive3 = (void *)pkt->data;
 			status = le16_to_cpu(palive3->status);
 			flags = le16_to_cpu(palive3->flags);
 			lmac1 = &palive3->lmac_data;
