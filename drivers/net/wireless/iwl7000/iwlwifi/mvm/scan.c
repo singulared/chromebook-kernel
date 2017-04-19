@@ -1214,13 +1214,14 @@ static void iwl_mvm_scan_umac_dwell(struct iwl_mvm *mvm,
 
 		/* if custom max budget was configured with debugfs */
 		if (IWL_MVM_ADWELL_MAX_BUDGET)
-			cmd->v7.adwell_max_budget = IWL_MVM_ADWELL_MAX_BUDGET;
+			cmd->v7.adwell_max_budget =
+				cpu_to_le16(IWL_MVM_ADWELL_MAX_BUDGET);
 		else if (params->ssids)
 			cmd->v7.adwell_max_budget =
-				IWL_SCAN_ADWELL_MAX_BUDGET_DIRECTED_SCAN;
+				cpu_to_le16(IWL_SCAN_ADWELL_MAX_BUDGET_DIRECTED_SCAN);
 		else
 			cmd->v7.adwell_max_budget =
-				IWL_SCAN_ADWELL_MAX_BUDGET_FULL_SCAN;
+				cpu_to_le16(IWL_SCAN_ADWELL_MAX_BUDGET_FULL_SCAN);
 
 		cmd->v7.scan_priority = cpu_to_le32(IWL_SCAN_PRIORITY_EXT_6);
 		cmd->v7.max_out_time[SCAN_LB_LMAC_IDX] =
