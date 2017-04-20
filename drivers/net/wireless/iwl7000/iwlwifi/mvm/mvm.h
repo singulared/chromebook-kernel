@@ -1113,6 +1113,9 @@ struct iwl_mvm {
 	/* system time of last beacon (for AP/GO interface) */
 	u32 ap_last_beacon_gp2;
 
+	/* indicates that we transmitted the last beacon */
+	bool ibss_manager;
+
 	bool lar_regdom_set;
 	enum iwl_mcc_source mcc_src;
 

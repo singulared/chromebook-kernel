@@ -3977,6 +3977,13 @@ static int iwl_mvm_switch_vif_chanctx(struct ieee80211_hw *hw,
 	return ret;
 }
 
+static int iwl_mvm_tx_last_beacon(struct ieee80211_hw *hw)
+{
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+
+	return mvm->ibss_manager;
+}
+
 static int iwl_mvm_set_tim(struct ieee80211_hw *hw,
 			   struct ieee80211_sta *sta,
 			   bool set)
@@ -4665,6 +4672,8 @@ const struct ieee80211_ops iwl_mvm_hw_ops = {
 	.stop_ap = iwl_mvm_stop_ap_ibss,
 	.join_ibss = iwl_mvm_start_ap_ibss,
 	.leave_ibss = iwl_mvm_stop_ap_ibss,
+
+	.tx_last_beacon = iwl_mvm_tx_last_beacon,
 
 	.set_tim = iwl_mvm_set_tim,
 
