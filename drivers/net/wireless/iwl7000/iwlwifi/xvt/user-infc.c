@@ -1402,11 +1402,9 @@ static int iwl_xvt_get_mac_addr_info(struct iwl_xvt *xvt,
 	__u8 temp_mac_addr[ETH_ALEN];
 	const u8 *hw_addr;
 
-	mac_addr_info = kmalloc(sizeof(*mac_addr_info), GFP_KERNEL);
+	mac_addr_info = kzalloc(sizeof(*mac_addr_info), GFP_KERNEL);
 	if (!mac_addr_info)
 		return -ENOMEM;
-
-	memset(mac_addr_info, 0, sizeof(*mac_addr_info));
 
 	if (!xvt->cfg->ext_nvm) {
 		memcpy(mac_addr_info->mac_addr, xvt->nvm_hw_addr,
