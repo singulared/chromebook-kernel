@@ -31,13 +31,13 @@ static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
 						u32 *flags,
 						struct vif_params *params)
 {
+#if CFG80211_VERSION <= KERNEL_VERSION(4,0,0)
+	unsigned char name_assign_type = NET_NAME_UNKNOWN;
+#endif
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct wireless_dev *wdev;
 	struct ieee80211_sub_if_data *sdata;
 	int err;
-#if CFG80211_VERSION <= KERNEL_VERSION(4,0,0)
-	unsigned char name_assign_type = NET_NAME_UNKNOWN;
-#endif
 
 	err = ieee80211_if_add(local, name, name_assign_type, &wdev, type, params);
 	if (err)
