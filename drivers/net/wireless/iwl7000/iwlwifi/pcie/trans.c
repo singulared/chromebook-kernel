@@ -1096,14 +1096,24 @@ int iwl_trans_pcie_power_device_off(struct iwl_trans_pcie *trans_pcie)
 
 bool iwl_trans_check_hw_rf_kill(struct iwl_trans *trans)
 {
+	struct iwl_trans_pcie *trans_pcie =  IWL_TRANS_GET_PCIE_TRANS(trans);
 	bool hw_rfkill = iwl_is_rfkill_set(trans);
+	bool prev = test_bit(STATUS_RFKILL_OPMODE, &trans->status);
+	bool report;
 
-	if (hw_rfkill)
-		set_bit(STATUS_RFKILL, &trans->status);
-	else
-		clear_bit(STATUS_RFKILL, &trans->status);
+	if (hw_rfkill) {
+		set_bit(STATUS_RFKILL_HW, &trans->status);
+		set_bit(STATUS_RFKILL_OPMODE, &trans->status);
+	} else {
+		clear_bit(STATUS_RFKILL_HW, &trans->status);
+		if (trans_pcie->opmode_down)
+			clear_bit(STATUS_RFKILL_OPMODE, &trans->status);
+	}
 
-	iwl_trans_pcie_rf_kill(trans, hw_rfkill);
+	report = test_bit(STATUS_RFKILL_OPMODE, &trans->status);
+
+	if (prev != report)
+		iwl_trans_pcie_rf_kill(trans, report);
 
 	return hw_rfkill;
 }
@@ -1228,7 +1238,6 @@ static void iwl_pcie_init_msix(struct iwl_trans_pcie *trans_pcie)
 static void _iwl_trans_pcie_stop_device(struct iwl_trans *trans, bool low_power)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	bool hw_rfkill, was_hw_rfkill;
 
 	lockdep_assert_held(&trans_pcie->mutex);
 
@@ -1236,8 +1245,6 @@ static void _iwl_trans_pcie_stop_device(struct iwl_trans *trans, bool low_power)
 		return;
 
 	trans_pcie->is_down = true;
-
-	was_hw_rfkill = iwl_is_rfkill_set(trans);
 
 	/* tell the device to stop sending interrupts */
 	iwl_disable_interrupts(trans);
@@ -1298,33 +1305,12 @@ static void _iwl_trans_pcie_stop_device(struct iwl_trans *trans, bool low_power)
 	clear_bit(STATUS_SYNC_HCMD_ACTIVE, &trans->status);
 	clear_bit(STATUS_INT_ENABLED, &trans->status);
 	clear_bit(STATUS_TPOWER_PMI, &trans->status);
-	clear_bit(STATUS_RFKILL, &trans->status);
 
 	/*
 	 * Even if we stop the HW, we still want the RF kill
 	 * interrupt
 	 */
 	iwl_enable_rfkill_int(trans);
-
-	/*
-	 * Check again since the RF kill state may have changed while
-	 * all the interrupts were disabled, in this case we couldn't
-	 * receive the RF kill interrupt and update the state in the
-	 * op_mode.
-	 * Don't call the op_mode if the rkfill state hasn't changed.
-	 * This allows the op_mode to call stop_device from the rfkill
-	 * notification without endless recursion. Under very rare
-	 * circumstances, we might have a small recursion if the rfkill
-	 * state changed exactly now while we were called from stop_device.
-	 * This is very unlikely but can happen and is supported.
-	 */
-	hw_rfkill = iwl_is_rfkill_set(trans);
-	if (hw_rfkill)
-		set_bit(STATUS_RFKILL, &trans->status);
-	else
-		clear_bit(STATUS_RFKILL, &trans->status);
-	if (hw_rfkill != was_hw_rfkill)
-		iwl_trans_pcie_rf_kill(trans, hw_rfkill);
 
 #ifdef CPTCFG_IWLWIFI_PLATFORM_DATA
 	if (low_power && !iwl_trans_pcie_power_device_off(trans_pcie)) {
@@ -1444,12 +1430,45 @@ static void iwl_trans_pcie_fw_alive(struct iwl_trans *trans, u32 scd_addr)
 	iwl_pcie_tx_start(trans, scd_addr);
 }
 
+void iwl_trans_pcie_handle_stop_rfkill(struct iwl_trans *trans,
+				       bool was_in_rfkill)
+{
+	bool hw_rfkill;
+
+	/*
+	 * Check again since the RF kill state may have changed while
+	 * all the interrupts were disabled, in this case we couldn't
+	 * receive the RF kill interrupt and update the state in the
+	 * op_mode.
+	 * Don't call the op_mode if the rkfill state hasn't changed.
+	 * This allows the op_mode to call stop_device from the rfkill
+	 * notification without endless recursion. Under very rare
+	 * circumstances, we might have a small recursion if the rfkill
+	 * state changed exactly now while we were called from stop_device.
+	 * This is very unlikely but can happen and is supported.
+	 */
+	hw_rfkill = iwl_is_rfkill_set(trans);
+	if (hw_rfkill) {
+		set_bit(STATUS_RFKILL_HW, &trans->status);
+		set_bit(STATUS_RFKILL_OPMODE, &trans->status);
+	} else {
+		clear_bit(STATUS_RFKILL_HW, &trans->status);
+		clear_bit(STATUS_RFKILL_OPMODE, &trans->status);
+	}
+	if (hw_rfkill != was_in_rfkill)
+		iwl_trans_pcie_rf_kill(trans, hw_rfkill);
+}
+
 static void iwl_trans_pcie_stop_device(struct iwl_trans *trans, bool low_power)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+	bool was_in_rfkill;
 
 	mutex_lock(&trans_pcie->mutex);
+	trans_pcie->opmode_down = true;
+	was_in_rfkill = test_bit(STATUS_RFKILL_OPMODE, &trans->status);
 	_iwl_trans_pcie_stop_device(trans, low_power);
+	iwl_trans_pcie_handle_stop_rfkill(trans, was_in_rfkill);
 	mutex_unlock(&trans_pcie->mutex);
 }
 
@@ -1460,6 +1479,8 @@ void iwl_trans_pcie_rf_kill(struct iwl_trans *trans, bool state)
 
 	lockdep_assert_held(&trans_pcie->mutex);
 
+	IWL_WARN(trans, "reporting RF_KILL (radio %s)\n",
+		 state ? "disabled" : "enabled");
 	if (iwl_op_mode_hw_rf_kill(trans->op_mode, state)) {
 		if (trans->cfg->gen2)
 			_iwl_trans_pcie_gen2_stop_device(trans, true);
@@ -1761,6 +1782,8 @@ static int _iwl_trans_pcie_start_hw(struct iwl_trans *trans, bool low_power)
 
 	/* From now on, the op_mode will be kept updated about RF kill state */
 	iwl_enable_rfkill_int(trans);
+
+	trans_pcie->opmode_down = false;
 
 	/* Set is_down to false here so that...*/
 	trans_pcie->is_down = false;
@@ -3091,6 +3114,7 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 	trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
 	trans_pcie->trans = trans;
+	trans_pcie->opmode_down = true;
 	spin_lock_init(&trans_pcie->irq_lock);
 	spin_lock_init(&trans_pcie->reg_lock);
 	mutex_init(&trans_pcie->mutex);
