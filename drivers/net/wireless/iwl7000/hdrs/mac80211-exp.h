@@ -14,6 +14,10 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0)
 #define dev_coredumpsg __iwl7000_dev_coredumpsg
 #endif /* < 4.7.0 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
+#define kstrtobool __iwl7000_kstrtobool
+#define kstrtobool_from_user __iwl7000_kstrtobool_from_user
+#endif /* < 4.6.0 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,4,0)
 #ifdef CONFIG_DEBUG_FS
 #define iwl_debugfs_create_bool __iwl7000_iwl_debugfs_create_bool
