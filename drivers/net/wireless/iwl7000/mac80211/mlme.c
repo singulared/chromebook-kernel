@@ -587,6 +587,34 @@ static void ieee80211_add_vht_ie(struct ieee80211_sub_if_data *sdata,
 	ieee80211_ie_build_vht_cap(pos, &vht_cap, cap);
 }
 
+/* This function determines HE capability flags for the association
+ * and builds the IE.
+ */
+static void ieee80211_add_he_ie(struct ieee80211_sub_if_data *sdata,
+				struct sk_buff *skb,
+				struct ieee80211_supported_band *sband)
+{
+	u8 *pos;
+	const struct ieee80211_sta_he_cap *he_cap = NULL;
+	u8 he_cap_size;
+
+	he_cap = ieee80211_get_he_sta_cap(sband);
+	if (!he_cap)
+		return;
+
+	/*
+	 * TODO: the 1 added is because this temporarily is under the EXTENSION
+	 * IE. Get rid of it when it moves.
+	 */
+	he_cap_size =
+		2 + 1 + sizeof(he_cap->he_cap_elem) +
+		ieee80211_he_mcs_nss_size(he_cap->he_mcs_nss_supp.mcs_hdr) +
+		ieee80211_he_ppe_size(he_cap->ppe_thres[0],
+				      he_cap->he_cap_elem.phy_cap_info);
+	pos = skb_put(skb, he_cap_size);
+	ieee80211_ie_build_he_cap(pos, he_cap, pos + he_cap_size);
+}
+
 static void ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_local *local = sdata->local;
@@ -847,6 +875,10 @@ static void ieee80211_send_assoc(struct ieee80211_sub_if_data *sdata)
 	if (!(ifmgd->flags & IEEE80211_STA_DISABLE_VHT))
 		ieee80211_add_vht_ie(sdata, skb, sband,
 				     &assoc_data->ap_vht_cap);
+
+	/* TODO: disable/enable HE according to resp from AP */
+	if (!(ifmgd->flags & IEEE80211_STA_DISABLE_HE))
+		ieee80211_add_he_ie(sdata, skb, sband);
 
 	/* if present, add any custom non-vendor IEs that go after HT */
 	if (assoc_data->ie_len) {
