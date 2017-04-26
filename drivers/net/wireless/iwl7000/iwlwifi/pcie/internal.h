@@ -727,7 +727,7 @@ static inline bool iwl_is_rfkill_set(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
-	lockdep_assert_held(trans_pcie->mutex);
+	lockdep_assert_held(&trans_pcie->mutex);
 
 	if (trans_pcie->debug_rfkill)
 		return true;
