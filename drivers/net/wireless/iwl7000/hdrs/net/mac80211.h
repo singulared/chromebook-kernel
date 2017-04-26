@@ -1156,6 +1156,7 @@ enum mac80211_rx_encoding {
 	RX_ENC_LEGACY = 0,
 	RX_ENC_HT,
 	RX_ENC_VHT,
+	RX_ENC_HE,
 };
 
 /**
@@ -1190,6 +1191,9 @@ enum mac80211_rx_encoding {
  * @encoding: &enum mac80211_rx_encoding
  * @bw: &enum rate_info_bw
  * @enc_flags: uses bits from &enum mac80211_rx_encoding_flags
+ * @he_ru: HE RU, from &enum nl80211_he_ru_alloc
+ * @he_gi: HE GI, from &enum nl80211_he_gi
+ * @he_dcm: HE DCM value
  * @rx_flags: internal RX flags for mac80211
  * @ampdu_reference: A-MPDU reference number, must be a different value for
  *	each A-MPDU but the same for each subframe within one A-MPDU
@@ -1203,7 +1207,8 @@ struct ieee80211_rx_status {
 	u32 flag;
 	u16 freq;
 	u8 enc_flags;
-	u8 encoding:2, bw:3;
+	u8 encoding:2, bw:3, he_ru:3;
+	u8 he_gi:2, he_dcm:1;
 	u8 rate_idx;
 	u8 nss;
 	u8 rx_flags;
