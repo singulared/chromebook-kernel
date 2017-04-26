@@ -2,7 +2,7 @@
  * Copyright 2002-2005, Instant802 Networks, Inc.
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
- * Copyright (C) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -1958,28 +1958,33 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 				  struct rate_info *rinfo)
 {
 #if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
-	rinfo->bw = (rate & STA_STATS_RATE_BW_MASK) >>
-		STA_STATS_RATE_BW_SHIFT;
+	rinfo->bw = STA_STATS_GET(BW, rate);
 #endif
 
-	switch (rate & STA_STATS_RATE_TYPE_MASK) {
+	switch (STA_STATS_GET(TYPE, rate)) {
 	case STA_STATS_RATE_TYPE_VHT:
 		rinfo->flags = RATE_INFO_FLAGS_VHT_MCS;
-		rinfo->mcs = rate & 0xf;
-		rinfo->nss = (rate & 0xf0) >> 4;
+		rinfo->mcs = STA_STATS_GET(VHT_MCS, rate);
+		rinfo->nss = STA_STATS_GET(VHT_NSS, rate);
+		if (STA_STATS_GET(SGI, rate))
+			rinfo->flags |= RATE_INFO_FLAGS_SHORT_GI;
 		break;
 	case STA_STATS_RATE_TYPE_HT:
 		rinfo->flags = RATE_INFO_FLAGS_MCS;
-		rinfo->mcs = rate & 0xff;
+		rinfo->mcs = STA_STATS_GET(HT_MCS, rate);
+		if (STA_STATS_GET(SGI, rate))
+			rinfo->flags |= RATE_INFO_FLAGS_SHORT_GI;
 		break;
 	case STA_STATS_RATE_TYPE_LEGACY: {
 		struct ieee80211_supported_band *sband;
 		u16 brate;
 		unsigned int shift;
+		int band = STA_STATS_GET(LEGACY_BAND, rate);
+		int rate_idx = STA_STATS_GET(LEGACY_IDX, rate);
 
 		rinfo->flags = 0;
-		sband = local->hw.wiphy->bands[(rate >> 4) & 0xf];
-		brate = sband->bitrates[rate & 0xf].bitrate;
+		sband = local->hw.wiphy->bands[band];
+		brate = sband->bitrates[rate_idx].bitrate;
 #if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
 		if (rinfo->bw == RATE_INFO_BW_5)
 			shift = 2;
@@ -1994,7 +1999,7 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 	}
 
 #if CFG80211_VERSION < KERNEL_VERSION(3,20,0)
-	switch ((rate & STA_STATS_RATE_BW_MASK) >> STA_STATS_RATE_BW_SHIFT) {
+	switch (STA_STATS_GET(BW, rate)) {
 	case RATE_INFO_BW_5:
 	case RATE_INFO_BW_10:
 		rinfo->flags = 0;
@@ -2013,9 +2018,6 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 		break;
 	}
 #endif
-
-	if (rate & STA_STATS_RATE_SGI)
-		rinfo->flags |= RATE_INFO_FLAGS_SHORT_GI;
 }
 
 static int sta_set_rate_info_rx(struct sta_info *sta, struct rate_info *rinfo)

@@ -53,6 +53,11 @@ struct pcpu_sw_netstats {
 #define BIT_ULL(nr) (1ULL << (nr))
 #endif
 
+#ifndef GENMASK
+#define GENMASK(h, l)		(((U32_C(1) << ((h) - (l) + 1)) - 1) << (l))
+#define GENMASK_ULL(h, l)	(((U64_C(1) << ((h) - (l) + 1)) - 1) << (l))
+#endif
+
 static inline void netdev_attach_ops(struct net_device *dev,
 				     const struct net_device_ops *ops)
 {
