@@ -1411,6 +1411,8 @@ struct ieee80211_ht_operation {
 #define		IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED	3
 #define IEEE80211_HT_OP_MODE_NON_GF_STA_PRSNT		0x0004
 #define IEEE80211_HT_OP_MODE_NON_HT_STA_PRSNT		0x0010
+#define IEEE80211_HT_OP_MODE_CCFS2_SHIFT		5
+#define IEEE80211_HT_OP_MODE_CCFS2_MASK			0x1fe0
 
 /* for stbc_param */
 #define IEEE80211_HT_STBC_PARAM_DUAL_BEACON		0x0040
@@ -1525,14 +1527,14 @@ enum ieee80211_vht_chanwidth {
  * This structure is the "VHT operation element" as
  * described in 802.11ac D3.0 8.4.2.161
  * @chan_width: Operating channel width
+ * @center_freq_seg0_idx: center freq segment 0 index
  * @center_freq_seg1_idx: center freq segment 1 index
- * @center_freq_seg2_idx: center freq segment 2 index
  * @basic_mcs_set: VHT Basic MCS rate set
  */
 struct ieee80211_vht_operation {
 	u8 chan_width;
+	u8 center_freq_seg0_idx;
 	u8 center_freq_seg1_idx;
-	u8 center_freq_seg2_idx;
 	__le16 basic_mcs_set;
 } __packed;
 
@@ -1723,6 +1725,9 @@ enum ieee80211_statuscode {
 	WLAN_STATUS_REJECT_DSE_BAND = 96,
 	WLAN_STATUS_DENIED_WITH_SUGGESTED_BAND_AND_CHANNEL = 99,
 	WLAN_STATUS_DENIED_DUE_TO_SPECTRUM_MANAGEMENT = 103,
+	/* 802.11ai */
+	WLAN_STATUS_FILS_AUTHENTICATION_FAILURE = 108,
+	WLAN_STATUS_UNKNOWN_AUTHENTICATION_SERVER = 109,
 };
 
 
@@ -2104,6 +2109,12 @@ enum ieee80211_key_len {
 #define FILS_NONCE_LEN			16
 #define FILS_MAX_KEK_LEN		64
 
+#define FILS_ERP_MAX_USERNAME_LEN	16
+#define FILS_ERP_MAX_REALM_LEN		253
+#define FILS_ERP_MAX_RRK_LEN		64
+
+#define PMK_MAX_LEN			48
+
 /* Public action codes */
 enum ieee80211_pub_actioncode {
 	WLAN_PUB_ACTION_EXT_CHANSW_ANN = 4,
@@ -2369,7 +2380,7 @@ enum ieee80211_sa_query_action {
 /* AKM suite selectors */
 #define WLAN_AKM_SUITE_8021X		SUITE(0x000FAC, 1)
 #define WLAN_AKM_SUITE_PSK		SUITE(0x000FAC, 2)
-#define WLAN_AKM_SUITE_FT_8021X	SUITE(0x000FAC, 3)
+#define WLAN_AKM_SUITE_FT_8021X		SUITE(0x000FAC, 3)
 #define WLAN_AKM_SUITE_FT_PSK		SUITE(0x000FAC, 4)
 #define WLAN_AKM_SUITE_8021X_SHA256	SUITE(0x000FAC, 5)
 #define WLAN_AKM_SUITE_PSK_SHA256	SUITE(0x000FAC, 6)
@@ -2378,6 +2389,10 @@ enum ieee80211_sa_query_action {
 #define WLAN_AKM_SUITE_FT_OVER_SAE	SUITE(0x000FAC, 9)
 #define WLAN_AKM_SUITE_8021X_SUITE_B	SUITE(0x000FAC, 11)
 #define WLAN_AKM_SUITE_8021X_SUITE_B_192	SUITE(0x000FAC, 12)
+#define WLAN_AKM_SUITE_FILS_SHA256	SUITE(0x000FAC, 14)
+#define WLAN_AKM_SUITE_FILS_SHA384	SUITE(0x000FAC, 15)
+#define WLAN_AKM_SUITE_FT_FILS_SHA256	SUITE(0x000FAC, 16)
+#define WLAN_AKM_SUITE_FT_FILS_SHA384	SUITE(0x000FAC, 17)
 
 #define WLAN_MAX_KEY_LEN		32
 

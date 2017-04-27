@@ -1962,14 +1962,17 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 		STA_STATS_RATE_BW_SHIFT;
 #endif
 
-	if (rate & STA_STATS_RATE_VHT) {
+	switch (rate & STA_STATS_RATE_TYPE_MASK) {
+	case STA_STATS_RATE_TYPE_VHT:
 		rinfo->flags = RATE_INFO_FLAGS_VHT_MCS;
 		rinfo->mcs = rate & 0xf;
 		rinfo->nss = (rate & 0xf0) >> 4;
-	} else if (rate & STA_STATS_RATE_HT) {
+		break;
+	case STA_STATS_RATE_TYPE_HT:
 		rinfo->flags = RATE_INFO_FLAGS_MCS;
 		rinfo->mcs = rate & 0xff;
-	} else if (rate & STA_STATS_RATE_LEGACY) {
+		break;
+	case STA_STATS_RATE_TYPE_LEGACY: {
 		struct ieee80211_supported_band *sband;
 		u16 brate;
 		unsigned int shift;
@@ -1986,6 +1989,8 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 #endif
 			shift = 0;
 		rinfo->legacy = DIV_ROUND_UP(brate, 1 << shift);
+		break;
+		}
 	}
 
 #if CFG80211_VERSION < KERNEL_VERSION(3,20,0)

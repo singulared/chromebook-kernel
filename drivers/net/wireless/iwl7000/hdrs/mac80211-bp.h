@@ -1431,6 +1431,16 @@ struct wiphy_ftm_initiator_capa {
 	u32 preamble;
 	u32 bw;
 };
+
+#define vif_params_flags(p) flags
+#define vif_params_flags_ptr(p) (!flags ? 0 :				    \
+				 *flags | 1 << __NL80211_MNTR_FLAG_INVALID)
+
+#else  /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
+
+#define vif_params_flags(p) ((p)->flags)
+#define vif_params_flags_ptr(p) vif_params_flags(p)
+
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
 #if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
@@ -1834,4 +1844,9 @@ static inline void *backport_idr_remove(struct idr *idr, int id)
 	return item;
 }
 #define idr_remove     backport_idr_remove
+#endif
+
+#ifndef setup_deferrable_timer
+#define setup_deferrable_timer(timer, fn, data)                         \
+        __setup_timer((timer), (fn), (data), TIMER_DEFERRABLE)
 #endif
