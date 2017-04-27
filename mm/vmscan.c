@@ -1648,11 +1648,6 @@ static int file_is_low(struct lruvec *lruvec)
 static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
 				 struct lruvec *lruvec, struct scan_control *sc)
 {
-	int file = is_file_lru(lru);
-
-	if (file && file_is_low(lruvec))
-		return 0;
-
 	if (is_active_lru(lru)) {
 		if (inactive_list_is_low(lruvec, lru))
 			shrink_active_list(nr_to_scan, lruvec, sc, lru);
@@ -1705,6 +1700,14 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 		force_scan = true;
 	if (!global_reclaim(sc))
 		force_scan = true;
+
+	/* do not scan file pages when file page count is low */
+	if (file_is_low(lruvec)) {
+		fraction[0] = 1;
+		fraction[1] = 0;
+		denominator = 1;
+		goto out;
+	}
 
 	/* If we have no swap space, do not bother scanning anon pages. */
 	if (!sc->may_swap || (nr_swap_pages <= 0)) {
