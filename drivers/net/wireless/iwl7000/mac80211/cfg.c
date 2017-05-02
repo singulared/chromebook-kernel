@@ -46,11 +46,11 @@ static void ieee80211_set_mu_mimo_follow(struct ieee80211_sub_if_data *sdata,
 		mu_mimo_groups = membership != 0;
 	}
 
-	if (params->vht_mumimo_follow_addr) {
+	if (vif_params_vht_mumimo_follow_addr(params)) {
 		mu_mimo_follow =
-			is_valid_ether_addr(params->vht_mumimo_follow_addr);
+			is_valid_ether_addr(vif_params_vht_mumimo_follow_addr(params));
 		ether_addr_copy(sdata->u.mntr.mu_follow_addr,
-				params->vht_mumimo_follow_addr);
+				vif_params_vht_mumimo_follow_addr(params));
 	}
 
 	sdata->vif.mu_mimo_owner = mu_mimo_groups || mu_mimo_follow;
@@ -90,7 +90,7 @@ static int ieee80211_set_mon_options(struct ieee80211_sub_if_data *sdata,
 	monitor_sdata = rtnl_dereference(local->monitor_sdata);
 
 	if (!monitor_sdata &&
-	    (params->vht_mumimo_groups || params->vht_mumimo_follow_addr))
+	    (params->vht_mumimo_groups || vif_params_vht_mumimo_follow_addr(params)))
 		return -EOPNOTSUPP;
 
 	/* apply all changes now - no failures allowed */

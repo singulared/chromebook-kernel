@@ -1436,10 +1436,14 @@ struct wiphy_ftm_initiator_capa {
 #define vif_params_flags_ptr(p) (!flags ? 0 :				    \
 				 *flags | 1 << __NL80211_MNTR_FLAG_INVALID)
 
+#define vif_params_vht_mumimo_follow_addr(p) NULL
+
 #else  /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
 #define vif_params_flags(p) ((p)->flags)
 #define vif_params_flags_ptr(p) vif_params_flags(p)
+
+#define vif_params_vht_mumimo_follow_addr(p) ((p)->vht_mumimo_follow_addr)
 
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
