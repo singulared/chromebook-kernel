@@ -987,7 +987,7 @@ static void iwl_op_mode_mvm_stop(struct iwl_op_mode *op_mode)
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	iwl_dnt_free(mvm->trans);
 #endif
-	iwl_free_nvm_data(mvm->nvm_data);
+	kfree(mvm->nvm_data);
 	for (i = 0; i < NVM_MAX_NUM_SECTIONS; i++)
 		kfree(mvm->nvm_sections[i].data);
 
