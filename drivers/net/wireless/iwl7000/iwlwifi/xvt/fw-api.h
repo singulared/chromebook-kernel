@@ -136,6 +136,11 @@ enum {
 	REPLY_MAX = 0xff,
 };
 
+enum iwl_long_subcmd_ids {
+	GET_SET_PHY_DB_CMD_WITH_GRP = WIDE_ID(LONG_GROUP,
+					      GET_SET_PHY_DB_CMD),
+};
+
 enum iwl_phy_ops_subcmd_ids {
 	DTS_MEASUREMENT_NOTIF = 0XFF,
 	DTS_MEASUREMENT_NOTIF_WITH_GRP = WIDE_ID(PHY_OPS_GROUP,

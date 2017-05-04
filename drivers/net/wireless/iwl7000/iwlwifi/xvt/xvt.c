@@ -128,6 +128,13 @@ static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
 /* Please keep this array *SORTED* by hex value.
  * Access is done through binary search.
  */
+static const struct iwl_hcmd_names iwl_xvt_long_cmd_names[] = {
+	HCMD_NAME(GET_SET_PHY_DB_CMD),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
 static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
 	HCMD_NAME(DTS_MEASUREMENT_NOTIF),
 };
@@ -164,7 +171,7 @@ static const struct iwl_hcmd_names iwl_xvt_system_names[] = {
 
 static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
 	[LEGACY_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
-	[LONG_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[LONG_GROUP] = HCMD_ARR(iwl_xvt_long_cmd_names),
 	[SYSTEM_GROUP] = HCMD_ARR(iwl_xvt_system_names),
 	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
 	[DATA_PATH_GROUP] = HCMD_ARR(iwl_xvt_data_path_names),
