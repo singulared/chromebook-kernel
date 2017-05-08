@@ -890,7 +890,7 @@ static int iwl_xvt_get_phy_db(struct iwl_xvt *xvt,
 
 static struct iwl_device_cmd *
 iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
-			       u32 rate_flags)
+			       u32 rate_flags, u32 flags)
 {
 	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
 	struct iwl_tx_cmd_gen2 *tx_cmd;
@@ -910,7 +910,7 @@ iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
 	tx_cmd->offload_assist |= (ieee80211_hdrlen(hdr->frame_control) % 4) ?
 				   cpu_to_le16(TX_CMD_OFFLD_PAD) : 0;
 
-	tx_cmd->flags |= cpu_to_le32(IWL_TX_FLAGS_CMD_RATE);
+	tx_cmd->flags = cpu_to_le32(flags | IWL_TX_FLAGS_CMD_RATE);
 
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
 
@@ -930,7 +930,7 @@ iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
  */
 static struct iwl_device_cmd *
 iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
-			  u8 sta_id, u32 rate_flags)
+			  u8 sta_id, u32 rate_flags, u32 flags)
 {
 	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
 	struct iwl_tx_cmd *tx_cmd;
@@ -948,7 +948,7 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 
 	tx_cmd->sta_id = sta_id;
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
-	tx_cmd->tx_flags = cpu_to_le32(TX_CMD_FLG_ACK);
+	tx_cmd->tx_flags = cpu_to_le32(flags);
 
 	/* the skb should already hold the data */
 	memcpy(tx_cmd->hdr, skb->data, sizeof(struct ieee80211_hdr));
@@ -970,6 +970,7 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	struct sk_buff *skb;
 	struct iwl_device_cmd *dev_cmd;
 	int time_remain, err = 0;
+	u32 flags = 0;
 
 	if (xvt->fw_error) {
 		IWL_ERR(xvt, "FW Error while sending Tx\n");
@@ -984,15 +985,19 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	}
 	memcpy(skb_put(skb, tx_req->len), tx_req->data, tx_req->len);
 
+	flags = tx_req->no_ack ? 0 : TX_CMD_FLG_ACK;
+
 	if (iwl_xvt_is_unified_fw(xvt))
 		dev_cmd = iwl_xvt_set_mod_tx_params_gen2(xvt,
 							 skb,
-							 tx_req->rate_flags);
+							 tx_req->rate_flags,
+							 flags);
 	else
 		dev_cmd = iwl_xvt_set_mod_tx_params(xvt,
 						    skb,
 						    tx_req->sta_id,
-						    tx_req->rate_flags);
+						    tx_req->rate_flags,
+						    flags);
 	if (!dev_cmd) {
 		kfree_skb(skb);
 		*status = XVT_TX_DRIVER_ABORTED;

@@ -454,6 +454,7 @@ struct iwl_xvt_phy_db_request {
  * @trigger_led:  Flag. When true, light led when transmitting
  * @len:	  Size of data buffer
  * @rate_flags:	  Tx Configuration rate flags
+ * @no_ack:	  Flag. When true, FW will not send ack
  * @sta_id:	  Station ID
  * @data:	  Data to transmit
  */
@@ -464,6 +465,7 @@ struct iwl_tm_mod_tx_request {
 	__u32 trigger_led;
 	__u32 len;
 	__u32 rate_flags;
+	__u32 no_ack;
 	__u8 sta_id;
 	__u8 data[];
 } __packed __aligned(4);
