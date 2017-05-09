@@ -316,7 +316,7 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 		if (txq_id == xvt->tx_meta_data[XVT_LMAC_0_ID].queue) {
 			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
 		} else if (txq_id == xvt->tx_meta_data[XVT_LMAC_1_ID].queue) {
-			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_1_ID];
 		} else {
 			IWL_ERR(xvt, "got TX_CMD from unidentified queque\n");
 			return;
