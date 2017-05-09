@@ -653,6 +653,8 @@ static int iwl_set_hw_address(struct iwl_trans *trans,
 		return -EINVAL;
 	}
 
+	IWL_INFO(trans, "base HW address: %pM\n", data->hw_addr);
+
 	return 0;
 }
 
