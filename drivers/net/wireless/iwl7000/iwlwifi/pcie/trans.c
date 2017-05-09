@@ -3213,6 +3213,17 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 		}
 	}
 
+	/*
+	 * 9000-series integrated A-step has a problem with suspend/resume
+	 * and sometimes even causes the whole platform to get stuck. This
+	 * workaround makes the hardware not go into the problematic state.
+	 */
+	if (trans->cfg->integrated &&
+	    trans->cfg->device_family == IWL_DEVICE_FAMILY_9000 &&
+	    CSR_HW_REV_STEP(trans->hw_rev) == SILICON_A_STEP)
+		iwl_set_bit(trans, CSR_HOST_CHICKEN,
+			    CSR_HOST_CHICKEN_PM_IDLE_SRC_DIS_SB_PME);
+
 	trans->hw_rf_id = iwl_read32(trans, CSR_HW_RF_ID);
 	/*
 	 * The RF_ID is set to zero in blank OTP so read version
