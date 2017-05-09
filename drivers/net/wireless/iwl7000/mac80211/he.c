@@ -78,7 +78,7 @@ ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
 	 * total size.
 	 */
 	he_ppe_size = (2 * he_ppe_size *
-		       IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE) + 7;
+		       IEEE80211_PPE_THRES_INFO_PPET_SIZE) + 7;
 	he_ppe_size = DIV_ROUND_UP(he_ppe_size, 8);
 
 	if (he_cap_len < (pos + he_ppe_size))

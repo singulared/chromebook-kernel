@@ -1889,9 +1889,8 @@ ieee80211_he_mcs_nss_size(__le16 mcs_hdr)
 #define IEEE80211_PPE_THRES_RU_INDEX_BITMASK_2x966_AND_966_RU	\
 	(BIT(5) | BIT(6))
 #define IEEE80211_PPE_THRES_RU_INDEX_BITMASK_MASK		0x78
-#define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET16			(0)
-#define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET8			(7)
-#define IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE		(3)
+#define IEEE80211_PPE_THRES_RU_INDEX_BITMASK_POS		(3)
+#define IEEE80211_PPE_THRES_INFO_PPET_SIZE			(3)
 
 /*
  * Calculate 802.11ax HE capabilities IE PPE field size
@@ -1915,7 +1914,7 @@ ieee80211_he_ppe_size(u8 ppe_thres_hdr, const u8 *phy_cap_info)
 	 * Each pair is 6 bits, and we need to add the 7 "header" bits to the
 	 * total size.
 	 */
-	n = (n * IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE * 2) + 7;
+	n = (n * IEEE80211_PPE_THRES_INFO_PPET_SIZE * 2) + 7;
 	n = DIV_ROUND_UP(n, 8);
 
 	return n;

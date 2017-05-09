@@ -2486,7 +2486,7 @@ u8 *ieee80211_ie_build_he_cap(u8 *pos,
 	 * Each pair is 6 bits, and we need to add the 7 "header" bits to the
 	 * total size.
 	 */
-	n = (n * IEEE80211_PPE_THRES_INFO_DEFAULT_PPET_SIZE * 2) + 7;
+	n = (n * IEEE80211_PPE_THRES_INFO_PPET_SIZE * 2) + 7;
 	n = DIV_ROUND_UP(n, 8);
 
 	/* Copy PPE Thresholds */
