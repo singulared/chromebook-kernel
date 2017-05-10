@@ -430,7 +430,7 @@ static void iwl_init_vht_hw_capab(const struct iwl_cfg *cfg,
 	vht_cap->vht_mcs.tx_mcs_map = vht_cap->vht_mcs.rx_mcs_map;
 }
 
-static const struct ieee80211_sband_iftype_data iwl_he_capa_2ghz = {
+static struct ieee80211_sband_iftype_data iwl_he_capa_2ghz = {
 	.types = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP),
 	.he_cap = {
 		.has_he = true,
@@ -510,14 +510,11 @@ static const struct ieee80211_sband_iftype_data iwl_he_capa_2ghz = {
 		 * Set default PPE thresholds, with PPET16 set to 0, PPET8 set
 		 * to 7
 		 */
-		.ppe_thres[0] = 0x61,
-		.ppe_thres[1] = 0x38,
-		.ppe_thres[2] = 0xe3,
-		.ppe_thres[3] = 0x8e,
+		.ppe_thres = {0x61, 0x1c, 0xc7, 0x71},
 	},
 };
 
-static const struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
+static struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
 	.types = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP),
 	.he_cap = {
 		.has_he = true,
@@ -597,10 +594,7 @@ static const struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
 		 * Set default PPE thresholds, with PPET16 set to 0, PPET8 set
 		 * to 7
 		 */
-		.ppe_thres[0] = 0x61,
-		.ppe_thres[1] = 0x38,
-		.ppe_thres[2] = 0xe3,
-		.ppe_thres[3] = 0x8e,
+		.ppe_thres = {0x61, 0x1c, 0xc7, 0x71},
 	},
 };
 
@@ -615,6 +609,35 @@ static void iwl_init_he_hw_capab(struct ieee80211_supported_band *sband)
 
 	ieee80211_sband_set_num_iftypes_data(sband, 1);
 }
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+static void iwl_init_he_override(struct iwl_trans *trans,
+				 struct ieee80211_supported_band *sband)
+{
+	struct ieee80211_sband_iftype_data *iftype_data;
+
+	if (sband->band == NL80211_BAND_2GHZ)
+		iftype_data = &iwl_he_capa_2ghz;
+	else if (sband->band == NL80211_BAND_5GHZ)
+		iftype_data = &iwl_he_capa_5ghz;
+	else
+		return;
+
+	/*
+	 * Check if any HE capabilities need to be set for debug purposes.
+	 * Currently only PPE thresholds available, but more options should
+	 * follow.
+	 */
+	if (trans->dbg_cfg.he_ppe_thres.len) {
+		u8 len = trans->dbg_cfg.he_ppe_thres.len;
+
+		if (len > sizeof(iftype_data->he_cap.ppe_thres))
+			len = sizeof(iftype_data->he_cap.ppe_thres);
+		memcpy(iftype_data->he_cap.ppe_thres,
+		       trans->dbg_cfg.he_ppe_thres.data, len);
+	}
+}
+#endif
 
 void iwl_init_sbands(struct device *dev, const struct iwl_cfg *cfg,
 		     struct iwl_nvm_data *data, const __le16 *nvm_ch_flags,
@@ -941,6 +964,10 @@ iwl_parse_nvm_data(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 		return NULL;
 	}
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	iwl_init_he_override(trans, &data->bands[NL80211_BAND_2GHZ]);
+	iwl_init_he_override(trans, &data->bands[NL80211_BAND_5GHZ]);
+#endif
 	iwl_init_sbands(dev, cfg, data, ch_section, tx_chains, rx_chains,
 			lar_fw_supported && lar_enabled);
 	data->calib_version = 255;
