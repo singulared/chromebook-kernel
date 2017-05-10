@@ -790,6 +790,56 @@ static int iwl_mvm_vendor_get_sar_profile_info(struct wiphy *wiphy,
 
 	return cfg80211_vendor_cmd_reply(skb);
 }
+
+#define IWL_MVM_SAR_GEO_NUM_BANDS	2
+
+static int iwl_mvm_vendor_get_geo_profile_info(struct wiphy *wiphy,
+					       struct wireless_dev *wdev,
+					       const void *data,
+					       int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	struct sk_buff *skb;
+	struct nlattr *nl_profile;
+	int i;
+	u32 tbl_idx;
+
+	tbl_idx = iwl_mvm_get_sar_geo_profile(mvm);
+	if (tbl_idx < 0)
+		return tbl_idx;
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, 100);
+	nl_profile = nla_nest_start(skb, IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE);
+	if (!nl_profile) {
+		kfree_skb(skb);
+		return -ENOBUFS;
+	}
+	if (!tbl_idx)
+		goto out;
+
+	for (i = 0; i < IWL_MVM_SAR_GEO_NUM_BANDS; i++) {
+		u8 *value;
+		struct nlattr *nl_chain = nla_nest_start(skb, i + 1);
+		int idx = i * IWL_GEO_PER_CHAIN_SIZE;
+
+		if (!nl_chain) {
+			kfree_skb(skb);
+			return -ENOBUFS;
+		}
+
+		value =  &mvm->geo_profiles[tbl_idx - 1].values[idx];
+
+		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_MAX_TXP, value[0]);
+		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET, value[1]);
+		nla_put_u8(skb, IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET, value[2]);
+		nla_nest_end(skb, nl_chain);
+	}
+out:
+	nla_nest_end(skb, nl_profile);
+
+	return cfg80211_vendor_cmd_reply(skb);
+}
 #endif
 
 static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
@@ -933,6 +983,15 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = iwl_mvm_vendor_get_sar_profile_info,
+	},
+	{
+		.info = {
+			.vendor_id = INTEL_OUI,
+			.subcmd = IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = iwl_mvm_vendor_get_geo_profile_info,
 	},
 #endif
 };
