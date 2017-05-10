@@ -3265,7 +3265,7 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 	 * The RF_ID is set to zero in blank OTP so read version
 	 * to extract the RF_ID.
 	 */
-	if (trans->cfg->rf_id && !trans->hw_rf_id) {
+	if (trans->cfg->rf_id && !CSR_HW_RFID_TYPE(trans->hw_rf_id)) {
 		unsigned long flags;
 
 		if (iwl_trans_grab_nic_access(trans, &flags)) {
