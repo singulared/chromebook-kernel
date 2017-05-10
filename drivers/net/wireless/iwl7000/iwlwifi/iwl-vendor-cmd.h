@@ -137,6 +137,10 @@
  * @IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE: An event that reports a list of
  *	neighbor APs received in a neighbor report response frame. The report is
  *	a nested list of &enum iwl_mvm_vendor_neighbor_report.
+ * @IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE: get sar geographic profile
+ *	information. This command provides the user with the following
+ *	information: Per band tx power offset for chain A and chain B as well as
+ *	maximum allowed tx power on this band.
  */
 
 enum iwl_mvm_vendor_cmd {
@@ -172,6 +176,7 @@ enum iwl_mvm_vendor_cmd {
 	IWL_MVM_VENDOR_CMD_GET_SAR_PROFILE_INFO,
 	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_REQUEST,
 	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE,
+	IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE,
 };
 
 /**
@@ -568,6 +573,19 @@ enum iwl_mvm_vendor_neighbor_report {
 };
 
 /**
+ * enum iwl_vendor_sar_per_chain_geo_table - per chain tx power table
+ *
+ * @IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET: allowed offset for chain a (u8).
+ * @IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET: allowed offset for chain b (u8).
+ * @IWL_VENDOR_SAR_GEO_MAX_TXP: maximum allowed tx power (u8).
+ */
+enum iwl_vendor_sar_per_chain_geo_table {
+	IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
+	IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
+	IWL_VENDOR_SAR_GEO_MAX_TXP,
+};
+
+/**
  * enum iwl_mvm_vendor_attr - attributes used in vendor commands
  * @__IWL_MVM_VENDOR_ATTR_INVALID: attribute 0 is invalid
  * @IWL_MVM_VENDOR_ATTR_LOW_LATENCY: low-latency flag attribute
@@ -695,6 +713,8 @@ enum iwl_mvm_vendor_neighbor_report {
  *	This is a u8.
  * @IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM: number of enabled SAR profile
  *	This is a u8.
+ * @IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE: geo profile info.
+ *	see &enum iwl_vendor_sar_per_chain_geo_table.
  *
  */
 enum iwl_mvm_vendor_attr {
@@ -763,6 +783,7 @@ enum iwl_mvm_vendor_attr {
 	IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI,
 	IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC,
 	IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT,
+	IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE,
 
 	NUM_IWL_MVM_VENDOR_ATTR,
 	MAX_IWL_MVM_VENDOR_ATTR = NUM_IWL_MVM_VENDOR_ATTR - 1,
