@@ -1847,6 +1847,40 @@ void iwl7000_cqm_rssi_notify(struct net_device *dev,
 #define IEEE80211_HE_PPE_THRES_MAX_LEN		25
 
 /**
+ * enum nl80211_he_gi - HE guard interval
+ * @NL80211_RATE_INFO_HE_GI_0_8: 0.8 usec
+ * @NL80211_RATE_INFO_HE_GI_1_6: 1.6 usec
+ * @NL80211_RATE_INFO_HE_GI_3_2: 3.2 usec
+ */
+enum nl80211_he_gi {
+	NL80211_RATE_INFO_HE_GI_0_8,
+	NL80211_RATE_INFO_HE_GI_1_6,
+	NL80211_RATE_INFO_HE_GI_3_2,
+};
+
+/**
+ * @enum nl80211_he_ru_alloc - HE RU allocation values
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_26: 26-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_52: 52-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_106: 106-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_242: 242-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_484: 484-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_996: 996-tone RU allocation
+ * @NL80211_RATE_INFO_HE_RU_ALLOC_2x996: 2x996-tone RU allocation
+ */
+enum nl80211_he_ru_alloc {
+	NL80211_RATE_INFO_HE_RU_ALLOC_26,
+	NL80211_RATE_INFO_HE_RU_ALLOC_52,
+	NL80211_RATE_INFO_HE_RU_ALLOC_106,
+	NL80211_RATE_INFO_HE_RU_ALLOC_242,
+	NL80211_RATE_INFO_HE_RU_ALLOC_484,
+	NL80211_RATE_INFO_HE_RU_ALLOC_996,
+	NL80211_RATE_INFO_HE_RU_ALLOC_2x996,
+};
+
+#define RATE_INFO_BW_HE_RU	(RATE_INFO_BW_160 + 1)
+
+/**
  * struct ieee80211_sta_he_cap - STA's HE capabilities
  *
  * This structure describes most essential parameters needed

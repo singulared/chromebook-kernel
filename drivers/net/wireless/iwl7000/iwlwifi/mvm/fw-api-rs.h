@@ -230,8 +230,8 @@ enum {
 #define RATE_LEGACY_RATE_MSK 0xff
 
 /* Bit 10 - OFDM HE */
-#define RATE_MCS_OFDM_HE_POS		10
-#define RATE_MCS_OFDM_HE_MSK		BIT(RATE_MCS_OFDM_HE_POS)
+#define RATE_MCS_HE_POS		10
+#define RATE_MCS_HE_MSK		BIT(RATE_MCS_HE_POS)
 
 /*
  * Bit 11-12: (0) 20MHz, (1) 40MHz, (2) 80MHz, (3) 160MHz
@@ -274,7 +274,7 @@ enum {
 
 /*
  * Bit 20-21: HE guard interval and LTF type.
- * (0) 1xLTF+1.6us, (1) 2xLTF+0.8us,
+ * (0) 1xLTF+0.8us, (1) 2xLTF+0.8us,
  * (2) 2xLTF+1.6us, (3) 4xLTF+3.2us
  */
 #define RATE_MCS_HE_GI_LTF_POS		20
@@ -282,6 +282,8 @@ enum {
 
 /* Bit 22-23: HE type. (0) SU, (1) SU_EXT, (2) MU, (3) trigger based */
 #define RATE_MCS_HE_TYPE_POS		22
+#define RATE_MCS_HE_TYPE_SU_EXT		(1 << RATE_MCS_HE_TYPE_POS)
+#define RATE_MCS_HE_TYPE_MU		(2 << RATE_MCS_HE_TYPE_POS)
 #define RATE_MCS_HE_TYPE_MSK		(3 << RATE_MCS_HE_TYPE_POS)
 
 /* Bit 24-25: (0) 20MHz (no dup), (1) 2x20MHz, (2) 4x20MHz, 3 8x20MHz */

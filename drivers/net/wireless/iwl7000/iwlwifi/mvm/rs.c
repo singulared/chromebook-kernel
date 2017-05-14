@@ -3600,6 +3600,11 @@ int rs_pretty_print_rate(char *buf, const u32 rate)
 		mcs = rate & RATE_HT_MCS_INDEX_MSK;
 		nss = ((rate & RATE_HT_MCS_NSS_MSK)
 		       >> RATE_HT_MCS_NSS_POS) + 1;
+	} else if (rate & RATE_MCS_HE_MSK) {
+		type = "HE";
+		mcs = rate & RATE_VHT_MCS_RATE_CODE_MSK;
+		nss = ((rate & RATE_VHT_MCS_NSS_MSK)
+		       >> RATE_VHT_MCS_NSS_POS) + 1;
 	} else {
 		type = "Unknown"; /* shouldn't happen */
 	}
