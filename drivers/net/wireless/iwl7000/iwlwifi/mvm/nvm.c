@@ -594,21 +594,20 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 		goto out;
 	}
 
+	iwl_set_hw_address_from_csr(trans, mvm->nvm_data);
+	/* TODO: if platform NVM has MAC address - override it here */
+
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	if (trans->dbg_cfg.hw_address.len) {
 		if (trans->dbg_cfg.hw_address.len == ETH_ALEN &&
-		    is_valid_ether_addr(trans->dbg_cfg.hw_address.data)) {
+		    is_valid_ether_addr(trans->dbg_cfg.hw_address.data))
 			memcpy(mvm->nvm_data->hw_addr,
 			       trans->dbg_cfg.hw_address.data, ETH_ALEN);
-			ret = 0;
-			goto out;
-		}
-		IWL_ERR(trans, "mac address from config file is invalid\n");
+		else
+			IWL_ERR(trans,
+				"mac address from config file is invalid\n");
 	}
 #endif
-
-	/* If no valid mac address was found - bail out */
-	iwl_set_hw_address_from_csr(trans, mvm->nvm_data);
 	if (!is_valid_ether_addr(mvm->nvm_data->hw_addr)) {
 		IWL_ERR(trans, "no valid mac address was found\n");
 		ret = -EINVAL;
