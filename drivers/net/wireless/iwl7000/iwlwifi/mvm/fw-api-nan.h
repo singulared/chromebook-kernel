@@ -253,7 +253,7 @@ struct iwl_nan_add_func_common {
  * @cipher_suite_id: Bitmap of the list of cipher suite IDs
  * @security_ctx_len: length of tx security context attributes
  * @sdea_ctrl: SDEA control field
- * @data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter,
+ * @data: dw aligned fields: service_info, srf, rxFilter, txFilter,
  *	security_ctx
  */
 struct iwl_nan_add_func_cmd_v2 {
