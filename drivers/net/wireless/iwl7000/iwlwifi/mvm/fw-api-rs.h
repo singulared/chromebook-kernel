@@ -370,6 +370,7 @@ enum {
 /**
  * struct iwl_lq_cmd - link quality command
  * @sta_id: station to update
+ * @reduced_tpc: reduced transmit power control value
  * @control: not used
  * @flags: combination of LQ_FLAG_*
  * @mimo_delim: the first SISO index in rs_table, which separates MIMO
@@ -387,6 +388,7 @@ enum {
  *	0: no limit
  *	1: no aggregation (one frame per aggregation)
  *	2 - 0x3f: maximal number of frames (up to 3f == 63)
+ * @reserved2: reserved
  * @rs_table: array of rates for each TX try, each is rate_n_flags,
  *	meaning it is a combination of RATE_MCS_* and IWL_RATE_*_PLCP
  * @ss_params: single stream features. declare whether STBC or BFER are allowed.
@@ -409,4 +411,5 @@ struct iwl_lq_cmd {
 	__le32 rs_table[LQ_MAX_RETRY_NUM];
 	__le32 ss_params;
 }; /* LINK_QUALITY_CMD_API_S_VER_1 */
+
 #endif /* __fw_api_rs_h__ */
