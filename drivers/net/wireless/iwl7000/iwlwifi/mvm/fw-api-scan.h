@@ -106,6 +106,7 @@ struct iwl_ssid_ie {
 #define IWL_FULL_SCAN_MULTIPLIER 5
 #define IWL_FAST_SCHED_SCAN_ITERATIONS 3
 #define IWL_MAX_SCHED_SCAN_PLANS 2
+#define IWL_SCAN_MAX_NUM_OF_CHANNELS 52
 
 enum scan_framework_client {
 	SCAN_CLIENT_SCHED_SCAN		= BIT(0),
