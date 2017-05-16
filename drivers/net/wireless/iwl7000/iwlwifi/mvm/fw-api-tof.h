@@ -300,7 +300,7 @@ struct iwl_tof_range_req_ap_entry {
 	s8 rssi;
 	u8 algo_type;
 	u8 notify_mcsi;
-	u16 reserved;
+	__le16 reserved;
 } __packed; /* LOCATION_RANGE_REQ_AP_ENTRY_CMD_API_S_VER_3 */
 
 /**
