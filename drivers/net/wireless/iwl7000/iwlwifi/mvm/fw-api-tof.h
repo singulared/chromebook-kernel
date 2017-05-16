@@ -93,6 +93,10 @@ struct iwl_tof_config_cmd {
 
 /**
  * enum iwl_tof_bandwidth - values for iwl_tof_range_req_ap_entry.bandwidth
+ * @IWL_TOF_BW_20_LEGACY: 20 MHz non-HT
+ * @IWL_TOF_BW_20_HT: 20 MHz HT
+ * @IWL_TOF_BW_40: 40 MHz
+ * @IWL_TOF_BW_80: 80 MHz
  */
 enum iwl_tof_bandwidth {
 	IWL_TOF_BW_20_LEGACY,
@@ -122,8 +126,25 @@ enum iwl_tof_mcsi_ntfy {
 };
 
 /**
- * enum iwl_tof_responder_cmd_valid_field -
- * valid fields in the responder cfg cmd
+ * enum iwl_tof_responder_cmd_valid_field - valid fields in the responder cfg
+ * @IWL_TOF_RESPONDER_CMD_VALID_CHAN_INFO: channel info is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_TOA_OFFSET: ToA offset is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_COMMON_CALIB: common calibration mode is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_SPECIFIC_CALIB: spefici calibration mode is
+ *	valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_BSSID: BSSID is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_TX_ANT: TX antenna is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_ALGO_TYPE: algorithm type is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_NON_ASAP_SUPPORT: non-ASAP support is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_STATISTICS_REPORT_SUPPORT: statistics report
+ *	support is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_MCSI_NOTIF_SUPPORT: MCSI notification support
+ *	is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_FAST_ALGO_SUPPORT: fast algorithm support
+ *	is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_RETRY_ON_ALGO_FAIL: retry on algorithm failure
+ *	is valid
+ * @IWL_TOF_RESPONDER_CMD_VALID_STA_ID: station ID is valid
  */
 enum iwl_tof_responder_cmd_valid_field {
 	IWL_TOF_RESPONDER_CMD_VALID_CHAN_INFO = BIT(0),
@@ -143,6 +164,16 @@ enum iwl_tof_responder_cmd_valid_field {
 
 /**
  * enum iwl_tof_responder_cfg_flags - responder configuration flags
+ * @IWL_TOF_RESPONDER_FLAGS_NON_ASAP_SUPPORT: non-ASAP support
+ * @IWL_TOF_RESPONDER_FLAGS_REPORT_STATISTICS: report statistics
+ * @IWL_TOF_RESPONDER_FLAGS_REPORT_MCSI: report MCSI
+ * @IWL_TOF_RESPONDER_FLAGS_ALGO_TYPE: algorithm type
+ * @IWL_TOF_RESPONDER_FLAGS_TOA_OFFSET_MODE: ToA offset mode
+ * @IWL_TOF_RESPONDER_FLAGS_COMMON_CALIB_MODE: common calibration mode
+ * @IWL_TOF_RESPONDER_FLAGS_SPECIFIC_CALIB_MODE: specific calibration mode
+ * @IWL_TOF_RESPONDER_FLAGS_FAST_ALGO_SUPPORT: fast algorithm support
+ * @IWL_TOF_RESPONDER_FLAGS_RETRY_ON_ALGO_FAIL: retry on algorithm fail
+ * @IWL_TOF_RESPONDER_FLAGS_FTM_TX_ANT: TX antenna mask
  */
 enum iwl_tof_responder_cfg_flags {
 	IWL_TOF_RESPONDER_FLAGS_NON_ASAP_SUPPORT = BIT(0),
@@ -177,12 +208,14 @@ enum iwl_tof_responder_cfg_flags {
  *		bit[2]
  *		 as above 40MHz
  * @sta_id: index of the AP STA when in AP mode
+ * @reserved1: reserved
  * @toa_offset: Artificial addition [pSec] for the ToA - to be used for debug
  *		purposes, simulating station movement by adding various values
  *		to this field
- * @common_calib - XVT: common calibration value
- * @specific_calib - XVT: specific calibration value
+ * @common_calib: XVT: common calibration value
+ * @specific_calib: XVT: specific calibration value
  * @bssid: Current AP BSSID
+ * @reserved2: reserved
  */
 struct iwl_tof_responder_config_cmd {
 	__le32 cmd_valid_fields;
@@ -218,6 +251,7 @@ struct iwl_tof_responder_dyn_config_cmd {
 /**
  * struct iwl_tof_range_request_ext_cmd - extended range req for WLS
  * @tsf_timer_offset_msec: the recommended time offset (mSec) from the AP's TSF
+ * @reserved: reserved
  * @min_delta_ftm: Minimal time between two consecutive measurements,
  *		   in units of 100us. 0 means no preference by station
  * @ftm_format_and_bw20M: FTM Channel Spacing/Format for 20MHz: recommended
@@ -238,6 +272,8 @@ struct iwl_tof_range_req_ext_cmd {
 
 /**
  * enum iwl_tof_location_query - values for query bitmap
+ *@IWL_TOF_LOC_LCI: query LCI
+ * @IWL_TOF_LOC_CIVIC: query civic
  */
 enum iwl_tof_location_query {
 	IWL_TOF_LOC_LCI = 0x01,
@@ -361,15 +397,19 @@ enum iwl_tof_initiator_flags {
  *		   the range report will be uploaded as a batch when ready or
  *		   when the session is done (successfully / partially).
  *		   one of iwl_tof_response_mode.
+ * @reserved0: reserved
  * @num_of_ap: Number of APs to measure (error if > IWL_MVM_TOF_MAX_APS)
  * @macaddr_random: '0' Use default source MAC address (i.e. p2_p),
  *	            '1' Use MAC Address randomization according to the below
+ * @range_req_bssid: ranging request BSSID
+ * @macaddr_template: MAC address template to use for non-randomized bits
  * @macaddr_mask: Bits set to 0 shall be copied from the MAC address template.
  *		  Bits set to 1 shall be randomized by the UMAC
  * @ftm_rx_chains: Rx chain to open to receive Responder's FTMs (XVT)
  * @ftm_tx_chains: Tx chain to send the ack to the Responder FTM (XVT)
  * @common_calib: The common calib value to inject to this measurement calc
  * @specific_calib: The specific calib value to inject to this measurement calc
+ * @ap: per-AP request data
  */
 struct iwl_tof_range_req_cmd {
 	__le32 initiator_flags;
@@ -452,6 +492,7 @@ enum iwl_tof_entry_status {
 
 /**
  * struct iwl_tof_range_rsp_ap_entry_ntfy - AP parameters (response)
+ * @bssid: BSSID of the AP
  * @measure_status: current APs measurement status, one of
  *	&enum iwl_tof_entry_status.
  * @measure_bw: Current AP Bandwidth: 0  20MHz, 1  40MHz, 2  80MHz
@@ -463,6 +504,7 @@ enum iwl_tof_entry_status {
  * @rssi: RSSI as uploaded in the Channel Estimation notification
  * @rssi_spread: The Difference between the maximum and the minimum RSSI values
  *	        measured for current AP in the current session
+ * @reserved: reserved
  * @refusal_period: refusal period in case of
  *	@IWL_TOF_ENTRY_RESPONDER_CANNOT_COLABORATE [sec]
  * @range: Measured range [cm]
@@ -520,6 +562,7 @@ enum iwl_tof_response_status {
  *	@enum iwl_tof_response_status.
  * @last_in_batch: reprot policy (when not all responses are uploaded at once)
  * @num_of_aps: Number of APs to measure (error if > IWL_MVM_TOF_MAX_APS)
+ * @ap: per-AP data
  */
 struct iwl_tof_range_rsp_ntfy {
 	u8 request_id;
@@ -534,6 +577,7 @@ struct iwl_tof_range_rsp_ntfy {
  * struct iwl_tof_mcsi_notif - used for debug
  * @token: token ID for the current session
  * @role: '0' - initiator, '1' - responder
+ * @reserved: reserved
  * @initiator_bssid: initiator machine
  * @responder_bssid: responder machine
  * @mcsi_buffer: debug data
@@ -548,24 +592,9 @@ struct iwl_tof_mcsi_notif {
 } __packed;
 
 /**
- * struct iwl_tof_neighbor_report_notif
- * @bssid: BSSID of the AP which sent the report
- * @request_token: same token as the corresponding request
- * @status:
- * @report_ie_len: the length of the response frame starting from the Element ID
- * @data: the IEs
- */
-struct iwl_tof_neighbor_report {
-	u8 bssid[ETH_ALEN];
-	u8 request_token;
-	u8 status;
-	__le16 report_ie_len;
-	u8 data[];
-} __packed;
-
-/**
  * struct iwl_tof_range_abort_cmd
  * @request_id: corresponds to a range request
+ * @reserved: reserved
  */
 struct iwl_tof_range_abort_cmd {
 	u8 request_id;
