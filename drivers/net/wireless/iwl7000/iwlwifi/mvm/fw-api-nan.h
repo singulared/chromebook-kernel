@@ -237,7 +237,7 @@ struct iwl_nan_add_func_common {
 	__le16 reserved1;
 	__le32 ttl;
 	struct iwl_fw_channel_info faw_ci;
-	u8 fawAttrtype;
+	u8 faw_attrtype;
 	u8 serv_info_len;
 	u8 srf_len;
 	u8 rx_filter_len;
