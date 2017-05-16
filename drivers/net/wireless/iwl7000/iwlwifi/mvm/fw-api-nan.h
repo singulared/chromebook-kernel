@@ -93,6 +93,7 @@ struct iwl_fw_chan_avail {
  * @tsf_id: tsf id to use in beacons
  * @sta_id: STA used for NAN operations. Currently it is AUX STA.
  * @node_addr: our address
+ * @reserved1: reserved
  * @master_pref: master preference value
  * @master_rand: random factor to override fw's decision (DEBUG)
  * @cluster_id: cluster id, if 0 the fw will choose one for us.
@@ -212,12 +213,13 @@ enum iwl_fw_nan_func_flags {
  * @instance_id: instance id of the DE function to remove
  * @type: enum %iwl_fw_nan_func_type
  * @service_id: service id
- * @flags: a combination of %iwl_fw_nan_func_flags
+ * @flags: a combination of &enum iwl_fw_nan_func_flags
  * @flw_up_id: follow up id
  * @flw_up_req_id: follow up requestor id
  * @flw_up_addr: follow up destination address
+ * @reserved1: reserved
  * @ttl: ttl in DW's or 0 for infinite
- * @faw_ci: struct %iwl_fw_channel_info for furher availability
+ * @faw_ci: &struct iwl_fw_channel_info for further availability
  * @faw_attrtype: further availability bitmap
  * @serv_info_len: length of service specific information
  * @srf_len: length of the srf
@@ -269,7 +271,8 @@ struct iwl_nan_add_func_cmd_v2 {
  * struct iwl_nan_add_func_cmd - NAN add/remove function command
  *
  * @cmn: nan add function common part
- * data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter
+ * @reserved: reserved
+ * @data: dw aligned fields -service_info, srf, rxFilter, txFilter
  */
 struct iwl_nan_add_func_cmd {
 	struct iwl_nan_add_func_common cmn;
@@ -290,6 +293,7 @@ enum iwl_nan_add_func_resp_status {
  *
  * @instance_id: assigned instance_id (if added)
  * @status: status of the command (&enum iwl_nan_add_func_resp_status)
+ * @reserved: reserved
  */
 struct iwl_nan_add_func_res {
 	u8 instance_id;
@@ -301,6 +305,7 @@ struct iwl_nan_add_func_res {
  * struct iwl_nan_disc_evt_notify - NaN discovery event
  *
  * @peer_mac_addr: peer address
+ * @reserved1: reserved
  * @type: Type of matching function
  * @instance_id: local matching instance id
  * @peer_instance: peer matching instance id
@@ -332,6 +337,7 @@ enum iwl_fw_nan_de_term_reason {
  * @type: type of terminated function (&enum iwl_fw_nan_func_type)
  * @instance_id: instance id
  * @reason: termination reason (&enum iwl_fw_nan_de_term_reason)
+ * @reserved1: reserved
  */
 struct iwl_nan_de_term {
 	u8 type;
