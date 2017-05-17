@@ -315,7 +315,7 @@ struct iwl_nan_disc_evt_notify {
 	u8 instance_id;
 	u8 peer_instance;
 	u8 service_info_len;
-	u32 attrs_len;
+	__le32 attrs_len;
 	u8 buf[0];
 } __packed; /* NAN_DISCO_EVENT_NTFY_API_S_VER_1 */
 
