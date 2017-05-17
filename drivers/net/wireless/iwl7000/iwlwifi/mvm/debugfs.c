@@ -416,8 +416,10 @@ static ssize_t iwl_dbgfs_sar_geo_profile_read(struct file *file,
 
 	mutex_lock(&mvm->mutex);
 	tbl_idx = iwl_mvm_get_sar_geo_profile(mvm);
-	if (tbl_idx < 0)
+	if (tbl_idx < 0) {
+		mutex_unlock(&mvm->mutex);
 		return tbl_idx;
+	}
 
 	if (!tbl_idx) {
 		pos = scnprintf(buf, bufsz,
