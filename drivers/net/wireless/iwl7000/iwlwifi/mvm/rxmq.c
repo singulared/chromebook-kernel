@@ -996,7 +996,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 		break;
 	}
 
-	if ((rate_n_flags & RATE_MCS_HE_TYPE_POS) == RATE_MCS_HE_TYPE_MU)
+	if ((rate_n_flags & RATE_MCS_HE_TYPE_MSK) == RATE_MCS_HE_TYPE_MU)
 		rx_status->bw = RATE_INFO_BW_HE_RU;
 
 	if (rate_n_flags & RATE_MCS_SGI_MSK)
