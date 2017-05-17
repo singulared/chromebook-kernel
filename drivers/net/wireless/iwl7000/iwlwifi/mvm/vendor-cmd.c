@@ -802,8 +802,7 @@ static int iwl_mvm_vendor_get_geo_profile_info(struct wiphy *wiphy,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct sk_buff *skb;
 	struct nlattr *nl_profile;
-	int i;
-	u32 tbl_idx;
+	int i, tbl_idx;
 
 	tbl_idx = iwl_mvm_get_sar_geo_profile(mvm);
 	if (tbl_idx < 0)
