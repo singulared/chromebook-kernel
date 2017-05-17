@@ -64,14 +64,43 @@
 /* TODO: read it from tlv */
 #define NAN_MAX_SUPPORTED_DE_ENTRIES 10
 
-/* NAN commands */
+/**
+ * enum iwl_nan_subcmd_ids - Neighbor Awareness Networking (NaN) commands IDS
+ */
 enum iwl_nan_subcmd_ids {
-	/* NaN commands */
+	/**
+	 * @NAN_CONFIG_CMD:
+	 * &struct iwl_nan_cfg_cmd_v2 or &struct iwl_nan_cfg_cmd
+	 */
 	NAN_CONFIG_CMD = 0,
+
+	/**
+	 * @NAN_DISCOVERY_FUNC_CMD:
+	 * &struct iwl_nan_add_func_cmd or &struct iwl_nan_add_func_cmd_v2
+	 */
 	NAN_DISCOVERY_FUNC_CMD = 0x1,
+
+	/**
+	 * @NAN_FAW_CONFIG_CMD:
+	 * &struct iwl_nan_faw_config
+	 */
 	NAN_FAW_CONFIG_CMD = 0x2,
+
+	/**
+	 * @NAN_DISCOVERY_EVENT_NOTIF:
+	 * &struct iwl_nan_disc_evt_notify
+	 */
 	NAN_DISCOVERY_EVENT_NOTIF = 0xFD,
+
+	/**
+	 * @NAN_DISCOVERY_TERMINATE_NOTIF:
+	 * &struct iwl_nan_de_term
+	 */
 	NAN_DISCOVERY_TERMINATE_NOTIF = 0xFE,
+
+	/**
+	 * @NAN_FAW_START_NOTIF:
+	 */
 	NAN_FAW_START_NOTIF = 0xFF,
 };
 
