@@ -575,11 +575,13 @@ enum iwl_mvm_vendor_neighbor_report {
 /**
  * enum iwl_vendor_sar_per_chain_geo_table - per chain tx power table
  *
+ * @IWL_VENDOR_SAR_GEO_INVALID: attribute number 0 is reserved.
  * @IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET: allowed offset for chain a (u8).
  * @IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET: allowed offset for chain b (u8).
  * @IWL_VENDOR_SAR_GEO_MAX_TXP: maximum allowed tx power (u8).
  */
 enum iwl_vendor_sar_per_chain_geo_table {
+	IWL_VENDOR_SAR_GEO_INVALID,
 	IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
 	IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
 	IWL_VENDOR_SAR_GEO_MAX_TXP,
