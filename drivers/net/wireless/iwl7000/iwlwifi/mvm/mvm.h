@@ -815,7 +815,10 @@ struct iwl_mvm {
 
 	struct iwl_notif_wait_data notif_wait;
 
-	struct mvm_statistics_rx rx_stats;
+	union {
+		struct mvm_statistics_rx_v3 rx_stats_v3;
+		struct mvm_statistics_rx rx_stats;
+	};
 
 	struct {
 		u64 rx_time;
@@ -1384,6 +1387,12 @@ static inline bool iwl_mvm_cdb_scan_api(struct iwl_mvm *mvm)
 	 * any sense...
 	 */
 	return mvm->trans->cfg->device_family >= IWL_DEVICE_FAMILY_A000;
+}
+
+static inline bool iwl_mvm_has_new_rx_stats_api(struct iwl_mvm *mvm)
+{
+	return fw_has_api(&mvm->fw->ucode_capa,
+			  IWL_UCODE_TLV_API_NEW_RX_STATS);
 }
 
 static inline struct agg_tx_status *
