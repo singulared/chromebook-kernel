@@ -1104,15 +1104,21 @@ static void iwl_pcie_rx_handle_rb(struct iwl_trans *trans,
 	struct iwl_txq *txq = trans_pcie->txq[trans_pcie->cmd_queue];
 	bool page_stolen = false;
 	int max_len = PAGE_SIZE << trans_pcie->rx_page_order;
-	u32 offset = 0;
+	u32 offset = 0, fh_marker_offset = 0;
+	u32 chunk_alignment = trans->cfg->use_tfh ? FH_RB_CHUNK_128_ALIGN :
+						    FH_RB_CHUNK_64_ALIGN;
+	u8 *rxb_start;
 
 	if (WARN_ON(!rxb))
 		return;
 
 	dma_unmap_page(trans->dev, rxb->page_dma, max_len, DMA_FROM_DEVICE);
 
+	rxb_start = page_address(rxb->page);
+
 	while (offset + sizeof(u32) + sizeof(struct iwl_cmd_header) < max_len) {
 		struct iwl_rx_packet *pkt;
+		__le32 *fh_marker;
 		u16 sequence;
 		bool reclaim;
 		int index, cmd_index, len;
@@ -1124,10 +1130,11 @@ static void iwl_pcie_rx_handle_rb(struct iwl_trans *trans,
 			.truesize = max_len,
 		};
 
-		pkt = rxb_addr(&rxcb);
-
-		if (pkt->len_n_flags == cpu_to_le32(FH_RSCSR_FRAME_INVALID))
+		fh_marker = (__le32 *)&rxb_start[fh_marker_offset];
+		if (*fh_marker == cpu_to_le32(FH_RSCSR_FRAME_INVALID))
 			break;
+
+		pkt = rxb_addr(&rxcb);
 
 		WARN_ON((le32_to_cpu(pkt->len_n_flags) & FH_RSCSR_RXQ_MASK) >>
 			FH_RSCSR_RXQ_POS != rxq->id);
@@ -1199,7 +1206,10 @@ static void iwl_pcie_rx_handle_rb(struct iwl_trans *trans,
 		}
 
 		page_stolen |= rxcb._page_stolen;
-		offset += ALIGN(len, FH_RSCSR_FRAME_ALIGN);
+
+		offset += len;
+		fh_marker_offset = ALIGN(offset, FH_RSCSR_FRAME_ALIGN);
+		offset = ALIGN(offset, chunk_alignment);
 	}
 
 	/* page was stolen from us -- free our reference */
