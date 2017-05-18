@@ -1968,9 +1968,7 @@ sta_get_last_rx_stats(struct sta_info *sta)
 static void sta_stats_decode_rate(struct ieee80211_local *local, u32 rate,
 				  struct rate_info *rinfo)
 {
-#if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
 	rinfo->bw = STA_STATS_GET(BW, rate);
-#endif
 
 	switch (STA_STATS_GET(TYPE, rate)) {
 	case STA_STATS_RATE_TYPE_VHT:
@@ -1996,19 +1994,15 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u32 rate,
 		rinfo->flags = 0;
 		sband = local->hw.wiphy->bands[band];
 		brate = sband->bitrates[rate_idx].bitrate;
-#if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
 		if (rinfo->bw == RATE_INFO_BW_5)
 			shift = 2;
 		else if (rinfo->bw == RATE_INFO_BW_10)
 			shift = 1;
 		else
-#endif
 			shift = 0;
 		rinfo->legacy = DIV_ROUND_UP(brate, 1 << shift);
 		break;
 		}
-/* TODO - adjust when HE support goes upstream */
-#if CFG80211_VERSION >= KERNEL_VERSION(99,0,0)
 	case STA_STATS_RATE_TYPE_HE:
 		rinfo->flags = RATE_INFO_FLAGS_HE_MCS;
 		rinfo->mcs = STA_STATS_GET(HE_MCS, rate);
@@ -2017,29 +2011,7 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u32 rate,
 		rinfo->he_ru_alloc = STA_STATS_GET(HE_RU, rate);
 		rinfo->he_dcm = STA_STATS_GET(HE_DCM, rate);
 		break;
-#endif
 	}
-
-#if CFG80211_VERSION < KERNEL_VERSION(3,20,0)
-	switch (STA_STATS_GET(BW, rate)) {
-	case RATE_INFO_BW_5:
-	case RATE_INFO_BW_10:
-		rinfo->flags = 0;
-		WARN_ON(1);
-		return;
-	case RATE_INFO_BW_20:
-		break;
-	case RATE_INFO_BW_40:
-		rinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
-		break;
-	case RATE_INFO_BW_80:
-		rinfo->flags |= RATE_INFO_FLAGS_80_MHZ_WIDTH;
-		break;
-	case RATE_INFO_BW_160:
-		rinfo->flags |= RATE_INFO_FLAGS_160_MHZ_WIDTH;
-		break;
-	}
-#endif
 }
 
 static int sta_set_rate_info_rx(struct sta_info *sta, struct rate_info *rinfo)

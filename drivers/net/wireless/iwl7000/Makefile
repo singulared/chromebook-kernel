@@ -1,3 +1,4 @@
+export CPTCFG_CFG80211=m
 export CPTCFG_MAC80211=m
 export CPTCFG_MAC80211_LEDS=y
 export CPTCFG_IWLWIFI=m
@@ -18,6 +19,7 @@ endif
 ifeq ($(CONFIG_IWL7000_DEBUGFS),y)
 export CPTCFG_IWLWIFI_DEBUGFS=y
 export CPTCFG_MAC80211_DEBUGFS=y
+export CPTCFG_CFG80211_DEBUGFS=y
 endif
 
 ifeq ($(CONFIG_IWL7000_TRACING),y)
@@ -41,5 +43,6 @@ subdir-ccflags-y += $(call cc-option,-Wno-date-time)
 subdir-ccflags-y += $(call cc-option,-Wno-enum-compare)
 subdir-ccflags-y += $(call cc-option,-Wno-enum-conversion)
 
+obj-$(CONFIG_IWL7000) += wireless/
 obj-$(CONFIG_IWL7000) += mac80211/
 obj-$(CONFIG_IWL7000) += iwlwifi/

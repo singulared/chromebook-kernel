@@ -601,13 +601,13 @@ static struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
 static void iwl_init_he_hw_capab(struct ieee80211_supported_band *sband)
 {
 	if (sband->band == NL80211_BAND_2GHZ)
-		ieee80211_sband_set_iftypes_data(sband, &iwl_he_capa_2ghz);
+		sband->iftype_data = &iwl_he_capa_2ghz;
 	else if (sband->band == NL80211_BAND_5GHZ)
-		ieee80211_sband_set_iftypes_data(sband, &iwl_he_capa_5ghz);
+		sband->iftype_data = &iwl_he_capa_5ghz;
 	else
 		return;
 
-	ieee80211_sband_set_num_iftypes_data(sband, 1);
+	sband->n_iftype_data = 1;
 }
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
