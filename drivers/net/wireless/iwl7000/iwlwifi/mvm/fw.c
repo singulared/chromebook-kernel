@@ -1373,6 +1373,7 @@ static int iwl_mvm_sar_get_wgds_table(struct iwl_mvm *mvm)
 	struct acpi_buffer wgds = {ACPI_ALLOCATE_BUFFER, NULL};
 	acpi_status status;
 	int i, j, ret;
+	int idx = 1;
 
 	root_handle = ACPI_HANDLE(mvm->dev);
 	if (!root_handle) {
@@ -1405,7 +1406,6 @@ static int iwl_mvm_sar_get_wgds_table(struct iwl_mvm *mvm)
 
 	for (i = 0; i < IWL_NUM_GEO_PROFILES; i++) {
 		for (j = 0; j < IWL_MVM_GEO_TABLE_SIZE; j++) {
-			int idx = 1;
 			union acpi_object *entry;
 
 			entry = &wifi_pkg->package.elements[idx++];
