@@ -712,9 +712,9 @@ cfg80211_del_sta_sinfo(struct net_device *dev, const u8 *mac_addr,
 }
 
 enum rate_info_bw {
+	RATE_INFO_BW_20 = 0,
 	RATE_INFO_BW_5,
 	RATE_INFO_BW_10,
-	RATE_INFO_BW_20,
 	RATE_INFO_BW_40,
 	RATE_INFO_BW_80,
 	RATE_INFO_BW_160,
