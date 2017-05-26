@@ -837,9 +837,12 @@ void iwl_mvm_handle_rx_statistics(struct iwl_mvm *mvm,
 
 		mdata->rx.airtime += airtime;
 		mdata->uapsd_nonagg_detect.rx_bytes += rx_bytes;
-		if (airtime)
+		if (airtime) {
+			/* re-init every time to store rate from FW */
+			ewma_rate_init(&mdata->uapsd_nonagg_detect.rate);
 			ewma_rate_add(&mdata->uapsd_nonagg_detect.rate,
 				      rx_bytes * 8 / airtime);
+		}
 	}
 	spin_unlock(&mvm->tcm.lock);
 #endif
