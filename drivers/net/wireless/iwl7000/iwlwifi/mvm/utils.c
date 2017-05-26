@@ -1576,7 +1576,8 @@ static void iwl_mvm_tcm_iterator(void *_data, u8 *mac,
 }
 
 static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
-					    unsigned long ts)
+					    unsigned long ts,
+					    bool handle_uapsd)
 {
 	unsigned int elapsed = jiffies_to_msecs(ts - mvm->tcm.ts);
 	unsigned int uapsd_elapsed =
@@ -1588,9 +1589,6 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 	bool low_latency = false;
 	enum iwl_mvm_vendor_load load, band_load;
 	bool handle_ll = time_after(ts, mvm->tcm.ll_ts + MVM_LL_PERIOD);
-	bool handle_uapsd =
-		time_after(ts, mvm->tcm.uapsd_nonagg_ts +
-			       msecs_to_jiffies(IWL_MVM_UAPSD_NONAGG_PERIOD));
 
 	if (handle_ll)
 		mvm->tcm.ll_ts = ts;
@@ -1686,6 +1684,9 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 {
 	unsigned long ts = jiffies;
+	bool handle_uapsd =
+		time_after(ts, mvm->tcm.uapsd_nonagg_ts +
+			       msecs_to_jiffies(IWL_MVM_UAPSD_NONAGG_PERIOD));
 
 	spin_lock(&mvm->tcm.lock);
 	if (mvm->tcm.paused || !time_after(ts, mvm->tcm.ts + MVM_TCM_PERIOD)) {
@@ -1694,9 +1695,10 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 	}
 	spin_unlock(&mvm->tcm.lock);
 
-	if (iwl_mvm_has_new_rx_api(mvm)) {
+	if (handle_uapsd && iwl_mvm_has_new_rx_api(mvm)) {
 		mutex_lock(&mvm->mutex);
-		iwl_mvm_request_statistics(mvm, true);
+		if (iwl_mvm_request_statistics(mvm, true))
+			handle_uapsd = false;
 		mutex_unlock(&mvm->mutex);
 	}
 
@@ -1704,7 +1706,8 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 	/* re-check if somebody else won the recheck race */
 	if (!mvm->tcm.paused && time_after(ts, mvm->tcm.ts + MVM_TCM_PERIOD)) {
 		/* calculate statistics */
-		unsigned long work_delay = iwl_mvm_calc_tcm_stats(mvm, ts);
+		unsigned long work_delay = iwl_mvm_calc_tcm_stats(mvm, ts,
+								  handle_uapsd);
 
 		/* the memset needs to be visible before the timestamp */
 		smp_mb();
