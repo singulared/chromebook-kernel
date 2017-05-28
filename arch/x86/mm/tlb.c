@@ -14,13 +14,11 @@
 #include <asm/uv/uv.h>
 #include <linux/debugfs.h>
 
-#ifdef CONFIG_SMP
-
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate)
 			= { &init_mm, 0, };
 
 /*
- *	Smarter SMP flushing macros.
+ *	TLB flushing, formerly SMP-only
  *		c/o Linus Torvalds.
  *
  *	These mean you can really definitely utterly forget about
@@ -55,8 +53,6 @@ void leave_mm(int cpu)
 }
 EXPORT_SYMBOL_GPL(leave_mm);
 
-#endif /* CONFIG_SMP */
-
 void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	       struct task_struct *tsk)
 {
@@ -73,10 +69,8 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 	unsigned cpu = smp_processor_id();
 
 	if (likely(prev != next)) {
-#ifdef CONFIG_SMP
 		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);
 		this_cpu_write(cpu_tlbstate.active_mm, next);
-#endif
 		cpumask_set_cpu(cpu, mm_cpumask(next));
 
 		/* Re-load page tables */
@@ -90,9 +84,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 */
 		if (unlikely(prev->context.ldt != next->context.ldt))
 			load_LDT_nolock(&next->context);
-	}
-#ifdef CONFIG_SMP
-	else {
+	} else {
 		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);
 		BUG_ON(this_cpu_read(cpu_tlbstate.active_mm) != next);
 
@@ -105,10 +97,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			load_LDT_nolock(&next->context);
 		}
 	}
-#endif
 }
-
-#ifdef CONFIG_SMP
 
 /*
  * The flush IPI assumes that a thread switch happens in this order:
@@ -370,4 +359,3 @@ static int __cpuinit create_tlb_flushall_shift(void)
 }
 late_initcall(create_tlb_flushall_shift);
 #endif
-#endif /* CONFIG_SMP */
