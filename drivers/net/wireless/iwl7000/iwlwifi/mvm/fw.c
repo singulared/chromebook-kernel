@@ -958,9 +958,11 @@ int iwl_run_init_mvm_ucode(struct iwl_mvm *mvm, bool read_nvm)
 	iwl_dnt_start(mvm->trans);
 #endif
 
-	ret = iwl_send_bt_init_conf(mvm);
-	if (ret)
-		goto error;
+	if (mvm->cfg->device_family < IWL_DEVICE_FAMILY_8000) {
+		ret = iwl_mvm_send_bt_init_conf(mvm);
+		if (ret)
+			goto error;
+	}
 
 	/* Read the NVM only at driver load time, no need to do this twice */
 	if (read_nvm) {
@@ -1675,10 +1677,6 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	if (ret)
 		goto error;
 
-	ret = iwl_send_bt_init_conf(mvm);
-	if (ret)
-		goto error;
-
 	/* Send phy db control command and then phy db calibration*/
 	if (!iwl_mvm_has_new_tx_api(mvm)) {
 		ret = iwl_send_phy_db_data(mvm->phy_db);
@@ -1689,6 +1687,10 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 		if (ret)
 			goto error;
 	}
+
+	ret = iwl_mvm_send_bt_init_conf(mvm);
+	if (ret)
+		goto error;
 
 	if (fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_SOC_LATENCY_SUPPORT)) {
