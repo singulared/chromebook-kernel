@@ -450,7 +450,7 @@ static struct ieee80211_sband_iftype_data iwl_he_capa_2ghz = {
 			.mac_cap_info[3] =
 				IEEE80211_HE_MAC_CAP4_GRP_ADDR_MULTI_STA_BA_DL_MU |
 				IEEE80211_HE_MAC_CAP4_OMI_A_CONTROL |
-				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_1,
+				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_2,
 			.mac_cap_info[4] = 0,
 			.phy_cap_info[0] =
 				IEEE80211_HE_PHY_CAP1_DUAL_BAND |
@@ -534,7 +534,7 @@ static struct ieee80211_sband_iftype_data iwl_he_capa_5ghz = {
 			.mac_cap_info[3] =
 				IEEE80211_HE_MAC_CAP4_GRP_ADDR_MULTI_STA_BA_DL_MU |
 				IEEE80211_HE_MAC_CAP4_OMI_A_CONTROL |
-				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_1,
+				IEEE80211_HE_MAC_CAP4_MAX_A_AMPDU_LEN_EXP_VHT_2,
 			.mac_cap_info[4] = 0,
 			.phy_cap_info[0] =
 				IEEE80211_HE_PHY_CAP1_DUAL_BAND |
