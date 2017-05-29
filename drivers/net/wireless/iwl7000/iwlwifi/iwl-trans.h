@@ -123,9 +123,6 @@
 #define FH_RSCSR_RXQ_POS		16
 #define FH_RSCSR_RXQ_MASK		0x3F0000
 
-#define FH_RB_CHUNK_64_ALIGN		0x40
-#define FH_RB_CHUNK_128_ALIGN		0x80
-
 struct iwl_rx_packet {
 	/*
 	 * The first 4 bytes of the RX frame header contain both the RX frame
