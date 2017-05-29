@@ -1557,8 +1557,16 @@ static void iwl_mvm_check_uapsd_agg_expected_tpt(struct iwl_mvm *mvm,
 		if (tpt < 22 * rate / 100)
 			return;
 	} else {
-		tpt = 100 * 8 * bytes;
-		do_div(tpt, elapsed); /* 100Kbps */
+		/*
+		 * the rate here is actually the threshold, in 100Kbps units,
+		 * so do the needed conversion from bytes to 100Kbps:
+		 * 100kb = bits / (100 * 1000),
+		 * 100kbps = 100kb / (msecs / 1000) ==
+		 *           (bits / (100 * 1000)) / (msecs / 1000) ==
+		 *           bits / (100 * msecs)
+		 */
+		tpt = (8 * bytes);
+		do_div(tpt, elapsed * 100);
 		if (tpt < rate)
 			return;
 	}
