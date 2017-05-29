@@ -3273,9 +3273,17 @@ int ieee80211_cs_headroom(struct ieee80211_local *local,
 			headroom = cs->hdr_len;
 	}
 
+#if CFG80211_VERSION >= KERNEL_VERSION(4,13,0)
+	for (i = 0; i < crypto->n_ciphers_group; i++) {
+		cs = ieee80211_cs_get(local, crypto->ciphers_group[i], iftype);
+		if (cs && headroom < cs->hdr_len)
+			headroom = cs->hdr_len;
+	}
+#else
 	cs = ieee80211_cs_get(local, crypto->cipher_group, iftype);
 	if (cs && headroom < cs->hdr_len)
 		headroom = cs->hdr_len;
+#endif
 
 	return headroom;
 }
