@@ -63,25 +63,13 @@
  *
  *****************************************************************************/
 
-#include <linux/init.h>
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/dma-mapping.h>
 #include <linux/pci_ids.h>
-#include <net/net_namespace.h>
-#include <linux/netdevice.h>
-#include <net/cfg80211.h>
-#include <net/mac80211.h>
-#include <net/netlink.h>
 
-#include "iwl-drv.h"
 #include "mvm.h"
 #include "iwl-prph.h"
 #include "iwl-csr.h"
 #include "iwl-fh.h"
 #include "iwl-io.h"
-#include "iwl-trans.h"
-#include "iwl-op-mode.h"
 #include "iwl-tm-infc.h"
 #include "iwl-tm-gnl.h"
 
