@@ -969,6 +969,19 @@ struct ieee80211_tx_info {
 };
 
 /**
+ * struct ieee80211_tx_status - extended tx staus info for rate control
+ *
+ * @sta: Station that the packet was transmitted for
+ * @info: Basic tx status information
+ * @skb: Packet skb (can be NULL if not provided by the driver)
+ */
+struct ieee80211_tx_status {
+	struct ieee80211_sta *sta;
+	struct ieee80211_tx_info *info;
+	struct sk_buff *skb;
+};
+
+/**
  * struct ieee80211_scan_ies - descriptors for different blocks of IEs
  *
  * This structure is used to point to different blocks of IEs in HW scan
@@ -4255,6 +4268,22 @@ void ieee80211_get_tx_rates(struct ieee80211_vif *vif,
 			    int max_rates);
 
 /**
+ * ieee80211_sta_set_expected_throughput - set the expected tpt for a station
+ *
+ * Call this function to notify mac80211 about a change in expected throughput
+ * to a station. A driver for a device that does rate control in firmware can
+ * call this function when the expected throughput estimate towards a station
+ * changes. The information is used to tune the CoDel AQM applied to traffic
+ * going towards that station (which can otherwise be too aggressive and cause
+ * slow stations to starve).
+ *
+ * @pubsta: the station to set throughput for.
+ * @thr: the current expected throughput in kbps.
+ */
+void ieee80211_sta_set_expected_throughput(struct ieee80211_sta *pubsta,
+					   u32 thr);
+
+/**
  * ieee80211_tx_status - transmit status callback
  *
  * Call this function for all transmitted frames after they have been
@@ -4274,6 +4303,23 @@ void ieee80211_tx_status(struct ieee80211_hw *hw,
 			 struct sk_buff *skb);
 
 /**
+ * ieee80211_tx_status_ext - extended transmit status callback
+ *
+ * This function can be used as a replacement for ieee80211_tx_status
+ * in drivers that may want to provide extra information that does not
+ * fit into &struct ieee80211_tx_info.
+ *
+ * Calls to this function for a single hardware must be synchronized
+ * against each other. Calls to this function, ieee80211_tx_status_ni()
+ * and ieee80211_tx_status_irqsafe() may not be mixed for a single hardware.
+ *
+ * @hw: the hardware the frame was transmitted by
+ * @status: tx status information
+ */
+void ieee80211_tx_status_ext(struct ieee80211_hw *hw,
+			     struct ieee80211_tx_status *status);
+
+/**
  * ieee80211_tx_status_noskb - transmit status callback without skb
  *
  * This function can be used as a replacement for ieee80211_tx_status
@@ -4289,9 +4335,17 @@ void ieee80211_tx_status(struct ieee80211_hw *hw,
  *	(NULL for multicast packets)
  * @info: tx status information
  */
-void ieee80211_tx_status_noskb(struct ieee80211_hw *hw,
-			       struct ieee80211_sta *sta,
-			       struct ieee80211_tx_info *info);
+static inline void ieee80211_tx_status_noskb(struct ieee80211_hw *hw,
+					     struct ieee80211_sta *sta,
+					     struct ieee80211_tx_info *info)
+{
+	struct ieee80211_tx_status status = {
+		.sta = sta,
+		.info = info,
+	};
+
+	ieee80211_tx_status_ext(hw, &status);
+}
 
 /**
  * ieee80211_tx_status_ni - transmit status callback (in process context)
@@ -5544,10 +5598,9 @@ struct rate_control_ops {
 	void (*free_sta)(void *priv, struct ieee80211_sta *sta,
 			 void *priv_sta);
 
-	void (*tx_status_noskb)(void *priv,
-				struct ieee80211_supported_band *sband,
-				struct ieee80211_sta *sta, void *priv_sta,
-				struct ieee80211_tx_info *info);
+	void (*tx_status_ext)(void *priv,
+			      struct ieee80211_supported_band *sband,
+			      void *priv_sta, struct ieee80211_tx_status *st);
 	void (*tx_status)(void *priv, struct ieee80211_supported_band *sband,
 			  struct ieee80211_sta *sta, void *priv_sta,
 			  struct sk_buff *skb);

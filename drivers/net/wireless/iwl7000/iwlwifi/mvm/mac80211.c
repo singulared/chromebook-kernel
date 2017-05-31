@@ -701,7 +701,11 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 	else
 		hw->wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 	hw->wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+#else
+	hw->wiphy->max_sched_scan_reqs = 1;
+#endif
 	hw->wiphy->max_sched_scan_ssids = PROBE_OPTION_MAX;
 	hw->wiphy->max_match_sets = IWL_SCAN_MAX_PROFILES;
 	/* we create the 802.11 header and zero length SSID IE. */
@@ -4032,7 +4036,8 @@ static int __iwl_mvm_mac_testmode_cmd(struct iwl_mvm *mvm,
 	int err;
 	u32 noa_duration;
 
-	err = nla_parse(tb, IWL_MVM_TM_ATTR_MAX, data, len, iwl_mvm_tm_policy);
+	err = nla_parse(tb, IWL_MVM_TM_ATTR_MAX, data, len, iwl_mvm_tm_policy,
+			NULL);
 	if (err)
 		return err;
 

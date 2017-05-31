@@ -20,6 +20,7 @@
 #include <linux/timer.h>
 #include <linux/rtnetlink.h>
 
+#include <net/codel.h>
 #include <net/mac80211.h>
 #include "ieee80211_i.h"
 #include "driver-ops.h"
@@ -395,10 +396,15 @@ struct sta_info *sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 	sta->sta.smps_mode = IEEE80211_SMPS_OFF;
 	if (sdata->vif.type == NL80211_IFTYPE_AP ||
 	    sdata->vif.type == NL80211_IFTYPE_AP_VLAN) {
-		struct ieee80211_supported_band *sband =
-			hw->wiphy->bands[ieee80211_get_sdata_band(sdata)];
-		u8 smps = (sband->ht_cap.cap & IEEE80211_HT_CAP_SM_PS) >>
-				IEEE80211_HT_CAP_SM_PS_SHIFT;
+		struct ieee80211_supported_band *sband;
+		u8 smps;
+
+		sband = ieee80211_get_sband(sdata);
+		if (!sband)
+			goto free_txq;
+
+		smps = (sband->ht_cap.cap & IEEE80211_HT_CAP_SM_PS) >>
+			IEEE80211_HT_CAP_SM_PS_SHIFT;
 		/*
 		 * Assume that hostapd advertises our caps in the beacon and
 		 * this is the known_smps_mode for a station that just assciated
@@ -419,6 +425,11 @@ struct sta_info *sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 	}
 
 	sta->sta.max_rc_amsdu_len = IEEE80211_MAX_MPDU_LEN_HT_BA;
+
+	sta->cparams.ce_threshold = CODEL_DISABLED_THRESHOLD;
+	sta->cparams.target = MS2TIME(20);
+	sta->cparams.interval = MS2TIME(100);
+	sta->cparams.ecn = true;
 
 	sta_dbg(sdata, "Allocated STA %pM\n", sta->sta.addr);
 
@@ -2340,4 +2351,28 @@ unsigned long ieee80211_sta_last_active(struct sta_info *sta)
 	if (time_after(stats->last_rx, sta->status_stats.last_ack))
 		return stats->last_rx;
 	return sta->status_stats.last_ack;
+}
+
+static void sta_update_codel_params(struct sta_info *sta, u32 thr)
+{
+	if (!sta->sdata->local->ops->wake_tx_queue)
+		return;
+
+	if (thr && thr < STA_SLOW_THRESHOLD * sta->local->num_sta) {
+		sta->cparams.target = MS2TIME(50);
+		sta->cparams.interval = MS2TIME(300);
+		sta->cparams.ecn = false;
+	} else {
+		sta->cparams.target = MS2TIME(20);
+		sta->cparams.interval = MS2TIME(100);
+		sta->cparams.ecn = true;
+	}
+}
+
+void ieee80211_sta_set_expected_throughput(struct ieee80211_sta *pubsta,
+					   u32 thr)
+{
+	struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
+
+	sta_update_codel_params(sta, thr);
 }

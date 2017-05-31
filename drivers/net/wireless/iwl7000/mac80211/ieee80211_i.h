@@ -645,6 +645,8 @@ struct ieee80211_if_mesh {
 	unsigned long wrkq_flags;
 	unsigned long mbss_changed;
 
+	bool userspace_handles_dfs;
+
 	u8 mesh_id[IEEE80211_MAX_MESH_ID_LEN];
 	size_t mesh_id_len;
 	/* Active Path Selection Protocol Identifier */
@@ -1001,21 +1003,6 @@ static inline void
 sdata_assert_lock(struct ieee80211_sub_if_data *sdata)
 {
 	lockdep_assert_held(&sdata->wdev.mtx);
-}
-
-static inline enum nl80211_band
-ieee80211_get_sdata_band(struct ieee80211_sub_if_data *sdata)
-{
-	enum nl80211_band band = NL80211_BAND_2GHZ;
-	struct ieee80211_chanctx_conf *chanctx_conf;
-
-	rcu_read_lock();
-	chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
-	if (!WARN_ON(!chanctx_conf))
-		band = chanctx_conf->def.chan->band;
-	rcu_read_unlock();
-
-	return band;
 }
 
 static inline int
@@ -1451,6 +1438,27 @@ IEEE80211_WDEV_TO_SUB_IF(struct wireless_dev *wdev)
 	return container_of(wdev, struct ieee80211_sub_if_data, wdev);
 }
 
+static inline struct ieee80211_supported_band *
+ieee80211_get_sband(struct ieee80211_sub_if_data *sdata)
+{
+	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_chanctx_conf *chanctx_conf;
+	enum nl80211_band band;
+
+	rcu_read_lock();
+	chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
+
+	if (WARN_ON(!chanctx_conf)) {
+		rcu_read_unlock();
+		return NULL;
+	}
+
+	band = chanctx_conf->def.chan->band;
+	rcu_read_unlock();
+
+	return local->hw.wiphy->bands[band];
+}
+
 /* this struct represents 802.11n's RA/TID combination */
 struct ieee80211_ra_tid {
 	u8 ra[ETH_ALEN];
@@ -1464,6 +1472,7 @@ struct ieee80211_csa_ie {
 	u8 count;
 	u8 ttl;
 	u16 pre_value;
+	u16 reason_code;
 };
 
 /* Parsed Information Elements */
@@ -2098,6 +2107,8 @@ u8 *ieee80211_ie_build_ht_cap(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
 u8 *ieee80211_ie_build_ht_oper(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
 			       const struct cfg80211_chan_def *chandef,
 			       u16 prot_mode, bool rifs_mode);
+void ieee80211_ie_build_wide_bw_cs(u8 *pos,
+				   const struct cfg80211_chan_def *chandef);
 u8 *ieee80211_ie_build_vht_cap(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,
 			       u32 cap);
 u8 *ieee80211_ie_build_vht_oper(u8 *pos, struct ieee80211_sta_vht_cap *vht_cap,

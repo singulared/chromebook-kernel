@@ -115,7 +115,7 @@ static int iwl_mvm_parse_vendor_data(struct nlattr **tb,
 		return -EINVAL;
 
 	return nla_parse(tb, MAX_IWL_MVM_VENDOR_ATTR, data, data_len,
-			 iwl_mvm_vendor_attr_policy);
+			 iwl_mvm_vendor_attr_policy, NULL);
 }
 
 static int iwl_mvm_set_low_latency(struct wiphy *wiphy,

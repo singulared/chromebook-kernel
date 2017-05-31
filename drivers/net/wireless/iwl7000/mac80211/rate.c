@@ -62,6 +62,28 @@ void rate_control_rate_init(struct sta_info *sta)
 	set_sta_flag(sta, WLAN_STA_RATE_CONTROL);
 }
 
+void rate_control_tx_status(struct ieee80211_local *local,
+			    struct ieee80211_supported_band *sband,
+			    struct ieee80211_tx_status *st)
+{
+	struct rate_control_ref *ref = local->rate_ctrl;
+	struct sta_info *sta = container_of(st->sta, struct sta_info, sta);
+	void *priv_sta = sta->rate_ctrl_priv;
+
+	if (!ref || !test_sta_flag(sta, WLAN_STA_RATE_CONTROL))
+		return;
+
+	spin_lock_bh(&sta->rate_ctrl_lock);
+	if (ref->ops->tx_status_ext)
+		ref->ops->tx_status_ext(ref->priv, sband, priv_sta, st);
+	else if (st->skb)
+		ref->ops->tx_status(ref->priv, sband, st->sta, priv_sta, st->skb);
+	else
+		WARN_ON_ONCE(1);
+
+	spin_unlock_bh(&sta->rate_ctrl_lock);
+}
+
 void rate_control_rate_update(struct ieee80211_local *local,
 				    struct ieee80211_supported_band *sband,
 				    struct sta_info *sta, u32 changed)
@@ -904,7 +926,9 @@ int rate_control_set_rates(struct ieee80211_hw *hw,
 	struct ieee80211_sta_rates *old;
 	struct ieee80211_supported_band *sband;
 
-	sband = hw->wiphy->bands[ieee80211_get_sdata_band(sta->sdata)];
+	sband = ieee80211_get_sband(sta->sdata);
+	if (!sband)
+		return -EINVAL;
 	rate_control_apply_mask_ratetbl(sta, sband, rates);
 	/*
 	 * mac80211 guarantees that this function will not be called
@@ -918,6 +942,8 @@ int rate_control_set_rates(struct ieee80211_hw *hw,
 		kfree_rcu(old, rcu_head);
 
 	drv_sta_rate_tbl_update(hw_to_local(hw), sta->sdata, pubsta);
+
+	ieee80211_sta_set_expected_throughput(pubsta, sta_get_expected_throughput(sta));
 
 	return 0;
 }
@@ -967,4 +993,3 @@ void rate_control_deinitialize(struct ieee80211_local *local)
 	local->rate_ctrl = NULL;
 	rate_control_free(local, ref);
 }
-

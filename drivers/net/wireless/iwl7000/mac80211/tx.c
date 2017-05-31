@@ -1340,8 +1340,15 @@ static struct sk_buff *fq_tin_dequeue_func(struct fq *fq,
 
 	local = container_of(fq, struct ieee80211_local, fq);
 	txqi = container_of(tin, struct txq_info, tin);
-	cparams = &local->cparams;
 	cstats = &txqi->cstats;
+
+	if (txqi->txq.sta) {
+		struct sta_info *sta = container_of(txqi->txq.sta,
+						    struct sta_info, sta);
+		cparams = &sta->cparams;
+	} else {
+		cparams = &local->cparams;
+	}
 
 	if (flow == &txqi->def_flow)
 		cvars = &txqi->def_cvars;
@@ -4303,7 +4310,10 @@ struct sk_buff *ieee80211_beacon_get_tim(struct ieee80211_hw *hw,
 		return bcn;
 
 	shift = ieee80211_vif_get_shift(vif);
-	sband = hw->wiphy->bands[ieee80211_get_sdata_band(vif_to_sdata(vif))];
+	sband = ieee80211_get_sband(vif_to_sdata(vif));
+	if (!sband)
+		return bcn;
+
 	ieee80211_tx_monitor(hw_to_local(hw), copy, sband, 1, shift, false);
 
 	return bcn;

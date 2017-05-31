@@ -202,7 +202,8 @@ ieee80211_chandef_rate_flags(struct cfg80211_chan_def *chandef)
 #define IEEE80211_RADIOTAP_MCS_STBC_SHIFT	5
 
 /* on older versions this is safe - no RTNL use there */
-#define cfg80211_sched_scan_stopped_rtnl cfg80211_sched_scan_stopped
+#define cfg80211_sched_scan_stopped_rtnl(wiphy, reqid)	\
+	cfg80211_sched_scan_stopped(wiphy, 0)
 #endif /* CFG80211_VERSION < KERNEL_VERSION(3,11,0) */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,12,0)
@@ -1442,6 +1443,19 @@ struct wiphy_ftm_initiator_capa {
 				 *flags | 1 << __NL80211_MNTR_FLAG_INVALID)
 
 #define vif_params_vht_mumimo_follow_addr(p) NULL
+
+#define cfg80211_sched_scan_results(wiphy, reqid)	\
+	cfg80211_sched_scan_results(wiphy)
+#define cfg80211_sched_scan_stopped(wiphy, reqid)	\
+	cfg80211_sched_scan_stopped(wiphy)
+
+#ifndef cfg80211_sched_scan_stopped_rtnl
+#define cfg80211_sched_scan_stopped_rtnl(wiphy, reqid)	\
+	cfg80211_sched_scan_stopped_rtnl(wiphy)
+#endif
+
+#define nla_parse(tb, maxtype, head, len, policy, extack)	\
+	nla_parse(tb, maxtype, head, len, policy)
 
 #else  /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
