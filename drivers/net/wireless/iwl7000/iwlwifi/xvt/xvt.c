@@ -205,6 +205,8 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	xvt->trans = trans;
 	xvt->dev = trans->dev;
 
+	iwl_fw_runtime_init(&xvt->fwrt, trans, fw);
+
 	mutex_init(&xvt->mutex);
 	mutex_init(&xvt->notif_mtx);
 

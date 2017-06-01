@@ -74,6 +74,7 @@
 #include "fw-api.h"
 #include "fw/notif-wait.h"
 #include "constants.h"
+#include "fw/runtime.h"
 
 enum iwl_xvt_state {
 	IWL_XVT_STATE_UNINITIALIZED = 0,
@@ -304,10 +305,7 @@ struct iwl_xvt {
 	u8 *dma_cpu_addr;
 	dma_addr_t dma_addr;
 
-	/* Paging section */
-	struct iwl_fw_paging fw_paging_db[NUM_OF_FW_PAGING_BLOCKS];
-	u16 num_of_paging_blk;
-	u16 num_of_pages_in_last_blk;
+	struct iwl_fw_runtime fwrt;
 
 	bool is_nvm_mac_override;
 	u8 nvm_hw_addr[ETH_ALEN];
@@ -350,8 +348,6 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 
 /* FW */
 int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type,  bool cont_run);
-
-void iwl_xvt_free_fw_paging(struct iwl_xvt *xvt);
 
 /* NVM */
 int iwl_xvt_nvm_init(struct iwl_xvt *xvt);

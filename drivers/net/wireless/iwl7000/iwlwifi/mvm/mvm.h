@@ -88,6 +88,7 @@
 #include "constants.h"
 #include "iwl-vendor-cmd.h"
 #include "tof.h"
+#include "fw/runtime.h"
 
 #ifdef CPTCFG_IWLMVM_TCM
 #include <linux/average.h>
@@ -887,10 +888,7 @@ struct iwl_mvm {
 	/* NVM sections */
 	struct iwl_nvm_section nvm_sections[NVM_MAX_NUM_SECTIONS];
 
-	/* Paging section */
-	struct iwl_fw_paging fw_paging_db[NUM_OF_FW_PAGING_BLOCKS];
-	u16 num_of_paging_blk;
-	u16 num_of_pages_in_last_blk;
+	struct iwl_fw_runtime fwrt;
 
 	/* EEPROM MAC addresses */
 	struct mac_address addresses[IWL_MVM_MAX_ADDRESSES];
@@ -1687,9 +1685,6 @@ void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 void iwl_mvm_rx_umac_scan_iter_complete_notif(struct iwl_mvm *mvm,
 					      struct iwl_rx_cmd_buffer *rxb);
 
-/* Paging */
-void iwl_free_fw_paging(struct iwl_mvm *mvm);
-
 /* MVM debugfs */
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 int iwl_mvm_dbgfs_register(struct iwl_mvm *mvm, struct dentry *dbgfs_dir);
@@ -1935,8 +1930,7 @@ void iwl_mvm_enable_ac_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 
 static inline void iwl_mvm_stop_device(struct iwl_mvm *mvm)
 {
-	if (!iwl_mvm_has_new_tx_api(mvm))
-		iwl_free_fw_paging(mvm);
+	iwl_free_fw_paging(&mvm->fwrt);
 	clear_bit(IWL_MVM_STATUS_FIRMWARE_RUNNING, &mvm->status);
 	mvm->fw_dbg_conf = FW_DBG_INVALID;
 	iwl_trans_stop_device(mvm->trans);

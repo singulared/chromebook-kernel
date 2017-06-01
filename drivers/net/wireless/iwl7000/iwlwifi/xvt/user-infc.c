@@ -785,7 +785,7 @@ static void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
 	}
 	iwl_trans_stop_device(xvt->trans);
 
-	iwl_xvt_free_fw_paging(xvt);
+	iwl_free_fw_paging(&xvt->fwrt);
 
 	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
 }
