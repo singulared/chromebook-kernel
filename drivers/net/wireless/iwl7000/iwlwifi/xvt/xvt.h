@@ -72,7 +72,7 @@
 #include "fw/img.h"
 #include "iwl-config.h"
 #include "fw-api.h"
-#include "iwl-notif-wait.h"
+#include "fw/notif-wait.h"
 #include "constants.h"
 
 enum iwl_xvt_state {
