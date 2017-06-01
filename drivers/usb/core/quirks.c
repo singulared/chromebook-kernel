@@ -238,6 +238,13 @@ void usb_detect_interface_quirks(struct usb_device *udev)
 	if (quirks == 0)
 		return;
 
+	/* crbug.com/706603: Do not reset-resume Logitech C920 and C930. */
+	if (le16_to_cpu(udev->descriptor.idVendor) == 0x046d) {
+		u16 pid = le16_to_cpu(udev->descriptor.idProduct);
+		if (pid == 0x082d || pid == 0x0843)
+			quirks &= ~USB_QUIRK_RESET_RESUME;
+	}
+
 	dev_dbg(&udev->dev, "USB interface quirks for this device: %x\n",
 		quirks);
 	udev->quirks |= quirks;
