@@ -74,12 +74,12 @@
 
 #include "iwl-debug.h"
 #include "iwl-config.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-op-mode.h"
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #include "iwl-dbg-cfg.h"
 #endif
-#include "iwl-fw-api.h"
+#include "fw/api.h"
 
 /**
  * DOC: Transport layer - what is it ?

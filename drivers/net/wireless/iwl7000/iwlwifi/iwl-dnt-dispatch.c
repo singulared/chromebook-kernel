@@ -75,7 +75,7 @@
 #include "iwl-tm-infc.h"
 #include "iwl-tm-gnl.h"
 #include "iwl-io.h"
-#include "iwl-fw-error-dump.h"
+#include "fw/error-dump.h"
 
 
 struct dnt_collect_db *iwl_dnt_dispatch_allocate_collect_db(struct iwl_dnt *dnt)
