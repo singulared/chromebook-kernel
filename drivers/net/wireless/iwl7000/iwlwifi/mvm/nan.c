@@ -59,7 +59,7 @@
 #include <linux/etherdevice.h>
 
 #include "mvm.h"
-#include "fw-api-nan.h"
+#include "fw/api/nan.h"
 
 #define NAN_WARMUP_TIMEOUT_USEC  (120000000ULL)
 #define NAN_CHANNEL_24           (6)

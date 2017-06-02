@@ -108,12 +108,12 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 		       pkt->hdr.group_id, pkt->hdr.cmd);
 
 	switch (WIDE_ID(pkt->hdr.group_id, pkt->hdr.cmd)) {
-	case GET_SET_PHY_DB_CMD_WITH_GRP:
+	case WIDE_ID(LONG_GROUP, GET_SET_PHY_DB_CMD):
 		iwl_xvt_user_send_notif(xvt, IWL_TM_USER_CMD_NOTIF_PHY_DB,
 					data, size, GFP_ATOMIC);
 		break;
 	case DTS_MEASUREMENT_NOTIFICATION:
-	case DTS_MEASUREMENT_NOTIF_WITH_GRP:
+	case WIDE_ID(PHY_OPS_GROUP, DTS_MEASUREMENT_NOTIF_WIDE):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_DTS_MEASUREMENTS,
 					data, size, GFP_ATOMIC);
@@ -148,12 +148,12 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 	case DEBUG_LOG_MSG:
 		iwl_dnt_dispatch_collect_ucode_message(xvt->trans, rxb);
 		break;
-	case LOCATION_MCSI_NOTIFICATION_WITH_GRP:
+	case WIDE_ID(TOF_GROUP, TOF_MCSI_DEBUG_NOTIF):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_LOC_MCSI,
 					data, size, GFP_ATOMIC);
 		break;
-	case LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP:
+	case WIDE_ID(TOF_GROUP, TOF_RANGE_RESPONSE_NOTIF):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_LOC_RANGE,
 					data, size, GFP_ATOMIC);
@@ -910,7 +910,7 @@ iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
 	tx_cmd->offload_assist |= (ieee80211_hdrlen(hdr->frame_control) % 4) ?
 				   cpu_to_le16(TX_CMD_OFFLD_PAD) : 0;
 
-	tx_cmd->flags |= cpu_to_le32(TX_CMD_FLAGS_CMD_RATE);
+	tx_cmd->flags |= cpu_to_le32(IWL_TX_FLAGS_CMD_RATE);
 
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
 
@@ -948,7 +948,7 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 
 	tx_cmd->sta_id = sta_id;
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
-	tx_cmd->tx_flags = TX_CMD_FLG_ACK_MSK;
+	tx_cmd->tx_flags = cpu_to_le32(TX_CMD_FLG_ACK);
 
 	/* the skb should already hold the data */
 	memcpy(tx_cmd->hdr, skb->data, sizeof(struct ieee80211_hdr));

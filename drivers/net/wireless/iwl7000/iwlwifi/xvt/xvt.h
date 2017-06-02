@@ -382,16 +382,16 @@ static inline bool iwl_xvt_is_cdb_supported(struct iwl_xvt *xvt)
 }
 
 static inline struct agg_tx_status*
-iwl_xvt_get_agg_status(struct iwl_xvt *xvt, struct iwl_xvt_tx_resp *tx_resp)
+iwl_xvt_get_agg_status(struct iwl_xvt *xvt, struct iwl_mvm_tx_resp *tx_resp)
 {
 	if (iwl_xvt_is_unified_fw(xvt))
-		return &tx_resp->v6.status;
+		return &((struct iwl_mvm_tx_resp *)tx_resp)->status;
 	else
-		return &tx_resp->v3.status;
+		return ((struct iwl_mvm_tx_resp_v3 *)tx_resp)->status;
 }
 
 static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt *xvt,
-				      struct iwl_xvt_tx_resp *tx_resp)
+				      struct iwl_mvm_tx_resp *tx_resp)
 {
 	return le32_to_cpup((__le32 *)iwl_xvt_get_agg_status(xvt, tx_resp) +
 			    tx_resp->frame_count) & 0xfff;

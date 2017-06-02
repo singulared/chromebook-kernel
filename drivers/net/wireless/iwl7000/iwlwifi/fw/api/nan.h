@@ -56,10 +56,8 @@
  *
  *****************************************************************************/
 
-#ifndef __fw_api_nan_h__
-#define __fw_api_nan_h__
-
-#include "fw-api.h"
+#ifndef __iwl_fw_api_nan_h__
+#define __iwl_fw_api_nan_h__
 
 /* TODO: read it from tlv */
 #define NAN_MAX_SUPPORTED_DE_ENTRIES 10
@@ -406,4 +404,4 @@ struct iwl_nan_faw_config {
 	u8 op_class;
 } __packed; /* _NAN_DISCO_FAW_CMD_API_S_VER_1 */
 
-#endif
+#endif /* __iwl_fw_api_nan_h__ */

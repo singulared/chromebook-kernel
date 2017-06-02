@@ -71,7 +71,7 @@
 #include "iwl-prph.h"
 #include "iwl-csr.h"
 #include "mvm.h"
-#include "fw-api-rs.h"
+#include "fw/api/rs.h"
 #ifdef CPTCFG_IWLMVM_TCM
 #include "iwl-vendor-cmd.h"
 #endif

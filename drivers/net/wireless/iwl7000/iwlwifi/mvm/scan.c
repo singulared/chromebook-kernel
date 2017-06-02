@@ -69,7 +69,7 @@
 #include <net/mac80211.h>
 
 #include "mvm.h"
-#include "fw-api-scan.h"
+#include "fw/api/scan.h"
 #include "iwl-io.h"
 #ifdef CPTCFG_IWLMVM_TCM
 #include "iwl-vendor-cmd.h"

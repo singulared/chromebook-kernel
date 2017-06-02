@@ -66,7 +66,7 @@
 #include "mvm.h"
 #include "iwl-io.h"
 #include "iwl-prph.h"
-#include "fw-api-tof.h"
+#include "fw/api/tof.h"
 
 #ifdef CPTCFG_IWLMVM_TOF_TSF_WA
 static u32 tof_tsf_addr_hash(const void *key, u32 length, u32 seed)

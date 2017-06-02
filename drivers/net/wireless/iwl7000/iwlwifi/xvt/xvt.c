@@ -106,7 +106,7 @@ module_exit(iwl_xvt_exit);
  * A warning will be triggered on violation.
  */
 static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
-	HCMD_NAME(XVT_ALIVE),
+	HCMD_NAME(MVM_ALIVE),
 	HCMD_NAME(INIT_COMPLETE_NOTIF),
 	HCMD_NAME(TX_CMD),
 	HCMD_NAME(SCD_QUEUE_CFG),
@@ -136,7 +136,7 @@ static const struct iwl_hcmd_names iwl_xvt_long_cmd_names[] = {
  * Access is done through binary search.
  */
 static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
-	HCMD_NAME(DTS_MEASUREMENT_NOTIF),
+	HCMD_NAME(DTS_MEASUREMENT_NOTIF_WIDE),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -158,8 +158,8 @@ static const struct iwl_hcmd_names iwl_xvt_regulatory_and_nvm_names[] = {
  */
 static const struct iwl_hcmd_names iwl_xvt_tof_names[] = {
 	HCMD_NAME(LOCATION_GROUP_NOTIFICATION),
-	HCMD_NAME(LOCATION_MCSI_NOTIFICATION),
-	HCMD_NAME(LOCATION_RANGE_RESPONSE_NOTIFICATION),
+	HCMD_NAME(TOF_MCSI_DEBUG_NOTIF),
+	HCMD_NAME(TOF_RANGE_RESPONSE_NOTIF),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -175,7 +175,7 @@ static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
 	[SYSTEM_GROUP] = HCMD_ARR(iwl_xvt_system_names),
 	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
 	[DATA_PATH_GROUP] = HCMD_ARR(iwl_xvt_data_path_names),
-	[CMD_GROUP_LOCATION] = HCMD_ARR(iwl_xvt_tof_names),
+	[TOF_GROUP] = HCMD_ARR(iwl_xvt_tof_names),
 	[REGULATORY_AND_NVM_GROUP] = HCMD_ARR(iwl_xvt_regulatory_and_nvm_names),
 };
 
@@ -220,12 +220,12 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	trans_cfg.command_groups = iwl_xvt_cmd_groups;
 	trans_cfg.command_groups_size = ARRAY_SIZE(iwl_xvt_cmd_groups);
 	if (iwl_xvt_is_dqa_supported(xvt)) {
-		trans_cfg.cmd_queue = IWL_XVT_DQA_CMD_QUEUE;
+		trans_cfg.cmd_queue = IWL_MVM_DQA_CMD_QUEUE;
 		IWL_DEBUG_INFO(xvt, "dqa supported\n");
 	} else {
-		trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
+		trans_cfg.cmd_queue = IWL_MVM_CMD_QUEUE;
 	}
-	trans_cfg.cmd_fifo = IWL_XVT_CMD_FIFO;
+	trans_cfg.cmd_fifo = IWL_MVM_TX_FIFO_CMD;
 	trans_cfg.bc_table_dword = true;
 	trans_cfg.scd_set_active = true;
 	trans->wide_cmd_header = true;
@@ -309,7 +309,8 @@ static void iwl_xvt_stop(struct iwl_op_mode *op_mode)
 static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 				      struct iwl_rx_packet *pkt)
 {
-	struct iwl_xvt_tx_resp *tx_resp = (void *)pkt->data;
+	/* struct iwl_mvm_tx_resp_v3 is almost the same */
+	struct iwl_mvm_tx_resp *tx_resp = (void *)pkt->data;
 	int txq_id = SEQ_TO_QUEUE(le16_to_cpu(pkt->hdr.sequence));
 	u16 ssn = iwl_xvt_get_scd_ssn(xvt, tx_resp);
 	struct sk_buff_head skbs;
@@ -320,7 +321,7 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 	__skb_queue_head_init(&skbs);
 
 	if (iwl_xvt_is_unified_fw(xvt)) {
-		txq_id = le16_to_cpu(tx_resp->v6.tx_queue);
+		txq_id = le16_to_cpu(tx_resp->tx_queue);
 
 		if (txq_id == xvt->tx_meta_data[XVT_LMAC_0_ID].queue) {
 			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];

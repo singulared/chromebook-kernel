@@ -80,7 +80,7 @@ struct iwl_xvt_alive_data {
 static int iwl_xvt_send_dqa_cmd(struct iwl_xvt *xvt)
 {
 	struct iwl_dqa_enable_cmd dqa_cmd = {
-		.cmd_queue = cpu_to_le32(IWL_XVT_DQA_CMD_QUEUE),
+		.cmd_queue = cpu_to_le32(IWL_MVM_DQA_CMD_QUEUE),
 	};
 	u32 cmd_id = iwl_cmd_id(DQA_ENABLE_CMD, DATA_PATH_GROUP, 0);
 	int ret;
@@ -102,8 +102,8 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 		container_of(notif_wait, struct iwl_xvt, notif_wait);
 	struct iwl_xvt_alive_data *alive_data = data;
 	struct xvt_alive_resp_ver2 *palive2;
-	struct xvt_alive_resp_ver3 *palive3;
-	struct xvt_alive_resp_ver4 *palive4;
+	struct mvm_alive_resp_v3 *palive3;
+	struct mvm_alive_resp *palive4;
 	struct iwl_lmac_alive *lmac1, *lmac2;
 	struct iwl_umac_alive *umac;
 	u32 rx_packet_payload_size = iwl_rx_packet_payload_len(pkt);
@@ -196,7 +196,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	const struct fw_img *fw;
 	int ret;
 	enum iwl_ucode_type old_type = xvt->fwrt.cur_fw_img;
-	static const u16 alive_cmd[] = { XVT_ALIVE };
+	static const u16 alive_cmd[] = { MVM_ALIVE };
 	struct iwl_scd_txq_cfg_cmd cmd = {
 				.scd_queue = IWL_XVT_DEFAULT_TX_QUEUE,
 				.action = SCD_CFG_ENABLE_QUEUE,

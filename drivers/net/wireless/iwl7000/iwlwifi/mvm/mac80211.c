@@ -93,7 +93,7 @@
 #include "iwl-dnt-dispatch.h"
 #endif
 #include "tof.h"
-#include "fw-api-nan.h"
+#include "fw/api/nan.h"
 
 static const struct ieee80211_iface_limit iwl_mvm_limits[] = {
 	{
