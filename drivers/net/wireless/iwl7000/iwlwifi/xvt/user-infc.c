@@ -370,7 +370,7 @@ static int iwl_xvt_get_dev_info(struct iwl_xvt *xvt,
 		read_sv_drop = dev_info_req->read_sv ? true : false;
 	}
 
-	if (xvt->cur_ucode == IWL_UCODE_REGULAR && read_sv_drop) {
+	if (xvt->fwrt.cur_fw_img == IWL_UCODE_REGULAR && read_sv_drop) {
 		sv_step = iwl_xvt_read_sv_drop(xvt);
 		if (sv_step < 0)
 			return sv_step;

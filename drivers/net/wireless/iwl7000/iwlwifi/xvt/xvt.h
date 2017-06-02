@@ -287,7 +287,6 @@ struct iwl_xvt {
 
 	struct iwl_notif_wait_data notif_wait;
 
-	enum iwl_ucode_type cur_ucode;
 	u32 error_event_table[2];
 	bool fw_running;
 	struct iwl_sf_region sf_space;

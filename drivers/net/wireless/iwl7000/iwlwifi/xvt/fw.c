@@ -195,7 +195,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	struct iwl_xvt_alive_data alive_data;
 	const struct fw_img *fw;
 	int ret;
-	enum iwl_ucode_type old_type = xvt->cur_ucode;
+	enum iwl_ucode_type old_type = xvt->fwrt.cur_fw_img;
 	static const u16 alive_cmd[] = { XVT_ALIVE };
 	struct iwl_scd_txq_cfg_cmd cmd = {
 				.scd_queue = IWL_XVT_DEFAULT_TX_QUEUE,
@@ -208,7 +208,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 				.tid = IWL_MAX_TID_COUNT,
 			};
 
-	xvt->cur_ucode = ucode_type;
+	iwl_fw_set_current_image(&xvt->fwrt, ucode_type);
 	fw = iwl_get_ucode_image(xvt->fw, ucode_type);
 
 	if (!fw)
@@ -222,7 +222,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 				     ucode_type == IWL_UCODE_INIT,
 				     xvt->sw_stack_cfg.fw_dbg_flags);
 	if (ret) {
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		iwl_remove_notification(&xvt->notif_wait, &alive_wait);
 		return ret;
 	}
@@ -234,13 +234,13 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	ret = iwl_wait_notification(&xvt->notif_wait, &alive_wait,
 				    XVT_UCODE_ALIVE_TIMEOUT);
 	if (ret) {
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		return ret;
 	}
 
 	if (!alive_data.valid) {
 		IWL_ERR(xvt, "Loaded ucode is not valid!\n");
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		return -EIO;
 	}
 
@@ -318,7 +318,7 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 	if (xvt->state != IWL_XVT_STATE_UNINITIALIZED) {
 		if (xvt->fw_running) {
 			xvt->fw_running = false;
-			if (xvt->cur_ucode == IWL_UCODE_REGULAR)
+			if (xvt->fwrt.cur_fw_img == IWL_UCODE_REGULAR)
 				iwl_xvt_txq_disable(xvt);
 		}
 		_iwl_trans_stop_device(xvt->trans, !cont_run);

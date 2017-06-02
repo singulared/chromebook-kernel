@@ -467,8 +467,8 @@ static void iwl_mvm_dump_umac_error_log(struct iwl_mvm *mvm)
 		IWL_ERR(mvm,
 			"Not valid error log pointer 0x%08X for %s uCode\n",
 			base,
-			(mvm->cur_ucode == IWL_UCODE_INIT)
-					? "Init" : "RT");
+			(mvm->fwrt.cur_fw_img == IWL_UCODE_INIT)
+			? "Init" : "RT");
 		return;
 	}
 
@@ -503,7 +503,7 @@ static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 	struct iwl_error_event_table table;
 	u32 val;
 
-	if (mvm->cur_ucode == IWL_UCODE_INIT) {
+	if (mvm->fwrt.cur_fw_img == IWL_UCODE_INIT) {
 		if (!base)
 			base = mvm->fw->init_errlog_ptr;
 	} else {
@@ -515,8 +515,8 @@ static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 		IWL_ERR(mvm,
 			"Not valid error log pointer 0x%08X for %s uCode\n",
 			base,
-			(mvm->cur_ucode == IWL_UCODE_INIT)
-					? "Init" : "RT");
+			(mvm->fwrt.cur_fw_img == IWL_UCODE_INIT)
+			? "Init" : "RT");
 		return;
 	}
 
