@@ -98,6 +98,7 @@ enum iwl_nan_subcmd_ids {
 
 	/**
 	 * @NAN_FAW_START_NOTIF:
+	 * Further availability window started.
 	 */
 	NAN_FAW_START_NOTIF = 0xFF,
 };
