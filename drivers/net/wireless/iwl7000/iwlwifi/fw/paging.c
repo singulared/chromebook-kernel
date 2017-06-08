@@ -374,6 +374,9 @@ int iwl_init_paging(struct iwl_fw_runtime *fwrt, enum iwl_ucode_type type)
 	const struct fw_img *fw = &fwrt->fw->img[type];
 	int ret;
 
+	if (fwrt->trans->cfg->gen2)
+		return 0;
+
 	/*
 	 * Configure and operate fw paging mechanism.
 	 * The driver configures the paging flow only once.
