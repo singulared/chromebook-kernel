@@ -8,7 +8,7 @@ iwlwifi-objs		+= iwl-phy-db.o iwl-nvm-parse.o
 iwlwifi-objs		+= iwl-trans.o
 
 iwlwifi-objs		+= fw/notif-wait.o
-iwlwifi-objs		+= fw/paging.o
+iwlwifi-$(CPTCFG_IWLMVM)	+= fw/paging.o
 
 # Bus
 iwlwifi-$(CPTCFG_IWLWIFI_PCIE)	+= pcie/drv.o pcie/rx.o pcie/tx.o pcie/trans.o
@@ -19,7 +19,7 @@ iwlwifi-$(CPTCFG_IWLWIFI_PCIE)-$(CPTCFG_IWLMVM) += cfg/9000.o cfg/a000.o
 
 iwlwifi-$(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) += iwl-dbg-cfg.o
 
-iwlwifi-objs += $(iwlwifi-y-y) $(iwlwifi-y-m)
+iwlwifi-objs += $(iwlwifi-m) $(iwlwifi-y-y) $(iwlwifi-y-m)
 
 iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TRACING) += iwl-devtrace.o
 iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TESTMODE) += iwl-tm-gnl.o iwl-dnt-cfg.o iwl-dnt-dispatch.o iwl-dnt-dev-if.o
