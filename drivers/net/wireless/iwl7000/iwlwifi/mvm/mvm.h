@@ -1370,6 +1370,16 @@ static inline bool iwl_mvm_is_cdb_supported(struct iwl_mvm *mvm)
 			   IWL_UCODE_TLV_CAPA_CDB_SUPPORT);
 }
 
+static inline bool iwl_mvm_cdb_scan_api(struct iwl_mvm *mvm)
+{
+	/*
+	 * TODO: should this be the same as iwl_mvm_is_cdb_supported()?
+	 * but then there's a little bit of code in scan that won't make
+	 * any sense...
+	 */
+	return mvm->trans->cfg->device_family >= IWL_DEVICE_FAMILY_A000;
+}
+
 static inline struct agg_tx_status *
 iwl_mvm_get_agg_status(struct iwl_mvm *mvm, void *tx_resp)
 {

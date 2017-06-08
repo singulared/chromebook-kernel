@@ -150,7 +150,8 @@ static inline void *iwl_mvm_get_scan_req_umac_data(struct iwl_mvm *mvm)
 
 	if (iwl_mvm_is_adaptive_dwell_supported(mvm))
 		return (void *)&cmd->v7.data;
-	if (iwl_mvm_has_new_tx_api(mvm))
+
+	if (iwl_mvm_cdb_scan_api(mvm))
 		return (void *)&cmd->v6.data;
 
 	return (void *)&cmd->v1.data;
@@ -1122,7 +1123,7 @@ int iwl_mvm_config_scan(struct iwl_mvm *mvm)
 			return 0;
 	}
 
-	if (iwl_mvm_has_new_tx_api(mvm))
+	if (iwl_mvm_cdb_scan_api(mvm))
 		cmd_size = sizeof(struct iwl_scan_config);
 	else
 		cmd_size = sizeof(struct iwl_scan_config_v1);
@@ -1155,7 +1156,7 @@ int iwl_mvm_config_scan(struct iwl_mvm *mvm)
 	 * Check for fragmented scan on LMAC2 - high band.
 	 * LMAC1 - low band is checked above.
 	 */
-	if (iwl_mvm_has_new_tx_api(mvm)) {
+	if (iwl_mvm_cdb_scan_api(mvm)) {
 		if (iwl_mvm_is_cdb_supported(mvm))
 			flags |= (hb_type == IWL_SCAN_TYPE_FRAGMENTED) ?
 				 SCAN_CONFIG_FLAG_SET_LMAC2_FRAGMENTED :
@@ -1249,7 +1250,7 @@ static void iwl_mvm_scan_umac_dwell(struct iwl_mvm *mvm,
 					cpu_to_le32(hb_timing->suspend_time);
 		}
 
-		if (iwl_mvm_has_new_tx_api(mvm)) {
+		if (iwl_mvm_cdb_scan_api(mvm)) {
 			cmd->v6.scan_priority =
 				cpu_to_le32(IWL_SCAN_PRIORITY_EXT_6);
 			cmd->v6.max_out_time[SCAN_LB_LMAC_IDX] =
@@ -1391,7 +1392,7 @@ static int iwl_mvm_scan_umac(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	if (iwl_mvm_is_adaptive_dwell_supported(mvm)) {
 		cmd->v7.channel_flags = channel_flags;
 		cmd->v7.n_channels = params->n_channels;
-	} else if (iwl_mvm_has_new_tx_api(mvm)) {
+	} else if (iwl_mvm_cdb_scan_api(mvm)) {
 		cmd->v6.channel_flags = channel_flags;
 		cmd->v6.n_channels = params->n_channels;
 	} else {
@@ -1875,7 +1876,7 @@ int iwl_mvm_scan_size(struct iwl_mvm *mvm)
 
 	if (iwl_mvm_is_adaptive_dwell_supported(mvm))
 		base_size = IWL_SCAN_REQ_UMAC_SIZE_V7;
-	else if (iwl_mvm_has_new_tx_api(mvm))
+	else if (iwl_mvm_cdb_scan_api(mvm))
 		base_size = IWL_SCAN_REQ_UMAC_SIZE_V6;
 
 	if (fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_UMAC_SCAN))
