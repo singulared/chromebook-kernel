@@ -808,6 +808,9 @@ static int iwl_mvm_vendor_get_geo_profile_info(struct wiphy *wiphy,
 		return tbl_idx;
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, 100);
+	if (!skb)
+		return -ENOMEM;
+
 	nl_profile = nla_nest_start(skb, IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE);
 	if (!nl_profile) {
 		kfree_skb(skb);
