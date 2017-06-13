@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 int memory_chunk_size = 10000000;
 int wait_time_us = 10000;
@@ -100,6 +101,7 @@ void free_memory(void)
 void *poll_thread(void *dummy)
 {
 	struct pollfd pfd;
+	int ret;
 	int fd = open("/dev/chromeos-low-mem", O_RDONLY);
 	if (fd == -1) {
 		perror("/dev/chromeos-low-mem");
@@ -111,10 +113,12 @@ void *poll_thread(void *dummy)
 
 	if (autotesting) {
 		/* Check that there is no memory shortage yet. */
-		poll(&pfd, 1, 0);
+		ret = poll(&pfd, 1, 0);
+		if (ret < 0) {
+			perror("poll");
+			exit(1);
+		}
 		if (pfd.revents != 0) {
-			exit(0);
-		} else {
 			fprintf(stderr, "expected no events but "
 				"poll() returned 0x%x\n", pfd.revents);
 			exit(1);
@@ -122,7 +126,11 @@ void *poll_thread(void *dummy)
 	}
 
 	while (1) {
-		poll(&pfd, 1, -1);
+		ret = poll(&pfd, 1, -1);
+		if (ret < 0) {
+			perror("poll");
+			exit(1);
+		}
 		if (autotesting) {
 			/* Free several chunks and check that the notification
 			 * is gone. */
@@ -131,7 +139,11 @@ void *poll_thread(void *dummy)
 			free_memory();
 			free_memory();
 			free_memory();
-			poll(&pfd, 1, 0);
+			ret = poll(&pfd, 1, 0);
+			if (ret < 0) {
+				perror("poll");
+				exit(1);
+			}
 			if (pfd.revents == 0) {
 				exit(0);
 			} else {
