@@ -8,7 +8,9 @@ iwlwifi-objs		+= iwl-phy-db.o iwl-nvm-parse.o
 iwlwifi-objs		+= iwl-trans.o
 
 iwlwifi-objs		+= fw/notif-wait.o
-iwlwifi-$(CPTCFG_IWLMVM)	+= fw/paging.o fw/smem.o fw/init.o fw/dbg.o
+
+IWLFWRT = fw/paging.o fw/smem.o fw/init.o fw/dbg.o fw/common_rx.o
+iwlwifi-$(CPTCFG_IWLMVM)	+= $(IWLFWRT)
 iwlwifi-$(CPTCFG_IWLXVT)	+= fw/init.o
 
 # Bus
