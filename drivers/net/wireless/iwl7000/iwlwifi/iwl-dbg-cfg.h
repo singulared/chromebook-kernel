@@ -193,6 +193,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u16, MVM_RS_TPC_SR_NO_INCREASE)
 	IWL_DBG_CFG(u8, MVM_RS_TPC_TX_POWER_STEP)
 	IWL_DBG_CFG(u8, MVM_ENABLE_DQA)
+	IWL_DBG_CFG(bool, MVM_ENABLE_EBS)
 	IWL_MVM_MOD_PARAM(int, power_scheme)
 	IWL_MVM_MOD_PARAM(bool, init_dbg)
 	IWL_MVM_MOD_PARAM(bool, tfd_q_hang_detect)
