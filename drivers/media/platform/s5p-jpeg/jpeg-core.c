@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
@@ -762,6 +763,42 @@ static void exynos4_jpeg_set_huff_tbl(void __iomem *base)
 							ARRAY_SIZE(hactblg0));
 }
 
+static int exynos4_jpeg_set_sclk_rate(struct s5p_jpeg *jpeg)
+{
+	struct clk *mout_jpeg, *sclk_cpll;
+	int ret;
+
+	mout_jpeg = clk_get(jpeg->dev, "mout_jpeg");
+	if (IS_ERR(mout_jpeg)) {
+		dev_err(jpeg->dev, "mout_jpeg clock not available: %ld\n",
+			PTR_ERR(mout_jpeg));
+		return PTR_ERR(mout_jpeg);
+	}
+
+	sclk_cpll = clk_get(jpeg->dev, "sclk_cpll");
+	if (IS_ERR(sclk_cpll)) {
+		dev_err(jpeg->dev, "sclk_cpll clock not available: %ld\n",
+			PTR_ERR(sclk_cpll));
+		clk_put(mout_jpeg);
+		return PTR_ERR(sclk_cpll);
+	}
+
+	ret = clk_set_parent(mout_jpeg, sclk_cpll);
+	clk_put(sclk_cpll);
+	clk_put(mout_jpeg);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_parent failed: %d\n", ret);
+		return ret;
+	}
+
+	ret = clk_set_rate(jpeg->sclk, 166500*1000);
+	if (ret) {
+		dev_err(jpeg->dev, "clk_set_rate failed: %d\n", ret);
+		return ret;
+	}
+	return 0;
+}
+
 #ifdef CONFIG_EXYNOS_IOMMU
 static int jpeg_iommu_init(struct platform_device *pdev)
 {
@@ -811,6 +848,7 @@ static void jpeg_iommu_deinit(struct platform_device *pdev)
 	}
 }
 #endif
+
 /*
  * ============================================================================
  * Device file operations
@@ -964,9 +1002,9 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 	jpeg_buffer.data = buffer;
 	jpeg_buffer.curr = 0;
 
-	has_sof0 = 1;
-	has_dht = 1;
-	while (has_sof0 || has_dht) {
+	has_sof0 = 0;
+	has_dht = 0;
+	while (!has_sof0 || !has_dht) {
 		c = get_byte(&jpeg_buffer);
 		if (c == -1)
 			return false;
@@ -994,7 +1032,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			components = get_byte(&jpeg_buffer);
 			if (components == -1)
 				break;
-			has_sof0 = 0;
+			has_sof0 = 1;
 
 			if (components == 1) {
 				subsampling = 0x33;
@@ -1010,7 +1048,7 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 		case DHT:
 			if (get_word_be(&jpeg_buffer, &word))
 				break;
-			has_dht = 0;
+			has_dht = 1;
 			length = (long)word - 2;
 			skip(&jpeg_buffer, length);
 			break;
@@ -1031,9 +1069,12 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 			break;
 		}
 	}
-	result->w = width;
-	result->h = height;
-	result->size = components;
+
+	if (!has_dht)
+		pr_err("HUFFMAN table NOT found.. !\n");
+
+	if (!has_sof0 || !has_dht)
+		return false;
 
 	switch (subsampling) {
 	case 0x11:
@@ -1055,10 +1096,10 @@ static bool s5p_jpeg_parse_hdr(struct s5p_jpeg_q_data *result,
 		return false;
 	}
 
-	if(has_dht)
-		pr_err("HUFFMAN table NOT found.. !\n");
+	result->w = width;
+	result->h = height;
 
-	return !(has_sof0 | has_dht);
+	return true;
 }
 
 static int s5p_jpeg_querycap(struct file *file, void *priv,
@@ -1085,6 +1126,14 @@ static int s5p_jpeg_querycap(struct file *file, void *priv,
 	 */
 	cap->capabilities = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_M2M |
 			    V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT;
+	/*
+	 * Advertise multi-planar capabilities. The driver supports only
+	 * single-planar pixel format at this moment so all the buffers will
+	 * have only one plane.
+	 */
+	cap->capabilities |= V4L2_CAP_VIDEO_M2M_MPLANE |
+			     V4L2_CAP_VIDEO_CAPTURE_MPLANE |
+			     V4L2_CAP_VIDEO_OUTPUT_MPLANE;
 	return 0;
 }
 
@@ -1143,12 +1192,10 @@ static int s5p_jpeg_enum_fmt_vid_out(struct file *file, void *priv,
 static struct s5p_jpeg_q_data *get_q_data(struct s5p_jpeg_ctx *ctx,
 					  enum v4l2_buf_type type)
 {
-	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
+	if (V4L2_TYPE_IS_OUTPUT(type))
 		return &ctx->out_q;
-	if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	else
 		return &ctx->cap_q;
-
-	return NULL;
 }
 
 static int s5p_jpeg_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
@@ -1162,14 +1209,19 @@ static int s5p_jpeg_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	if (!vq)
 		return -EINVAL;
 
-	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	if (!V4L2_TYPE_IS_OUTPUT(f->type) &&
 	    ct->mode == S5P_JPEG_DECODE && !ct->hdr_parsed)
 		return -EINVAL;
 	q_data = get_q_data(ct, f->type);
-	BUG_ON(q_data == NULL);
 
-	pix->width = q_data->w;
-	pix->height = q_data->h;
+	if ((!V4L2_TYPE_IS_OUTPUT(f->type) && ct->mode == S5P_JPEG_ENCODE) ||
+	    (V4L2_TYPE_IS_OUTPUT(f->type) && ct->mode == S5P_JPEG_DECODE)) {
+		pix->width = 0;
+		pix->height = 0;
+	} else {
+		pix->width = q_data->w;
+		pix->height = q_data->h;
+	}
 	pix->field = V4L2_FIELD_NONE;
 	pix->pixelformat = q_data->fmt->fourcc;
 	pix->bytesperline = 0;
@@ -1411,7 +1463,8 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 		return -EINVAL;
 
 	q_data = get_q_data(ct, f->type);
-	BUG_ON(q_data == NULL);
+	vq->type = f->type;
+	q_data->type = f->type;
 
 	if (vb2_is_busy(vq)) {
 		v4l2_err(&ct->jpeg->v4l2_dev, "%s queue busy\n", __func__);
@@ -1422,8 +1475,6 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 			FMT_TYPE_OUTPUT : FMT_TYPE_CAPTURE;
 
 	q_data->fmt = s5p_jpeg_find_format(ct, pix->pixelformat, f_type);
-	q_data->w = pix->width;
-	q_data->h = pix->height;
 	if (q_data->fmt->fourcc != V4L2_PIX_FMT_JPEG) {
 		/*
 		 * During encoding Exynos4x12 SoCs access wider memory area
@@ -1431,6 +1482,8 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 		 * the JPEG_IMAGE_SIZE register. In order to avoid sysmmu
 		 * page fault calculate proper buffer size in such a case.
 		 */
+		q_data->w = pix->width;
+		q_data->h = pix->height;
 		if (ct->jpeg->variant->version == SJPEG_EXYNOS4 &&
 		    f_type == FMT_TYPE_OUTPUT && ct->mode == S5P_JPEG_ENCODE)
 			q_data->size = exynos4_jpeg_get_output_buffer_size(ct,
@@ -1504,6 +1557,17 @@ static int s5p_jpeg_s_fmt_vid_out(struct file *file, void *priv,
 		return ret;
 
 	return s5p_jpeg_s_fmt(fh_to_ctx(priv), f);
+}
+
+static int s5p_jpeg_subscribe_event(struct v4l2_fh *fh,
+				const struct  v4l2_event_subscription *sub)
+{
+	switch (sub->type) {
+	case V4L2_EVENT_SOURCE_CHANGE:
+		return v4l2_src_change_event_subscribe(fh, sub);
+	default:
+		return -EINVAL;
+	}
 }
 
 static int exynos3250_jpeg_try_downscale(struct s5p_jpeg_ctx *ctx,
@@ -1607,7 +1671,9 @@ static int s5p_jpeg_g_selection(struct file *file, void *priv,
 	struct s5p_jpeg_ctx *ctx = fh_to_ctx(priv);
 
 	if (s->type != V4L2_BUF_TYPE_VIDEO_OUTPUT &&
-	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
 		return -EINVAL;
 
 	/* For JPEG blob active == default == bounds */
@@ -1645,7 +1711,8 @@ static int s5p_jpeg_s_selection(struct file *file, void *fh,
 	struct v4l2_rect *rect = &s->r;
 	int ret = -EINVAL;
 
-	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
 		return -EINVAL;
 
 	if (s->target == V4L2_SEL_TGT_COMPOSE) {
@@ -1805,6 +1872,107 @@ error_free:
 	return ret;
 }
 
+static void v4l2_format_pixmp_to_pix(struct v4l2_format *fmt_pix_mp,
+				     struct v4l2_format *fmt_pix) {
+	struct v4l2_pix_format *pix = &fmt_pix->fmt.pix;
+	struct v4l2_pix_format_mplane *pix_mp = &fmt_pix_mp->fmt.pix_mp;
+
+	fmt_pix->type = fmt_pix_mp->type;
+	pix->width = pix_mp->width;
+	pix->height = pix_mp->height;
+	pix->pixelformat = pix_mp->pixelformat;
+	pix->field = pix_mp->field;
+	pix->colorspace = pix_mp->colorspace;
+	pix->bytesperline = pix_mp->plane_fmt[0].bytesperline;
+	pix->sizeimage = pix_mp->plane_fmt[0].sizeimage;
+}
+
+static void v4l2_format_pixmp_from_pix(struct v4l2_format *fmt_pix_mp,
+				       struct v4l2_format *fmt_pix) {
+	struct v4l2_pix_format *pix = &fmt_pix->fmt.pix;
+	struct v4l2_pix_format_mplane *pix_mp = &fmt_pix_mp->fmt.pix_mp;
+
+	fmt_pix_mp->type = fmt_pix->type;
+	pix_mp->width = pix->width;
+	pix_mp->height = pix->height;
+	pix_mp->pixelformat = pix->pixelformat;
+	pix_mp->field = pix->field;
+	pix_mp->colorspace = pix->colorspace;
+	pix_mp->plane_fmt[0].bytesperline = pix->bytesperline;
+	pix_mp->plane_fmt[0].sizeimage = pix->sizeimage;
+	pix_mp->num_planes = 1;
+}
+
+static int s5p_jpeg_g_fmt_mplane(struct file *file, void *priv,
+				 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_g_fmt(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_try_fmt_vid_cap_mplane(struct file *file, void *priv,
+					   struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_try_fmt_vid_cap(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_try_fmt_vid_out_mplane(struct file *file, void *priv,
+					   struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_try_fmt_vid_out(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_s_fmt_vid_cap_mplane(struct file *file, void *priv,
+					 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_s_fmt_vid_cap(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_s_fmt_vid_out_mplane(struct file *file, void *priv,
+					 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_s_fmt_vid_out(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
 static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 	.vidioc_querycap		= s5p_jpeg_querycap,
 
@@ -1820,6 +1988,18 @@ static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 	.vidioc_s_fmt_vid_cap		= s5p_jpeg_s_fmt_vid_cap,
 	.vidioc_s_fmt_vid_out		= s5p_jpeg_s_fmt_vid_out,
 
+	.vidioc_enum_fmt_vid_cap_mplane	= s5p_jpeg_enum_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_out_mplane	= s5p_jpeg_enum_fmt_vid_out,
+
+	.vidioc_g_fmt_vid_cap_mplane	= s5p_jpeg_g_fmt_mplane,
+	.vidioc_g_fmt_vid_out_mplane	= s5p_jpeg_g_fmt_mplane,
+
+	.vidioc_try_fmt_vid_cap_mplane	= s5p_jpeg_try_fmt_vid_cap_mplane,
+	.vidioc_try_fmt_vid_out_mplane	= s5p_jpeg_try_fmt_vid_out_mplane,
+
+	.vidioc_s_fmt_vid_cap_mplane	= s5p_jpeg_s_fmt_vid_cap_mplane,
+	.vidioc_s_fmt_vid_out_mplane	= s5p_jpeg_s_fmt_vid_out_mplane,
+
 	.vidioc_reqbufs			= v4l2_m2m_ioctl_reqbufs,
 	.vidioc_querybuf		= v4l2_m2m_ioctl_querybuf,
 	.vidioc_qbuf			= v4l2_m2m_ioctl_qbuf,
@@ -1830,6 +2010,9 @@ static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 
 	.vidioc_g_selection		= s5p_jpeg_g_selection,
 	.vidioc_s_selection		= s5p_jpeg_s_selection,
+
+	.vidioc_subscribe_event		= s5p_jpeg_subscribe_event,
+	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 };
 
 /*
@@ -2153,8 +2336,15 @@ static int s5p_jpeg_job_ready(void *priv)
 {
 	struct s5p_jpeg_ctx *ctx = priv;
 
-	if (ctx->mode == S5P_JPEG_DECODE)
+	if (ctx->mode == S5P_JPEG_DECODE) {
+		/*
+		 * We have only one input buffer and one output buffer. If there
+		 * is a resolution change event, no need to continue decoding.
+		 */
+		if (ctx->state == JPEGCTX_RESOLUTION_CHANGE)
+			return 0;
 		return ctx->hdr_parsed;
+	}
 	return 1;
 }
 
@@ -2196,7 +2386,6 @@ static int s5p_jpeg_queue_setup(struct vb2_queue *vq,
 	unsigned int size, count = *nbuffers;
 
 	q_data = get_q_data(ctx, vq->type);
-	BUG_ON(q_data == NULL);
 
 	size = q_data->size;
 
@@ -2221,7 +2410,6 @@ static int s5p_jpeg_buf_prepare(struct vb2_buffer *vb)
 	struct s5p_jpeg_q_data *q_data = NULL;
 
 	q_data = get_q_data(ctx, vb->vb2_queue->type);
-	BUG_ON(q_data == NULL);
 
 	if (vb2_plane_size(vb, 0) < q_data->size) {
 		pr_err("%s data will not fit into plane (%lu < %lu)\n",
@@ -2235,14 +2423,36 @@ static int s5p_jpeg_buf_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
+static void s5p_jpeg_set_capture_queue_data(struct s5p_jpeg_ctx *ctx)
+{
+	struct s5p_jpeg_q_data *q_data = &ctx->cap_q;
+	q_data->w = ctx->out_q.w;
+	q_data->h = ctx->out_q.h;
+
+	jpeg_bound_align_image(ctx, &q_data->w, S5P_JPEG_MIN_WIDTH,
+			       S5P_JPEG_MAX_WIDTH, q_data->fmt->h_align,
+			       &q_data->h, S5P_JPEG_MIN_HEIGHT,
+			       S5P_JPEG_MAX_HEIGHT, q_data->fmt->v_align
+			      );
+	q_data->size = q_data->w * q_data->h * q_data->fmt->depth >> 3;
+}
+
 static void s5p_jpeg_buf_queue(struct vb2_buffer *vb)
 {
 	struct s5p_jpeg_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	if (ctx->mode == S5P_JPEG_DECODE &&
-	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		struct s5p_jpeg_q_data tmp, *q_data;
-		ctx->hdr_parsed = s5p_jpeg_parse_hdr(&tmp,
+	    vb->vb2_queue->type == ctx->out_q.type) {
+		static const struct v4l2_event ev_src_ch = {
+			.type = V4L2_EVENT_SOURCE_CHANGE,
+			.u.src_change.changes =
+				V4L2_EVENT_SRC_CH_RESOLUTION,
+		};
+		struct vb2_queue *dst_vq = v4l2_m2m_get_vq(
+				ctx->fh.m2m_ctx, ctx->cap_q.type);
+		u32 ori_w = ctx->out_q.w, ori_h = ctx->out_q.h;
+
+		ctx->hdr_parsed = s5p_jpeg_parse_hdr(&ctx->out_q,
 		     (unsigned long)vb2_plane_vaddr(vb, 0),
 		     min((unsigned long)ctx->out_q.size,
 			 vb2_get_plane_payload(vb, 0)), ctx);
@@ -2251,20 +2461,18 @@ static void s5p_jpeg_buf_queue(struct vb2_buffer *vb)
 			return;
 		}
 
-		q_data = &ctx->out_q;
-		q_data->w = tmp.w;
-		q_data->h = tmp.h;
-
-		q_data = &ctx->cap_q;
-		q_data->w = tmp.w;
-		q_data->h = tmp.h;
-
-		jpeg_bound_align_image(ctx, &q_data->w, S5P_JPEG_MIN_WIDTH,
-				       S5P_JPEG_MAX_WIDTH, q_data->fmt->h_align,
-				       &q_data->h, S5P_JPEG_MIN_HEIGHT,
-				       S5P_JPEG_MAX_HEIGHT, q_data->fmt->v_align
-				      );
-		q_data->size = q_data->w * q_data->h * q_data->fmt->depth >> 3;
+		/*
+		 * If there is a resolution change event, only update capture
+		 * queue when it is not streaming. Otherwise, update it in
+		 * STREAMOFF. See s5p_jpeg_stop_streaming for detail.
+		 */
+		if (ctx->out_q.w != ori_w || ctx->out_q.h != ori_h) {
+			v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
+			if (vb2_is_streaming(dst_vq))
+				ctx->state = JPEGCTX_RESOLUTION_CHANGE;
+			else
+				s5p_jpeg_set_capture_queue_data(ctx);
+		}
 	}
 
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vb);
@@ -2283,6 +2491,16 @@ static int s5p_jpeg_start_streaming(struct vb2_queue *q, unsigned int count)
 static int s5p_jpeg_stop_streaming(struct vb2_queue *q)
 {
 	struct s5p_jpeg_ctx *ctx = vb2_get_drv_priv(q);
+	/*
+	 * STREAMOFF is an acknowledgment for resolution change event.
+	 * Before STREAMOFF, we still have to return the old resolution and
+	 * subsampling. Update capture queue when the stream is off.
+	 */
+	if (ctx->state == JPEGCTX_RESOLUTION_CHANGE &&
+	    !V4L2_TYPE_IS_OUTPUT(q->type)) {
+		s5p_jpeg_set_capture_queue_data(ctx);
+		ctx->state = JPEGCTX_RUNNING;
+	}
 
 	pm_runtime_put(ctx->jpeg->dev);
 
@@ -2376,12 +2594,12 @@ static irqreturn_t s5p_jpeg_irq(int irq, void *dev_id)
 	if (curr_ctx->mode == S5P_JPEG_ENCODE)
 		vb2_set_plane_payload(dst_buf, 0, payload_size);
 	v4l2_m2m_buf_done(dst_buf, state);
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	curr_ctx->subsampling = s5p_jpeg_get_subsampling_mode(jpeg->regs);
+	s5p_jpeg_clear_int(jpeg->regs);
 	spin_unlock(&jpeg->slock);
 
-	s5p_jpeg_clear_int(jpeg->regs);
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
 }
@@ -2440,10 +2658,12 @@ static irqreturn_t exynos4_jpeg_irq(int irq, void *priv)
 		v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
 	}
 
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 	curr_ctx->subsampling = exynos4_jpeg_get_frame_fmt(jpeg->regs);
 
 	spin_unlock(&jpeg->slock);
+
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
+
 	return IRQ_HANDLED;
 }
 
@@ -2455,6 +2675,7 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	unsigned long payload_size = 0;
 	enum vb2_buffer_state state = VB2_BUF_STATE_DONE;
 	bool interrupt_timeout = false;
+	bool stream_error = false;
 	u32 irq_status;
 
 	spin_lock(&jpeg->slock);
@@ -2470,6 +2691,12 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	exynos3250_jpeg_clear_int_status(jpeg->regs, irq_status);
 
 	jpeg->irq_status |= irq_status;
+
+	if (irq_status & EXYNOS3250_STREAM_STAT) {
+		stream_error = true;
+		dev_err(jpeg->dev,
+			"Syntax error or unrecoverable error occurred.\n");
+	}
 
 	curr_ctx = v4l2_m2m_get_curr_priv(jpeg->m2m_dev);
 
@@ -2487,7 +2714,7 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 				EXYNOS3250_RDMA_DONE |
 				EXYNOS3250_RESULT_STAT))
 		payload_size = exynos3250_jpeg_compressed_size(jpeg->regs);
-	else if (interrupt_timeout)
+	else if (interrupt_timeout || stream_error)
 		state = VB2_BUF_STATE_ERROR;
 	else
 		goto exit_unlock;
@@ -2502,10 +2729,15 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	if (curr_ctx->mode == S5P_JPEG_ENCODE)
 		vb2_set_plane_payload(dst_buf, 0, payload_size);
 	v4l2_m2m_buf_done(dst_buf, state);
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	curr_ctx->subsampling =
 			exynos3250_jpeg_get_subsampling_mode(jpeg->regs);
+
+	spin_unlock(&jpeg->slock);
+
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
+	return IRQ_HANDLED;
+
 exit_unlock:
 	spin_unlock(&jpeg->slock);
 	return IRQ_HANDLED;
@@ -2524,6 +2756,7 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	struct s5p_jpeg *jpeg;
 	struct resource *res;
 	int ret;
+	DEFINE_DMA_ATTRS(attrs);
 
 	/* JPEG IP abstraction struct */
 	jpeg = devm_kzalloc(&pdev->dev, sizeof(struct s5p_jpeg), GFP_KERNEL);
@@ -2531,6 +2764,11 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	jpeg->variant = jpeg_get_drv_data(&pdev->dev);
+	if (!jpeg->variant) {
+		dev_err(&pdev->dev,
+			"Failed to probe, an expected error on Exynos4210.\n");
+		return -ENODEV;
+	}
 
 	mutex_init(&jpeg->lock);
 	spin_lock_init(&jpeg->slock);
@@ -2576,8 +2814,13 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "clock source %p\n", jpeg->clk);
 
 	jpeg->sclk = clk_get(&pdev->dev, "sclk");
-	if (IS_ERR(jpeg->sclk))
+	if (IS_ERR(jpeg->sclk)) {
 		dev_info(&pdev->dev, "sclk clock not available\n");
+	} else if (jpeg->variant->version == SJPEG_EXYNOS4) {
+		ret = exynos4_jpeg_set_sclk_rate(jpeg);
+		if (ret)
+			goto clk_get_rollback;
+	}
 
 	/* v4l2 device */
 	ret = v4l2_device_register(&pdev->dev, &jpeg->v4l2_dev);
@@ -2594,7 +2837,8 @@ static int s5p_jpeg_probe(struct platform_device *pdev)
 		goto device_register_rollback;
 	}
 
-	jpeg->alloc_ctx = vb2_dma_contig_init_ctx(&pdev->dev);
+	dma_set_attr(DMA_ATTR_NON_CONSISTENT, &attrs);
+	jpeg->alloc_ctx = vb2_dma_contig_init_ctx_attrs(&pdev->dev, &attrs);
 	if (IS_ERR(jpeg->alloc_ctx)) {
 		v4l2_err(&jpeg->v4l2_dev, "Failed to init memory allocator\n");
 		ret = PTR_ERR(jpeg->alloc_ctx);
@@ -2787,7 +3031,14 @@ static const struct of_device_id samsung_jpeg_match[] = {
 		.data = &exynos3250_jpeg_drvdata,
 	}, {
 		.compatible = "samsung,exynos4210-jpeg",
-		.data = &exynos4_jpeg_drvdata,
+		/*
+		 * This variant of the JPEG decoder can't properly signal JPEG
+		 * errors and the API currently assumes that JPEG errors will
+		 * be reported. We will effectively disable the driver on this
+		 * hardware until the API is extended to allow the JPEG decoder
+		 * to say that images are OK with errors going unreported.
+		 */
+		.data = NULL,
 	}, {
 		.compatible = "samsung,exynos4212-jpeg",
 		.data = &exynos4_jpeg_drvdata,

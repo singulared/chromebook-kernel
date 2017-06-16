@@ -20,44 +20,40 @@
 #include <mali_kbase.h>
 #include <mali_kbase_smc.h>
 
+#include <linux/compiler.h>
 
-static noinline u32 invoke_smc_fid(u32 function_id, u64 arg0, u64 arg1,
-		u64 arg2, u64 *res0, u64 *res1, u64 *res2)
+static noinline u64 invoke_smc_fid(u64 function_id,
+		u64 arg0, u64 arg1, u64 arg2)
 {
-	/* 3 args and 3 returns are chosen arbitrarily,
-	   see SMC calling convention for limits */
+	register u64 x0 asm("x0") = function_id;
+	register u64 x1 asm("x1") = arg0;
+	register u64 x2 asm("x2") = arg1;
+	register u64 x3 asm("x3") = arg2;
+
 	asm volatile(
-			"mov x0, %[fid]\n"
-			"mov x1, %[a0]\n"
-			"mov x2, %[a1]\n"
-			"mov x3, %[a2]\n"
-			"smc #0\n"
-			"str x0, [%[re0]]\n"
-			"str x1, [%[re1]]\n"
-			"str x2, [%[re2]]\n"
-			: [fid] "+r" (function_id), [a0] "+r" (arg0),
-				[a1] "+r" (arg1), [a2] "+r" (arg2)
-			: [re0] "r" (res0), [re1] "r" (res1), [re2] "r" (res2)
-			: "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
-				"x8", "x9",	"x10", "x11", "x12", "x13",
-				"x14", "x15", "x16", "x17");
-	return function_id;
+			__asmeq("%0", "x0")
+			__asmeq("%1", "x1")
+			__asmeq("%2", "x2")
+			__asmeq("%3", "x3")
+			"smc    #0\n"
+			: "+r" (x0)
+			: "r" (x1), "r" (x2), "r" (x3));
+
+	return x0;
 }
 
-void kbase_invoke_smc_fid(u32 fid)
+u64 kbase_invoke_smc_fid(u32 fid, u64 arg0, u64 arg1, u64 arg2)
 {
-	u64 res0, res1, res2;
-
 	/* Is fast call (bit 31 set) */
 	KBASE_DEBUG_ASSERT(fid & ~SMC_FAST_CALL);
 	/* bits 16-23 must be zero for fast calls */
 	KBASE_DEBUG_ASSERT((fid & (0xFF << 16)) == 0);
 
-	invoke_smc_fid(fid, 0, 0, 0, &res0, &res1, &res2);
+	return invoke_smc_fid(fid, arg0, arg1, arg2);
 }
 
-void kbase_invoke_smc(u32 oen, u16 function_number, u64 arg0, u64 arg1,
-		u64 arg2, u64 *res0, u64 *res1, u64 *res2)
+u64 kbase_invoke_smc(u32 oen, u16 function_number, bool smc64,
+		u64 arg0, u64 arg1, u64 arg2)
 {
 	u32 fid = 0;
 
@@ -65,12 +61,13 @@ void kbase_invoke_smc(u32 oen, u16 function_number, u64 arg0, u64 arg1,
 	KBASE_DEBUG_ASSERT((oen & ~SMC_OEN_MASK) == 0);
 
 	fid |= SMC_FAST_CALL; /* Bit 31: Fast call */
-	/* Bit 30: 1=SMC64, 0=SMC32 */
+	if (smc64)
+		fid |= SMC_64; /* Bit 30: 1=SMC64, 0=SMC32 */
 	fid |= oen; /* Bit 29:24: OEN */
 	/* Bit 23:16: Must be zero for fast calls */
 	fid |= (function_number); /* Bit 15:0: function number */
 
-	invoke_smc_fid(fid, arg0, arg1, arg2, res0, res1, res2);
+	return kbase_invoke_smc_fid(fid, arg0, arg1, arg2);
 }
 
 #endif /* CONFIG_ARM64 */

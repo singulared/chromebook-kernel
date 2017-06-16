@@ -89,6 +89,11 @@ enum  exynos4_jpeg_img_quality_level {
 	QUALITY_LEVEL_4,	/* low */
 };
 
+enum s5p_jpeg_ctx_state {
+	JPEGCTX_RUNNING = 0,
+	JPEGCTX_RESOLUTION_CHANGE,
+};
+
 /**
  * struct s5p_jpeg - JPEG IP abstraction
  * @lock:		the mutex protecting this structure
@@ -104,7 +109,7 @@ enum  exynos4_jpeg_img_quality_level {
  * @dev:		JPEG IP struct device
  * @alloc_ctx:		videobuf2 memory allocator's context
  * @variant:		driver variant to be used
- * @irq_status		interrupt flags set during single encode/decode
+ * @irq_status:		interrupt flags set during single encode/decode
 			operation
 
  */
@@ -163,12 +168,14 @@ struct s5p_jpeg_fmt {
  * @w:		image width
  * @h:		image height
  * @size:	image buffer size in bytes
+ * @type:	buffer type of the queue (enum v4l2_buf_type)
  */
 struct s5p_jpeg_q_data {
 	struct s5p_jpeg_fmt	*fmt;
 	u32			w;
 	u32			h;
 	u32			size;
+	u32			type;
 };
 
 /**
@@ -179,13 +186,14 @@ struct s5p_jpeg_q_data {
  * @restart_interval:	JPEG restart interval for JPEG encoding
  * @subsampling:	subsampling of a raw format or a JPEG
  * @out_q:		source (output) queue information
- * @cap_q:		destination (capture) queue queue information
+ * @cap_q:		destination (capture) queue information
  * @scale_factor:	scale factor for JPEG decoding
  * @crop_rect:		a rectangle representing crop area of the output buffer
  * @fh:			V4L2 file handle
  * @hdr_parsed:		set if header has been parsed during decompression
  * @crop_altered:	set if crop rectangle has been altered by the user space
  * @ctrl_handler:	controls handler
+ * @state:		state of the context
  */
 struct s5p_jpeg_ctx {
 	struct s5p_jpeg		*jpeg;
@@ -201,6 +209,7 @@ struct s5p_jpeg_ctx {
 	bool			hdr_parsed;
 	bool			crop_altered;
 	struct v4l2_ctrl_handler ctrl_handler;
+	enum s5p_jpeg_ctx_state	state;
 };
 
 /**

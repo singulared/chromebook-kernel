@@ -71,7 +71,7 @@ config DRM_KMS_CMA_HELPER
 
 config DRM_DMA_SYNC
 	bool "DRM DMA Sync"
-	depends on DRM && !DMA_SHARED_BUFFER_USES_KDS
+	depends on DRM
 	help
 	  Choose this option if you want to use fences and reservations for
 	  synchronization of shared dma-buf access between different drivers.
@@ -172,6 +172,8 @@ source "drivers/gpu/drm/vmwgfx/Kconfig"
 source "drivers/gpu/drm/gma500/Kconfig"
 
 source "drivers/gpu/drm/udl/Kconfig"
+
+source "drivers/gpu/drm/evdi/Kconfig"
 
 source "drivers/gpu/drm/ast/Kconfig"
 

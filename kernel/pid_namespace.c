@@ -134,6 +134,12 @@ out:
 	return ERR_PTR(err);
 }
 
+static void delayed_free_pidns(struct rcu_head *p)
+{
+	kmem_cache_free(pid_ns_cachep,
+			container_of(p, struct pid_namespace, rcu));
+}
+
 static void destroy_pid_namespace(struct pid_namespace *ns)
 {
 	int i;
@@ -142,7 +148,7 @@ static void destroy_pid_namespace(struct pid_namespace *ns)
 	for (i = 0; i < PIDMAP_ENTRIES; i++)
 		kfree(ns->pidmap[i].page);
 	put_user_ns(ns->user_ns);
-	kmem_cache_free(pid_ns_cachep, ns);
+	call_rcu(&ns->rcu, delayed_free_pidns);
 }
 
 struct pid_namespace *copy_pid_ns(unsigned long flags,
@@ -230,7 +236,7 @@ void zap_pid_ns_processes(struct pid_namespace *pid_ns)
 	 * Make sure they all go away, see free_pid().
 	 */
 	for (;;) {
-		set_current_state(TASK_UNINTERRUPTIBLE);
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (pid_ns->nr_hashed == init_pids)
 			break;
 		schedule();
@@ -314,7 +320,9 @@ static void *pidns_get(struct task_struct *task)
 	struct pid_namespace *ns;
 
 	rcu_read_lock();
-	ns = get_pid_ns(task_active_pid_ns(task));
+	ns = task_active_pid_ns(task);
+	if (ns)
+		get_pid_ns(ns);
 	rcu_read_unlock();
 
 	return ns;

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -50,10 +50,7 @@ enum {
 	KBASE_CTX_FLAG_SUBMIT_DISABLED = (1u << 0),
 
 	/** Set if the context uses an address space and should be kept scheduled in */
-	KBASE_CTX_FLAG_PRIVILEGED = (1u << 1),
-
-	/** Kernel-side equivalent of BASE_CONTEXT_HINT_ONLY_COMPUTE. Non-mutable after creation flags set */
-	KBASE_CTX_FLAG_HINT_ONLY_COMPUTE = (1u << 2)
+	KBASE_CTX_FLAG_PRIVILEGED = (1u << 1)
 
 	    /* NOTE: Add flags for other things, such as 'is scheduled', and 'is dying' */
 };
@@ -126,15 +123,10 @@ typedef void (*kbasep_js_policy_ctx_job_cb)(struct kbase_device *kbdev, struct k
  * - The runpool holds a refcount of how many contexts in the runpool have this
  * attribute.
  * - The context holds a refcount of how many atoms have this attribute.
- *
- * Examples of use:
- * - Finding out when there are a mix of @ref BASE_CONTEXT_HINT_ONLY_COMPUTE
- * and ! @ref BASE_CONTEXT_HINT_ONLY_COMPUTE contexts in the runpool
  */
 enum kbasep_js_ctx_attr {
 	/** Attribute indicating a context that contains Compute jobs. That is,
-	 * @ref BASE_CONTEXT_HINT_ONLY_COMPUTE is \b set and/or the context has jobs of type
-	 * @ref BASE_JD_REQ_ONLY_COMPUTE
+	 * the context has jobs of type @ref BASE_JD_REQ_ONLY_COMPUTE
 	 *
 	 * @note A context can be both 'Compute' and 'Non Compute' if it contains
 	 * both types of jobs.
@@ -288,11 +280,6 @@ struct kbasep_js_device_data {
 		 * submitted to a slot, and is de-refcounted immediately after a job
 		 * finishes */
 		s8 slot_affinity_refcount[BASE_JM_MAX_NR_SLOTS][64];
-
-		/*
-		 * true when GPU is put into secure mode
-		 */
-		bool secure_mode;
 	} runpool_irq;
 
 	/**
@@ -361,6 +348,9 @@ struct kbasep_js_device_data {
 	u32 cfs_ctx_runtime_init_slices; /**< Value for DEFAULT_JS_CFS_CTX_RUNTIME_INIT_SLICES */
 	u32 cfs_ctx_runtime_min_slices;	 /**< Value for  DEFAULT_JS_CFS_CTX_RUNTIME_MIN_SLICES */
 
+	/**< Value for JS_SOFT_EVENT_TIMEOUT */
+	atomic_t soft_event_timeout_ms;
+
 	/** List of suspended soft jobs */
 	struct list_head suspended_soft_jobs_list;
 
@@ -368,6 +358,7 @@ struct kbasep_js_device_data {
 	/* Support soft-stop on a single context */
 	bool softstop_always;
 #endif				/* CONFIG_MALI_DEBUG */
+
 	/** The initalized-flag is placed at the end, to avoid cache-pollution (we should
 	 * only be using this during init/term paths).
 	 * @note This is a write-once member, and so no locking is required to read */
@@ -414,7 +405,7 @@ struct kbasep_js_kctx_info {
 	 *
 	 * You may not access any of these members from IRQ context.
 	 */
-	struct {
+	struct kbase_jsctx {
 		struct mutex jsctx_mutex;		    /**< Job Scheduler Context lock */
 
 		/** Number of jobs <b>ready to run</b> - does \em not include the jobs waiting in
@@ -446,8 +437,6 @@ struct kbasep_js_kctx_info {
 		 * list per job slot
 		 */
 		struct list_head ctx_list_entry[BASE_JM_MAX_NR_SLOTS];
-
-		atomic_t fault_count;		/**< The no. of times the context is retained due to the fault job. */
 	} ctx;
 
 	/* The initalized-flag is placed at the end, to avoid cache-pollution (we should

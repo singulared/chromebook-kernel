@@ -898,20 +898,17 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	}
 	WRITEL(reg, mfc_regs->e_h264_lf_beta_offset);
 
-	/* entropy coding mode */
 	reg = READL(mfc_regs->e_h264_options);
+
+	/* entropy coding mode */
 	reg &= ~(0x1);
 	reg |= p_h264->entropy_mode & 0x1;
-	WRITEL(reg, mfc_regs->e_h264_options);
 
 	/* number of ref. picture */
-	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 7);
 	reg |= (((p_h264->num_ref_pic_4p - 1) & 0x1) << 7);
-	WRITEL(reg, mfc_regs->e_h264_options);
 
 	/* 8x8 transform enable */
-	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x3 << 12);
 	reg |= ((p_h264->_8x8_transform & 0x3) << 12);
 	WRITEL(reg, mfc_regs->e_h264_options);
@@ -932,7 +929,7 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	}
 
 	/* aspect ratio VUI */
-	READL(mfc_regs->e_h264_options);
+	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 5);
 	reg |= ((p_h264->vui_sar & 0x1) << 5);
 	WRITEL(reg, mfc_regs->e_h264_options);
@@ -955,7 +952,7 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 
 	/* intra picture period for H.264 open GOP */
 	/* control */
-	READL(mfc_regs->e_h264_options);
+	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 4);
 	reg |= ((p_h264->open_gop & 0x1) << 4);
 	WRITEL(reg, mfc_regs->e_h264_options);
@@ -969,26 +966,26 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	}
 
 	/* 'WEIGHTED_BI_PREDICTION' for B is disable */
-	READL(mfc_regs->e_h264_options);
+	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x3 << 9);
-	WRITEL(reg, mfc_regs->e_h264_options);
 
 	/* 'CONSTRAINED_INTRA_PRED_ENABLE' is disable */
-	READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 14);
-	WRITEL(reg, mfc_regs->e_h264_options);
 
 	/* ASO */
-	READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 6);
 	reg |= ((p_h264->aso & 0x1) << 6);
-	WRITEL(reg, mfc_regs->e_h264_options);
 
 	/* hier qp enable */
-	READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 8);
 	reg |= ((p_h264->open_gop & 0x1) << 8);
+
+	/* Add SPS and PPS headers for each IDR. */
+	reg &= ~(0x1 << 29);
+	reg |= !!p_h264->sps_pps_before_idr << 29;
+
 	WRITEL(reg, mfc_regs->e_h264_options);
+
 	reg = 0;
 	if (p_h264->hier_qp && p_h264->hier_qp_layer) {
 		reg |= (p_h264->hier_qp_type & 0x1) << 0x3;
@@ -1006,7 +1003,7 @@ static int s5p_mfc_set_enc_params_h264(struct s5p_mfc_ctx *ctx)
 	WRITEL(reg, mfc_regs->e_h264_num_t_layer);
 
 	/* frame packing SEI generation */
-	READL(mfc_regs->e_h264_options);
+	reg = READL(mfc_regs->e_h264_options);
 	reg &= ~(0x1 << 25);
 	reg |= ((p_h264->sei_frame_packing & 0x1) << 25);
 	WRITEL(reg, mfc_regs->e_h264_options);

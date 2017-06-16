@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -16,8 +16,7 @@
 
 
 
-/**
- * @file mali_kbase_pm_hwaccess.c
+/*
  * GPU backend implementation of base kernel power management APIs
  */
 
@@ -30,15 +29,13 @@
 
 #include <mali_kbase_pm.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
+#include <backend/gpu/mali_kbase_js_internal.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
 
 void kbase_pm_register_access_enable(struct kbase_device *kbdev)
 {
 	struct kbase_pm_callback_conf *callbacks;
 
-#ifdef CONFIG_MALI_PLATFORM_DEVICETREE
-	pm_runtime_enable(kbdev->dev);
-#endif /* CONFIG_MALI_PLATFORM_DEVICETREE */
 	callbacks = (struct kbase_pm_callback_conf *)POWER_MANAGEMENT_CALLBACKS;
 
 	if (callbacks)
@@ -57,9 +54,6 @@ void kbase_pm_register_access_disable(struct kbase_device *kbdev)
 		callbacks->power_off_callback(kbdev);
 
 	kbdev->pm.backend.gpu_powered = false;
-#ifdef CONFIG_MALI_PLATFORM_DEVICETREE
-	pm_runtime_disable(kbdev->dev);
-#endif
 }
 
 int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
@@ -97,6 +91,8 @@ int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
 					callbacks->power_runtime_on_callback;
 		kbdev->pm.backend.callback_power_runtime_off =
 					callbacks->power_runtime_off_callback;
+		kbdev->pm.backend.callback_power_runtime_idle =
+					callbacks->power_runtime_idle_callback;
 	} else {
 		kbdev->pm.backend.callback_power_on = NULL;
 		kbdev->pm.backend.callback_power_off = NULL;
@@ -106,6 +102,7 @@ int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
 		kbdev->pm.callback_power_runtime_term = NULL;
 		kbdev->pm.backend.callback_power_runtime_on = NULL;
 		kbdev->pm.backend.callback_power_runtime_off = NULL;
+		kbdev->pm.backend.callback_power_runtime_idle = NULL;
 	}
 
 	/* Initialise the metrics subsystem */
@@ -228,7 +225,10 @@ int kbase_hwaccess_pm_powerup(struct kbase_device *kbdev,
 
 	kbasep_pm_read_present_cores(kbdev);
 
-	kbdev->pm.debug_core_mask = kbdev->shader_present_bitmap;
+	kbdev->pm.debug_core_mask_all = kbdev->pm.debug_core_mask[0] =
+			kbdev->pm.debug_core_mask[1] =
+			kbdev->pm.debug_core_mask[2] =
+			kbdev->gpu_props.props.raw_props.shader_present;
 
 	/* Pretend the GPU is active to prevent a power policy turning the GPU
 	 * cores off */
@@ -321,9 +321,15 @@ void kbase_pm_power_changed(struct kbase_device *kbdev)
 	}
 }
 
-void kbase_pm_set_debug_core_mask(struct kbase_device *kbdev, u64 new_core_mask)
+void kbase_pm_set_debug_core_mask(struct kbase_device *kbdev,
+		u64 new_core_mask_js0, u64 new_core_mask_js1,
+		u64 new_core_mask_js2)
 {
-	kbdev->pm.debug_core_mask = new_core_mask;
+	kbdev->pm.debug_core_mask[0] = new_core_mask_js0;
+	kbdev->pm.debug_core_mask[1] = new_core_mask_js1;
+	kbdev->pm.debug_core_mask[2] = new_core_mask_js2;
+	kbdev->pm.debug_core_mask_all = new_core_mask_js0 | new_core_mask_js1 |
+			new_core_mask_js2;
 
 	kbase_pm_update_cores_state_nolock(kbdev);
 }
@@ -358,6 +364,8 @@ void kbase_hwaccess_pm_suspend(struct kbase_device *kbdev)
 		WARN_ON(!kbase_pm_do_poweroff(kbdev, false));
 	}
 
+	kbase_backend_timer_suspend(kbdev);
+
 	mutex_unlock(&kbdev->pm.lock);
 	mutex_unlock(&js_devdata->runpool_mutex);
 }
@@ -368,8 +376,12 @@ void kbase_hwaccess_pm_resume(struct kbase_device *kbdev)
 
 	mutex_lock(&js_devdata->runpool_mutex);
 	mutex_lock(&kbdev->pm.lock);
+
 	kbdev->pm.suspending = false;
 	kbase_pm_do_poweron(kbdev, true);
+
+	kbase_backend_timer_resume(kbdev);
+
 	mutex_unlock(&kbdev->pm.lock);
 	mutex_unlock(&js_devdata->runpool_mutex);
 }

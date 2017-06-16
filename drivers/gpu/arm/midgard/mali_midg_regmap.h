@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -15,10 +15,11 @@
 
 
 
-
-
 #ifndef _MIDGARD_REGMAP_H_
 #define _MIDGARD_REGMAP_H_
+
+#include "mali_midg_coherency.h"
+#include "mali_kbase_gpu_id.h"
 
 /*
  * Begin Register Offsets
@@ -57,7 +58,7 @@
 
 #define GPU_COMMAND             0x030	/* (WO) */
 #define GPU_STATUS              0x034	/* (RO) */
-
+#define LATEST_FLUSH            0x038	/* (RO) */
 
 #define GROUPS_L2_COHERENT      (1 << 0)	/* Cores groups are l2 coherent */
 
@@ -168,7 +169,10 @@
 #define L2_PWRACTIVE_LO         0x260	/* (RO) Level 2 cache active bitmap, low word */
 #define L2_PWRACTIVE_HI         0x264	/* (RO) Level 2 cache active bitmap, high word */
 
+#define COHERENCY_FEATURES      0x300	/* (RO) Coherency features present */
+#define COHERENCY_ENABLE        0x304	/* (RW) Coherency enable */
 
+#define JM_CONFIG               0xF00   /* (RW) Job Manager configuration register (Implementation specific register) */
 #define SHADER_CONFIG           0xF04	/* (RW) Shader core configuration settings (Implementation specific register) */
 #define TILER_CONFIG            0xF08   /* (RW) Tiler core configuration settings (Implementation specific register) */
 #define L2_MMU_CONFIG           0xF0C	/* (RW) Configuration of the L2 cache and MMU (Implementation specific register) */
@@ -223,6 +227,7 @@
 
 #define JS_COMMAND_NEXT        0x60	/* (RW) Next command register for job slot n */
 
+#define JS_FLUSH_ID_NEXT       0x70	/* (RW) Next job slot n cache flush ID */
 
 #define MEMORY_MANAGEMENT_BASE  0x2000
 #define MMU_REG(r)              (MEMORY_MANAGEMENT_BASE + (r))
@@ -264,6 +269,14 @@
 #define AS_STATUS              0x28	/* (RO) Status flags for address space n */
 
 
+/* (RW) Translation table configuration for address space n, low word */
+#define AS_TRANSCFG_LO         0x30
+/* (RW) Translation table configuration for address space n, high word */
+#define AS_TRANSCFG_HI         0x34
+/* (RO) Secondary fault address for address space n, low word */
+#define AS_FAULTEXTRA_LO       0x38
+/* (RO) Secondary fault address for address space n, high word */
+#define AS_FAULTEXTRA_HI       0x3C
 
 /* End Register Offsets */
 
@@ -291,6 +304,11 @@
 
 #define AS_TRANSTAB_LPAE_ADRMODE_MASK      0x00000003
 
+/*
+ * Begin AARCH64 MMU TRANSTAB register values
+ */
+#define MMU_HW_OUTA_BITS 40
+#define AS_TRANSTAB_BASE_MASK ((1ULL << MMU_HW_OUTA_BITS) - (1ULL << 4))
 
 /*
  * Begin MMU STATUS register values
@@ -303,12 +321,38 @@
 #define AS_FAULTSTATUS_EXCEPTION_CODE_TRANSTAB_BUS_FAULT      (0x2<<3)
 #define AS_FAULTSTATUS_EXCEPTION_CODE_ACCESS_FLAG             (0x3<<3)
 
+#define AS_FAULTSTATUS_EXCEPTION_CODE_ADDRESS_SIZE_FAULT      (0x4<<3)
+#define AS_FAULTSTATUS_EXCEPTION_CODE_MEMORY_ATTRIBUTES_FAULT (0x5<<3)
 
 #define AS_FAULTSTATUS_ACCESS_TYPE_MASK                  (0x3<<8)
+#define AS_FAULTSTATUS_ACCESS_TYPE_ATOMIC                (0x0<<8)
 #define AS_FAULTSTATUS_ACCESS_TYPE_EX                    (0x1<<8)
 #define AS_FAULTSTATUS_ACCESS_TYPE_READ                  (0x2<<8)
 #define AS_FAULTSTATUS_ACCESS_TYPE_WRITE                 (0x3<<8)
 
+/*
+ * Begin MMU TRANSCFG register values
+ */
+
+#define AS_TRANSCFG_ADRMODE_LEGACY      0
+#define AS_TRANSCFG_ADRMODE_UNMAPPED    1
+#define AS_TRANSCFG_ADRMODE_IDENTITY    2
+#define AS_TRANSCFG_ADRMODE_AARCH64_4K  6
+#define AS_TRANSCFG_ADRMODE_AARCH64_64K 8
+
+#define AS_TRANSCFG_ADRMODE_MASK        0xF
+
+
+/*
+ * Begin TRANSCFG register values
+ */
+#define AS_TRANSCFG_PTW_MEMATTR_MASK (3 << 24)
+#define AS_TRANSCFG_PTW_MEMATTR_NON_CACHEABLE (1 << 24)
+#define AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK (2 << 24)
+
+#define AS_TRANSCFG_PTW_SH_MASK ((3 << 28))
+#define AS_TRANSCFG_PTW_SH_OS (2 << 28)
+#define AS_TRANSCFG_PTW_SH_IS (3 << 28)
 
 /*
  * Begin Command Values
@@ -346,6 +390,8 @@
 #define JS_CONFIG_END_FLUSH_NO_ACTION          JS_CONFIG_START_FLUSH_NO_ACTION
 #define JS_CONFIG_END_FLUSH_CLEAN              (1u << 12)
 #define JS_CONFIG_END_FLUSH_CLEAN_INVALIDATE   (3u << 12)
+#define JS_CONFIG_ENABLE_FLUSH_REDUCTION       (1u << 14)
+#define JS_CONFIG_DISABLE_DESCRIPTOR_WR_BK     (1u << 15)
 #define JS_CONFIG_THREAD_PRI(n)                ((n) << 16)
 
 /* JS_STATUS register values */
@@ -398,19 +444,35 @@
 #define GPU_COMMAND_CYCLE_COUNT_STOP   0x06	/* Stops the cycle counter, and system timestamp propagation */
 #define GPU_COMMAND_CLEAN_CACHES       0x07	/* Clean all caches */
 #define GPU_COMMAND_CLEAN_INV_CACHES   0x08	/* Clean and invalidate all caches */
+#define GPU_COMMAND_SET_PROTECTED_MODE 0x09	/* Places the GPU in protected mode */
 
 /* End Command Values */
 
 /* GPU_STATUS values */
 #define GPU_STATUS_PRFCNT_ACTIVE           (1 << 2)	/* Set if the performance counters are active. */
+#define GPU_STATUS_PROTECTED_MODE_ACTIVE   (1 << 7)	/* Set if protected mode is active */
 
 /* PRFCNT_CONFIG register values */
-#define PRFCNT_CONFIG_AS_SHIFT    4	/* address space bitmap starts from bit 4 of the register */
+#define PRFCNT_CONFIG_MODE_SHIFT      0 /* Counter mode position. */
+#define PRFCNT_CONFIG_AS_SHIFT        4 /* Address space bitmap position. */
+#define PRFCNT_CONFIG_SETSELECT_SHIFT 8 /* Set select position. */
+
 #define PRFCNT_CONFIG_MODE_OFF    0	/* The performance counters are disabled. */
 #define PRFCNT_CONFIG_MODE_MANUAL 1	/* The performance counters are enabled, but are only written out when a PRFCNT_SAMPLE command is issued using the GPU_COMMAND register. */
 #define PRFCNT_CONFIG_MODE_TILE   2	/* The performance counters are enabled, and are written out each time a tile finishes rendering. */
 
 /* AS<n>_MEMATTR values: */
+/* Use GPU implementation-defined caching policy. */
+#define AS_MEMATTR_IMPL_DEF_CACHE_POLICY 0x88ull
+/* The attribute set to force all resources to be cached. */
+#define AS_MEMATTR_FORCE_TO_CACHE_ALL    0x8Full
+/* Inner write-alloc cache setup, no outer caching */
+#define AS_MEMATTR_WRITE_ALLOC           0x8Dull
+
+/* Set to implementation defined, outer caching */
+#define AS_MEMATTR_AARCH64_OUTER_IMPL_DEF 0x88ull
+/* Set to write back memory, outer caching */
+#define AS_MEMATTR_AARCH64_OUTER_WA       0x8Dull
 
 /* Use GPU implementation-defined  caching policy. */
 #define AS_MEMATTR_LPAE_IMPL_DEF_CACHE_POLICY 0x48ull
@@ -424,7 +486,10 @@
 #define AS_MEMATTR_LPAE_OUTER_WA              0x8Dull
 
 /* Symbol for default MEMATTR to use */
+
+/* Default is - HW implementation defined caching */
 #define AS_MEMATTR_INDEX_DEFAULT               0
+#define AS_MEMATTR_INDEX_DEFAULT_ACE           3
 
 /* HW implementation defined caching */
 #define AS_MEMATTR_INDEX_IMPL_DEF_CACHE_POLICY 0
@@ -436,39 +501,6 @@
 #define AS_MEMATTR_INDEX_OUTER_IMPL_DEF        3
 /* Outer coherent, write alloc inner */
 #define AS_MEMATTR_INDEX_OUTER_WA              4
-
-/* GPU_ID register */
-#define GPU_ID_VERSION_STATUS_SHIFT       0
-#define GPU_ID_VERSION_MINOR_SHIFT        4
-#define GPU_ID_VERSION_MAJOR_SHIFT        12
-#define GPU_ID_VERSION_PRODUCT_ID_SHIFT   16
-#define GPU_ID_VERSION_STATUS             (0xF  << GPU_ID_VERSION_STATUS_SHIFT)
-#define GPU_ID_VERSION_MINOR              (0xFF << GPU_ID_VERSION_MINOR_SHIFT)
-#define GPU_ID_VERSION_MAJOR              (0xF  << GPU_ID_VERSION_MAJOR_SHIFT)
-#define GPU_ID_VERSION_PRODUCT_ID         (0xFFFF << GPU_ID_VERSION_PRODUCT_ID_SHIFT)
-
-/* Values for GPU_ID_VERSION_PRODUCT_ID bitfield */
-#define GPU_ID_PI_T60X                    0x6956
-#define GPU_ID_PI_T62X                    0x0620
-#define GPU_ID_PI_T76X                    0x0750
-#define GPU_ID_PI_T72X                    0x0720
-#define GPU_ID_PI_TFRX                    0x0880
-#define GPU_ID_PI_T86X                    0x0860
-#define GPU_ID_PI_T82X                    0x0820
-#define GPU_ID_PI_T83X                    0x0830
-
-/* Values for GPU_ID_VERSION_STATUS field for PRODUCT_ID GPU_ID_PI_T60X */
-#define GPU_ID_S_15DEV0                   0x1
-#define GPU_ID_S_EAC                      0x2
-
-/* Helper macro to create a GPU_ID assuming valid values for id, major, minor, status */
-#define GPU_ID_MAKE(id, major, minor, status) \
-		(((id) << GPU_ID_VERSION_PRODUCT_ID_SHIFT) | \
-		((major) << GPU_ID_VERSION_MAJOR_SHIFT) |   \
-		((minor) << GPU_ID_VERSION_MINOR_SHIFT) |   \
-		((status) << GPU_ID_VERSION_STATUS_SHIFT))
-
-/* End GPU_ID register */
 
 /* JS<n>_FEATURES register */
 
@@ -485,6 +517,8 @@
 /* End JS<n>_FEATURES register */
 
 /* L2_MMU_CONFIG register */
+#define L2_MMU_CONFIG_ALLOW_SNOOP_DISPARITY_SHIFT       (23)
+#define L2_MMU_CONFIG_ALLOW_SNOOP_DISPARITY             (0x1 << L2_MMU_CONFIG_ALLOW_SNOOP_DISPARITY_SHIFT)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_SHIFT        (24)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_READS              (0x3 << L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_SHIFT)
 #define L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_OCTANT       (0x1 << L2_MMU_CONFIG_LIMIT_EXTERNAL_READS_SHIFT)
@@ -516,19 +550,14 @@
 
 /* End THREAD_* registers */
 
-/* COHERENCY_* values*/
-#define COHERENCY_ACE_LITE 0
-#define COHERENCY_ACE      1
-#define COHERENCY_NONE     0xFFFF
-#define COHERENCY_FEATURE_BIT(x) (1 << (x))
-/* End COHERENCY_* values */
-
 /* SHADER_CONFIG register */
 
 #define SC_ALT_COUNTERS             (1ul << 3)
 #define SC_OVERRIDE_FWD_PIXEL_KILL  (1ul << 4)
 #define SC_SDC_DISABLE_OQ_DISCARD   (1ul << 6)
+#define SC_LS_ALLOW_ATTR_TYPES      (1ul << 16)
 #define SC_LS_PAUSEBUFFER_DISABLE   (1ul << 16)
+#define SC_LS_ATTR_CHECK_DISABLE    (1ul << 18)
 #define SC_ENABLE_TEXGRD_FLAGS      (1ul << 25)
 /* End SHADER_CONFIG register */
 
@@ -537,6 +566,5 @@
 #define TC_CLOCK_GATE_OVERRIDE      (1ul << 0)
 
 /* End TILER_CONFIG register */
-
 
 #endif /* _MIDGARD_REGMAP_H_ */

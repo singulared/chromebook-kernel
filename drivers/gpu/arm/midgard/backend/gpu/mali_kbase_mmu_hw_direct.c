@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -20,6 +20,7 @@
 #include <mali_kbase.h>
 #include <mali_kbase_mem.h>
 #include <mali_kbase_mmu_hw.h>
+#include <mali_kbase_tlstream.h>
 #include <backend/gpu/mali_kbase_mmu_hw_direct.h>
 #include <backend/gpu/mali_kbase_device_internal.h>
 
@@ -63,18 +64,21 @@ static int wait_ready(struct kbase_device *kbdev,
 		unsigned int as_nr, struct kbase_context *kctx)
 {
 	unsigned int max_loops = KBASE_AS_INACTIVE_MAX_LOOPS;
+	u32 val = kbase_reg_read(kbdev, MMU_AS_REG(as_nr, AS_STATUS), kctx);
 
-	/* Wait for the MMU status to indicate there is no active command. */
-	while (--max_loops && kbase_reg_read(kbdev,
-			MMU_AS_REG(as_nr, AS_STATUS),
-			kctx) & AS_STATUS_AS_ACTIVE) {
-		;
-	}
+	/* Wait for the MMU status to indicate there is no active command, in
+	 * case one is pending. Do not log remaining register accesses. */
+	while (--max_loops && (val & AS_STATUS_AS_ACTIVE))
+		val = kbase_reg_read(kbdev, MMU_AS_REG(as_nr, AS_STATUS), NULL);
 
 	if (max_loops == 0) {
 		dev_err(kbdev->dev, "AS_ACTIVE bit stuck\n");
 		return -1;
 	}
+
+	/* If waiting in loop was performed, log last read value. */
+	if (KBASE_AS_INACTIVE_MAX_LOOPS - 1 > max_loops)
+		kbase_reg_read(kbdev, MMU_AS_REG(as_nr, AS_STATUS), kctx);
 
 	return 0;
 }
@@ -159,6 +163,15 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 				KBASE_MMU_FAULT_TYPE_BUS :
 				KBASE_MMU_FAULT_TYPE_PAGE;
 
+#ifdef CONFIG_MALI_GPU_MMU_AARCH64
+		as->fault_extra_addr = kbase_reg_read(kbdev,
+				MMU_AS_REG(as_no, AS_FAULTEXTRA_HI),
+				kctx);
+		as->fault_extra_addr <<= 32;
+		as->fault_extra_addr |= kbase_reg_read(kbdev,
+				MMU_AS_REG(as_no, AS_FAULTEXTRA_LO),
+				kctx);
+#endif /* CONFIG_MALI_GPU_MMU_AARCH64 */
 
 		if (kbase_as_has_bus_fault(as)) {
 			/* Mark bus fault as handled.
@@ -197,7 +210,36 @@ void kbase_mmu_hw_configure(struct kbase_device *kbdev, struct kbase_as *as,
 		struct kbase_context *kctx)
 {
 	struct kbase_mmu_setup *current_setup = &as->current_setup;
+	u32 transcfg = 0;
 
+#ifdef CONFIG_MALI_GPU_MMU_AARCH64
+	transcfg = current_setup->transcfg & 0xFFFFFFFFUL;
+
+	/* Set flag AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK */
+	/* Clear PTW_MEMATTR bits */
+	transcfg &= ~AS_TRANSCFG_PTW_MEMATTR_MASK;
+	/* Enable correct PTW_MEMATTR bits */
+	transcfg |= AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK;
+
+	if (kbdev->system_coherency == COHERENCY_ACE) {
+		/* Set flag AS_TRANSCFG_PTW_SH_OS (outer shareable) */
+		/* Clear PTW_SH bits */
+		transcfg = (transcfg & ~AS_TRANSCFG_PTW_SH_MASK);
+		/* Enable correct PTW_SH bits */
+		transcfg = (transcfg | AS_TRANSCFG_PTW_SH_OS);
+	}
+
+	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_LO),
+			transcfg, kctx);
+	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_HI),
+			(current_setup->transcfg >> 32) & 0xFFFFFFFFUL, kctx);
+
+#else /* CONFIG_MALI_GPU_MMU_AARCH64 */
+
+	if (kbdev->system_coherency == COHERENCY_ACE)
+		current_setup->transtab |= AS_TRANSTAB_LPAE_SHARE_OUTER;
+
+#endif /* CONFIG_MALI_GPU_MMU_AARCH64 */
 
 	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSTAB_LO),
 			current_setup->transtab & 0xFFFFFFFFUL, kctx);
@@ -208,6 +250,11 @@ void kbase_mmu_hw_configure(struct kbase_device *kbdev, struct kbase_as *as,
 			current_setup->memattr & 0xFFFFFFFFUL, kctx);
 	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_MEMATTR_HI),
 			(current_setup->memattr >> 32) & 0xFFFFFFFFUL, kctx);
+
+	kbase_tlstream_tl_attrib_as_config(as,
+			current_setup->transtab,
+			current_setup->memattr,
+			transcfg);
 
 	write_cmd(kbdev, as->number, AS_COMMAND_UPDATE, kctx);
 }
@@ -263,14 +310,28 @@ int kbase_mmu_hw_do_operation(struct kbase_device *kbdev, struct kbase_as *as,
 void kbase_mmu_hw_clear_fault(struct kbase_device *kbdev, struct kbase_as *as,
 		struct kbase_context *kctx, enum kbase_mmu_fault_type type)
 {
+	unsigned long flags;
 	u32 pf_bf_mask;
+
+	spin_lock_irqsave(&kbdev->mmu_mask_change, flags);
+
+	/*
+	 * A reset is in-flight and we're flushing the IRQ + bottom half
+	 * so don't update anything as it could race with the reset code.
+	 */
+	if (kbdev->irq_reset_flush)
+		goto unlock;
 
 	/* Clear the page (and bus fault IRQ as well in case one occurred) */
 	pf_bf_mask = MMU_PAGE_FAULT(as->number);
-	if (type == KBASE_MMU_FAULT_TYPE_BUS)
+	if (type == KBASE_MMU_FAULT_TYPE_BUS ||
+			type == KBASE_MMU_FAULT_TYPE_BUS_UNEXPECTED)
 		pf_bf_mask |= MMU_BUS_ERROR(as->number);
 
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_CLEAR), pf_bf_mask, kctx);
+
+unlock:
+	spin_unlock_irqrestore(&kbdev->mmu_mask_change, flags);
 }
 
 void kbase_mmu_hw_enable_fault(struct kbase_device *kbdev, struct kbase_as *as,
@@ -283,13 +344,22 @@ void kbase_mmu_hw_enable_fault(struct kbase_device *kbdev, struct kbase_as *as,
 	 * occurred) */
 	spin_lock_irqsave(&kbdev->mmu_mask_change, flags);
 
+	/*
+	 * A reset is in-flight and we're flushing the IRQ + bottom half
+	 * so don't update anything as it could race with the reset code.
+	 */
+	if (kbdev->irq_reset_flush)
+		goto unlock;
+
 	irq_mask = kbase_reg_read(kbdev, MMU_REG(MMU_IRQ_MASK), kctx) |
 			MMU_PAGE_FAULT(as->number);
 
-	if (type == KBASE_MMU_FAULT_TYPE_BUS)
+	if (type == KBASE_MMU_FAULT_TYPE_BUS ||
+			type == KBASE_MMU_FAULT_TYPE_BUS_UNEXPECTED)
 		irq_mask |= MMU_BUS_ERROR(as->number);
 
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), irq_mask, kctx);
 
+unlock:
 	spin_unlock_irqrestore(&kbdev->mmu_mask_change, flags);
 }

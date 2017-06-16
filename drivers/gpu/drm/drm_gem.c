@@ -281,6 +281,28 @@ drm_gem_object_handle_unreference_unlocked(struct drm_gem_object *obj)
 	drm_gem_object_unreference_unlocked(obj);
 }
 
+/*
+ * Called at device or object close to release the file's
+ * handle references on objects.
+ */
+static int
+drm_gem_object_release_handle(int id, void *ptr, void *data)
+{
+	struct drm_file *file_priv = data;
+	struct drm_gem_object *obj = ptr;
+	struct drm_device *dev = obj->dev;
+
+	if (drm_core_check_feature(dev, DRIVER_PRIME))
+		drm_gem_remove_prime_handles(obj, file_priv);
+
+	if (dev->driver->gem_close_object)
+		dev->driver->gem_close_object(obj, file_priv);
+
+	drm_gem_object_handle_unreference_unlocked(obj);
+
+	return 0;
+}
+
 /**
  * Removes the mapping from handle to filp for this object.
  */
@@ -313,13 +335,7 @@ drm_gem_handle_delete(struct drm_file *filp, u32 handle)
 	idr_remove(&filp->object_idr, handle);
 	spin_unlock(&filp->table_lock);
 
-	if (drm_core_check_feature(dev, DRIVER_PRIME))
-		drm_gem_remove_prime_handles(obj, filp);
-
-	if (dev->driver->gem_close_object)
-		dev->driver->gem_close_object(obj, filp);
-	drm_gem_object_handle_unreference_unlocked(obj);
-
+	drm_gem_object_release_handle(handle, obj, filp);
 	return 0;
 }
 EXPORT_SYMBOL(drm_gem_handle_delete);
@@ -641,28 +657,6 @@ drm_gem_open(struct drm_device *dev, struct drm_file *file_private)
 }
 
 /**
- * Called at device close to release the file's
- * handle references on objects.
- */
-static int
-drm_gem_object_release_handle(int id, void *ptr, void *data)
-{
-	struct drm_file *file_priv = data;
-	struct drm_gem_object *obj = ptr;
-	struct drm_device *dev = obj->dev;
-
-	if (drm_core_check_feature(dev, DRIVER_PRIME))
-		drm_gem_remove_prime_handles(obj, file_priv);
-
-	if (dev->driver->gem_close_object)
-		dev->driver->gem_close_object(obj, file_priv);
-
-	drm_gem_object_handle_unreference_unlocked(obj);
-
-	return 0;
-}
-
-/**
  * Called at close time when the filp is going away.
  *
  * Releases any remaining references on objects by this filp.
@@ -752,9 +746,6 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_gem_object *obj;
 	struct drm_hash_item *hash;
 	int ret = 0;
-
-	if (drm_device_is_unplugged(dev))
-		return -ENODEV;
 
 	mutex_lock(&dev->struct_mutex);
 
