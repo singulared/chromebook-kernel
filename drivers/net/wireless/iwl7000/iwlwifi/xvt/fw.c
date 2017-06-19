@@ -260,12 +260,9 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 		return ret;
 
 	if (ucode_type == IWL_UCODE_REGULAR) {
-		/* Enable DQA-mode if required */
-		if (iwl_xvt_is_dqa_supported(xvt)) {
-			ret = iwl_xvt_send_dqa_cmd(xvt);
-			if (ret)
-				return ret;
-		}
+		ret = iwl_xvt_send_dqa_cmd(xvt);
+		if (ret)
+			return ret;
 	}
 	/*
 	 * Starting from A000 tx queue allocation must be done after add

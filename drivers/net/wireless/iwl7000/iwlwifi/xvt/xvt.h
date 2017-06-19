@@ -351,14 +351,6 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type,  bool cont_run);
 /* NVM */
 int iwl_xvt_nvm_init(struct iwl_xvt *xvt);
 
-static inline bool iwl_xvt_is_dqa_supported(struct iwl_xvt *xvt)
-{
-	/* Make sure DQA isn't allowed in driver until feature is complete */
-	return fw_has_capa(&xvt->fw->ucode_capa,
-			   IWL_UCODE_TLV_CAPA_DQA_SUPPORT) &&
-	       IWL_XVT_ENABLE_DQA;
-}
-
 /* Based on mvm function: iwl_mvm_has_new_tx_api */
 static inline bool iwl_xvt_is_unified_fw(struct iwl_xvt *xvt)
 {
