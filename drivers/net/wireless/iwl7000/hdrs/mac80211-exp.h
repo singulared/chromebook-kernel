@@ -77,12 +77,13 @@
 #define rate_control_send_low __iwl7000_rate_control_send_low
 #define ieee80211_get_tx_rates __iwl7000_ieee80211_get_tx_rates
 #define rate_control_set_rates __iwl7000_rate_control_set_rates
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 #define regulatory_set_wiphy_regd __iwl7000_regulatory_set_wiphy_regd
 #define regulatory_set_wiphy_regd_sync_rtnl __iwl7000_regulatory_set_wiphy_regd_sync_rtnl
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 #ifdef CONFIG_PROVE_LOCKING
 #define lockdep_rht_mutex_is_held __iwl7000_lockdep_rht_mutex_is_held
 #define lockdep_rht_bucket_is_held __iwl7000_lockdep_rht_bucket_is_held
-#else
 #endif
 #define rhashtable_insert_slow __iwl7000_rhashtable_insert_slow
 #define rhashtable_walk_enter __iwl7000_rhashtable_walk_enter
@@ -94,6 +95,8 @@
 #define rhltable_init __iwl7000_rhltable_init
 #define rhashtable_free_and_destroy __iwl7000_rhashtable_free_and_destroy
 #define rhashtable_destroy __iwl7000_rhashtable_destroy
+#define rht_bucket_nested __iwl7000_rht_bucket_nested
+#define rht_bucket_nested_insert __iwl7000_rht_bucket_nested_insert
 #define ieee80211_sta_ps_transition __iwl7000_ieee80211_sta_ps_transition
 #define ieee80211_sta_pspoll __iwl7000_ieee80211_sta_pspoll
 #define ieee80211_sta_uapsd_trigger __iwl7000_ieee80211_sta_uapsd_trigger

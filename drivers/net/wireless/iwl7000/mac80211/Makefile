@@ -19,6 +19,7 @@ mac80211-y := \
 	aes_gcm.o \
 	aes_cmac.o \
 	aes_gmac.o \
+	fils_aead.o \
 	cfg.o \
 	ethtool.o \
 	rx.o \
@@ -62,6 +63,6 @@ rc80211_minstrel_ht-$(CPTCFG_MAC80211_DEBUGFS) += rc80211_minstrel_ht_debugfs.o
 mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
 mac80211-$(CPTCFG_MAC80211_RC_MINSTREL_HT) += $(rc80211_minstrel_ht-y)
 
-ccflags-y += -D__CHECK_ENDIAN__ -DDEBUG
+ccflags-y += -DDEBUG
 
 iwl7000_mac80211-objs := $(mac80211-objs) $(mac80211-y)

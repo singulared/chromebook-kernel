@@ -20,7 +20,7 @@ static inline void ieee80211_led_rx(struct ieee80211_local *local)
 
 	if (!atomic_read(&local->rx_led_active))
 		return;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+#if LINUX_VERSION_IS_GEQ(3,6,0)
 	led_trigger_blink_oneshot(&local->rx_led, &led_delay, &led_delay, 0);
 #else
 	if (local->rx_led_counter++ % 2 == 0)
@@ -38,7 +38,7 @@ static inline void ieee80211_led_tx(struct ieee80211_local *local)
 
 	if (!atomic_read(&local->tx_led_active))
 		return;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+#if LINUX_VERSION_IS_GEQ(3,6,0)
 	led_trigger_blink_oneshot(&local->tx_led, &led_delay, &led_delay, 0);
 #else
 	if (local->tx_led_counter++ % 2 == 0)

@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,7 +25,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,8 +87,7 @@ struct iwl_fw_chan_avail {
 } __packed;
 
 /**
- * NAN configuration command. This command starts/stops/modifies NAN
- * sync engine.
+ * struct iwl_nan_umac_cfg - NAN umac config parameters
  *
  * @action: one of the FW_CTXT_ACTION_*
  * @tsf_id: tsf id to use in beacons
@@ -99,23 +98,9 @@ struct iwl_fw_chan_avail {
  * @cluster_id: cluster id, if 0 the fw will choose one for us.
  * @dual_band: enables dual band operation.
  * @beacon_template_id: beacon template id for NAN
- * @nan_state: NAN state (DEBUG)
- * @chan24: override default 2.4GHz channel (DEBUG)
- * @chan52: override default 5.2GHz channel (DEBUG)
- * @hop_count: fake hop count (DEBUG)
- * @op_bands: band bit mask (DEBUG)
- * @warmup_timer: warmup_timer in us (DEBUG)
- * @custom_tsf: fake tsf value (DEBUG)
- * @action_delay: usecs to delay SDFs (DEBUG)
- * @cdw: committed DW interval as defined in NAN2 spec (NAN2)
- * @op_mode: operation mode as defined in NAN2 spec (NAN2)
- * @pot_avail_len: length of pot_avail array (NAN2)
- * @pot_avail: potential availability per op. class (NAN2)
  */
-struct iwl_nan_cfg_cmd {
+struct iwl_nan_umac_cfg {
 	__le32 action;
-
-	/* _NAN_UMAC_CONFIG_CMD_API_S_VER_1 */
 	__le32 tsf_id;
 	__le32 sta_id;
 	u8 node_addr[6];
@@ -125,8 +110,20 @@ struct iwl_nan_cfg_cmd {
 	__le16 cluster_id;
 	__le32 dual_band;
 	__le32 beacon_template_id;
+} __packed; /* _NAN_UMAC_CONFIG_CMD_API_S_VER_1 */
 
-	/* NAN_TEST_BED_SPECIFIC_CONFIG_S_VER_1 */
+/**
+ * struct iwl_nan_testbed_cfg - NAN testbed specific config parameters
+ *
+ * @chan24: override default 2.4GHz channel (DEBUG)
+ * @chan52: override default 5.2GHz channel (DEBUG)
+ * @hop_count: fake hop count (DEBUG)
+ * @op_bands: band bit mask (DEBUG)
+ * @warmup_timer: warmup_timer in us (DEBUG)
+ * @custom_tsf: fake tsf value (DEBUG)
+ * @action_delay: usecs to delay SDFs (DEBUG)
+ */
+struct iwl_nan_testbed_cfg {
 	u8 chan24;
 	u8 chan52;
 	u8 hop_count;
@@ -134,13 +131,57 @@ struct iwl_nan_cfg_cmd {
 	__le32 warmup_timer;
 	__le64 custom_tsf;
 	__le32 action_delay;
+} __packed; /* NAN_TEST_BED_SPECIFIC_CONFIG_S_VER_1 */
 
-	/* NAN 2 specific configuration */
+/*
+ * struct iwl_nan_nan2_cfg - NAN2 specific configuration
+ *
+ * @cdw: committed DW interval as defined in NAN2 spec (NAN2)
+ * @op_mode: operation mode as defined in NAN2 spec (NAN2)
+ * @pot_avail_len: length of pot_avail array (NAN2)
+ * @pot_avail: potential availability per op. class (NAN2)
+ */
+struct iwl_nan_nan2_cfg {
 	__le16 cdw;
 	u8 op_mode;
 	u8 pot_avail_len;
 	struct iwl_fw_chan_avail pot_avail[20];
 } __packed; /* NAN_CONFIG_CMD_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_cfg_cmd - NAN configuration command
+ *
+ * This command starts/stops/modifies NAN sync engine.
+ *
+ * @umac_cfg: umac specific configuration
+ * @tb_cfg: testbed specific configuration
+ * @nan2_cfg: nan2 specific configuration
+ */
+struct iwl_nan_cfg_cmd {
+	struct iwl_nan_umac_cfg umac_cfg;
+	struct iwl_nan_testbed_cfg tb_cfg;
+	/* NAN 2 specific configuration */
+	struct iwl_nan_nan2_cfg nan2_cfg;
+} __packed; /* NAN_CONFIG_CMD_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_cfg_cmd_v2 - NAN configuration command, version 2
+ *
+ * This command starts/stops/modifies NAN sync engine.
+ *
+ * @umac_cfg: umac specific configuration
+ * @tb_cfg: testbed specific configuration
+ * @unavailable_slots: Force this amount of slots to be unavailable in potential
+ *	map
+ * @nan2_cfg: nan2 specific configuration
+ */
+struct iwl_nan_cfg_cmd_v2 {
+	struct iwl_nan_umac_cfg umac_cfg;
+	struct iwl_nan_testbed_cfg tb_cfg;
+	__le32 unavailable_slots;
+	/* NAN 2 specific configuration */
+	struct iwl_nan_nan2_cfg nan2_cfg;
+} __packed; /* NAN_CONFIG_CMD_API_S_VER_2 */
 
 /* NAN DE function type */
 enum iwl_fw_nan_func_type {
@@ -165,7 +206,7 @@ enum iwl_fw_nan_func_flags {
 };
 
 /**
- * NAN add/remove function command
+ * struct iwl_nan_add_func_common - NAN add/remove function, common part
  *
  * @action: one of the FW_CTXT_ACTION_ADD/REMOVE
  * @instance_id: instance id of the DE function to remove
@@ -174,7 +215,7 @@ enum iwl_fw_nan_func_flags {
  * @flags: a combination of %iwl_fw_nan_func_flags
  * @flw_up_id: follow up id
  * @flw_up_req_id: follow up requestor id
- * @flw_up_addr[6]: follow up destination address
+ * @flw_up_addr: follow up destination address
  * @ttl: ttl in DW's or 0 for infinite
  * @faw_ci: struct %iwl_fw_channel_info for furher availability
  * @faw_attrtype: further availability bitmap
@@ -183,9 +224,8 @@ enum iwl_fw_nan_func_flags {
  * @rx_filter_len: length of rx filter
  * @tx_filter_len: length of tx filter
  * @dw_interval: awake dw interval
- * data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter
  */
-struct iwl_nan_add_func_cmd {
+struct iwl_nan_add_func_common {
 	__le32 action;
 	u8 instance_id;
 	u8 type;
@@ -203,6 +243,36 @@ struct iwl_nan_add_func_cmd {
 	u8 rx_filter_len;
 	u8 tx_filter_len;
 	u8 dw_interval;
+} __packed; /* NAN_DISCO_FUNC_FIXED_CMD_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_add_func_cmd_v2 - NAN add/remove function command, version 2
+ *
+ * @cmn: nan add function common part
+ * @cipher_capa: Cipher suite information capabilities
+ * @cipher_suite_id: Bitmap of the list of cipher suite IDs
+ * @security_ctx_len: length of tx security context attributes
+ * @sdea_ctrl: SDEA control field
+ * @data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter,
+ *	security_ctx
+ */
+struct iwl_nan_add_func_cmd_v2 {
+	struct iwl_nan_add_func_common cmn;
+	u8 cipher_capa;
+	u8 cipher_suite_id;
+	__le16 security_ctx_len;
+	__le16 sdea_ctrl;
+	u8 data[0];
+} __packed; /* NAN_DISCO_FUNC_FIXED_CMD_API_S_VER_2 */
+
+/**
+ * struct iwl_nan_add_func_cmd - NAN add/remove function command
+ *
+ * @cmn: nan add function common part
+ * data[0]: dw aligned fields -service_info, srf, rxFilter, txFilter
+ */
+struct iwl_nan_add_func_cmd {
+	struct iwl_nan_add_func_common cmn;
 	u8 reserved[2];
 	u8 data[0];
 } __packed; /* NAN_DISCO_FUNC_FIXED_CMD_API_S_VER_1 */
@@ -216,10 +286,10 @@ enum iwl_nan_add_func_resp_status {
 };
 
 /**
- * Add NAN function response
+ * struct iwl_nan_add_func_res - Add NAN function response
  *
  * @instance_id: assigned instance_id (if added)
- * @status: status of the command (NAN_DE_FUNC_STATUS_*)
+ * @status: status of the command (&enum iwl_nan_add_func_resp_status)
  */
 struct iwl_nan_add_func_res {
 	u8 instance_id;
@@ -228,7 +298,7 @@ struct iwl_nan_add_func_res {
 } __packed; /* NAN_DISCO_FUNC_CMD_API_S_VER_1 */
 
 /**
- * NaN discovery event
+ * struct iwl_nan_disc_evt_notify - NaN discovery event
  *
  * @peer_mac_addr: peer address
  * @type: Type of matching function
@@ -257,11 +327,11 @@ enum iwl_fw_nan_de_term_reason {
 };
 
 /**
- * NAN function termination event
+ * struct iwl_nan_de_term - NAN function termination event
  *
- * @type: type of terminated function (enum %iwl_fw_nan_func_type)
+ * @type: type of terminated function (&enum iwl_fw_nan_func_type)
  * @instance_id: instance id
- * @reason: termination reason (enum %iwl_fw_nan_de_term_reason)
+ * @reason: termination reason (&enum iwl_fw_nan_de_term_reason)
  */
 struct iwl_nan_de_term {
 	u8 type;
@@ -283,7 +353,7 @@ enum iwl_fw_config_flags {
 };
 
 /**
- * NAN further availability configuration command
+ * struct iwl_nan_faw_config - NAN further availability configuration command
  *
  * @id_n_color: id and color of the mac used for further availability
  * @faw_ci: channel to be available on

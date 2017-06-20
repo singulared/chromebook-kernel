@@ -39,6 +39,7 @@ subdir-ccflags-y += $(call cc-option,-Wno-error=date-time)
 subdir-ccflags-y += $(call cc-option,-Wno-date-time)
 # otherwise ieee80211_band vs. nl80211_band warnings come up
 subdir-ccflags-y += $(call cc-option,-Wno-enum-compare)
+subdir-ccflags-y += $(call cc-option,-Wno-enum-conversion)
 
 obj-$(CONFIG_IWL7000) += mac80211/
 obj-$(CONFIG_IWL7000) += iwlwifi/

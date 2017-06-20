@@ -32,7 +32,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
- * Copyright(c) 2015 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,6 +84,30 @@ enum iwl_xvt_state {
 
 #define IWL_XVT_LOAD_MASK_INIT BIT(0)
 #define IWL_XVT_LOAD_MASK_RUNTIME BIT(1)
+
+#define NUM_OF_LMACS	(2)
+
+/**
+ * tx_meta_data - Holds data and member needed for tx
+ * @tx_mod_thread: thread dedicated for tx traffic
+ * @mod_tx_wq: send packets queue
+ * @tx_task_operating: whether tx is active
+ * @queue: FW queue ID for TX_CMD
+ * @tx_counter: counts number of sent packets
+ * @tot_tx: total number of packets required to sent
+ * @mod_tx_done_wq: queue to wait on until all packets are sent and received
+ * @txq_full: set to true when mod_tx_wq is full
+ */
+struct tx_meta_data {
+	struct task_struct *tx_mod_thread;
+	wait_queue_head_t mod_tx_wq;
+	bool tx_task_operating;
+	int queue;
+	u64 tx_counter;
+	u32 tot_tx;
+	wait_queue_head_t mod_tx_done_wq;
+	bool txq_full;
+};
 
 /**
  * iwl_sw_stack_config - Holds active SW stack config as set from user space
@@ -258,13 +282,12 @@ struct iwl_xvt {
 	struct mutex mutex;	/* Protects access to xVT struct */
 	struct mutex notif_mtx;	/* Protects notifications processing */
 	enum iwl_xvt_state state;
-	bool txq_full;
 	bool fw_error;
 
 	struct iwl_notif_wait_data notif_wait;
 
 	enum iwl_ucode_type cur_ucode;
-	u32 error_event_table;
+	u32 error_event_table[2];
 	bool fw_running;
 	struct iwl_sf_region sf_space;
 	u32 fw_major_ver;
@@ -275,16 +298,11 @@ struct iwl_xvt {
 	struct iwl_sw_stack_config sw_stack_cfg;
 	bool rx_hdr_enabled;
 
-	wait_queue_head_t mod_tx_wq;
 	bool apmg_pd_en;
 	/* DMA buffer information */
 	u32 dma_buffer_size;
 	u8 *dma_cpu_addr;
 	dma_addr_t dma_addr;
-	/* TX done conter */
-	u32 tx_counter;
-	u32 tot_tx;
-	wait_queue_head_t mod_tx_done_wq;
 
 	/* Paging section */
 	struct iwl_fw_paging fw_paging_db[NUM_OF_FW_PAGING_BLOCKS];
@@ -294,6 +312,8 @@ struct iwl_xvt {
 	bool is_nvm_mac_override;
 	u8 nvm_hw_addr[ETH_ALEN];
 	u8 nvm_mac_addr[ETH_ALEN];
+
+	struct tx_meta_data tx_meta_data[NUM_OF_LMACS];
 };
 
 #define IWL_OP_MODE_GET_XVT(_op_mode) \
@@ -343,4 +363,43 @@ static inline bool iwl_xvt_is_dqa_supported(struct iwl_xvt *xvt)
 			   IWL_UCODE_TLV_CAPA_DQA_SUPPORT) &&
 	       IWL_XVT_ENABLE_DQA;
 }
+
+/* Based on mvm function: iwl_mvm_has_new_tx_api */
+static inline bool iwl_xvt_is_unified_fw(struct iwl_xvt *xvt)
+{
+	/* TODO - replace with TLV once defined */
+	return xvt->trans->cfg->use_tfh;
+}
+
+static inline bool iwl_xvt_is_cdb_supported(struct iwl_xvt *xvt)
+{
+	/*
+	 * TODO:
+	 * The issue of how to determine CDB APIs and usage is still not fully
+	 * defined.
+	 * There is a compilation for CDB and non-CDB FW, but there may
+	 * be also runtime check.
+	 * For now there is a TLV for checking compilation mode, but a
+	 * runtime check will also have to be here - once defined.
+	 */
+	return fw_has_capa(&xvt->fw->ucode_capa,
+			   IWL_UCODE_TLV_CAPA_CDB_SUPPORT);
+}
+
+static inline struct agg_tx_status*
+iwl_xvt_get_agg_status(struct iwl_xvt *xvt, struct iwl_xvt_tx_resp *tx_resp)
+{
+	if (iwl_xvt_is_unified_fw(xvt))
+		return &tx_resp->v6.status;
+	else
+		return &tx_resp->v3.status;
+}
+
+static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt *xvt,
+				      struct iwl_xvt_tx_resp *tx_resp)
+{
+	return le32_to_cpup((__le32 *)iwl_xvt_get_agg_status(xvt, tx_resp) +
+			    tx_resp->frame_count) & 0xfff;
+}
+
 #endif

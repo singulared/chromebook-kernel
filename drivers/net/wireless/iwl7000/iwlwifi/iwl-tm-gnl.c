@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -522,14 +522,7 @@ enum iwl_tm_gnl_cmd_attr_t {
 };
 
 /* TM GNL family definition */
-static struct genl_family iwl_tm_gnl_family = {
-	.id		= GENL_ID_GENERATE,
-	.hdrsize	= 0,
-	.name		= IWL_TM_GNL_FAMILY_NAME,
-	.version	= IWL_TM_GNL_VERSION_NR,
-	.maxattr	= IWL_TM_GNL_MSG_ATTR_MAX,
-};
-
+static struct genl_family iwl_tm_gnl_family;
 static __genl_const struct genl_multicast_group iwl_tm_gnl_mcgrps[] = {
 	{ .name = IWL_TM_GNL_MC_GRP_NAME, },
 };
@@ -1121,6 +1114,20 @@ static __genl_const struct genl_ops iwl_tm_gnl_ops[] = {
 	},
 };
 
+static struct genl_family iwl_tm_gnl_family __genl_ro_after_init = {
+	.hdrsize	= 0,
+	.name		= IWL_TM_GNL_FAMILY_NAME,
+	.version	= IWL_TM_GNL_VERSION_NR,
+	.maxattr	= IWL_TM_GNL_MSG_ATTR_MAX,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
+	.module		= THIS_MODULE,
+	.ops		= iwl_tm_gnl_ops,
+	.n_ops		= ARRAY_SIZE(iwl_tm_gnl_ops),
+	.mcgrps		= iwl_tm_gnl_mcgrps,
+	.n_mcgrps	= ARRAY_SIZE(iwl_tm_gnl_mcgrps),
+#endif
+};
+
 /**
  * iwl_tm_gnl_add() - Registers a devices/op-mode in the iwl-tm-gnl list
  * @trans:	transport struct for the device to register for
@@ -1218,9 +1225,13 @@ int iwl_tm_gnl_init(void)
 	INIT_LIST_HEAD(&dev_list);
 	mutex_init(&dev_list_mtx);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
+	ret = genl_register_family(&iwl_tm_gnl_family);
+#else
 	ret = genl_register_family_with_ops_groups(&iwl_tm_gnl_family,
 						   iwl_tm_gnl_ops,
 						   iwl_tm_gnl_mcgrps);
+#endif
 	if (ret)
 		return ret;
 	ret = netlink_register_notifier(&iwl_tm_gnl_netlink_notifier);

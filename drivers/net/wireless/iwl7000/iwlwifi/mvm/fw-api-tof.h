@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -167,11 +167,17 @@ enum iwl_tof_responder_cfg_flags {
  * @rate: current AP rate
  * @channel_num: current AP Channel
  * @ctrl_ch_position: coding of the control channel position relative to
- *	     the center frequency.
- *	     40MHz  0 below center, 1 above center
- *	     80MHz  bits [0..1]: 0  the near 20MHz to the center,
- *				 1  the far  20MHz to the center
- *		    bit[2]  as above 40MHz
+ *	the center frequency:
+ *
+ *	40 MHz
+ *		0 below center, 1 above center
+ *
+ *	80 MHz
+ *		bits [0..1]
+ *		 * 0  the near 20MHz to the center,
+ *		 * 1  the far  20MHz to the center
+ *		bit[2]
+ *		 as above 40MHz
  * @sta_id: index of the AP STA when in AP mode
  * @toa_offset: Artificial addition [pSec] for the ToA - to be used for debug
  *		purposes, simulating station movement by adding various values
@@ -231,9 +237,6 @@ struct iwl_tof_range_req_ext_cmd {
 	u8 ftm_format_and_bw40M;
 	u8 ftm_format_and_bw80M;
 } __packed;
-
-#define IWL_MVM_TOF_MAX_APS 21
-#define IWL_MVM_TOF_MAX_TWO_SIDED_APS 5
 
 /**
  * enum iwl_tof_location_query - values for query bitmap
@@ -320,34 +323,30 @@ enum iwl_tof_response_mode {
 
 /**
  * enum iwl_tof_initiator_flags
- * @IWL_TOF_INITIATOR_FLAGS_DYNAMIC_ACK: send ack on all band (1)
- *					 os send duplicated ack on 20 band
- * @IWL_TOF_INITIATOR_FLAGS_REQ_MODE: ASAP or NON ASAP measurement mode
- * @IWL_TOF_INITIATOR_FLAGS_REPORT_MCSI: report MCSI notification to host
- * @IWL_TOF_INITIATOR_FLAGS_ALGO_TYPE: location Algorithm to execute
- * @IWL_TOF_INITIATOR_FLAGS_PAPD_CALIB: run calib PAPD mode
- * @IWL_TOF_INITIATOR_FLAGS_COMMON_CALIB_OVERRIDE: force common calib.
- *						   field 'common_calib' shall
- *						   be used.
- * @IWL_TOF_INITIATOR_FLAGS_SPECIFIC_CALIB_OVERRIDE: force specific calib
- *						     field 'specific_calib'
- *						     shall be used.
- * @IWL_TOF_INITIATOR_FLAGS_FAST_ALGO_SUPPORT: support fast algo, meaning run
- *					       the algo on ant A or B only,
- *					       instead of A+B.
- * @IWL_TOF_INITIATOR_FLAGS_FTM_RX_ANT: force rx ant
+ *
+ * @IWL_TOF_INITIATOR_FLAGS_FAST_ALGO_DISABLED: disable fast algo, meaning run
+ *	the algo on ant A+B, instead of only one of them.
+ * @IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_A: open RX antenna A for FTMs RX
+ * @IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_B: open RX antenna B for FTMs RX
+ * @IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_C: open RX antenna C for FTMs RX
+ * @IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_A: use antenna A fo TX ACKs during FTM
+ * @IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_B: use antenna B fo TX ACKs during FTM
+ * @IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_C: use antenna C fo TX ACKs during FTM
+ * @IWL_TOF_INITIATOR_FLAGS_MINDELTA_NO_PREF: no preference for minDeltaFTM
  */
 enum iwl_tof_initiator_flags {
-	IWL_TOF_INITIATOR_FLAGS_DYNAMIC_ACK = BIT(0),
-	IWL_TOF_INITIATOR_FLAGS_REQ_MODE = BIT(1),
-	IWL_TOF_INITIATOR_FLAGS_REPORT_MCSI = BIT(2),
-	IWL_TOF_INITIATOR_FLAGS_ALGO_TYPE = BIT(3) | BIT(4) | BIT(5),
-	IWL_TOF_INITIATOR_FLAGS_PAPD_CALIB = BIT(6),
-	IWL_TOF_INITIATOR_FLAGS_COMMON_CALIB_OVERRIDE = BIT(7),
-	IWL_TOF_INITIATOR_FLAGS_SPECIFIC_CALIB_OVERRIDE = BIT(8),
-	IWL_TOF_INITIATOR_FLAGS_FAST_ALGO_SUPPORT = BIT(9),
-	IWL_TOF_INITIATOR_FLAGS_FTM_RX_ANT = RATE_MCS_ANT_ABC_MSK,
-};
+	IWL_TOF_INITIATOR_FLAGS_FAST_ALGO_DISABLED = BIT(0),
+	IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_A = BIT(1),
+	IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_B = BIT(2),
+	IWL_TOF_INITIATOR_FLAGS_RX_CHAIN_SEL_C = BIT(3),
+	IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_A = BIT(4),
+	IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_B = BIT(5),
+	IWL_TOF_INITIATOR_FLAGS_TX_CHAIN_SEL_C = BIT(6),
+	IWL_TOF_INITIATOR_FLAGS_MINDELTA_NO_PREF = BIT(7),
+}; /* LOCATION_RANGE_REQ_CMD_API_S_VER_5 */
+
+#define IWL_MVM_TOF_MAX_APS 5
+#define IWL_MVM_TOF_MAX_TWO_SIDED_APS 5
 
 /**
  * struct iwl_tof_range_req_cmd - start measurement cmd
@@ -393,6 +392,19 @@ struct iwl_tof_range_req_cmd {
 	__le16 specific_calib;
 	struct iwl_tof_range_req_ap_entry ap[IWL_MVM_TOF_MAX_APS];
 } __packed;
+/* LOCATION_RANGE_REQ_CMD_API_S_VER_5 */
+
+/*
+ * enum iwl_tof_range_request_status - status of the sent request
+ * @IWL_TOF_RANGE_REQUEST_STATUS_SUCCESSFUL - FW successfully received the
+ *	request
+ * @IWL_TOF_RANGE_REQUEST_STATUS_BUSY - FW is busy with a previous request, the
+ *	sent request will not be handled
+ */
+enum iwl_tof_range_request_status {
+	IWL_TOF_RANGE_REQUEST_STATUS_SUCCESS,
+	IWL_TOF_RANGE_REQUEST_STATUS_BUSY,
+};
 
 /**
  * enum iwl_tof_entry_status
@@ -443,7 +455,7 @@ enum iwl_tof_entry_status {
 /**
  * struct iwl_tof_range_rsp_ap_entry_ntfy - AP parameters (response)
  * @measure_status: current APs measurement status, one of
- *	%enum iwl_tof_entry_status.
+ *	&enum iwl_tof_entry_status.
  * @measure_bw: Current AP Bandwidth: 0  20MHz, 1  40MHz, 2  80MHz
  * @rtt: The Round Trip Time that took for the last measurement for
  *	 current AP [pSec]

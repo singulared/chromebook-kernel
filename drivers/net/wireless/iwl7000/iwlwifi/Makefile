@@ -10,6 +10,7 @@ iwlwifi-objs		+= iwl-trans.o
 
 # Bus
 iwlwifi-$(CPTCFG_IWLWIFI_PCIE)	+= pcie/drv.o pcie/rx.o pcie/tx.o pcie/trans.o
+iwlwifi-$(CPTCFG_IWLWIFI_PCIE)	+= pcie/ctxt-info.o pcie/trans-gen2.o pcie/tx-gen2.o
 iwlwifi-$(CPTCFG_IWLWIFI_PCIE)-$(CPTCFG_IWLMVM) += iwl-7000.o iwl-8000.o iwl-9000.o iwl-a000.o
 iwlwifi-$(CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES) += iwl-dbg-cfg.o
 
@@ -18,7 +19,7 @@ iwlwifi-objs += $(iwlwifi-y-y) $(iwlwifi-y-m)
 iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TRACING) += iwl-devtrace.o
 iwlwifi-$(CPTCFG_IWLWIFI_DEVICE_TESTMODE) += iwl-tm-gnl.o iwl-dnt-cfg.o iwl-dnt-dispatch.o iwl-dnt-dev-if.o
 
-ccflags-y += -D__CHECK_ENDIAN__ -I$(src)
+ccflags-y += -I$(src)
 
 obj-$(CPTCFG_IWLMVM)	+= mvm/
 obj-$(CPTCFG_IWLXVT)	+= xvt/

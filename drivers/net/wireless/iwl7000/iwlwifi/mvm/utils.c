@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
- * Copyright (C) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
- * Copyright (C) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,7 +74,7 @@
 #include "mvm.h"
 #include "fw-api-rs.h"
 #ifdef CPTCFG_IWLMVM_TCM
-#include "vendor-cmd.h"
+#include "iwl-vendor-cmd.h"
 #endif
 
 /*
@@ -502,13 +502,12 @@ static void iwl_mvm_dump_umac_error_log(struct iwl_mvm *mvm)
 	IWL_ERR(mvm, "0x%08X | isr status reg\n", table.nic_isr_pref);
 }
 
-void iwl_mvm_dump_nic_error_log(struct iwl_mvm *mvm)
+static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 {
 	struct iwl_trans *trans = mvm->trans;
 	struct iwl_error_event_table table;
-	u32 base, val;
+	u32 val;
 
-	base = mvm->error_event_table;
 	if (mvm->cur_ucode == IWL_UCODE_INIT) {
 		if (!base)
 			base = mvm->fw->init_errlog_ptr;
@@ -609,6 +608,14 @@ void iwl_mvm_dump_nic_error_log(struct iwl_mvm *mvm)
 	IWL_ERR(mvm, "0x%08X | lmpm_pmg_sel\n", table.lmpm_pmg_sel);
 	IWL_ERR(mvm, "0x%08X | timestamp\n", table.u_timestamp);
 	IWL_ERR(mvm, "0x%08X | flow_handler\n", table.flow_handler);
+}
+
+void iwl_mvm_dump_nic_error_log(struct iwl_mvm *mvm)
+{
+	iwl_mvm_dump_lmac_error_log(mvm, mvm->error_event_table[0]);
+
+	if (mvm->error_event_table[1])
+		iwl_mvm_dump_lmac_error_log(mvm, mvm->error_event_table[1]);
 
 	if (mvm->support_umac_log)
 		iwl_mvm_dump_umac_error_log(mvm);
@@ -619,6 +626,10 @@ int iwl_mvm_find_free_queue(struct iwl_mvm *mvm, u8 sta_id, u8 minq, u8 maxq)
 	int i;
 
 	lockdep_assert_held(&mvm->queue_info_lock);
+
+	/* This should not be hit with new TX path */
+	if (WARN_ON(iwl_mvm_has_new_tx_api(mvm)))
+		return -ENOSPC;
 
 	/* Start by looking for a free queue */
 	for (i = minq; i <= maxq; i++)
@@ -656,6 +667,9 @@ int iwl_mvm_reconfig_scd(struct iwl_mvm *mvm, int queue, int fifo, int sta_id,
 	};
 	int ret;
 
+	if (WARN_ON(iwl_mvm_has_new_tx_api(mvm)))
+		return -EINVAL;
+
 	spin_lock_bh(&mvm->queue_info_lock);
 	if (WARN(mvm->queue_info[queue].hw_queue_refcount == 0,
 		 "Trying to reconfig unallocated queue %d\n", queue)) {
@@ -673,20 +687,18 @@ int iwl_mvm_reconfig_scd(struct iwl_mvm *mvm, int queue, int fifo, int sta_id,
 	return ret;
 }
 
-bool iwl_mvm_enable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
-			u16 ssn, const struct iwl_trans_txq_scd_cfg *cfg,
-			unsigned int wdg_timeout)
+static bool iwl_mvm_update_txq_mapping(struct iwl_mvm *mvm, int queue,
+				       int mac80211_queue, u8 sta_id, u8 tid)
 {
 	bool enable_queue = true;
-	bool inc_ssn = false;
 
 	spin_lock_bh(&mvm->queue_info_lock);
 
 	/* Make sure this TID isn't already enabled */
-	if (mvm->queue_info[queue].tid_bitmap & BIT(cfg->tid)) {
+	if (mvm->queue_info[queue].tid_bitmap & BIT(tid)) {
 		spin_unlock_bh(&mvm->queue_info_lock);
 		IWL_ERR(mvm, "Trying to enable TXQ %d with existing TID %d\n",
-			queue, cfg->tid);
+			queue, tid);
 		return false;
 	}
 
@@ -694,62 +706,102 @@ bool iwl_mvm_enable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 	if (mvm->queue_info[queue].hw_queue_refcount > 0)
 		enable_queue = false;
 
-	mvm->queue_info[queue].hw_queue_to_mac80211 |= BIT(mac80211_queue);
+	mvm->hw_queue_to_mac80211[queue] |= BIT(mac80211_queue);
+
 	mvm->queue_info[queue].hw_queue_refcount++;
-	mvm->queue_info[queue].tid_bitmap |= BIT(cfg->tid);
-	mvm->queue_info[queue].ra_sta_id = cfg->sta_id;
+	mvm->queue_info[queue].tid_bitmap |= BIT(tid);
+	mvm->queue_info[queue].ra_sta_id = sta_id;
 
 	if (enable_queue) {
-		if (cfg->tid != IWL_MAX_TID_COUNT)
+		if (tid != IWL_MAX_TID_COUNT)
 			mvm->queue_info[queue].mac80211_ac =
-				tid_to_mac80211_ac[cfg->tid];
+				tid_to_mac80211_ac[tid];
 		else
 			mvm->queue_info[queue].mac80211_ac = IEEE80211_AC_VO;
 
-		mvm->queue_info[queue].txq_tid = cfg->tid;
+		mvm->queue_info[queue].txq_tid = tid;
 	}
 
 	IWL_DEBUG_TX_QUEUES(mvm,
 			    "Enabling TXQ #%d refcount=%d (mac80211 map:0x%x)\n",
 			    queue, mvm->queue_info[queue].hw_queue_refcount,
-			    mvm->queue_info[queue].hw_queue_to_mac80211);
+			    mvm->hw_queue_to_mac80211[queue]);
 
 	spin_unlock_bh(&mvm->queue_info_lock);
 
-	/* Send the enabling command if we need to */
-	if (enable_queue) {
-		struct iwl_scd_txq_cfg_cmd cmd = {
-			.scd_queue = queue,
-			.action = SCD_CFG_ENABLE_QUEUE,
-			.window = cfg->frame_limit,
-			.sta_id = cfg->sta_id,
-			.ssn = cpu_to_le16(ssn),
-			.tx_fifo = cfg->fifo,
-			.aggregate = cfg->aggregate,
-			.tid = cfg->tid,
-		};
+	return enable_queue;
+}
 
-		/* Set sta_id in the command, if it exists */
-		if (iwl_mvm_is_dqa_supported(mvm))
-			cmd.sta_id = cfg->sta_id;
+int iwl_mvm_tvqm_enable_txq(struct iwl_mvm *mvm, int mac80211_queue,
+			    u8 sta_id, u8 tid, unsigned int timeout)
+{
+	struct iwl_tx_queue_cfg_cmd cmd = {
+		.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
+		.sta_id = sta_id,
+		.tid = tid,
+	};
+	int queue;
 
-		inc_ssn = iwl_trans_txq_enable_cfg(mvm->trans, queue, ssn,
-						   NULL, wdg_timeout);
+	if (cmd.tid == IWL_MAX_TID_COUNT)
+		cmd.tid = IWL_MGMT_TID;
+	queue = iwl_trans_txq_alloc(mvm->trans, (void *)&cmd,
+				    SCD_QUEUE_CFG, timeout);
 
-		if (inc_ssn)
-			le16_add_cpu(&cmd.ssn, 1);
-
-		WARN(iwl_mvm_send_cmd_pdu(mvm, SCD_QUEUE_CFG, 0, sizeof(cmd),
-					  &cmd),
-		     "Failed to configure queue %d on FIFO %d\n", queue,
-		     cfg->fifo);
+	if (queue < 0) {
+		IWL_DEBUG_TX_QUEUES(mvm,
+				    "Failed allocating TXQ for sta %d tid %d, ret: %d\n",
+				    sta_id, tid, queue);
+		return queue;
 	}
+
+	IWL_DEBUG_TX_QUEUES(mvm, "Enabling TXQ #%d for sta %d tid %d\n",
+			    queue, sta_id, tid);
+
+	mvm->hw_queue_to_mac80211[queue] |= BIT(mac80211_queue);
+	IWL_DEBUG_TX_QUEUES(mvm,
+			    "Enabling TXQ #%d (mac80211 map:0x%x)\n",
+			    queue, mvm->hw_queue_to_mac80211[queue]);
+
+	return queue;
+}
+
+bool iwl_mvm_enable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
+			u16 ssn, const struct iwl_trans_txq_scd_cfg *cfg,
+			unsigned int wdg_timeout)
+{
+	struct iwl_scd_txq_cfg_cmd cmd = {
+		.scd_queue = queue,
+		.action = SCD_CFG_ENABLE_QUEUE,
+		.window = cfg->frame_limit,
+		.sta_id = cfg->sta_id,
+		.ssn = cpu_to_le16(ssn),
+		.tx_fifo = cfg->fifo,
+		.aggregate = cfg->aggregate,
+		.tid = cfg->tid,
+	};
+	bool inc_ssn;
+
+	if (WARN_ON(iwl_mvm_has_new_tx_api(mvm)))
+		return false;
+
+	/* Send the enabling command if we need to */
+	if (!iwl_mvm_update_txq_mapping(mvm, queue, mac80211_queue,
+					cfg->sta_id, cfg->tid))
+		return false;
+
+	inc_ssn = iwl_trans_txq_enable_cfg(mvm->trans, queue, ssn,
+					   NULL, wdg_timeout);
+	if (inc_ssn)
+		le16_add_cpu(&cmd.ssn, 1);
+
+	WARN(iwl_mvm_send_cmd_pdu(mvm, SCD_QUEUE_CFG, 0, sizeof(cmd), &cmd),
+	     "Failed to configure queue %d on FIFO %d\n", queue, cfg->fifo);
 
 	return inc_ssn;
 }
 
-void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
-			 u8 tid, u8 flags)
+int iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
+			u8 tid, u8 flags)
 {
 	struct iwl_scd_txq_cfg_cmd cmd = {
 		.scd_queue = queue,
@@ -758,11 +810,21 @@ void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 	bool remove_mac_queue = true;
 	int ret;
 
+	if (iwl_mvm_has_new_tx_api(mvm)) {
+		spin_lock_bh(&mvm->queue_info_lock);
+		mvm->hw_queue_to_mac80211[queue] &= ~BIT(mac80211_queue);
+		spin_unlock_bh(&mvm->queue_info_lock);
+
+		iwl_trans_txq_free(mvm->trans, queue);
+
+		return 0;
+	}
+
 	spin_lock_bh(&mvm->queue_info_lock);
 
 	if (WARN_ON(mvm->queue_info[queue].hw_queue_refcount == 0)) {
 		spin_unlock_bh(&mvm->queue_info_lock);
-		return;
+		return 0;
 	}
 
 	mvm->queue_info[queue].tid_bitmap &= ~BIT(tid);
@@ -784,7 +846,7 @@ void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 	}
 
 	if (remove_mac_queue)
-		mvm->queue_info[queue].hw_queue_to_mac80211 &=
+		mvm->hw_queue_to_mac80211[queue] &=
 			~BIT(mac80211_queue);
 	mvm->queue_info[queue].hw_queue_refcount--;
 
@@ -797,12 +859,12 @@ void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 			    "Disabling TXQ #%d refcount=%d (mac80211 map:0x%x)\n",
 			    queue,
 			    mvm->queue_info[queue].hw_queue_refcount,
-			    mvm->queue_info[queue].hw_queue_to_mac80211);
+			    mvm->hw_queue_to_mac80211[queue]);
 
 	/* If the queue is still enabled - nothing left to do in this func */
 	if (cmd.action == SCD_CFG_ENABLE_QUEUE) {
 		spin_unlock_bh(&mvm->queue_info_lock);
-		return;
+		return 0;
 	}
 
 	cmd.sta_id = mvm->queue_info[queue].ra_sta_id;
@@ -811,16 +873,16 @@ void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 	/* Make sure queue info is correct even though we overwrite it */
 	WARN(mvm->queue_info[queue].hw_queue_refcount ||
 	     mvm->queue_info[queue].tid_bitmap ||
-	     mvm->queue_info[queue].hw_queue_to_mac80211,
+	     mvm->hw_queue_to_mac80211[queue],
 	     "TXQ #%d info out-of-sync - refcount=%d, mac map=0x%x, tid=0x%x\n",
 	     queue, mvm->queue_info[queue].hw_queue_refcount,
-	     mvm->queue_info[queue].hw_queue_to_mac80211,
+	     mvm->hw_queue_to_mac80211[queue],
 	     mvm->queue_info[queue].tid_bitmap);
 
 	/* If we are here - the queue is freed and we can zero out these vals */
 	mvm->queue_info[queue].hw_queue_refcount = 0;
 	mvm->queue_info[queue].tid_bitmap = 0;
-	mvm->queue_info[queue].hw_queue_to_mac80211 = 0;
+	mvm->hw_queue_to_mac80211[queue] = 0;
 
 	/* Regardless if this is a reserved TXQ for a STA - mark it as false */
 	mvm->queue_info[queue].reserved = false;
@@ -829,10 +891,12 @@ void iwl_mvm_disable_txq(struct iwl_mvm *mvm, int queue, int mac80211_queue,
 
 	iwl_trans_txq_disable(mvm->trans, queue, false);
 	ret = iwl_mvm_send_cmd_pdu(mvm, SCD_QUEUE_CFG, flags,
-				   sizeof(cmd), &cmd);
+				   sizeof(struct iwl_scd_txq_cfg_cmd), &cmd);
+
 	if (ret)
 		IWL_ERR(mvm, "Failed to disable queue %d (ret=%d)\n",
 			queue, ret);
+	return ret;
 }
 
 /**
@@ -854,7 +918,7 @@ int iwl_mvm_send_lq_cmd(struct iwl_mvm *mvm, struct iwl_lq_cmd *lq, bool init)
 		.data = { lq, },
 	};
 
-	if (WARN_ON(lq->sta_id == IWL_MVM_STATION_COUNT))
+	if (WARN_ON(lq->sta_id == IWL_MVM_INVALID_STA))
 		return -EINVAL;
 
 	return iwl_mvm_send_cmd(mvm, &cmd);
@@ -992,23 +1056,48 @@ int iwl_mvm_update_low_latency(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	return iwl_mvm_power_update_mac(mvm);
 }
 
+struct iwl_mvm_low_latency_iter {
+	bool result;
+	bool result_per_band[NUM_NL80211_BANDS];
+};
+
 static void iwl_mvm_ll_iter(void *_data, u8 *mac, struct ieee80211_vif *vif)
 {
-	bool *result = _data;
+	struct iwl_mvm_low_latency_iter *result = _data;
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	enum nl80211_band band;
 
-	if (iwl_mvm_vif_low_latency(iwl_mvm_vif_from_mac80211(vif)))
-		*result = true;
+	if (iwl_mvm_vif_low_latency(mvmvif)) {
+		result->result = true;
+
+		if (!mvmvif->phy_ctxt)
+			return;
+
+		band = mvmvif->phy_ctxt->channel->band;
+		result->result_per_band[band] = true;
+	}
 }
 
 bool iwl_mvm_low_latency(struct iwl_mvm *mvm)
 {
-	bool result = false;
+	struct iwl_mvm_low_latency_iter data = {};
 
 	ieee80211_iterate_active_interfaces_atomic(
 			mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
-			iwl_mvm_ll_iter, &result);
+			iwl_mvm_ll_iter, &data);
 
-	return result;
+	return data.result;
+}
+
+bool iwl_mvm_low_latency_band(struct iwl_mvm *mvm, enum nl80211_band band)
+{
+	struct iwl_mvm_low_latency_iter data = {};
+
+	ieee80211_iterate_active_interfaces_atomic(
+			mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
+			iwl_mvm_ll_iter, &data);
+
+	return data.result_per_band[band];
 }
 
 struct iwl_bss_iter_data {
@@ -1046,6 +1135,35 @@ struct ieee80211_vif *iwl_mvm_get_bss_vif(struct iwl_mvm *mvm)
 	}
 
 	return bss_iter_data.vif;
+}
+
+struct iwl_sta_iter_data {
+	bool assoc;
+};
+
+static void iwl_mvm_sta_iface_iterator(void *_data, u8 *mac,
+				       struct ieee80211_vif *vif)
+{
+	struct iwl_sta_iter_data *data = _data;
+
+	if (vif->type != NL80211_IFTYPE_STATION)
+		return;
+
+	if (vif->bss_conf.assoc)
+		data->assoc = true;
+}
+
+bool iwl_mvm_is_vif_assoc(struct iwl_mvm *mvm)
+{
+	struct iwl_sta_iter_data data = {
+		.assoc = false,
+	};
+
+	ieee80211_iterate_active_interfaces_atomic(mvm->hw,
+						   IEEE80211_IFACE_ITER_NORMAL,
+						   iwl_mvm_sta_iface_iterator,
+						   &data);
+	return data.assoc;
 }
 
 unsigned int iwl_mvm_get_wd_timeout(struct iwl_mvm *mvm,
@@ -1130,6 +1248,9 @@ static void iwl_mvm_remove_inactive_tids(struct iwl_mvm *mvm,
 	lockdep_assert_held(&mvmsta->lock);
 	lockdep_assert_held(&mvm->queue_info_lock);
 
+	if (WARN_ON(iwl_mvm_has_new_tx_api(mvm)))
+		return;
+
 	/* Go over all non-active TIDs, incl. IWL_MAX_TID_COUNT (for mgmt) */
 	for_each_set_bit(tid, &tid_bitmap, IWL_MAX_TID_COUNT + 1) {
 		/* If some TFDs are still queued - don't mark TID as inactive */
@@ -1160,8 +1281,8 @@ static void iwl_mvm_remove_inactive_tids(struct iwl_mvm *mvm,
 	for_each_set_bit(tid, &tid_bitmap, IWL_MAX_TID_COUNT + 1) {
 		int mac_queue = mvmsta->vif->hw_queue[tid_to_mac80211_ac[tid]];
 
-		mvmsta->tid_data[tid].txq_id = IEEE80211_INVAL_HW_QUEUE;
-		mvm->queue_info[queue].hw_queue_to_mac80211 &= ~BIT(mac_queue);
+		mvmsta->tid_data[tid].txq_id = IWL_MVM_INVALID_QUEUE;
+		mvm->hw_queue_to_mac80211[queue] &= ~BIT(mac_queue);
 		mvm->queue_info[queue].hw_queue_refcount--;
 		mvm->queue_info[queue].tid_bitmap &= ~BIT(tid);
 		mvmsta->tid_data[tid].is_tid_active = false;
@@ -1181,7 +1302,7 @@ static void iwl_mvm_remove_inactive_tids(struct iwl_mvm *mvm,
 	 */
 	tid_bitmap = mvm->queue_info[queue].tid_bitmap;
 	for_each_set_bit(tid, &tid_bitmap, IWL_MAX_TID_COUNT + 1) {
-		mvm->queue_info[queue].hw_queue_to_mac80211 |=
+		mvm->hw_queue_to_mac80211[queue] |=
 			BIT(mvmsta->vif->hw_queue[tid_to_mac80211_ac[tid]]);
 	}
 
@@ -1199,6 +1320,9 @@ void iwl_mvm_inactivity_check(struct iwl_mvm *mvm)
 	unsigned long timeout_queues_map = 0;
 	unsigned long now = jiffies;
 	int i;
+
+	if (iwl_mvm_has_new_tx_api(mvm))
+		return;
 
 	spin_lock_bh(&mvm->queue_info_lock);
 	for (i = 0; i < IWL_MAX_HW_QUEUES; i++)
@@ -1444,6 +1568,18 @@ static void iwl_mvm_check_uapsd_agg_expected_tpt(struct iwl_mvm *mvm,
 		iwl_mvm_uapsd_agg_disconnect_iter, &mac);
 }
 
+static void iwl_mvm_tcm_iterator(void *_data, u8 *mac,
+				 struct ieee80211_vif *vif)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	u32 *band = _data;
+
+	if (!mvmvif->phy_ctxt)
+		return;
+
+	band[mvmvif->id] = mvmvif->phy_ctxt->channel->band;
+}
+
 static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 					    unsigned long ts)
 {
@@ -1451,9 +1587,11 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 	unsigned int uapsd_elapsed =
 		jiffies_to_msecs(ts - mvm->tcm.uapsd_nonagg_ts);
 	u32 total_airtime = 0;
-	int ac, mac;
+	u32 band_airtime[NUM_NL80211_BANDS] = {0};
+	u32 band[NUM_MAC_INDEX_DRIVER] = {0};
+	int ac, mac, i;
 	bool low_latency = false;
-	enum iwl_mvm_vendor_load load;
+	enum iwl_mvm_vendor_load load, band_load;
 	bool handle_ll = time_after(ts, mvm->tcm.ll_ts + MVM_LL_PERIOD);
 	bool handle_uapsd =
 		time_after(ts, mvm->tcm.uapsd_nonagg_ts +
@@ -1466,12 +1604,18 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 
 	mvm->tcm.result.elapsed = elapsed;
 
+	ieee80211_iterate_active_interfaces_atomic(mvm->hw,
+						   IEEE80211_IFACE_ITER_NORMAL,
+						   iwl_mvm_tcm_iterator,
+						   &band);
+
 	for (mac = 0; mac < NUM_MAC_INDEX_DRIVER; mac++) {
 		struct iwl_mvm_tcm_mac *mdata = &mvm->tcm.data[mac];
 		u32 vo_vi_pkts = 0;
 		u32 airtime = mdata->rx.airtime + mdata->tx.airtime;
 
 		total_airtime += airtime;
+		band_airtime[band[mac]] += airtime;
 
 		load = iwl_mvm_tcm_load(mvm, airtime, elapsed);
 		mvm->tcm.result.change[mac] = load != mvm->tcm.result.load[mac];
@@ -1510,10 +1654,37 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 	mvm->tcm.result.global_change = load != mvm->tcm.result.global_load;
 	mvm->tcm.result.global_load = load;
 
+	for (i = 0; i < NUM_NL80211_BANDS; i++) {
+		band_load = iwl_mvm_tcm_load(mvm, band_airtime[i], elapsed);
+		mvm->tcm.result.band_load[i] = band_load;
+	}
+
+	/*
+	 * If the current load isn't low we need to force re-evaluation
+	 * in the TCM period, so that we can return to low load if there
+	 * was no traffic at all (and thus iwl_mvm_recalc_tcm didn't get
+	 * triggered by traffic).
+	 */
 	if (load != IWL_MVM_VENDOR_LOAD_LOW)
 		return MVM_TCM_PERIOD;
+	/*
+	 * If low-latency is active we need to force re-evaluation after
+	 * (the longer) MVM_LL_PERIOD, so that we can disable low-latency
+	 * when there's no traffic at all.
+	 */
 	if (low_latency)
 		return MVM_LL_PERIOD;
+	/*
+	 * Otherwise, we don't need to run the work struct because we're
+	 * in the default "idle" state - traffic indication is low (which
+	 * also covers the "no traffic" case) and low-latency is disabled
+	 * so there's no state that may need to be disabled when there's
+	 * no traffic at all.
+	 *
+	 * Note that this has no impact on the regular scheduling of the
+	 * updates triggered by traffic - those happen whenever one of the
+	 * two timeouts expire (if there's traffic at all.)
+	 */
 	return 0;
 }
 
@@ -1544,8 +1715,7 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 		smp_mb();
 		mvm->tcm.ts = ts;
 		if (work_delay)
-			queue_delayed_work(system_wq, &mvm->tcm.work,
-					   work_delay);
+			schedule_delayed_work(&mvm->tcm.work, work_delay);
 	}
 	spin_unlock(&mvm->tcm.lock);
 

@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright (C) 2015 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright (C) 2015 Intel Deutschland GmbH
+ * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -72,6 +72,7 @@
 #include <linux/pci_ids.h>
 #include <linux/if_ether.h>
 #include <linux/etherdevice.h>
+#include <linux/limits.h>
 
 #include "iwl-drv.h"
 #include "iwl-prph.h"
@@ -87,12 +88,15 @@
 #include "iwl-dnt-dispatch.h"
 #include "iwl-trans.h"
 
-#define XVT_UCODE_CALIB_TIMEOUT (2*HZ)
+#define XVT_UCODE_CALIB_TIMEOUT (CPTCFG_IWL_TIMEOUT_FACTOR * HZ)
 #define XVT_SCU_BASE	(0xe6a00000)
 #define XVT_SCU_SNUM1	(XVT_SCU_BASE + 0x300)
 #define XVT_SCU_SNUM2	(XVT_SCU_SNUM1 + 0x4)
 #define XVT_SCU_SNUM3	(XVT_SCU_SNUM2 + 0x4)
-
+#define XVT_MAX_TX_COUNT (ULLONG_MAX)
+#define XVT_LMAC_0_STA_ID (0) /* must be aligned with station id added in USC */
+#define XVT_LMAC_1_STA_ID (3) /* must be aligned with station id added in USC */
+#define TX_QUEUE_CFG_TID (6)
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb)
@@ -110,7 +114,7 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 					data, size, GFP_ATOMIC);
 		break;
 	case DTS_MEASUREMENT_NOTIFICATION:
-	case DTS_MEASUREMENT_NOTIF_WIDE:
+	case DTS_MEASUREMENT_NOTIF_WITH_GRP:
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_DTS_MEASUREMENTS,
 					data, size, GFP_ATOMIC);
@@ -158,6 +162,10 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 	case REPLY_RX_PHY_CMD:
 		IWL_DEBUG_INFO(xvt,
 			       "REPLY_RX_PHY_CMD received but not handled\n");
+		break;
+	case INIT_COMPLETE_NOTIF:
+		IWL_DEBUG_INFO(xvt, "received INIT_COMPLETE_NOTIF\n");
+		break;
 	default:
 		IWL_DEBUG_INFO(xvt, "xVT mode RX command 0x%x not handled\n",
 			       pkt->hdr.cmd);
@@ -344,9 +352,15 @@ static int iwl_xvt_read_sv_drop(struct iwl_xvt *xvt)
 
 	/* Get response data */
 	debug_res = (struct xvt_debug_res *)pkt->data;
-	if (le32_to_cpu(debug_res->dw_num) < 1)
-		return -ENODATA;
-	return le32_to_cpu(debug_res->data[0]) & 0xFF;
+	if (le32_to_cpu(debug_res->dw_num) < 1) {
+		ret = -ENODATA;
+		goto out;
+	}
+	ret = le32_to_cpu(debug_res->data[0]) & 0xFF;
+
+out:
+	iwl_free_resp(&host_cmd);
+	return ret;
 }
 
 static int iwl_xvt_get_dev_info(struct iwl_xvt *xvt,
@@ -612,6 +626,45 @@ static int iwl_xvt_send_phy_cfg_cmd(struct iwl_xvt *xvt, u32 ucode_type)
 	return err;
 }
 
+static int iwl_xvt_continue_init_unified(struct iwl_xvt *xvt)
+{
+	struct iwl_nvm_access_complete_cmd nvm_complete = {};
+	struct iwl_notification_wait init_complete_wait;
+	static const u16 init_complete[] = { INIT_COMPLETE_NOTIF };
+	int err;
+
+	err = iwl_xvt_send_cmd_pdu(xvt,
+				   WIDE_ID(REGULATORY_AND_NVM_GROUP,
+					   NVM_ACCESS_COMPLETE), 0,
+				   sizeof(nvm_complete), &nvm_complete);
+	if (err)
+		goto init_error;
+
+	xvt->state = IWL_XVT_STATE_OPERATIONAL;
+
+	iwl_init_notification_wait(&xvt->notif_wait,
+				   &init_complete_wait,
+				   init_complete,
+				   sizeof(init_complete),
+				   NULL,
+				   NULL);
+
+	err = iwl_xvt_send_phy_cfg_cmd(xvt, IWL_UCODE_REGULAR);
+	if (err) {
+		iwl_remove_notification(&xvt->notif_wait, &init_complete_wait);
+		goto init_error;
+	}
+
+	err = iwl_wait_notification(&xvt->notif_wait, &init_complete_wait,
+				    XVT_UCODE_CALIB_TIMEOUT);
+	if (err)
+		goto init_error;
+	return 0;
+init_error:
+	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
+	iwl_trans_stop_device(xvt->trans);
+	return err;
+}
 static int iwl_xvt_run_runtime_fw(struct iwl_xvt *xvt, bool cont_run)
 {
 	int err;
@@ -621,6 +674,15 @@ static int iwl_xvt_run_runtime_fw(struct iwl_xvt *xvt, bool cont_run)
 		goto fw_error;
 
 	xvt->state = IWL_XVT_STATE_OPERATIONAL;
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		err = iwl_xvt_nvm_init(xvt);
+		if (err) {
+			IWL_ERR(xvt, "Failed to read NVM: %d\n", err);
+			return err;
+		}
+		return iwl_xvt_continue_init_unified(xvt);
+	}
 
 	/* Send phy db control command and then phy db calibration*/
 	err = iwl_send_phy_db_data(xvt->phy_db);
@@ -665,6 +727,7 @@ static bool iwl_xvt_wait_phy_db_entry(struct iwl_notif_wait_data *notif_wait,
 static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 {
 	int err = 0;
+	u32 ucode_type = IWL_UCODE_INIT;
 
 	/*
 	 * If init FW and runtime FW are both enabled,
@@ -694,7 +757,10 @@ static int iwl_xvt_start_op_mode(struct iwl_xvt *xvt)
 		return err;
 	}
 
-	err = iwl_xvt_run_fw(xvt, IWL_UCODE_INIT, false);
+	/* when fw image is unified, only regular ucode is loaded. */
+	if (iwl_xvt_is_unified_fw(xvt))
+		ucode_type = IWL_UCODE_REGULAR;
+	err = iwl_xvt_run_fw(xvt, ucode_type, false);
 	if (err)
 		return err;
 
@@ -750,6 +816,9 @@ static int iwl_xvt_continue_init(struct iwl_xvt *xvt)
 
 	if (xvt->state != IWL_XVT_STATE_INIT_STARTED)
 		return -EINVAL;
+
+	if (iwl_xvt_is_unified_fw(xvt))
+		return iwl_xvt_continue_init_unified(xvt);
 
 	iwl_init_notification_wait(&xvt->notif_wait,
 				   &calib_wait,
@@ -829,6 +898,43 @@ static int iwl_xvt_get_phy_db(struct iwl_xvt *xvt,
 	return 0;
 }
 
+static struct iwl_device_cmd *
+iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
+			       u32 rate_flags)
+{
+	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
+	struct iwl_tx_cmd_gen2 *tx_cmd;
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+
+	dev_cmd = iwl_trans_alloc_tx_cmd(xvt->trans);
+	if (unlikely(!dev_cmd))
+		return NULL;
+
+	memset(dev_cmd, 0, sizeof(*dev_cmd));
+	dev_cmd->hdr.cmd = TX_CMD;
+
+	tx_cmd = (struct iwl_tx_cmd_gen2 *)dev_cmd->payload;
+
+	tx_cmd->len = cpu_to_le16((u16)skb->len);
+
+	tx_cmd->offload_assist |= (ieee80211_hdrlen(hdr->frame_control) % 4) ?
+				   cpu_to_le16(TX_CMD_OFFLD_PAD) : 0;
+
+	tx_cmd->flags |= cpu_to_le32(TX_CMD_FLAGS_CMD_RATE);
+
+	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
+
+	/* Copy MAC header from skb into command buffer */
+	memcpy(tx_cmd->hdr, hdr, sizeof(*hdr));
+
+	 /* Saving device command address itself in the
+	  * control buffer, to be used when reclaiming
+	  * the command. */
+	*cb_dev_cmd = dev_cmd;
+
+	return dev_cmd;
+}
+
 /*
  * Allocates and sets the Tx cmd the driver data pointers in the skb
  */
@@ -867,97 +973,294 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 	return dev_cmd;
 }
 
-static int iwl_xvt_modulated_tx(struct iwl_xvt *xvt,
-				struct iwl_tm_data *data_in)
+static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
+			       struct iwl_tm_mod_tx_request *tx_req,
+			       u32 *status, struct tx_meta_data *meta_tx)
 {
-	struct iwl_tm_mod_tx_request *tx_req =
-			(struct iwl_tm_mod_tx_request *)data_in->data;
 	struct sk_buff *skb;
 	struct iwl_device_cmd *dev_cmd;
-	u32 tx_count;
 	int time_remain, err = 0;
 
-	xvt->tot_tx = tx_req->times;
-	xvt->tx_counter = 0;
-	for (tx_count = 0; tx_count < tx_req->times; tx_count++) {
-		if (xvt->fw_error) {
-			IWL_ERR(xvt, "FW Error while sending Tx\n");
-			return -ENODEV;
-		}
-
-		skb = alloc_skb(tx_req->len, GFP_KERNEL);
-		if (!skb) {
-			return -ENOMEM;
-		}
-		memcpy(skb_put(skb, tx_req->len), tx_req->data, tx_req->len);
-
-		dev_cmd = iwl_xvt_set_mod_tx_params(xvt, skb,
-						    tx_req->sta_id,
-						    tx_req->rate_flags);
-		if (!dev_cmd) {
-			kfree_skb(skb);
-			return -ENOMEM;
-		}
-
-		if (tx_req->trigger_led)
-			iwl_xvt_led_enable(xvt);
-
-		/* wait until the tx queue isn't full */
-		time_remain = wait_event_interruptible_timeout(xvt->mod_tx_wq,
-							!xvt->txq_full, HZ);
-
-		if (time_remain <= 0) {
-			/* This should really not happen */
-			WARN_ON_ONCE(xvt->txq_full);
-			IWL_ERR(xvt, "Error while sending Tx\n");
-			iwl_trans_free_tx_cmd(xvt->trans, dev_cmd);
-			kfree_skb(skb);
-			return -EIO;
-		}
-
-		if (xvt->fw_error) {
-			WARN_ON_ONCE(xvt->txq_full);
-			IWL_ERR(xvt, "FW Error while sending Tx\n");
-			iwl_trans_free_tx_cmd(xvt->trans, dev_cmd);
-			kfree_skb(skb);
-			return -ENODEV;
-		}
-
-		/*
-		 * Assume we have one Txing thread only: the queue is not full
-		 * any more - nobody could fill it up in the meantime since we
-		 * were blocked.
-		 */
-
-		local_bh_disable();
-
-		err = iwl_trans_tx(xvt->trans, skb, dev_cmd,
-				   IWL_XVT_DEFAULT_TX_QUEUE);
-
-		local_bh_enable();
-		if (err) {
-			IWL_ERR(xvt, "Tx command failed (error %d)\n", err);
-			kfree_skb(skb);
-			iwl_trans_free_tx_cmd(xvt->trans, dev_cmd);
-			return err;
-		}
-
-		if (tx_req->trigger_led)
-			iwl_xvt_led_disable(xvt);
-
-		if (tx_req->delay_us)
-			udelay(tx_req->delay_us);
+	if (xvt->fw_error) {
+		IWL_ERR(xvt, "FW Error while sending Tx\n");
+		*status = XVT_TX_DRIVER_ABORTED;
+		return -ENODEV;
 	}
 
-	time_remain = wait_event_interruptible_timeout(xvt->mod_tx_done_wq,
-					 xvt->tx_counter == xvt->tot_tx,
-					 5 * HZ);
+	skb = alloc_skb(tx_req->len, GFP_KERNEL);
+	if (!skb) {
+		*status = XVT_TX_DRIVER_ABORTED;
+		return -ENOMEM;
+	}
+	memcpy(skb_put(skb, tx_req->len), tx_req->data, tx_req->len);
+
+	if (iwl_xvt_is_unified_fw(xvt))
+		dev_cmd = iwl_xvt_set_mod_tx_params_gen2(xvt,
+							 skb,
+							 tx_req->rate_flags);
+	else
+		dev_cmd = iwl_xvt_set_mod_tx_params(xvt,
+						    skb,
+						    tx_req->sta_id,
+						    tx_req->rate_flags);
+	if (!dev_cmd) {
+		kfree_skb(skb);
+		*status = XVT_TX_DRIVER_ABORTED;
+		return -ENOMEM;
+	}
+
+	if (tx_req->trigger_led)
+		iwl_xvt_led_enable(xvt);
+
+	/* wait until the tx queue isn't full */
+	time_remain = wait_event_interruptible_timeout(meta_tx->mod_tx_wq,
+						       !meta_tx->txq_full, HZ);
+
 	if (time_remain <= 0) {
-		IWL_ERR(xvt, "Not all Tx messages were sent\n");
-		return -EIO;
+		/* This should really not happen */
+		WARN_ON_ONCE(meta_tx->txq_full);
+		IWL_ERR(xvt, "Error while sending Tx\n");
+		*status = XVT_TX_DRIVER_QUEUE_FULL;
+		err = -EIO;
+		goto err;
+	}
+
+	if (xvt->fw_error) {
+		WARN_ON_ONCE(meta_tx->txq_full);
+		IWL_ERR(xvt, "FW Error while sending Tx\n");
+		*status = XVT_TX_DRIVER_ABORTED;
+		err = -ENODEV;
+		goto err;
+	}
+
+	/* Assume we have one Txing thread only: the queue is not full
+	 * any more - nobody could fill it up in the meantime since we
+	 * were blocked.
+	 */
+
+	local_bh_disable();
+
+	err = iwl_trans_tx(xvt->trans, skb, dev_cmd, meta_tx->queue);
+
+	local_bh_enable();
+	if (err) {
+		IWL_ERR(xvt, "Tx command failed (error %d)\n", err);
+		*status = XVT_TX_DRIVER_ABORTED;
+		goto err;
+	}
+
+	if (tx_req->trigger_led)
+		iwl_xvt_led_disable(xvt);
+
+	return err;
+err:
+	iwl_trans_free_tx_cmd(xvt->trans, dev_cmd);
+	kfree_skb(skb);
+	return err;
+}
+
+static int iwl_xvt_modulated_tx_handler(void *data)
+{
+	u64 tx_count, max_tx;
+	int time_remain, num_of_packets, err = 0;
+	struct iwl_xvt *xvt;
+	struct iwl_xvt_tx_mod_done *done_notif;
+	u32 status = XVT_TX_DRIVER_SUCCESSFUL;
+	struct iwl_xvt_tx_mod_task_data *task_data =
+		(struct iwl_xvt_tx_mod_task_data *)data;
+	struct tx_meta_data *xvt_tx;
+
+	xvt = task_data->xvt;
+	xvt_tx = &xvt->tx_meta_data[task_data->lmac_id];
+	xvt_tx->tx_task_operating = true;
+	num_of_packets = task_data->tx_req.times;
+	max_tx = (num_of_packets == IWL_XVT_TX_MODULATED_INFINITE) ?
+		  XVT_MAX_TX_COUNT : num_of_packets;
+	xvt_tx->tot_tx = num_of_packets;
+	xvt_tx->tx_counter = 0;
+
+	for (tx_count = 0;
+	    (tx_count < max_tx) && (!kthread_should_stop());
+	     tx_count++){
+		err = iwl_xvt_send_packet(xvt, &task_data->tx_req,
+					  &status, xvt_tx);
+		if (err) {
+			IWL_ERR(xvt, "stop send packets due to err %d\n", err);
+			break;
+		}
+	}
+
+	if (!err) {
+		time_remain = wait_event_interruptible_timeout(
+						xvt_tx->mod_tx_done_wq,
+						xvt_tx->tx_counter == tx_count,
+						5 * HZ);
+		if (time_remain <= 0) {
+			IWL_ERR(xvt, "Not all Tx messages were sent\n");
+			xvt_tx->tx_task_operating = false;
+			status = XVT_TX_DRIVER_TIMEOUT;
+		}
+	}
+
+	done_notif = kmalloc(sizeof(*done_notif), GFP_KERNEL);
+	if (!done_notif) {
+		xvt_tx->tx_task_operating = false;
+		return -ENOMEM;
+	}
+	done_notif->num_of_packets = xvt_tx->tx_counter;
+	done_notif->status = status;
+	done_notif->lmac_id = task_data->lmac_id;
+	err = iwl_xvt_user_send_notif(xvt,
+				      IWL_XVT_CMD_SEND_MOD_TX_DONE,
+				      (void *)done_notif,
+				      sizeof(*done_notif), GFP_ATOMIC);
+	if (err) {
+		IWL_ERR(xvt, "Error %d sending tx_done notification\n", err);
+		kfree(done_notif);
+	}
+
+	xvt_tx->tx_task_operating = false;
+	do_exit(err);
+}
+
+static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
+					      struct iwl_tm_data *data_in)
+{
+	int err = 0;
+	u32 lmac_id = ((struct iwl_xvt_tx_mod_stop *)data_in->data)->lmac_id;
+	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[lmac_id];
+
+	if (xvt_tx->tx_mod_thread && xvt_tx->tx_task_operating) {
+		err = kthread_stop(xvt_tx->tx_mod_thread);
+		xvt_tx->tx_mod_thread = NULL;
 	}
 
 	return err;
+}
+
+static int iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
+{
+	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
+
+	xvt->tx_meta_data[lmac_id].queue = -1;
+
+	return 0;
+}
+
+static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+				     u8 lmac_id) {
+	int ret;
+	struct iwl_tx_queue_cfg_cmd cmd = {
+			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
+			.sta_id = sta_id,
+			.tid = TX_QUEUE_CFG_TID };
+
+	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
+	/* ret is positive when func returns the allocated the queue number */
+	if (ret > 0) {
+		xvt->tx_meta_data[lmac_id].queue = ret;
+		ret = 0;
+	} else {
+		IWL_ERR(xvt, "failed to allocate queue\n");
+	}
+
+	return ret;
+}
+
+static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
+{
+	switch (sta_id) {
+	case XVT_LMAC_0_STA_ID:
+		return XVT_LMAC_0_ID;
+	case XVT_LMAC_1_STA_ID:
+		return XVT_LMAC_1_ID;
+	default:
+		IWL_ERR(xvt, "wrong sta id, can't match queue\n");
+		return -EINVAL;
+	}
+}
+
+static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
+				struct iwl_tm_data *data_in)
+{
+	struct iwl_xvt_tx_queue_cfg *input =
+			(struct iwl_xvt_tx_queue_cfg *)data_in->data;
+	u8 sta_id = input->sta_id;
+	int lmac_id = map_sta_to_lmac(xvt, sta_id);
+
+	if (lmac_id < 0)
+		return lmac_id;
+
+	switch (input->operation) {
+	case TX_QUEUE_CFG_ADD:
+		return iwl_xvt_allocate_tx_queue(xvt, sta_id, lmac_id);
+	case TX_QUEUE_CFG_REMOVE:
+		return iwl_xvt_free_tx_queue(xvt, lmac_id);
+	default:
+		IWL_ERR(xvt, "failed in tx config - wrong operation\n");
+		return -EINVAL;
+	}
+}
+
+static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
+				     struct iwl_tm_data *data_in)
+{
+	static struct iwl_xvt_tx_mod_task_data task_data;
+	u32 size = sizeof(struct iwl_tm_mod_tx_request);
+	struct tx_meta_data *xvt_tx;
+	u8 sta_id;
+	int lmac_id;
+
+	/*
+	* no need to check whether tx already operating on lmac, since check
+	* is already done in the USC
+	*/
+	task_data.xvt = xvt;
+	memcpy(&task_data.tx_req, data_in->data, size);
+
+	sta_id = task_data.tx_req.sta_id;
+	lmac_id = map_sta_to_lmac(xvt, sta_id);
+	if (lmac_id < 0)
+		return lmac_id;
+
+	task_data.lmac_id = lmac_id;
+	xvt_tx = &xvt->tx_meta_data[lmac_id];
+
+	/* check if tx queue is allocated. if not - return */
+	if (xvt_tx->queue < 0) {
+		IWL_ERR(xvt, "failed in tx - queue is not allocated\n");
+		return -EIO;
+	}
+
+	xvt_tx->tx_mod_thread = kthread_run(iwl_xvt_modulated_tx_handler,
+					   &task_data, "tx mod infinite");
+	if (!xvt_tx->tx_mod_thread) {
+		xvt_tx->tx_task_operating = false;
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int iwl_xvt_modulated_tx(struct iwl_xvt *xvt,
+				struct iwl_tm_data *data_in)
+{
+	static struct iwl_xvt_tx_mod_task_data task_data;
+	u32 size = sizeof(struct iwl_tm_mod_tx_request);
+	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+
+	task_data.xvt = xvt;
+	memcpy(&task_data.tx_req, data_in->data, size);
+
+	xvt_tx->tx_mod_thread =
+		kthread_run(iwl_xvt_modulated_tx_handler,
+			    &task_data, "tx mod infinite");
+	if (!xvt_tx->tx_mod_thread) {
+		xvt_tx->tx_task_operating = false;
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 static int iwl_xvt_rx_hdrs_mode(struct iwl_xvt *xvt,
@@ -1148,7 +1451,7 @@ static int iwl_xvt_get_mac_addr_info(struct iwl_xvt *xvt,
 
 	memset(mac_addr_info, 0, sizeof(*mac_addr_info));
 
-	if (xvt->cfg->device_family != IWL_DEVICE_FAMILY_8000) {
+	if (!xvt->cfg->ext_nvm) {
 		memcpy(mac_addr_info->mac_addr, xvt->nvm_hw_addr,
 		       sizeof(mac_addr_info->mac_addr));
 	} else {
@@ -1255,7 +1558,10 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 		break;
 
 	case IWL_XVT_CMD_MOD_TX:
-		ret = iwl_xvt_modulated_tx(xvt, data_in);
+		if (iwl_xvt_is_unified_fw(xvt))
+			ret = iwl_xvt_modulated_tx_gen2(xvt, data_in);
+		else
+			ret = iwl_xvt_modulated_tx(xvt, data_in);
 		break;
 
 	case IWL_XVT_CMD_RX_HDRS_MODE:
@@ -1283,6 +1589,14 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 
 	case IWL_XVT_CMD_GET_MAC_ADDR_INFO:
 		ret = iwl_xvt_get_mac_addr_info(xvt, data_out);
+		break;
+
+	case IWL_XVT_CMD_MOD_TX_STOP:
+		ret = iwl_xvt_modulated_tx_infinite_stop(xvt, data_in);
+		break;
+
+	case IWL_XVT_CMD_TX_QUEUE_CFG:
+		ret = iwl_xvt_tx_queue_cfg(xvt, data_in);
 		break;
 
 	default:

@@ -70,7 +70,7 @@
 #include "xvt.h"
 #include "iwl-dnt-cfg.h"
 
-#define XVT_UCODE_ALIVE_TIMEOUT	HZ
+#define XVT_UCODE_ALIVE_TIMEOUT	(HZ * CPTCFG_IWL_TIMEOUT_FACTOR)
 
 struct iwl_xvt_alive_data {
 	bool valid;
@@ -134,7 +134,7 @@ static int iwl_xvt_fill_paging_mem(struct iwl_xvt *xvt,
 	 * CPU2 paging CSS
 	 * CPU2 paging image (including instruction and data)
 	 */
-	for (sec_idx = 0; sec_idx < IWL_UCODE_SECTION_MAX; sec_idx++) {
+	for (sec_idx = 0; sec_idx < image->num_sec; sec_idx++) {
 		if (image->sec[sec_idx].offset == PAGING_SEPARATOR_SECTION) {
 			sec_idx++;
 			break;
@@ -145,7 +145,7 @@ static int iwl_xvt_fill_paging_mem(struct iwl_xvt *xvt,
 	 * If paging is enabled there should be at least 2 more sections left
 	 * (one for CSS and one for Paging data)
 	 */
-	if (sec_idx >= ARRAY_SIZE(image->sec) - 1) {
+	if (sec_idx >= image->num_sec - 1) {
 		IWL_ERR(xvt, "Paging: Missing CSS and/or paging sections\n");
 		iwl_xvt_free_fw_paging(xvt);
 		return -EINVAL;
@@ -365,31 +365,20 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 	struct iwl_xvt *xvt =
 		container_of(notif_wait, struct iwl_xvt, notif_wait);
 	struct iwl_xvt_alive_data *alive_data = data;
-	struct xvt_alive_resp *palive;
 	struct xvt_alive_resp_ver2 *palive2;
 	struct xvt_alive_resp_ver3 *palive3;
-
+	struct xvt_alive_resp_ver4 *palive4;
+	struct iwl_lmac_alive *lmac1, *lmac2;
+	struct iwl_umac_alive *umac;
+	u32 rx_packet_payload_size = iwl_rx_packet_payload_len(pkt);
+	u16 status, flags;
 	xvt->support_umac_log = false;
 
-	if (iwl_rx_packet_payload_len(pkt) == sizeof(*palive)) {
-		palive = (void *)pkt->data;
-		xvt->error_event_table = le32_to_cpu(
-						palive->error_event_table_ptr);
-		alive_data->scd_base_addr = le32_to_cpu(
-						palive->scd_base_ptr);
-		alive_data->valid = le16_to_cpu(palive->status) ==
-							IWL_ALIVE_STATUS_OK;
-		xvt->fw_major_ver = palive->ucode_major;
-		xvt->fw_minor_ver = palive->ucode_minor;
-
-		IWL_DEBUG_FW(xvt, "Alive ucode status 0x%04x revision 0x%01X "
-			     "0x%01X\n", le16_to_cpu(palive->status),
-			     palive->ver_type, palive->ver_subtype);
-	} else if (iwl_rx_packet_payload_len(pkt) == sizeof(*palive2)) {
+	if (rx_packet_payload_size == sizeof(*palive2)) {
 
 		palive2 = (void *)pkt->data;
 
-		xvt->error_event_table =
+		xvt->error_event_table[0] =
 			le32_to_cpu(palive2->error_event_table_ptr);
 		alive_data->scd_base_addr = le32_to_cpu(palive2->scd_base_ptr);
 		xvt->sf_space.addr = le32_to_cpu(palive2->st_fwrd_addr);
@@ -414,31 +403,50 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 			     "UMAC version: Major - 0x%x, Minor - 0x%x\n",
 			     palive2->umac_major, palive2->umac_minor);
 	} else {
+		if (rx_packet_payload_size == sizeof(*palive3)) {
 		palive3 = (void *)pkt->data;
+			status = le16_to_cpu(palive3->status);
+			flags = le16_to_cpu(palive3->flags);
+			lmac1 = &palive3->lmac_data;
+			umac = &palive3->umac_data;
 
-		xvt->error_event_table =
-			le32_to_cpu(palive3->error_event_table_ptr);
-		alive_data->scd_base_addr = le32_to_cpu(palive3->scd_base_ptr);
-		xvt->sf_space.addr = le32_to_cpu(palive3->st_fwrd_addr);
-		xvt->sf_space.size = le32_to_cpu(palive3->st_fwrd_size);
+			IWL_DEBUG_FW(xvt, "Alive VER3\n");
+		} else if (rx_packet_payload_size == sizeof(*palive4)) {
+			palive4 = (void *)pkt->data;
+			status = le16_to_cpu(palive4->status);
+			flags = le16_to_cpu(palive4->flags);
+			lmac1 = &palive4->lmac_data[0];
+			lmac2 = &palive4->lmac_data[1];
+			umac = &palive4->umac_data;
+			xvt->error_event_table[1] =
+				le32_to_cpu(lmac2->error_event_table_ptr);
 
-		alive_data->valid = le16_to_cpu(palive3->status) ==
-				    IWL_ALIVE_STATUS_OK;
-		xvt->fw_major_ver = le32_to_cpu(palive3->ucode_major);
-		xvt->fw_minor_ver = le32_to_cpu(palive3->ucode_minor);
+			IWL_DEBUG_FW(xvt, "Alive VER4 CDB\n");
+		} else {
+			IWL_ERR(xvt, "unrecognized alive notificatio\n");
+			return false;
+		}
+
+		alive_data->valid = status == IWL_ALIVE_STATUS_OK;
+		xvt->error_event_table[0] =
+			le32_to_cpu(lmac1->error_event_table_ptr);
+		alive_data->scd_base_addr = le32_to_cpu(lmac1->scd_base_ptr);
+		xvt->sf_space.addr = le32_to_cpu(lmac1->st_fwrd_addr);
+		xvt->sf_space.size = le32_to_cpu(lmac1->st_fwrd_size);
+		xvt->fw_major_ver = le32_to_cpu(lmac1->ucode_major);
+		xvt->fw_minor_ver = le32_to_cpu(lmac1->ucode_minor);
 		xvt->umac_error_event_table =
-			le32_to_cpu(palive3->error_info_addr);
+			le32_to_cpu(umac->error_info_addr);
 		if (xvt->umac_error_event_table)
 			xvt->support_umac_log = true;
 
 		IWL_DEBUG_FW(xvt,
-			     "Alive VER3 ucode status 0x%04x revision 0x%01X 0x%01X flags 0x%01X\n",
-			     le16_to_cpu(palive3->status), palive3->ver_type,
-			     palive3->ver_subtype, palive3->flags);
-
+			     "status 0x%04x rev 0x%01X 0x%01X flags 0x%01X\n",
+			     status, lmac1->ver_type, lmac1->ver_subtype,
+			     flags);
 		IWL_DEBUG_FW(xvt,
 			     "UMAC version: Major - 0x%x, Minor - 0x%x\n",
-			     palive3->umac_major, palive3->umac_minor);
+			     umac->umac_major, umac->umac_minor);
 	}
 
 	return true;
@@ -515,8 +523,9 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	 * configure and operate fw paging mechanism.
 	 * driver configures the paging flow only once, CPU2 paging image
 	 * included in the IWL_UCODE_INIT image.
+	 * In unified image paging mechanism is done out of the xvt op
 	 */
-	if (fw->paging_mem_size) {
+	if (fw->paging_mem_size && !iwl_xvt_is_unified_fw(xvt)) {
 		/*
 		 * When dma is not enabled, the driver needs to copy / write
 		 * the downloaded / uploaded page to / from the smem.
@@ -547,7 +556,12 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 			if (ret)
 				return ret;
 		}
-
+	}
+	/*
+	 * Starting from A000 tx queue allocation must be done after add
+	 * station, so it is not part of the init flow.
+	 */
+	if (!iwl_xvt_is_unified_fw(xvt)) {
 		iwl_trans_txq_enable_cfg(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE,
 					 0, NULL, 0);
 
@@ -555,11 +569,31 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 					  &cmd),
 		     "Failed to configure queue %d on FIFO %d\n",
 		     IWL_XVT_DEFAULT_TX_QUEUE, IWL_XVT_DEFAULT_TX_FIFO);
+		xvt->tx_meta_data[XVT_LMAC_0_ID].queue =
+					IWL_XVT_DEFAULT_TX_QUEUE;
 	}
 
 	xvt->fw_running = true;
 
 	return 0;
+}
+
+static int iwl_xvt_send_extended_config(struct iwl_xvt *xvt)
+{
+	/*
+	 * TODO: once WRT will be implemented in xVT, IWL_INIT_DEBUG_CFG
+	 * flag will not always be set
+	 */
+	struct iwl_init_extended_cfg_cmd ext_cfg = {
+		.init_flags = cpu_to_le32(IWL_INIT_NVM | IWL_INIT_DEBUG_CFG),
+	};
+
+	if (xvt->sw_stack_cfg.load_mask & IWL_XVT_LOAD_MASK_RUNTIME)
+		ext_cfg.init_flags |= cpu_to_le32(IWL_INIT_PHY);
+
+	return iwl_xvt_send_cmd_pdu(xvt, WIDE_ID(SYSTEM_GROUP,
+						 INIT_EXTENDED_CFG_CMD), 0,
+				    sizeof(ext_cfg), &ext_cfg);
 }
 
 int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
@@ -601,6 +635,16 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 	if (ret) {
 		IWL_ERR(xvt, "Failed to start ucode: %d\n", ret);
 		iwl_trans_stop_device(xvt->trans);
+	}
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		ret = iwl_xvt_send_extended_config(xvt);
+		if (ret) {
+			IWL_ERR(xvt, "Failed to send extended_config: %d\n",
+				ret);
+			iwl_trans_stop_device(xvt->trans);
+			return ret;
+		}
 	}
 	iwl_dnt_start(xvt->trans);
 

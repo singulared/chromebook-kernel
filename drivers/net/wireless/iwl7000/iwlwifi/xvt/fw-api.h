@@ -75,13 +75,21 @@
 
 #define IWL_XVT_TX_STA_ID_DEFAULT	0
 
+#define XVT_LMAC_0_ID (0)
+#define XVT_LMAC_1_ID (1)
+
 /* command groups */
 enum {
+	LEGACY_GROUP = 0x0,
+	LONG_GROUP = 0x1,
+	SYSTEM_GROUP = 0x2,
 	PHY_OPS_GROUP = 0x4,
 	DATA_PATH_GROUP = 0x5,
 	CMD_GROUP_LOCATION = 0x8,
+	REGULATORY_AND_NVM_GROUP = 0xc,
 };
 
+/* commands and notifications */
 enum {
 	XVT_ALIVE = 0x1,
 	INIT_COMPLETE_NOTIF = 0x4,
@@ -89,18 +97,11 @@ enum {
 
 	/* ToF */
 	LOCATION_GROUP_NOTIFICATION = 0x11,
-	LOCATION_MCSI_NOTIFICATION = 0xFE,
-	LOCATION_RANGE_RESPONSE_NOTIFICATION = 0xFF,
-	LOCATION_MCSI_NOTIFICATION_WITH_GRP =
-		WIDE_ID(CMD_GROUP_LOCATION, LOCATION_MCSI_NOTIFICATION),
-	LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP =
-		WIDE_ID(CMD_GROUP_LOCATION,
-			LOCATION_RANGE_RESPONSE_NOTIFICATION),
 
 	/* Tx */
 	TX_CMD = 0x1C,
 
-	/* scheduler config */
+	/* scheduler config, also called TX_QUEUE_CFG */
 	SCD_QUEUE_CFG = 0x1d,
 
 	/* Paging block to FW cpu2 */
@@ -136,11 +137,31 @@ enum {
 };
 
 enum iwl_phy_ops_subcmd_ids {
-	DTS_MEASUREMENT_NOTIF_WIDE = WIDE_ID(PHY_OPS_GROUP, 0xFF),
+	DTS_MEASUREMENT_NOTIF = 0XFF,
+	DTS_MEASUREMENT_NOTIF_WITH_GRP = WIDE_ID(PHY_OPS_GROUP,
+						 DTS_MEASUREMENT_NOTIF),
+};
+
+enum iwl_regulatory_and_nvm_subcmd_ids {
+	NVM_ACCESS_COMPLETE = 0x0,
+};
+
+enum iwl_location_subcmd_ids {
+	LOCATION_MCSI_NOTIFICATION = 0xFE,
+	LOCATION_RANGE_RESPONSE_NOTIFICATION = 0xFF,
+	LOCATION_MCSI_NOTIFICATION_WITH_GRP =
+		WIDE_ID(CMD_GROUP_LOCATION, LOCATION_MCSI_NOTIFICATION),
+	LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP =
+		WIDE_ID(CMD_GROUP_LOCATION,
+			LOCATION_RANGE_RESPONSE_NOTIFICATION),
 };
 
 enum iwl_data_path_subcmd_ids {
 	DQA_ENABLE_CMD = 0x0,
+};
+
+enum iwl_system_subcmd_ids {
+	INIT_EXTENDED_CFG_CMD = 0x03,
 };
 
 /*
@@ -168,28 +189,6 @@ struct iwl_phy_cfg_cmd {
 
 #define IWL_ALIVE_STATUS_ERR 0xDEAD
 #define IWL_ALIVE_STATUS_OK 0xCAFE
-
-struct xvt_alive_resp {
-	__le16 status;
-	__le16 flags;
-	u8 ucode_minor;
-	u8 ucode_major;
-	__le16 id;
-	u8 api_minor;
-	u8 api_major;
-	u8 ver_subtype;
-	u8 ver_type;
-	u8 mac;
-	u8 opt;
-	__le16 reserved2;
-	__le32 timestamp;
-	__le32 error_event_table_ptr;	/* SRAM address for error log */
-	__le32 log_event_table_ptr;	/* SRAM address for event log */
-	__le32 cpu_register_ptr;
-	__le32 dbgm_config_ptr;
-	__le32 alive_counter_ptr;
-	__le32 scd_base_ptr;		/* SRAM address for SCD */
-} __packed; /* ALIVE_RES_API_S_VER_1 */
 
 struct xvt_alive_resp_ver2 {
 	__le16 status;
@@ -220,18 +219,14 @@ struct xvt_alive_resp_ver2 {
 	__le32 dbg_print_buff_addr;
 } __packed; /* ALIVE_RES_API_S_VER_2 */
 
-struct xvt_alive_resp_ver3 {
-	__le16 status;
-	__le16 flags;
+struct iwl_lmac_alive {
 	__le32 ucode_minor;
 	__le32 ucode_major;
-
 	u8 ver_subtype;
 	u8 ver_type;
 	u8 mac;
 	u8 opt;
 	__le32 timestamp;
-
 	__le32 error_event_table_ptr;	/* SRAM address for error log */
 	__le32 log_event_table_ptr;	/* SRAM address for LMAC event log */
 	__le32 cpu_register_ptr;
@@ -240,17 +235,41 @@ struct xvt_alive_resp_ver3 {
 	__le32 scd_base_ptr;		/* SRAM address for SCD */
 	__le32 st_fwrd_addr;		/* pointer to Store and forward */
 	__le32 st_fwrd_size;
+} __packed; /* UCODE_ALIVE_DATA_API_VER_3 */
 
-	u32 umac_minor;			/* UMAC version: minor */
-	u32 umac_major;			/* UMAC version: major */
-
+struct iwl_umac_alive {
+	__le32 umac_minor;		/* UMAC version: minor */
+	__le32 umac_major;		/* UMAC version: major */
 	__le32 error_info_addr;		/* SRAM address for UMAC error log */
 	__le32 dbg_print_buff_addr;
 } __packed; /* ALIVE_RES_API_S_VER_3 */
 
+struct xvt_alive_resp_ver3 {
+	__le16 status;
+	__le16 flags;
+	struct iwl_lmac_alive lmac_data;
+	struct iwl_umac_alive umac_data;
+} __packed; /* ALIVE_RES_API_S_VER_3 */
+
+struct xvt_alive_resp_ver4 {
+	__le16 status;
+	__le16 flags;
+	struct iwl_lmac_alive lmac_data[2];
+	struct iwl_umac_alive umac_data;
+} __packed; /* UCODE_ALIVE_NTFY_API_S_VER_4 */
+
+/**
+ * struct iwl_nvm_access_complete_cmd - NVM_ACCESS commands are completed
+ */
+struct iwl_nvm_access_complete_cmd {
+	__le32 reserved;
+} __packed; /* NVM_ACCESS_COMPLETE_CMD_API_S_VER_1 */
+
 #define TX_CMD_LIFE_TIME_INFINITE	0xFFFFFFFF
 
 #define TX_CMD_FLG_ACK_MSK cpu_to_le32(1 << 3)
+#define TX_CMD_OFFLD_PAD	BIT(13) /* TX_CMD_OFLD_ASSIST_PAD */
+#define TX_CMD_FLAGS_CMD_RATE	BIT(0) /* TX_CMD_FLG_RATE_FROM_CMD */
 
 struct iwl_tx_cmd {
 	__le16 len;
@@ -280,11 +299,67 @@ struct iwl_tx_cmd {
 	struct ieee80211_hdr hdr[0];
 } __packed; /* TX_CMD_API_S_VER_3 */
 
+struct iwl_dram_sec_info {
+	__le32 pn_low;
+	__le16 pn_high;
+	__le16 aux_info;
+} __packed; /* DRAM_SEC_INFO_API_S_VER_1 */
+
+/**
+ * struct iwl_tx_cmd_gen2 - TX command struct to FW for a000 devices
+ * ( TX_CMD = 0x1c )
+ * @len: in bytes of the payload, see below for details
+ * @offload_assist: TX offload configuration
+ * @flags: combination of &iwl_tx_cmd_flags
+ * @dram_info: FW internal DRAM storage
+ * @rate_n_flags: rate for *all* Tx attempts, if TX_CMD_FLG_STA_RATE_MSK is
+ *	cleared. Combination of RATE_MCS_*
+ * @hdr: 802.11 header
+ */
+struct iwl_tx_cmd_gen2 {
+	__le16 len;
+	__le16 offload_assist;
+	__le32 flags;
+	struct iwl_dram_sec_info dram_info;
+	__le32 rate_n_flags;
+	struct ieee80211_hdr hdr[0];
+} __packed; /* TX_CMD_API_S_VER_7 */
+
 struct agg_tx_status {
 	__le16 status;
 	__le16 sequence;
 } __packed;
 
+/**
+ * struct iwl_xvt_tx_resp - notifies that fw is TXing a packet
+ * ( REPLY_TX = 0x1c )
+ * @frame_count: 1 no aggregation, >1 aggregation
+ * @bt_kill_count: num of times blocked by bluetooth (unused for agg)
+ * @failure_rts: num of failures due to unsuccessful RTS
+ * @failure_frame: num failures due to no ACK (unused for agg)
+ * @initial_rate: for non-agg: rate of the successful Tx. For agg: rate of the
+ *	Tx of all the batch. RATE_MCS_*
+ * @wireless_media_time: for non-agg: RTS + CTS + frame tx attempts time + ACK.
+ *	for agg: RTS + CTS + aggregation tx time + block-ack time.
+ *	in usec.
+ * @pa_status: tx power info
+ * @pa_integ_res_a: tx power info
+ * @pa_integ_res_b: tx power info
+ * @pa_integ_res_c: tx power info
+ * @measurement_req_id: tx power info
+ * @reduced_tpc: transmit power reduction used
+ * @tfd_info: TFD information set by the FH
+ * @seq_ctl: sequence control from the Tx cmd
+ * @byte_cnt: byte count from the Tx cmd
+ * @tlc_info: TLC rate info
+ * @ra_tid: bits [3:0] = ra, bits [7:4] = tid
+ * @frame_ctrl: frame control
+ * @tx_queue: TX queue for this response
+ * @status: for non-agg:  frame status TX_STATUS_*
+ *	for agg: status of 1st frame, AGG_TX_STATE_*; other frame status fields
+ *	follow this one, up to frame_count.
+ *	For version 6 TX response isn't received for aggregation at all.
+ */
 struct iwl_xvt_tx_resp {
 	u8 frame_count;
 	u8 bt_kill_count;
@@ -298,7 +373,8 @@ struct iwl_xvt_tx_resp {
 	u8 pa_integ_res_b[3];
 	u8 pa_integ_res_c[3];
 	__le16 measurement_req_id;
-	__le16 reserved;
+	u8 reduced_tpc;
+	u8 reserved;
 
 	__le32 tfd_info;
 	__le16 seq_ctl;
@@ -306,9 +382,17 @@ struct iwl_xvt_tx_resp {
 	u8 tlc_info;
 	u8 ra_tid;
 	__le16 frame_ctrl;
-
-	struct agg_tx_status status;
-} __packed; /* TX_RSP_API_S_VER_3 */
+	union {
+		struct {
+			struct agg_tx_status status;
+		} v3;/* TX_RSP_API_S_VER_3 */
+		struct {
+			__le16 tx_queue;
+			__le16 reserved2;
+			struct agg_tx_status status;
+		} v6;
+	};
+} __packed; /* TX_RSP_API_S_VER_6 */
 
 enum {
 	XVT_DBG_GET_SVDROP_VER_OP = 0x01,
@@ -323,12 +407,6 @@ struct xvt_debug_res {
 	__le32 dw_num;
 	__le32 data[0];
 }; /* DEBUG_XVT_RES_API_S_VER_1 */
-
-static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt_tx_resp *tx_resp)
-{
-	return le32_to_cpup((__le32 *)&tx_resp->status +
-			    tx_resp->frame_count) & 0xfff;
-}
 
 /* Section types for NVM_ACCESS_CMD */
 enum {
@@ -422,7 +500,7 @@ enum iwl_scd_cfg_actions {
  * @action: 1 queue enable, 0 queue disable, 2 change txq's tid owner
  *	Value is one of %iwl_scd_cfg_actions options
  * @aggregate: 1 aggregated queue, 0 otherwise
- * @tx_fifo: %enum iwl_mvm_tx_fifo
+ * @tx_fifo: &enum iwl_mvm_tx_fifo
  * @window: BA window size
  * @ssn: SSN for the BA agreement
  */
@@ -438,4 +516,26 @@ struct iwl_scd_txq_cfg_cmd {
 	__le16 ssn;
 	__le16 reserved;
 } __packed; /* SCD_QUEUE_CFG_CMD_API_S_VER_1 */
+
+ /* enum iwl_extended_cfg_flags - commands driver may send before
+ *	finishing init flow
+ * @IWL_INIT_DEBUG_CFG: driver is going to send debug config command
+ * @IWL_INIT_NVM: driver is going to send NVM_ACCESS commands
+ * @IWL_INIT_PHY: driver is going to send PHY_DB commands */
+enum iwl_extended_cfg_flags {
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_DEBUG_CFG */
+	IWL_INIT_DEBUG_CFG = BIT(0),
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_NVM_CFG */
+	IWL_INIT_NVM = BIT(1),
+	/* INIT_EXTENDED_CONFIG_CONTROL_FLAGS_PHY_CFG */
+	IWL_INIT_PHY = BIT(2),
+};
+
+ /* struct iwl_extended_cfg_cmd - mark what commands ucode should wait for
+ * before finishing init flows
+ * @init_flags: values from &enum iwl_extended_cfg_flags */
+struct iwl_init_extended_cfg_cmd {
+	__le32 init_flags;
+} __packed; /* INIT_EXTENDED_CFG_CMD_API_S_VER_1 */
+
 #endif /* __fw_api_h__ */

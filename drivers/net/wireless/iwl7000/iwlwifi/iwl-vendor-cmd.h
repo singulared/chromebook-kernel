@@ -131,6 +131,16 @@
  * @IWL_MVM_VENDOR_CMD_GET_SAR_PROFILE_INFO: get sar profile information.
  *	This command provides the user with the following information:
  *	Number of enabled SAR profiles, current used SAR profile per chain.
+ * @IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_REQUEST: Send a neighbor report request
+ *	to the AP we are currently connected to. The request parameters are
+ *	specified with %IWL_MVM_VENDOR_ATTR_NR_*.
+ * @IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE: An event that reports a list of
+ *	neighbor APs received in a neighbor report response frame. The report is
+ *	a nested list of &enum iwl_mvm_vendor_neighbor_report.
+ * @IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE: get sar geographic profile
+ *	information. This command provides the user with the following
+ *	information: Per band tx power offset for chain A and chain B as well as
+ *	maximum allowed tx power on this band.
  */
 
 enum iwl_mvm_vendor_cmd {
@@ -164,6 +174,9 @@ enum iwl_mvm_vendor_cmd {
 	IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS,
 	IWL_MVM_VENDOR_CMD_SET_SAR_PROFILE,
 	IWL_MVM_VENDOR_CMD_GET_SAR_PROFILE_INFO,
+	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_REQUEST,
+	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE,
+	IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE,
 };
 
 /**
@@ -194,6 +207,8 @@ enum iwl_mvm_vendor_load {
  * @IWL_MVM_VENDOR_GSCAN_REPORT_HISTORY_RESERVED: reserved.
  * @IWL_MVM_VENDOR_GSCAN_REPORT_NO_BATCH: do not fill scan history buffer.
  * @NUM_IWL_MVM_VENDOR_GSCAN_REPORT: number of report mode attributes.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_gscan_report_mode {
 	IWL_MVM_VENDOR_GSCAN_REPORT_BUFFER_FULL,
@@ -275,6 +290,8 @@ enum iwl_mvm_vendor_gscan_bucket_spec {
  *	because scan of a bucket was completed.
  * @NUM_IWL_VENDOR_RESULTS_NOTIF_EVENT_TYPE: number of defined gscan results
  *	notification event types.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_results_event_type {
 	IWL_MVM_VENDOR_RESULTS_NOTIF_BUFFER_FULL,
@@ -364,6 +381,8 @@ enum iwl_mvm_vendor_ap_threshold_param {
  * @IWL_MVM_VENDOR_HOTLIST_AP_LOST: beacon from this AP was received with RSSI
  *	below the configured low threshold.
  * @NUM_IWL_MVM_VENDOR_HOTLIST_AP_STATUS: number of defined AP statuses.
+ *
+ * Note that these must match the firmware API.
  */
 enum iwl_mvm_vendor_hotlist_ap_status {
 	IWL_MVM_VENDOR_HOTLIST_AP_FOUND,
@@ -474,6 +493,100 @@ enum iwl_mvm_vendor_lqm_result {
 	MAX_IWL_MVM_VENDOR_LQM_RESULT = NUM_IWL_MVM_VENDOR_LQM_RESULT - 1,
 };
 
+/*
+ * enum iwl_mvm_vendor_nr_chan_width - channel width definitions
+ *
+ * The values in this enum correspond to the values defined in
+ * IEEE802.11-2016, table 9-153.
+ */
+enum iwl_mvm_vendor_nr_chan_width {
+	IWL_MVM_VENDOR_CHAN_WIDTH_20,
+	IWL_MVM_VENDOR_CHAN_WIDTH_40,
+	IWL_MVM_VENDOR_CHAN_WIDTH_80,
+	IWL_MVM_VENDOR_CHAN_WIDTH_160,
+	IWL_MVM_VENDOR_CHAN_WIDTH_80P80,
+};
+
+/*
+ * enum iwl_mvm_vendor_phy_type - neighbor report phy types
+ *
+ * The values in this enum correspond to the values defined in
+ * IEEE802.11-2016, Annex C.
+ */
+enum iwl_mvm_vendor_phy_type {
+	IWL_MVM_VENDOR_PHY_TYPE_UNSPECIFIED,
+	IWL_MVM_VENDOR_PHY_TYPE_DSSS = 2,
+	IWL_MVM_VENDOR_PHY_TYPE_OFDM = 4,
+	IWL_MVM_VENDOR_PHY_TYPE_HRDSSS = 5,
+	IWL_MVM_VENDOR_PHY_TYPE_ERP = 6,
+	IWL_MVM_VENDOR_PHY_TYPE_HT = 7,
+	IWL_MVM_VENDOR_PHY_TYPE_DMG = 8,
+	IWL_MVM_VENDOR_PHY_TYPE_VHT = 9,
+	IWL_MVM_VENDOR_PHY_TYPE_TVHT = 10,
+};
+
+/**
+ * enum iwl_mvm_vendor_neighbor_report - Neighbor report for one AP
+ *
+ * @__IWL_MVM_VENDOR_NEIGHBOR_INVALID: attribute number 0 is reserved
+ * @IWL_MVM_VENDOR_NEIGHBOR_BSSID: the BSSID of the neighbor AP.
+ * @IWL_MVM_VENDOR_NEIGHBOR_BSSID_INFO: the BSSID information field as
+ *	defined in IEEE802.11-2016, figure 9-296 (u32)
+ * @IWL_MVM_VENDOR_NEIGHBOR_OPERATING_CLASS: the operating class of the
+ *	neighbor AP (u8)
+ * @IWL_MVM_VENDOR_NEIGHBOR_CHANNEL: the primary channel number of the
+ *	neighbor AP (u8)
+ * @IWL_MVM_VENDOR_NEIGHBOR_PHY_TYPE: the phy type of the neighbor AP
+ *	as specified in &enum iwl_mvm_vendor_phy_type (u8)
+ * @IWL_MVM_VENDOR_NEIGHBOR_CHANNEL_WIDTH: u32 attribute containing one of the
+ *	values of &enum iwl_mvm_vendor_nr_chan_width, describing the
+ *	channel width.
+ * @IWL_MVM_VENDOR_NEIGHBOR_CENTER_FREQ_IDX_0: Center frequency of the first
+ *	part of the channel, used for anything but 20 MHz bandwidth.
+ * @IWL_MVM_VENDOR_NEIGHBOR_CENTER_FREQ_IDX_1: Center frequency of the second
+ *	part of the channel, used only for 80+80 MHz bandwidth.
+ * @IWL_MVM_VENDOR_NEIGHBOR_LCI: the LCI info of the neighbor AP. Optional.
+ *	Binary attribute.
+ * @IWL_MVM_VENDOR_NEIGHBOR_CIVIC: the CIVIC info of the neighbor AP. Optional.
+ *	Binary attribute.
+ * @NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT: num of neighbor report attributes
+ * @MAX_IWL_MVM_VENDOR_NEIGHBOR_REPORT: highest neighbor report attribute
+ *	number.
+
+ */
+enum iwl_mvm_vendor_neighbor_report {
+	__IWL_MVM_VENDOR_NEIGHBOR_INVALID,
+	IWL_MVM_VENDOR_NEIGHBOR_BSSID,
+	IWL_MVM_VENDOR_NEIGHBOR_BSSID_INFO,
+	IWL_MVM_VENDOR_NEIGHBOR_OPERATING_CLASS,
+	IWL_MVM_VENDOR_NEIGHBOR_CHANNEL,
+	IWL_MVM_VENDOR_NEIGHBOR_PHY_TYPE,
+	IWL_MVM_VENDOR_NEIGHBOR_CHANNEL_WIDTH,
+	IWL_MVM_VENDOR_NEIGHBOR_CENTER_FREQ_IDX_0,
+	IWL_MVM_VENDOR_NEIGHBOR_CENTER_FREQ_IDX_1,
+	IWL_MVM_VENDOR_NEIGHBOR_LCI,
+	IWL_MVM_VENDOR_NEIGHBOR_CIVIC,
+
+	NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT,
+	MAX_IWL_MVM_VENDOR_NEIGHBOR_REPORT =
+		NUM_IWL_MVM_VENDOR_NEIGHBOR_REPORT - 1,
+};
+
+/**
+ * enum iwl_vendor_sar_per_chain_geo_table - per chain tx power table
+ *
+ * @IWL_VENDOR_SAR_GEO_INVALID: attribute number 0 is reserved.
+ * @IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET: allowed offset for chain a (u8).
+ * @IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET: allowed offset for chain b (u8).
+ * @IWL_VENDOR_SAR_GEO_MAX_TXP: maximum allowed tx power (u8).
+ */
+enum iwl_vendor_sar_per_chain_geo_table {
+	IWL_VENDOR_SAR_GEO_INVALID,
+	IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
+	IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
+	IWL_VENDOR_SAR_GEO_MAX_TXP,
+};
+
 /**
  * enum iwl_mvm_vendor_attr - attributes used in vendor commands
  * @__IWL_MVM_VENDOR_ATTR_INVALID: attribute 0 is invalid
@@ -580,12 +693,20 @@ enum iwl_mvm_vendor_lqm_result {
  *	measurement can take. Required for
  *	&IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS. This is a u32.
  * @IWL_MVM_VENDOR_ATTR_LQM_RESULT: result of the measurement. Nested attribute
- *	see %enum iwl_mvm_vendor_lqm_result.
+ *	see &enum iwl_mvm_vendor_lqm_result.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM: report that scan results
  *	are available when buffer is that much full. In number of scans.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_CACHED_RESULTS: array of gscan cached results.
  *	Each result is a nested attribute of
  *	&enum iwl_mvm_vendor_gscan_cached_scan_res.
+ * @IWL_MVM_VENDOR_ATTR_SSID: SSID (binary attribute, 0..32 octets)
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI: Flag attribute specifying that the
+ *	neighbor request shall query for LCI information.
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC: Flag attribute specifying that the
+ *	neighbor request shall query for CIVIC information.
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT: A list of neighbor APs as received in a
+ *	neighbor report frame. Each AP is a nested attribute of
+ *	&enum iwl_mvm_vendor_neighbor_report.
  * @IWL_MVM_VENDOR_ATTR_LAST_MSG: Indicates that this message is the last one
  *	in the series of messages. (flag)
  * @IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE: SAR table idx for chain A.
@@ -594,6 +715,8 @@ enum iwl_mvm_vendor_lqm_result {
  *	This is a u8.
  * @IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM: number of enabled SAR profile
  *	This is a u8.
+ * @IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE: geo profile info.
+ *	see &enum iwl_vendor_sar_per_chain_geo_table.
  *
  */
 enum iwl_mvm_vendor_attr {
@@ -658,6 +781,11 @@ enum iwl_mvm_vendor_attr {
 	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE,
 	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE,
 	IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM,
+	IWL_MVM_VENDOR_ATTR_SSID,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT,
+	IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE,
 
 	NUM_IWL_MVM_VENDOR_ATTR,
 	MAX_IWL_MVM_VENDOR_ATTR = NUM_IWL_MVM_VENDOR_ATTR - 1,

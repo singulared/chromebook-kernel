@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2014 Intel Mobile Communications GmbH
- * Copyright(c) 2016 Intel Deutschland GmbH
+ * Copyright(c) 2016-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2014 Intel Mobile Communications GmbH
- * Copyright(c) 2016 Intel Deutschland GmbH
+ * Copyright(c) 2016-2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,11 +102,25 @@ static ssize_t iwl_dnt_debugfs_log_read(struct file *file,
 	dnt->debugfs_counter++;
 	do {
 		/* wait for new logs */
-		wait_event_interruptible(db->waitq,
-					 (!trans->op_mode ||
-					  db->read_ptr != db->wr_ptr));
-		if (signal_pending(current) || !trans->op_mode)
+		ret = wait_event_interruptible_timeout(
+			db->waitq,
+			(!trans->op_mode || db->read_ptr != db->wr_ptr),
+			HZ);
+		if (ret < 0 || !trans->op_mode) {
+			/* we reached EOF */
+			ret = 0;
 			break;
+		}
+		if (ret == 0) {
+			/*
+			 * temp_buf is zeroed at this point, so if we set the
+			 * size to non-zero we'll return zeroes to userspace,
+			 * which the trace viewer will ignore (outside of a
+			 * specific trace item/event)
+			 */
+			ret = sizeof(u32);
+			break;
+		}
 
 		ret = iwl_dnt_dispatch_pull(trans, temp_buf, count,
 					    UCODE_MESSAGES);
@@ -221,7 +235,7 @@ static int iwl_dnt_conf_monitor(struct iwl_trans *trans, u32 output,
 		 * If we're running a device that supports DBGC and monitor
 		 * was given value as MARBH, it should be interpreted as SMEM
 		 */
-		if ((trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) &&
+		if (trans->cfg->dbgc_supported &&
 		    (monitor_type == MARBH_ADC || monitor_type == MARBH_DBG))
 			dnt->cur_mon_type = SMEM;
 	}

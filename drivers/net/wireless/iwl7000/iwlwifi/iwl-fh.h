@@ -77,6 +77,8 @@
  */
 #define FH_MEM_LOWER_BOUND                   (0x1000)
 #define FH_MEM_UPPER_BOUND                   (0x2000)
+#define FH_MEM_LOWER_BOUND_GEN2              (0xa06000)
+#define FH_MEM_UPPER_BOUND_GEN2              (0xa08000)
 
 /**
  * Keep-Warm (KW) buffer base address.
@@ -614,6 +616,8 @@ static inline unsigned int FH_MEM_CBBC_QUEUE(struct iwl_trans *trans,
 #define RX_POOL_SIZE		(MQ_RX_NUM_RBDS +	\
 				 IWL_MAX_RX_HW_QUEUES *	\
 				 (RX_CLAIM_REQ_ALLOC - RX_POST_REQ_ALLOC))
+/* cb size is the exponent */
+#define RX_QUEUE_CB_SIZE(x)	ilog2(x)
 
 #define RX_QUEUE_SIZE                         256
 #define RX_QUEUE_MASK                         255
@@ -639,6 +643,8 @@ struct iwl_rb_status {
 
 
 #define TFD_QUEUE_SIZE_MAX      (256)
+/* cb size is the exponent - 3 */
+#define TFD_QUEUE_CB_SIZE(x)	(ilog2(x) - 3)
 #define TFD_QUEUE_SIZE_BC_DUP	(64)
 #define TFD_QUEUE_BC_SIZE	(TFD_QUEUE_SIZE_MAX + TFD_QUEUE_SIZE_BC_DUP)
 #define IWL_TX_DMA_MASK        DMA_BIT_MASK(36)
@@ -647,7 +653,7 @@ struct iwl_rb_status {
 
 static inline u8 iwl_get_dma_hi_addr(dma_addr_t addr)
 {
-	return (sizeof(addr) > sizeof(u32) ? (addr >> 16) >> 16 : 0) & 0xF;
+	return (sizeof(addr) > sizeof(u32) ? upper_32_bits(addr) : 0) & 0xF;
 }
 /**
  * struct iwl_tfd_tb transmit buffer descriptor within transmit frame descriptor

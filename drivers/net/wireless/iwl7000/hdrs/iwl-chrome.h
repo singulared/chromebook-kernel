@@ -51,8 +51,10 @@ static inline u64 ktime_get_real_ns(void)
 #include <hdrs/mac80211-exp.h>
 #include <hdrs/ieee80211.h>
 #include <hdrs/mac80211-bp.h>
-/* need to include mac80211 here, otherwise we get the regular kernel one */
+/* need to include these here, otherwise we get the regular kernel one */
 #include <hdrs/mac80211.h>
+#include <hdrs/average.h>
+#include <hdrs/bitfield.h>
 
 /* include rhashtable this way to get our copy if another exists */
 #include <linux/list_nulls.h>
@@ -442,5 +444,17 @@ static inline int nla_put_u64_64bit(struct sk_buff *skb, int attrtype,
 void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 		    size_t datalen, gfp_t gfp);
 #endif /* < 4.7 */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,10,0)
+/* on earlier kernels, genl_unregister_family() modifies the struct */
+#define __genl_ro_after_init
+#else
+#define __genl_ro_after_init __ro_after_init
+#endif
+
+#define LINUX_VERSION_IS_LESS(x1,x2,x3) (LINUX_VERSION_CODE < KERNEL_VERSION(x1,x2,x3))
+#define LINUX_VERSION_IS_GEQ(x1,x2,x3)  (LINUX_VERSION_CODE >= KERNEL_VERSION(x1,x2,x3))
+#define LINUX_VERSION_IN_RANGE(x1,x2,x3, y1,y2,y3) \
+        (LINUX_VERSION_IS_GEQ(x1,x2,x3) && LINUX_VERSION_IS_LESS(y1,y2,y3))
 
 #endif /* __IWL_CHROME */

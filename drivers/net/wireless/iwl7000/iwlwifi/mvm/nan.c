@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,7 +25,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015-2016 Intel Deutschland GmbH
+ * Copyright(c) 2015-2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,34 +87,84 @@ static bool iwl_mvm_can_beacon(struct ieee80211_vif *vif,
 	return cfg80211_reg_can_beacon(wiphy, &def, vif->type);
 }
 
+static inline bool iwl_mvm_nan_is_ver2(struct ieee80211_hw *hw)
+{
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+
+	return fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_NAN2_VER2);
+}
+
+static inline size_t iwl_mvm_nan_cfg_cmd_len(struct ieee80211_hw *hw)
+{
+	return iwl_mvm_nan_is_ver2(hw) ? sizeof(struct iwl_nan_cfg_cmd_v2) :
+					 sizeof(struct iwl_nan_cfg_cmd);
+}
+
+static inline struct iwl_nan_umac_cfg
+*iwl_mvm_nan_get_umac_cfg(struct ieee80211_hw *hw, void *nan_cfg_cmd)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       &((struct iwl_nan_cfg_cmd_v2 *)nan_cfg_cmd)->umac_cfg :
+	       &((struct iwl_nan_cfg_cmd *)nan_cfg_cmd)->umac_cfg;
+}
+
+static inline struct iwl_nan_testbed_cfg
+*iwl_mvm_nan_get_tb_cfg(struct ieee80211_hw *hw, void *nan_cfg_cmd)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       &((struct iwl_nan_cfg_cmd_v2 *)nan_cfg_cmd)->tb_cfg :
+	       &((struct iwl_nan_cfg_cmd *)nan_cfg_cmd)->tb_cfg;
+}
+
+static inline struct iwl_nan_nan2_cfg
+*iwl_mvm_nan_get_nan2_cfg(struct ieee80211_hw *hw, void *nan_cfg_cmd)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       &((struct iwl_nan_cfg_cmd_v2 *)nan_cfg_cmd)->nan2_cfg :
+	       &((struct iwl_nan_cfg_cmd *)nan_cfg_cmd)->nan2_cfg;
+}
+
 int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		      struct ieee80211_vif *vif,
 		      struct cfg80211_nan_conf *conf)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_nan_cfg_cmd cmd = {};
+	void *cmd;
+	struct iwl_nan_umac_cfg *umac_cfg;
+	struct iwl_nan_testbed_cfg *tb_cfg;
+	struct iwl_nan_nan2_cfg *nan2_cfg;
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	int ret = 0;
 	u16 cdw = 0;
 
 	IWL_DEBUG_MAC80211(IWL_MAC80211_GET_MVM(hw), "Start NAN\n");
 
-	/* apparently the FW doesn't support 5GHz without 2GHz */
-	if ((conf->dual & NL80211_NAN_BAND_5GHZ) &&
-	    !(conf->dual & NL80211_NAN_BAND_2GHZ))
-	    return -EOPNOTSUPP;
+	/* 2GHz is mandatory and nl80211 should make sure it is set.
+	 * Warn and add 2GHz if this happens anyway.
+	 */
+	if (WARN_ON(ieee80211_nan_bands(conf) && !(ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ))))
+		return -EINVAL;
+
+	ieee80211_nan_set_band(conf, NL80211_BAND_2GHZ);
+	cmd = kzalloc(iwl_mvm_nan_cfg_cmd_len(hw), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	umac_cfg = iwl_mvm_nan_get_umac_cfg(hw, cmd);
+	tb_cfg = iwl_mvm_nan_get_tb_cfg(hw, cmd);
+	nan2_cfg = iwl_mvm_nan_get_nan2_cfg(hw, cmd);
 
 	mutex_lock(&mvm->mutex);
 
-	cmd.action = cpu_to_le32(FW_CTXT_ACTION_ADD);
-	cmd.tsf_id = cpu_to_le32(mvmvif->tsf_id);
-	cmd.beacon_template_id = cpu_to_le32(mvmvif->id);
+	umac_cfg->action = cpu_to_le32(FW_CTXT_ACTION_ADD);
+	umac_cfg->tsf_id = cpu_to_le32(mvmvif->tsf_id);
+	umac_cfg->beacon_template_id = cpu_to_le32(mvmvif->id);
 
-	ether_addr_copy(cmd.node_addr, vif->addr);
-	cmd.sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
-	cmd.master_pref = conf->master_pref;
+	ether_addr_copy(umac_cfg->node_addr, vif->addr);
+	umac_cfg->sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
+	umac_cfg->master_pref = conf->master_pref;
 
-	if (conf->dual & (NL80211_NAN_BAND_2GHZ | NL80211_NAN_BAND_DEFAULT)) {
+	if (ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_2GHZ,
 					NAN_CHANNEL_24)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_24);
@@ -122,13 +172,13 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 			goto out;
 		}
 
-		cmd.chan24 = NAN_CHANNEL_24;
+		tb_cfg->chan24 = NAN_CHANNEL_24;
 
 		/* available on each DW in on 2.4GHZ */
 		cdw |= 1;
 	}
 
-	if (conf->dual & NL80211_NAN_BAND_5GHZ) {
+	if (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_5GHZ,
 					NAN_CHANNEL_52)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_52);
@@ -136,29 +186,30 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 			goto out;
 		}
 
-		cmd.chan52 = NAN_CHANNEL_52;
+		tb_cfg->chan52 = NAN_CHANNEL_52;
 
 		/* available on each dw on 5GHZ */
 		cdw |= 1 << 3;
 	}
 
-	cmd.warmup_timer = cpu_to_le32(NAN_WARMUP_TIMEOUT_USEC);
-	cmd.op_bands = 3;
-	cmd.cdw = cpu_to_le16(cdw);
+	tb_cfg->warmup_timer = cpu_to_le32(NAN_WARMUP_TIMEOUT_USEC);
+	tb_cfg->op_bands = 3;
+	nan2_cfg->cdw = cpu_to_le16(cdw);
 
-	if ((conf->dual & NL80211_NAN_BAND_2GHZ) &&
-	    (conf->dual & NL80211_NAN_BAND_5GHZ))
-		cmd.dual_band = cpu_to_le32(1);
+	if ((ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) &&
+	    (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)))
+		umac_cfg->dual_band = cpu_to_le32(1);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_CONFIG_CMD,
 						   NAN_GROUP, 0),
-				   0, sizeof(cmd), &cmd);
+				   0, iwl_mvm_nan_cfg_cmd_len(hw), cmd);
 
 	if (!ret)
 		mvm->nan_vif = vif;
 
 out:
 	mutex_unlock(&mvm->mutex);
+	kfree(cmd);
 
 	return ret;
 }
@@ -166,22 +217,30 @@ out:
 int iwl_mvm_stop_nan(struct ieee80211_hw *hw,
 		     struct ieee80211_vif *vif)
 {
-	struct iwl_nan_cfg_cmd cmd = {};
+	void *cmd;
+	struct iwl_nan_umac_cfg *umac_cfg;
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	int ret = 0;
 
 	IWL_DEBUG_MAC80211(IWL_MAC80211_GET_MVM(hw), "Stop NAN\n");
 
+	cmd = kzalloc(iwl_mvm_nan_cfg_cmd_len(hw), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	umac_cfg = iwl_mvm_nan_get_umac_cfg(hw, cmd);
+
 	mutex_lock(&mvm->mutex);
-	cmd.action = cpu_to_le32(FW_CTXT_ACTION_REMOVE);
+	umac_cfg->action = cpu_to_le32(FW_CTXT_ACTION_REMOVE);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_CONFIG_CMD,
 						   NAN_GROUP, 0),
-				   0, sizeof(cmd), &cmd);
+				   0, iwl_mvm_nan_cfg_cmd_len(hw), cmd);
 
 	if (!ret)
 		mvm->nan_vif = NULL;
 	mutex_unlock(&mvm->mutex);
+	kfree(cmd);
 
 	return ret;
 }
@@ -236,12 +295,37 @@ static void iwl_mvm_copy_filters(struct cfg80211_nan_func_filter *filters,
 	}
 }
 
+static inline size_t iwl_mvm_nan_add_func_cmd_len(struct ieee80211_hw *hw)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       sizeof(struct iwl_nan_add_func_cmd_v2) :
+	       sizeof(struct iwl_nan_add_func_cmd);
+}
+
+static inline struct iwl_nan_add_func_common
+*iwl_mvm_nan_get_add_func_common(struct ieee80211_hw *hw,
+				 void *nan_add_func_cmd)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       &((struct iwl_nan_add_func_cmd_v2 *)nan_add_func_cmd)->cmn :
+	       &((struct iwl_nan_add_func_cmd *)nan_add_func_cmd)->cmn;
+}
+
+static inline u8 *iwl_mvm_nan_get_add_func_data(struct ieee80211_hw *hw,
+						void *nan_add_func_cmd)
+{
+	return iwl_mvm_nan_is_ver2(hw) ?
+	       ((struct iwl_nan_add_func_cmd_v2 *)nan_add_func_cmd)->data :
+	       ((struct iwl_nan_add_func_cmd *)nan_add_func_cmd)->data;
+}
+
 int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 			 struct ieee80211_vif *vif,
 			 const struct cfg80211_nan_func *nan_func)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_nan_add_func_cmd *cmd;
+	void *cmd;
+	struct iwl_nan_add_func_common *cmn;
 	struct iwl_host_cmd hcmd = {
 		.id = iwl_cmd_id(NAN_DISCOVERY_FUNC_CMD, NAN_GROUP, 0),
 		.flags = CMD_WANT_SKB,
@@ -259,7 +343,8 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	mutex_lock(&mvm->mutex);
 
 	/* We assume here that mac80211 properly validated the nan_func */
-	cmd_len = sizeof(*cmd) + ALIGN(nan_func->serv_spec_info_len, 4);
+	cmd_len = iwl_mvm_nan_add_func_cmd_len(hw) +
+		  ALIGN(nan_func->serv_spec_info_len, 4);
 	if (nan_func->srf_bf_len)
 		cmd_len += ALIGN(nan_func->srf_bf_len + 1, 4);
 	else if (nan_func->srf_num_macs)
@@ -284,13 +369,15 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	hcmd.len[0] = cmd_len;
 	hcmd.data[0] = cmd;
 
-	cmd_data = cmd->data;
-	cmd->action = cpu_to_le32(FW_CTXT_ACTION_ADD);
-	cmd->type = iwl_fw_nan_func_type(nan_func->type);
-	cmd->instance_id = nan_func->instance_id;
-	cmd->dw_interval = 1;
+	cmn = iwl_mvm_nan_get_add_func_common(hw, cmd);
 
-	memcpy(&cmd->service_id, nan_func->service_id, sizeof(cmd->service_id));
+	cmd_data = iwl_mvm_nan_get_add_func_data(hw, cmd);
+	cmn->action = cpu_to_le32(FW_CTXT_ACTION_ADD);
+	cmn->type = iwl_fw_nan_func_type(nan_func->type);
+	cmn->instance_id = nan_func->instance_id;
+	cmn->dw_interval = 1;
+
+	memcpy(&cmn->service_id, nan_func->service_id, sizeof(cmn->service_id));
 
 	/*
 	 * TODO: Currently we want all the events, however we might need to be
@@ -313,22 +400,22 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	if (nan_func->publish_type == NL80211_NAN_SOLICITED_PUBLISH)
 		flags |= NAN_DE_FUNC_FLAG_SOLICITED;
 
-	cmd->flags = cpu_to_le16(flags);
-	cmd->ttl = cpu_to_le32(nan_func->ttl);
-	cmd->serv_info_len = nan_func->serv_spec_info_len;
+	cmn->flags = cpu_to_le16(flags);
+	cmn->ttl = cpu_to_le32(nan_func->ttl);
+	cmn->serv_info_len = nan_func->serv_spec_info_len;
 	if (nan_func->serv_spec_info_len)
 		memcpy(cmd_data, nan_func->serv_spec_info,
 		       nan_func->serv_spec_info_len);
 
 	if (nan_func->type == NL80211_NAN_FUNC_FOLLOW_UP) {
-		cmd->flw_up_id = nan_func->followup_id;
-		cmd->flw_up_req_id = nan_func->followup_reqid;
-		memcpy(cmd->flw_up_addr, nan_func->followup_dest.addr,
+		cmn->flw_up_id = nan_func->followup_id;
+		cmn->flw_up_req_id = nan_func->followup_reqid;
+		memcpy(cmn->flw_up_addr, nan_func->followup_dest.addr,
 		       ETH_ALEN);
-		cmd->ttl = cpu_to_le32(1);
+		cmn->ttl = cpu_to_le32(1);
 	}
 
-	cmd_data += ALIGN(cmd->serv_info_len, 4);
+	cmd_data += ALIGN(cmn->serv_info_len, 4);
 	if (nan_func->srf_bf_len) {
 		u8 srf_ctl = 0;
 
@@ -337,7 +424,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		if (nan_func->srf_include)
 			srf_ctl |= SRF_INCLUDE;
 
-		cmd->srf_len = nan_func->srf_bf_len + 1;
+		cmn->srf_len = nan_func->srf_bf_len + 1;
 		memcpy(cmd_data, &srf_ctl, sizeof(srf_ctl));
 		memcpy(cmd_data + 1, nan_func->srf_bf, nan_func->srf_bf_len);
 	} else if (nan_func->srf_num_macs) {
@@ -347,7 +434,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		if (nan_func->srf_include)
 			srf_ctl |= SRF_INCLUDE;
 
-		cmd->srf_len = nan_func->srf_num_macs * ETH_ALEN + 1;
+		cmn->srf_len = nan_func->srf_num_macs * ETH_ALEN + 1;
 		memcpy(cmd_data, &srf_ctl, sizeof(srf_ctl));
 
 		for (i = 0; i < nan_func->srf_num_macs; i++) {
@@ -356,20 +443,20 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		}
 	}
 
-	cmd_data += ALIGN(cmd->srf_len, 4);
+	cmd_data += ALIGN(cmn->srf_len, 4);
 
 	if (rx_filt_len > 0)
 		iwl_mvm_copy_filters(nan_func->rx_filters,
 				     nan_func->num_rx_filters, cmd_data);
 
-	cmd->rx_filter_len = rx_filt_len;
-	cmd_data += ALIGN(cmd->rx_filter_len, 4);
+	cmn->rx_filter_len = rx_filt_len;
+	cmd_data += ALIGN(cmn->rx_filter_len, 4);
 
 	if (tx_filt_len > 0)
 		iwl_mvm_copy_filters(nan_func->tx_filters,
 				     nan_func->num_tx_filters, cmd_data);
 
-	cmd->tx_filter_len = tx_filt_len;
+	cmn->tx_filter_len = tx_filt_len;
 
 	ret = iwl_mvm_send_cmd(mvm, &hcmd);
 
@@ -406,8 +493,8 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		goto out_free_resp;
 	}
 
-	if (cmd->instance_id &&
-	    WARN_ON(resp->instance_id != cmd->instance_id)) {
+	if (cmn->instance_id &&
+	    WARN_ON(resp->instance_id != cmn->instance_id)) {
 		ret = -EIO;
 		goto out_free_resp;
 	}
@@ -427,22 +514,35 @@ void iwl_mvm_del_nan_func(struct ieee80211_hw *hw,
 			  u8 instance_id)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_nan_add_func_cmd cmd = {0};
+	void *cmd;
+	struct iwl_nan_add_func_common *cmn;
 	int ret;
 
 	IWL_DEBUG_MAC80211(IWL_MAC80211_GET_MVM(hw), "Remove NAN func\n");
+
+	cmd = kzalloc(iwl_mvm_nan_add_func_cmd_len(hw), GFP_KERNEL);
+	if (!cmd) {
+		IWL_ERR(mvm,
+			"Failed to allocate command to remove NAN func instance_id: %d\n",
+			instance_id);
+		return;
+	}
+
+	cmn = iwl_mvm_nan_get_add_func_common(hw, cmd);
+
 	mutex_lock(&mvm->mutex);
-	cmd.action = cpu_to_le32(FW_CTXT_ACTION_REMOVE);
-	cmd.instance_id = instance_id;
+	cmn->action = cpu_to_le32(FW_CTXT_ACTION_REMOVE);
+	cmn->instance_id = instance_id;
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_DISCOVERY_FUNC_CMD,
 						   NAN_GROUP, 0),
-				   0, sizeof(cmd), &cmd);
+				   0, iwl_mvm_nan_add_func_cmd_len(hw), cmd);
 	if (ret)
 		IWL_ERR(mvm, "Failed to remove NAN func instance_id: %d\n",
 			instance_id);
 
 	mutex_unlock(&mvm->mutex);
+	kfree(cmd);
 }
 
 static u8 iwl_cfg_nan_func_type(u8 fw_type)

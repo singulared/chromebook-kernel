@@ -144,19 +144,20 @@ static int iwl_mvm_tm_send_hcmd(struct iwl_mvm *mvm,
 	resp_size = sizeof(struct iwl_tm_cmd_request) + reply_len;
 	cmd_resp = kzalloc(resp_size, GFP_KERNEL);
 	if (!cmd_resp) {
-		iwl_free_resp(&host_cmd);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 	cmd_resp->id = hcmd_req->id;
 	cmd_resp->len = reply_len;
 	memcpy(cmd_resp->data, &(pkt->hdr), reply_len);
 
-	iwl_free_resp(&host_cmd);
-
 	data_out->data = cmd_resp;
 	data_out->len = resp_size;
+	ret = 0;
 
-	return 0;
+out:
+	iwl_free_resp(&host_cmd);
+	return ret;
 }
 
 static void iwl_mvm_tm_execute_reg_ops(struct iwl_trans *trans,

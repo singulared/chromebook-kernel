@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,6 +91,12 @@ enum iwl_tm_gnl_cmd_t {
 #define XVT_CMD_BASE		0x300
 #define XVT_CMD_NOTIF_BASE	0x400
 #define XVT_BUS_TESTER_BASE	0x500
+
+/**
+ * signifies iwl_tm_mod_tx_request is set to infinite mode,
+ * when iwl_tm_mod_tx_request.times ==  IWL_XVT_TX_MODULATED_INFINITE
+ */
+#define IWL_XVT_TX_MODULATED_INFINITE (0)
 
 /*
  * Periphery registers absolute lower bound. This is used in order to
@@ -154,12 +160,15 @@ enum {
 	IWL_XVT_CMD_GET_CHIP_ID,
 	IWL_XVT_CMD_APMG_PD_MODE,
 	IWL_XVT_CMD_GET_MAC_ADDR_INFO,
+	IWL_XVT_CMD_MOD_TX_STOP,
+	IWL_XVT_CMD_TX_QUEUE_CFG,
 
 	/* Driver notifications */
 	IWL_XVT_CMD_SEND_REPLY_ALIVE = XVT_CMD_NOTIF_BASE,
 	IWL_XVT_CMD_SEND_RFKILL,
 	IWL_XVT_CMD_SEND_NIC_ERROR,
 	IWL_XVT_CMD_SEND_NIC_UMAC_ERROR,
+	IWL_XVT_CMD_SEND_MOD_TX_DONE,
 
 	/* Bus Tester Commands*/
 	IWL_TM_USER_CMD_SV_BUS_CONFIG = XVT_BUS_TESTER_BASE,
@@ -460,6 +469,47 @@ struct iwl_tm_mod_tx_request {
 } __packed __aligned(4);
 
 /**
+ * struct iwl_xvt_tx_mod_task_data - Data for modulated tx task handler
+ * @xvt:	  pointer to the xvt op mode
+ * @tx_req:	  pointer to data of transmission request
+ */
+struct iwl_xvt_tx_mod_task_data {
+	struct iwl_xvt *xvt;
+	struct iwl_tm_mod_tx_request tx_req;
+	__u8 lmac_id;
+} __packed __aligned(4);
+
+/**
+ * error status for status parameter in struct iwl_xvt_tx_mod_done
+ */
+enum {
+	XVT_TX_DRIVER_SUCCESSFUL = 0,
+	XVT_TX_DRIVER_QUEUE_FULL,
+	XVT_TX_DRIVER_TIMEOUT,
+	XVT_TX_DRIVER_ABORTED
+};
+
+/**
+ * struct iwl_xvt_tx_mod_done - Notification data for modulated tx
+ * @num_of_packets: number of sent packets
+ * @status: tx task handler error status
+ & @lmac_id: lmac index
+ */
+struct iwl_xvt_tx_mod_done {
+	__u64 num_of_packets;
+	__u32 status;
+	__u32 lmac_id;
+} __packed __aligned(4);
+
+/**
+ * struct iwl_xvt_tx_mod_stop - input for stop modulated tx
+ * @lmac_id: which lmac id to stop
+ */
+struct iwl_xvt_tx_mod_stop {
+	__u32 lmac_id;
+} __packed __aligned(4);
+
+/**
  * struct iwl_xvt_rx_hdrs_mode_request - Start/Stop gathering headers info.
  * @mode: 0 - stop
  *        1 - start
@@ -522,6 +572,21 @@ struct iwl_tm_crash_data {
  */
 struct iwl_xvt_mac_addr_info {
 	__u8 mac_addr[ETH_ALEN];
+} __packed __aligned(4);
+
+enum {
+	TX_QUEUE_CFG_REMOVE,
+	TX_QUEUE_CFG_ADD,
+};
+
+/**
+ * iwl_xvt_tx_queue_cfg - add/remove tx queue
+ * @ sta_id: station ID associated with queue
+ * @ flags: 0 - remove queue, 1 - add queue
+ */
+struct iwl_xvt_tx_queue_cfg {
+	__u8 sta_id;
+	__u8 operation;
 } __packed __aligned(4);
 
 #endif

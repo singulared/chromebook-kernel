@@ -355,7 +355,8 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0xA370, 0x1030, iwl9560_2ac_cfg)},
 
 /* a000 Series */
-	{IWL_PCI_DEVICE(0x2720, 0x0A10, iwla000_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2720, 0x0A10, iwla000_2ac_cfg_hr_cdb)},
+	{IWL_PCI_DEVICE(0x34F0, 0x0310, iwla000_2ac_cfg_jf)},
 #endif /* CPTCFG_IWLMVM */
 
 	{0}
@@ -493,17 +494,18 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		iwl_trans->cfg = cfg_7265d;
 	}
 
-	if (iwl_trans->cfg->rf_id) {
-		if (cfg == &iwl9460_2ac_cfg &&
-		    iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_LC) {
-			cfg = &iwl9000lc_2ac_cfg;
-			iwl_trans->cfg = cfg;
-		}
+	if (iwl_trans->cfg->rf_id && cfg == &iwla000_2ac_cfg_hr_cdb) {
+		if (iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_JF)
+			cfg = &iwla000_2ac_cfg_jf;
+		else if (iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_HR)
+			cfg = &iwla000_2ac_cfg_hr;
+
+		iwl_trans->cfg = cfg;
 	}
 #endif
 
 	pci_set_drvdata(pdev, iwl_trans);
-	iwl_trans->drv = iwl_drv_start(iwl_trans, cfg);
+	iwl_trans->drv = iwl_drv_start(iwl_trans);
 
 	if (IS_ERR(iwl_trans->drv)) {
 		ret = PTR_ERR(iwl_trans->drv);

@@ -19,7 +19,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 /**
  * DOC: Wireless regulatory infrastructure
  *
@@ -52,8 +52,6 @@
 #include <net/cfg80211.h>
 #include "ieee80211_i.h"
 
-static bool reg_initialized;
-
 static LIST_HEAD(cfg80211_rdev_list);
 
 static struct cfg80211_registered_device *wiphy_to_rdev(struct wiphy *wiphy)
@@ -79,7 +77,7 @@ static struct cfg80211_registered_device *wiphy_to_rdev(struct wiphy *wiphy)
 #define REG_DBG_PRINT(args...)
 #endif
 
-static spinlock_t reg_requests_lock;
+static DEFINE_SPINLOCK(reg_requests_lock);
 
 static void reg_todo(struct work_struct *work);
 static DECLARE_WORK(reg_work, reg_todo);
@@ -678,11 +676,6 @@ void intel_regulatory_register(struct ieee80211_local *local)
 	struct wiphy *wiphy = local->hw.wiphy;
 
 	rtnl_lock();
-	if (!reg_initialized) {
-		spin_lock_init(&reg_requests_lock);
-		reg_initialized = true;
-	}
-
 	/* self-managed devices ignore external hints */
 	if (wiphy->regulatory_flags & REGULATORY_WIPHY_SELF_MANAGED) {
 		unsigned long flags;
@@ -723,3 +716,4 @@ void intel_regulatory_deregister(struct ieee80211_local *local)
 
 	flush_work(&reg_work);
 }
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */

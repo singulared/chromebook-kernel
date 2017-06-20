@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015 - 2016 Intel Deutschland GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -94,7 +94,7 @@ void iwl_mvm_tof_init(struct iwl_mvm *mvm)
 
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	if (IWL_MVM_TOF_IS_RESPONDER) {
-		tof_data->responder_cfg.sta_id = IWL_MVM_STATION_COUNT;
+		tof_data->responder_cfg.sta_id = IWL_MVM_INVALID_STA;
 	}
 #endif
 
@@ -127,6 +127,7 @@ void iwl_mvm_tof_init(struct iwl_mvm *mvm)
 #endif
 
 	INIT_LIST_HEAD(&tof_data->lci_civic_info);
+	mvm->init_status |= IWL_MVM_INIT_STATUS_TOF_INIT_COMPLETE;
 }
 
 #ifdef CPTCFG_IWLMVM_TOF_TSF_WA
@@ -228,7 +229,9 @@ void iwl_mvm_tof_clean(struct iwl_mvm *mvm)
 {
 	struct iwl_mvm_tof_data *tof_data = &mvm->tof_data;
 
-	if (!fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_TOF_SUPPORT))
+	if (!fw_has_capa(&mvm->fw->ucode_capa,
+			 IWL_UCODE_TLV_CAPA_TOF_SUPPORT) ||
+	    !(mvm->init_status & IWL_MVM_INIT_STATUS_TOF_INIT_COMPLETE))
 		return;
 
 #ifdef CPTCFG_IWLMVM_TOF_TSF_WA
@@ -241,6 +244,7 @@ void iwl_mvm_tof_clean(struct iwl_mvm *mvm)
 	iwl_mvm_tof_clean_lci_civic(tof_data);
 	memset(tof_data, 0, sizeof(*tof_data));
 	mvm->tof_data.active_request_id = IWL_MVM_TOF_RANGE_REQ_MAX_ID;
+	mvm->init_status &= ~IWL_MVM_INIT_STATUS_TOF_INIT_COMPLETE;
 }
 
 static void iwl_tof_iterator(void *_data, u8 *mac,
@@ -663,9 +667,24 @@ static void iwl_mvm_debug_range_req(struct iwl_mvm *mvm)
 	}
 }
 
+static int
+iwl_tof_range_request_status_to_err(enum iwl_tof_range_request_status s)
+{
+	switch (s) {
+	case IWL_TOF_RANGE_REQUEST_STATUS_SUCCESS:
+		return 0;
+	case IWL_TOF_RANGE_REQUEST_STATUS_BUSY:
+		return -EBUSY;
+	default:
+		WARN_ON_ONCE(1);
+		return -EIO;
+	}
+}
+
 int iwl_mvm_tof_range_request_cmd(struct iwl_mvm *mvm)
 {
 	int err;
+	u32 status;
 	struct iwl_host_cmd cmd = {
 		.id = iwl_cmd_id(TOF_RANGE_REQ_CMD, TOF_GROUP, 0),
 		.len = { sizeof(mvm->tof_data.range_req), },
@@ -687,11 +706,15 @@ int iwl_mvm_tof_range_request_cmd(struct iwl_mvm *mvm)
 
 	iwl_mvm_debug_range_req(mvm);
 
-	err = iwl_mvm_send_cmd(mvm, &cmd);
+	err = iwl_mvm_send_cmd_status(mvm, &cmd, &status);
 	if (err) {
-		IWL_ERR(mvm, "Failed to send ToF cmd!\n");
-		iwl_mvm_tof_reset_active(mvm);
+		IWL_ERR(mvm, "Failed to send ToF cmd! err: %d\n", err);
+	} else if (status) {
+		IWL_ERR(mvm, "ToF cmd failure! status: %u\n", status);
+		err = iwl_tof_range_request_status_to_err(status);
 	}
+	if (err)
+		iwl_mvm_tof_reset_active(mvm);
 
 	return err;
 }

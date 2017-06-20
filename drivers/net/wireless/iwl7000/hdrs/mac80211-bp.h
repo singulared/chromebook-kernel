@@ -8,6 +8,7 @@
 #include <generated/utsrelease.h>
 /* ipv6_addr_is_multicast moved - include old header */
 #include <net/addrconf.h>
+#include <net/ieee80211_radiotap.h>
 
 /* common backward compat code */
 
@@ -938,6 +939,56 @@ static inline bool iwl7000_wiphy_ext_feature_isset(struct wiphy *wiphy,
 #define wiphy_ext_feature_set iwl7000_wiphy_ext_feature_set
 #define wiphy_ext_feature_isset iwl7000_wiphy_ext_feature_isset
 
+static inline
+size_t iwl7000_get_auth_data_len(struct cfg80211_auth_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return req->sae_data_len;
+#else
+	return req->auth_data_len;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_auth_data(struct cfg80211_auth_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return req->sae_data;
+#else
+	return req->auth_data;
+#endif
+}
+
+static inline
+size_t iwl7000_get_fils_kek_len(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return 0;
+#else
+	return req->fils_kek_len;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_fils_kek(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return NULL;
+#else
+	return req->fils_kek;
+#endif
+}
+
+static inline
+const u8 *iwl7000_get_fils_nonces(struct cfg80211_assoc_request *req)
+{
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+	return NULL;
+#else
+	return req->fils_nonces;
+#endif
+}
+
 #if CFG80211_VERSION < KERNEL_VERSION(4,1,0)
 size_t ieee80211_ie_split_ric(const u8 *ies, size_t ielen,
 			      const u8 *ids, int n_ids,
@@ -951,47 +1002,6 @@ size_t ieee80211_ie_split(const u8 *ies, size_t ielen,
 #define cfg80211_reg_can_beacon_relax(wiphy, chandef, iftype) \
 	cfg80211_reg_can_beacon(wiphy, chandef, iftype)
 #endif
-
-#ifndef DECLARE_EWMA
-#define DECLARE_EWMA(name, _factor, _weight)				\
-	struct ewma_##name {						\
-		unsigned long internal;					\
-	};								\
-	static inline void ewma_##name##_init(struct ewma_##name *e)	\
-	{								\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-		e->internal = 0;					\
-	}								\
-	static inline unsigned long					\
-	ewma_##name##_read(struct ewma_##name *e)			\
-	{								\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-		return e->internal >> ilog2(_factor);			\
-	}								\
-	static inline void ewma_##name##_add(struct ewma_##name *e,	\
-					     unsigned long val)		\
-	{								\
-		unsigned long internal = ACCESS_ONCE(e->internal);	\
-		unsigned long weight = ilog2(_weight);			\
-		unsigned long factor = ilog2(_factor);			\
-									\
-		BUILD_BUG_ON(!__builtin_constant_p(_factor));		\
-		BUILD_BUG_ON(!__builtin_constant_p(_weight));		\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_factor);			\
-		BUILD_BUG_ON_NOT_POWER_OF_2(_weight);			\
-									\
-		ACCESS_ONCE(e->internal) = internal ?			\
-			(((internal << weight) - internal) +		\
-				(val << factor)) >> weight :		\
-			(val << factor);				\
-	}
-#endif /* DECLARE_EWMA */
 
 #if CFG80211_VERSION < KERNEL_VERSION(4,4,0)
 #define CFG80211_STA_AP_CLIENT_UNASSOC CFG80211_STA_AP_CLIENT
@@ -1243,7 +1253,7 @@ cfg80211_inform_bss_frame_data(struct wiphy *wiphy,
 }
 #endif /* CFG80211_VERSION < KERNEL_VERSION(4,4,0) */
 
-#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
 struct cfg80211_ftm_target {
 	u64 cookie;
 	struct cfg80211_chan_def chan_def;
@@ -1421,23 +1431,22 @@ struct wiphy_ftm_initiator_capa {
 	u32 preamble;
 	u32 bw;
 };
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,12,0) */
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,9,0)
 static inline bool ieee80211_viftype_nan(unsigned int iftype)
 {
 	return false;
 }
 
-#define ieee80211_has_nan_iftype(x)	0
-
-enum nl80211_nan_dual_band_conf {
-	NL80211_NAN_BAND_DEFAULT	= 1 << 0,
-	NL80211_NAN_BAND_2GHZ		= 1 << 1,
-	NL80211_NAN_BAND_5GHZ		= 1 << 2,
-};
+static inline bool ieee80211_has_nan_iftype(unsigned int iftype)
+{
+	return false;
+}
 
 struct cfg80211_nan_conf {
 	u8 master_pref;
-	enum nl80211_nan_dual_band_conf dual;
+	u8 bands;
 };
 
 enum nl80211_nan_function_type {
@@ -1513,8 +1522,19 @@ enum nl80211_nan_publish_type {
 	NL80211_NAN_SOLICITED_PUBLISH = 1 << 0,
 	NL80211_NAN_UNSOLICITED_PUBLISH = 1 << 1,
 };
+#else
+static inline bool ieee80211_viftype_nan(unsigned int iftype)
+{
+	return iftype == NL80211_IFTYPE_NAN;
+}
 
-#endif /* CFG80211_VERSION < KERNEL_VERSION(4,8,0) */
+static inline
+bool ieee80211_has_nan_iftype(unsigned int iftype)
+{
+	return iftype & BIT(NL80211_IFTYPE_NAN);
+}
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,9,0) */
+
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
 static inline long ktime_get_seconds(void)
@@ -1697,4 +1717,121 @@ static inline void cfg80211_abandon_assoc(struct net_device *dev,
 	 */
 	WARN_ONCE(1, "BSS entry for %pM leaked\n", bss->bssid);
 }
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,4,0) */
+
+#if CFG80211_VERSION < KERNEL_VERSION(4,10,0)
+#define NL80211_EXT_FEATURE_FILS_STA -1
+
+static inline bool wdev_running(struct wireless_dev *wdev)
+{
+	if (wdev->netdev)
+		return netif_running(wdev->netdev);
+	return wdev->p2p_started;
+}
+
+struct iface_combination_params {
+	int num_different_channels;
+	u8 radar_detect;
+	int iftype_num[NUM_NL80211_IFTYPES];
+	u32 new_beacon_int;
+};
+
+static inline
+int iwl7000_check_combinations(struct wiphy *wiphy,
+			       struct iface_combination_params *params)
+{
+	return cfg80211_check_combinations(wiphy,
+					   params->num_different_channels,
+					   params->radar_detect,
+					   params->iftype_num);
+}
+
+#define cfg80211_check_combinations iwl7000_check_combinations
+
+static inline
+int iwl7000_iter_combinations(struct wiphy *wiphy,
+			      struct iface_combination_params *params,
+			      void (*iter)(const struct ieee80211_iface_combination *c,
+					   void *data),
+			      void *data)
+{
+	return cfg80211_iter_combinations(wiphy, params->num_different_channels,
+					  params->radar_detect,
+					  params->iftype_num,
+					  iter, data);
+}
+
+#define cfg80211_iter_combinations iwl7000_iter_combinations
+
+#endif
+
+#if CFG80211_VERSION >= KERNEL_VERSION(4,11,0) || \
+     CFG80211_VERSION < KERNEL_VERSION(4,9,0)
+static inline
+bool ieee80211_nan_has_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	return conf->bands & BIT(band);
+}
+
+static inline
+void ieee80211_nan_set_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	conf->bands |= BIT(band);
+}
+
+static inline u8 ieee80211_nan_bands(struct cfg80211_nan_conf *conf)
+{
+	return conf->bands;
+}
+#else
+static inline
+bool ieee80211_nan_has_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	return (band == NL80211_BAND_2GHZ) ||
+		(band == NL80211_BAND_5GHZ && conf->dual);
+}
+
+static inline
+void ieee80211_nan_set_band(struct cfg80211_nan_conf *conf, u8 band)
+{
+	if (band == NL80211_BAND_2GHZ)
+		return;
+
+	conf->dual = (band == NL80211_BAND_5GHZ);
+}
+
+static inline u8 ieee80211_nan_bands(struct cfg80211_nan_conf *conf)
+{
+	return BIT(NL80211_BAND_2GHZ) |
+		(conf->dual ? BIT(NL80211_BAND_5GHZ) : 0);
+}
+
+#define CFG80211_NAN_CONF_CHANGED_BANDS CFG80211_NAN_CONF_CHANGED_DUAL
+#endif
+
+#if CFG80211_VERSION < KERNEL_VERSION(4,11,0)
+static inline
+void iwl7000_cqm_rssi_notify(struct net_device *dev,
+			     enum nl80211_cqm_rssi_threshold_event rssi_event,
+			     s32 rssi_level, gfp_t gfp)
+{
+	cfg80211_cqm_rssi_notify(dev, rssi_event, gfp);
+}
+
+#define cfg80211_cqm_rssi_notify iwl7000_cqm_rssi_notify
+#endif
+
+#ifndef SHASH_DESC_ON_STACK
+#define SHASH_DESC_ON_STACK(shash, ctx)				 \
+	char __##shash##_desc[sizeof(struct shash_desc) +	 \
+	       crypto_shash_descsize(ctx)] CRYPTO_MINALIGN_ATTR; \
+	struct shash_desc *shash = (struct shash_desc *)__##shash##_desc
+
+static inline void *backport_idr_remove(struct idr *idr, int id)
+{
+	void *item = idr_find(idr, id);
+	idr_remove(idr, id);
+	return item;
+}
+#define idr_remove     backport_idr_remove
 #endif

@@ -229,7 +229,7 @@ enum iwl_ucode_tlv_flag {
 	IWL_UCODE_TLV_FLAGS_BCAST_FILTERING	= BIT(29),
 };
 
-typedef unsigned int __bitwise__ iwl_ucode_tlv_api_t;
+typedef unsigned int __bitwise iwl_ucode_tlv_api_t;
 
 /**
  * enum iwl_ucode_tlv_api - ucode api
@@ -242,6 +242,10 @@ typedef unsigned int __bitwise__ iwl_ucode_tlv_api_t;
  *	iteration complete notification, and the timestamp reported for RX
  *	received during scan, are reported in TSF of the mac specified in the
  *	scan request.
+ * @IWL_UCODE_TLV_API_TKIP_MIC_KEYS: This ucode supports version 2 of
+ *	ADD_MODIFY_STA_KEY_API_S_VER_2.
+ * @IWL_UCODE_TLV_API_STA_TYPE: This ucode supports station type assignement.
+ * @IWL_UCODE_TLV_API_NAN2_VER2: This ucode supports NAN API version 2
  *
  * @NUM_IWL_UCODE_TLV_API: number of bits used
  */
@@ -251,6 +255,9 @@ enum iwl_ucode_tlv_api {
 	IWL_UCODE_TLV_API_LQ_SS_PARAMS		= (__force iwl_ucode_tlv_api_t)18,
 	IWL_UCODE_TLV_API_NEW_VERSION		= (__force iwl_ucode_tlv_api_t)20,
 	IWL_UCODE_TLV_API_SCAN_TSF_REPORT	= (__force iwl_ucode_tlv_api_t)28,
+	IWL_UCODE_TLV_API_TKIP_MIC_KEYS		= (__force iwl_ucode_tlv_api_t)29,
+	IWL_UCODE_TLV_API_STA_TYPE		= (__force iwl_ucode_tlv_api_t)30,
+	IWL_UCODE_TLV_API_NAN2_VER2		= (__force iwl_ucode_tlv_api_t)31,
 
 	NUM_IWL_UCODE_TLV_API
 #ifdef __CHECKER__
@@ -259,7 +266,7 @@ enum iwl_ucode_tlv_api {
 #endif
 };
 
-typedef unsigned int __bitwise__ iwl_ucode_tlv_capa_t;
+typedef unsigned int __bitwise iwl_ucode_tlv_capa_t;
 
 /**
  * enum iwl_ucode_tlv_capa - ucode capabilities
@@ -294,7 +301,7 @@ typedef unsigned int __bitwise__ iwl_ucode_tlv_capa_t;
  *	IWL_UCODE_TLV_API_WIFI_MCC_UPDATE. When either is set, multi-source LAR
  *	is supported.
  * @IWL_UCODE_TLV_CAPA_BT_COEX_RRC: supports BT Coex RRC
- * @IWL_UCODE_TLV_CAPA_GSCAN_SUPPORT: supports gscan
+ * @IWL_UCODE_TLV_CAPA_GSCAN_SUPPORT: supports gscan (no longer used)
  * @IWL_UCODE_TLV_CAPA_NAN_SUPPORT: supports NAN
  * @IWL_UCODE_TLV_CAPA_UMAC_UPLOAD: supports upload mode in umac (1=supported,
  *	0=no support)
@@ -357,6 +364,8 @@ enum iwl_ucode_tlv_capa {
 	IWL_UCODE_TLV_CAPA_UMAC_UPLOAD			= (__force iwl_ucode_tlv_capa_t)35,
 	IWL_UCODE_TLV_CAPA_SOC_LATENCY_SUPPORT		= (__force iwl_ucode_tlv_capa_t)37,
 	IWL_UCODE_TLV_CAPA_STA_PM_NOTIF			= (__force iwl_ucode_tlv_capa_t)38,
+	IWL_UCODE_TLV_CAPA_BINDING_CDB_SUPPORT		= (__force iwl_ucode_tlv_capa_t)39,
+	IWL_UCODE_TLV_CAPA_CDB_SUPPORT			= (__force iwl_ucode_tlv_capa_t)40,
 	IWL_UCODE_TLV_CAPA_EXTENDED_DTS_MEASURE		= (__force iwl_ucode_tlv_capa_t)64,
 	IWL_UCODE_TLV_CAPA_SHORT_PM_TIMEOUTS		= (__force iwl_ucode_tlv_capa_t)65,
 	IWL_UCODE_TLV_CAPA_BT_MPLUT_SUPPORT		= (__force iwl_ucode_tlv_capa_t)67,
@@ -393,7 +402,6 @@ enum iwl_ucode_tlv_capa {
  * For 16.0 uCode and above, there is no differentiation between sections,
  * just an offset to the HW address.
  */
-#define IWL_UCODE_SECTION_MAX 16
 #define CPU1_CPU2_SEPARATOR_SECTION	0xFFFFCCCC
 #define PAGING_SEPARATOR_SECTION	0xAAAABBBB
 
@@ -403,8 +411,8 @@ enum iwl_ucode_tlv_capa {
 #define IWL_UCODE_API(ver)	(((ver) & 0x0000FF00) >> 8)
 #define IWL_UCODE_SERIAL(ver)	((ver) & 0x000000FF)
 
-/*
- * Calibration control struct.
+/**
+ * struct iwl_tlv_calib_ctrl - Calibration control struct.
  * Sent as part of the phy configuration command.
  * @flow_trigger: bitmap for which calibrations to perform according to
  *		flow triggers.
@@ -476,7 +484,7 @@ enum iwl_fw_dbg_reg_operator {
 /**
  * struct iwl_fw_dbg_reg_op - an operation on a register
  *
- * @op: %enum iwl_fw_dbg_reg_operator
+ * @op: &enum iwl_fw_dbg_reg_operator
  * @addr: offset of the register
  * @val: value
  */
@@ -503,25 +511,22 @@ enum iwl_fw_dbg_monitor_mode {
 };
 
 /**
- * enum iwl_fw_mem_seg_type - data types for dumping on error
- *
- * @FW_DBG_MEM_SMEM: the data type is SMEM
- * @FW_DBG_MEM_DCCM_LMAC: the data type is DCCM_LMAC
- * @FW_DBG_MEM_DCCM_UMAC: the data type is DCCM_UMAC
+ * enum iwl_fw_mem_seg_type - memory segment type
+ * @FW_DBG_MEM_TYPE_MASK: mask for the type indication
+ * @FW_DBG_MEM_TYPE_REGULAR: regular memory
+ * @FW_DBG_MEM_TYPE_PRPH: periphery memory (requires special reading)
  */
-enum iwl_fw_dbg_mem_seg_type {
-	FW_DBG_MEM_DCCM_LMAC = 0,
-	FW_DBG_MEM_DCCM_UMAC,
-	FW_DBG_MEM_SMEM,
-
-	/* Must be last */
-	FW_DBG_MEM_MAX,
+enum iwl_fw_mem_seg_type {
+	FW_DBG_MEM_TYPE_MASK	= 0xff000000,
+	FW_DBG_MEM_TYPE_REGULAR	= 0x00000000,
+	FW_DBG_MEM_TYPE_PRPH	= 0x01000000,
 };
 
 /**
  * struct iwl_fw_dbg_mem_seg_tlv - configures the debug data memory segments
  *
- * @data_type: enum %iwl_fw_mem_seg_type
+ * @data_type: the memory segment type to record, see &enum iwl_fw_mem_seg_type
+ *	for what we care about
  * @ofs: the memory segment offset
  * @len: the memory segment length, in bytes
  *
@@ -537,7 +542,7 @@ struct iwl_fw_dbg_mem_seg_tlv {
  * struct iwl_fw_dbg_dest_tlv - configures the destination of the debug data
  *
  * @version: version of the TLV - currently 0
- * @monitor_mode: %enum iwl_fw_dbg_monitor_mode
+ * @monitor_mode: &enum iwl_fw_dbg_monitor_mode
  * @size_power: buffer size will be 2^(size_power + 11)
  * @base_reg: addr of the base addr register (PRPH)
  * @end_reg:  addr of the end addr register (PRPH)
@@ -610,15 +615,15 @@ enum iwl_fw_dbg_trigger_vif_type {
 
 /**
  * struct iwl_fw_dbg_trigger_tlv - a TLV that describes the trigger
- * @id: %enum iwl_fw_dbg_trigger
- * @vif_type: %enum iwl_fw_dbg_trigger_vif_type
+ * @id: &enum iwl_fw_dbg_trigger
+ * @vif_type: &enum iwl_fw_dbg_trigger_vif_type
  * @stop_conf_ids: bitmap of configurations this trigger relates to.
  *	if the mode is %IWL_FW_DBG_TRIGGER_STOP, then if the bit corresponding
  *	to the currently running configuration is set, the data should be
  *	collected.
  * @stop_delay: how many milliseconds to wait before collecting the data
  *	after the STOP trigger fires.
- * @mode: %enum iwl_fw_dbg_trigger_mode - can be stop / start of both
+ * @mode: &enum iwl_fw_dbg_trigger_mode - can be stop / start of both
  * @start_conf_id: if mode is %IWL_FW_DBG_TRIGGER_START, this defines what
  *	configuration should be applied when the triggers kicks in.
  * @occurrences: number of occurrences. 0 means the trigger will never fire.
@@ -842,41 +847,6 @@ struct iwl_fw_dbg_conf_tlv {
 	u8 reserved;
 	u8 num_of_hcmds;
 	struct iwl_fw_dbg_conf_hcmd hcmd;
-} __packed;
-
-/**
- * struct iwl_fw_gscan_capabilities - gscan capabilities supported by FW
- * @max_scan_cache_size: total space allocated for scan results (in bytes).
- * @max_scan_buckets: maximum number of channel buckets.
- * @max_ap_cache_per_scan: maximum number of APs that can be stored per scan.
- * @max_rssi_sample_size: number of RSSI samples used for averaging RSSI.
- * @max_scan_reporting_threshold: max possible report threshold. in percentage.
- * @max_hotlist_aps: maximum number of entries for hotlist APs.
- * @max_significant_change_aps: maximum number of entries for significant
- *	change APs.
- * @max_bssid_history_entries: number of BSSID/RSSI entries that the device can
- *	hold.
- * @max_hotlist_ssids: maximum number of entries for hotlist SSIDs.
- * @max_number_epno_networks: max number of epno entries.
- * @max_number_epno_networks_by_ssid: max number of epno entries if ssid is
- *	specified.
- * @max_number_of_white_listed_ssid: max number of white listed SSIDs.
- * @max_number_of_black_listed_ssid: max number of black listed SSIDs.
- */
-struct iwl_fw_gscan_capabilities {
-	__le32 max_scan_cache_size;
-	__le32 max_scan_buckets;
-	__le32 max_ap_cache_per_scan;
-	__le32 max_rssi_sample_size;
-	__le32 max_scan_reporting_threshold;
-	__le32 max_hotlist_aps;
-	__le32 max_significant_change_aps;
-	__le32 max_bssid_history_entries;
-	__le32 max_hotlist_ssids;
-	__le32 max_number_epno_networks;
-	__le32 max_number_epno_networks_by_ssid;
-	__le32 max_number_of_white_listed_ssid;
-	__le32 max_number_of_black_listed_ssid;
 } __packed;
 
 #endif  /* __iwl_fw_file_h__ */
