@@ -72,6 +72,7 @@
 #include "fw-api-rx.h"
 #include "fw-api-tx.h"
 #include "fw-api-sta.h"
+#include "fw-api-led.h"
 #include "fw-api-mac.h"
 #include "fw-api-power.h"
 #include "fw-api-d3.h"
@@ -277,6 +278,11 @@ enum iwl_legacy_cmds {
 	 */
 	TIME_QUOTA_CMD = 0x2c,
 	NON_QOS_TX_COUNTER_CMD = 0x2d,
+
+	/**
+	 * @LEDS_CMD: command is &struct iwl_led_cmd
+	 */
+	LEDS_CMD = 0x48,
 
 	/**
 	 * @LQ_CMD: using &struct iwl_lq_cmd
