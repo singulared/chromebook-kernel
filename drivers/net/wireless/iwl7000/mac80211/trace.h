@@ -11,7 +11,7 @@
 #include "ieee80211_i.h"
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM mac80211
+#define TRACE_SYSTEM iwl7000_mac80211
 
 #define MAXNAME		32
 #define LOCAL_ENTRY	__array(char, wiphy_name, 32)

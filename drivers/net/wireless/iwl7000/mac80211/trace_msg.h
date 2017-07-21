@@ -8,7 +8,7 @@
 #include "ieee80211_i.h"
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM mac80211_msg
+#define TRACE_SYSTEM iwl7000_mac80211_msg
 
 #define MAX_MSG_LEN	100
 

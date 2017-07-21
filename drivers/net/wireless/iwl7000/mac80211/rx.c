@@ -518,9 +518,11 @@ ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
 	struct net_device *prev_dev = NULL;
 	int present_fcs_len = 0;
 	unsigned int rtap_vendor_space = 0;
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	struct ieee80211_mgmt *mgmt;
 	struct ieee80211_sub_if_data *monitor_sdata =
 		rcu_dereference(local->monitor_sdata);
+#endif
 
 	if (unlikely(status->flag & RX_FLAG_RADIOTAP_VENDOR_DATA)) {
 		struct ieee80211_vendor_radiotap *rtap = (void *)origskb->data;
@@ -621,6 +623,7 @@ ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
 		ieee80211_rx_stats(sdata->dev, skb->len);
 	}
 
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	mgmt = (void *)skb->data;
 	if (monitor_sdata &&
 	    skb->len >= IEEE80211_MIN_ACTION_SIZE + 1 + VHT_MUMIMO_GROUPS_DATA_LEN &&
@@ -637,6 +640,7 @@ ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
 			ieee80211_queue_work(&local->hw, &monitor_sdata->work);
 		}
 	}
+#endif
 
 	if (prev_dev) {
 		skb->dev = prev_dev;
@@ -1244,7 +1248,7 @@ ieee80211_rx_h_check(struct ieee80211_rx_data *rx)
 		      ieee80211_is_pspoll(hdr->frame_control)) &&
 		     rx->sdata->vif.type != NL80211_IFTYPE_ADHOC &&
 		     rx->sdata->vif.type != NL80211_IFTYPE_WDS &&
-		     rx->sdata->vif.type != NL80211_IFTYPE_OCB &&
+		     !ieee80211_viftype_ocb(rx->sdata->vif.type) &&
 		     (!rx->sta || !test_sta_flag(rx->sta, WLAN_STA_ASSOC)))) {
 		/*
 		 * accept port control frames from the AP even when it's not
@@ -1515,7 +1519,7 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 				sta->rx_stats.last_rate =
 					sta_stats_encode_rate(status);
 		}
-	} else if (rx->sdata->vif.type == NL80211_IFTYPE_OCB) {
+	} else if (ieee80211_viftype_ocb(rx->sdata->vif.type)) {
 		sta->rx_stats.last_rx = jiffies;
 	} else if (!is_multicast_ether_addr(hdr->addr1)) {
 		/*
@@ -2388,6 +2392,10 @@ ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx)
 					  rx->sdata->vif.type))
 		return RX_DROP_UNUSABLE;
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,6,0)
+	if (skb_linearize(skb))
+		return RX_DROP_UNUSABLE;
+#endif
 	ieee80211_amsdu_to_8023s(skb, &frame_list, dev->dev_addr,
 				 rx->sdata->vif.type,
 				 rx->local->hw.extra_tx_headroom,
@@ -3181,7 +3189,7 @@ ieee80211_rx_h_mgmt(struct ieee80211_rx_data *rx)
 
 	if (!ieee80211_vif_is_mesh(&sdata->vif) &&
 	    sdata->vif.type != NL80211_IFTYPE_ADHOC &&
-	    sdata->vif.type != NL80211_IFTYPE_OCB &&
+	    !ieee80211_viftype_ocb(sdata->vif.type) &&
 	    sdata->vif.type != NL80211_IFTYPE_STATION)
 		return RX_DROP_MONITOR;
 
@@ -3580,7 +3588,10 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 						 BIT(rate_idx));
 		}
 		return true;
+#if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
 	case NL80211_IFTYPE_OCB:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 		if (!bssid)
 			return false;
 		if (!ieee80211_is_data_present(hdr->frame_control))
@@ -3665,7 +3676,10 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 		       ieee80211_is_probe_req(hdr->frame_control) ||
 		       ieee80211_is_probe_resp(hdr->frame_control) ||
 		       ieee80211_is_beacon(hdr->frame_control);
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	case NL80211_IFTYPE_NAN:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 		/* Currently no frames on NAN interface are allowed */
 		return false;
 	default:

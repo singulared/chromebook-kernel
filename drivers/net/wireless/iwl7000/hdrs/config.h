@@ -1,7 +1,5 @@
 #ifndef __IWL_CHROME_CONFIG
 #define __IWL_CHROME_CONFIG
-#define CPTCFG_CFG80211_DEBUGFS 1
-#define CPTCFG_CFG80211_MODULE 1
 /* This must match the CPTCFG_* symbols defined in the Makefile */
 #define CPTCFG_MAC80211_MODULE 1
 #define CPTCFG_MAC80211_LEDS 1
@@ -43,7 +41,15 @@
 #define CPTCFG_IWLXVT_MODULE 1
 #endif
 
-#ifdef CONFIG_IWL7000_VENDOR_CMDS
+/* cfg80211 version specific backward compat code follows */
+#ifdef CONFIG_WIRELESS_38
+#define CFG80211_VERSION KERNEL_VERSION(3,8,0)
+#else
+#define CFG80211_VERSION LINUX_VERSION_CODE
+#endif
+
+#if defined(CONFIG_IWL7000_VENDOR_CMDS) && \
+	(CFG80211_VERSION >= KERNEL_VERSION(3, 14, 0))
 #define CPTCFG_IWLMVM_VENDOR_CMDS 1
 #endif
 

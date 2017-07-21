@@ -902,7 +902,11 @@ iwl_mvm_get_wowlan_config(struct iwl_mvm *mvm,
 		wowlan_config_cmd->wakeup_filter |=
 			cpu_to_le32(IWL_WOWLAN_WAKEUP_RF_KILL_DEASSERT);
 
+#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
 	if (wowlan->tcp) {
+#else
+	if (0) {
+#endif
 		/*
 		 * Set the "link change" (really "link lost") flag as well
 		 * since that implies losing the TCP connection.
@@ -1082,7 +1086,12 @@ iwl_mvm_wowlan_config(struct iwl_mvm *mvm,
 	if (ret)
 		return ret;
 
-	ret = iwl_mvm_send_remote_wake_cfg(mvm, vif, wowlan->tcp);
+	ret = iwl_mvm_send_remote_wake_cfg(mvm, vif,
+#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
+					   wowlan->tcp);
+#else
+					   NULL);
+#endif
 	return ret;
 }
 
@@ -1406,6 +1415,7 @@ static void iwl_mvm_report_wakeup_reasons(struct iwl_mvm *mvm,
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_FOUR_WAY_HANDSHAKE)
 		wakeup.four_way_handshake = true;
 
+#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_REM_WAKE_LINK_LOSS)
 		wakeup.tcp_connlost = true;
 
@@ -1414,6 +1424,7 @@ static void iwl_mvm_report_wakeup_reasons(struct iwl_mvm *mvm,
 
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_REM_WAKE_WAKEUP_PACKET)
 		wakeup.tcp_match = true;
+#endif
 
 	if (status->wake_packet_bufsize) {
 		int pktsize = status->wake_packet_bufsize;

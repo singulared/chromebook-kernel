@@ -18,21 +18,12 @@
 #include <linux/hrtimer.h>
 #include <crypto/algapi.h>
 #include <linux/pci.h>
-#include <linux/if_vlan.h>
 
 #define LINUX_VERSION_IS_LESS(x1,x2,x3) (LINUX_VERSION_CODE < KERNEL_VERSION(x1,x2,x3))
 #define LINUX_VERSION_IS_GEQ(x1,x2,x3)  (LINUX_VERSION_CODE >= KERNEL_VERSION(x1,x2,x3))
 #define LINUX_VERSION_IN_RANGE(x1,x2,x3, y1,y2,y3) \
         (LINUX_VERSION_IS_GEQ(x1,x2,x3) && LINUX_VERSION_IS_LESS(y1,y2,y3))
-#define LINUX_BACKPORT(sym) backport_ ## sym
 
-#if LINUX_VERSION_IS_LESS(3,20,0)
-#define get_net_ns_by_fd LINUX_BACKPORT(get_net_ns_by_fd)
-static inline struct net *get_net_ns_by_fd(int fd)
-{
-	return ERR_PTR(-EINVAL);
-}
-#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,17,0)
 static inline u64 ktime_get_ns(void)
@@ -49,6 +40,13 @@ static inline u64 ktime_get_real_ns(void)
 /* get the CPTCFG_* preprocessor symbols */
 #include <hdrs/config.h>
 
+/* cfg80211 version specific backward compat code follows */
+#ifdef CONFIG_WIRELESS_38
+#define CFG80211_VERSION KERNEL_VERSION(3,8,0)
+#else
+#define CFG80211_VERSION LINUX_VERSION_CODE
+#endif
+
 /*
  * Need to include these here, otherwise we get the regular kernel ones
  * pre-including them makes it work, even though later the kernel ones
@@ -61,15 +59,10 @@ static inline u64 ktime_get_real_ns(void)
 #include <hdrs/linux/ieee80211.h>
 #include <hdrs/linux/average.h>
 #include <hdrs/linux/bitfield.h>
-#include <hdrs/net/ieee80211_radiotap.h>
-#define IEEE80211RADIOTAP_H 1 /* older kernels used this include protection */
 
 /* mac80211 & backport - order matters, need this inbetween */
-#include <hdrs/symbols-rename.h>
+#include <hdrs/mac80211-exp.h>
 #include <hdrs/mac80211-bp.h>
-#include <hdrs/uapi/linux/nl80211.h>
-#include <hdrs/net/regulatory.h>
-#include <hdrs/net/cfg80211.h>
 
 #include <hdrs/net/codel.h>
 #include <hdrs/net/codel_impl.h>
@@ -88,15 +81,6 @@ static inline u64 ktime_get_real_ns(void)
 #define genl_info_snd_portid(__genl_info) (__genl_info->snd_portid)
 #define NETLINK_CB_PORTID(__skb) NETLINK_CB(cb->skb).portid
 #define netlink_notify_portid(__notify) __notify->portid
-
-static inline struct netlink_ext_ack *genl_info_extack(struct genl_info *info)
-{
-#if LINUX_VERSION_IS_GEQ(4,12,0)
-	return info->extack;
-#else
-	return NULL;
-#endif
-}
 
 /* things that may or may not be upstream depending on the version */
 #ifndef ETH_P_802_3_MIN
@@ -188,13 +172,6 @@ size_t sg_pcopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(3,12,0) */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,13,0)
-#if !defined(CONFIG_PROVE_LOCKING)
-static inline bool lockdep_rtnl_is_held(void)
-{
-	return true;
-}
-#endif /* !defined(CONFIG_PROVE_LOCKING) */
-
 #define __genl_const
 static inline int
 _genl_register_family_with_ops_grps(struct genl_family *family,
@@ -449,6 +426,19 @@ pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
 void netdev_rss_key_fill(void *buffer, size_t len);
 #endif
 
+#if CFG80211_VERSION < KERNEL_VERSION(4, 1, 0) && \
+	CFG80211_VERSION >= KERNEL_VERSION(3, 14, 0)
+static inline struct sk_buff *
+backport_cfg80211_vendor_event_alloc(struct wiphy *wiphy,
+				     struct wireless_dev *wdev,
+				     int approxlen, int event_idx, gfp_t gfp)
+{
+	return cfg80211_vendor_event_alloc(wiphy, approxlen, event_idx, gfp);
+}
+
+#define cfg80211_vendor_event_alloc backport_cfg80211_vendor_event_alloc
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0)
 static inline void page_ref_inc(struct page *page)
 {
@@ -465,12 +455,6 @@ static inline int nla_put_u64_64bit(struct sk_buff *skb, int attrtype,
 {
 	return nla_put_u64(skb, attrtype, value);
 }
-#define nla_put_s64 iwl7000_nla_put_s64
-static inline int nla_put_s64(struct sk_buff *skb, int attrtype, s64 value,
-			      int padattr)
-{
-	return nla_put_u64(skb, attrtype, value);
-}
 void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 		    size_t datalen, gfp_t gfp);
 #endif /* < 4.7 */
@@ -481,344 +465,5 @@ void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 #else
 #define __genl_ro_after_init __ro_after_init
 #endif
-
-#ifndef __BUILD_BUG_ON_NOT_POWER_OF_2
-#define __BUILD_BUG_ON_NOT_POWER_OF_2(...)
-#endif
-
-#if LINUX_VERSION_IS_LESS(3,11,0)
-#ifndef DEVICE_ATTR_RO
-#define DEVICE_ATTR_RO(_name) \
-struct device_attribute dev_attr_ ## _name = __ATTR_RO(_name);
-#endif
-#ifndef DEVICE_ATTR_RW
-#define DEVICE_ATTR_RW(_name) \
-struct device_attribute dev_attr_ ## _name = __ATTR_RW(_name)
-#endif
-#endif
-
-#define ATTRIBUTE_GROUPS_BACKPORT(_name) \
-static struct BP_ATTR_GRP_STRUCT _name##_dev_attrs[ARRAY_SIZE(_name##_attrs)];\
-static void init_##_name##_attrs(void)				\
-{									\
-	int i;								\
-	for (i = 0; _name##_attrs[i]; i++)				\
-		_name##_dev_attrs[i] =				\
-			*container_of(_name##_attrs[i],		\
-				      struct BP_ATTR_GRP_STRUCT,	\
-				      attr);				\
-}
-
-#ifndef __ATTRIBUTE_GROUPS
-#define __ATTRIBUTE_GROUPS(_name)				\
-static const struct attribute_group *_name##_groups[] = {	\
-	&_name##_group,						\
-	NULL,							\
-}
-#endif /* __ATTRIBUTE_GROUPS */
-
-#undef ATTRIBUTE_GROUPS
-#define ATTRIBUTE_GROUPS(_name)					\
-static const struct attribute_group _name##_group = {		\
-	.attrs = _name##_attrs,					\
-};								\
-static inline void init_##_name##_attrs(void) {}		\
-__ATTRIBUTE_GROUPS(_name)
-
-#ifndef ETH_P_80221
-#define ETH_P_80221	0x8917	/* IEEE 802.21 Media Independent Handover Protocol */
-#endif
-
-#ifndef skb_vlan_tag_present
-#define skb_vlan_tag_present(__skb)	((__skb)->vlan_tci & VLAN_TAG_PRESENT)
-#endif
-
-#ifndef skb_vlan_tag_get
-#define skb_vlan_tag_get(__skb)		((__skb)->vlan_tci & ~VLAN_TAG_PRESENT)
-#endif
-
-#if LINUX_VERSION_IS_LESS(3,11,0)
-/* power efficient workqueues were added in commit 0668106ca386. */
-#define system_power_efficient_wq system_wq
-#define system_freezable_power_efficient_wq system_freezable_wq
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,0,0)
-#define __print_array(array, count, el_size) ""
-#endif
-
-#ifndef S32_MAX
-#define S32_MAX		((s32)(U32_MAX>>1))
-#endif
-
-#ifndef S32_MIN
-#define S32_MIN		((s32)(-S32_MAX - 1))
-#endif
-
-/* ChromeOS backported this to 3.14, 3.18, etc. - upstream only since 4.1 */
-#if LINUX_VERSION_IS_LESS(3,14,0)
-static inline int nla_put_in_addr(struct sk_buff *skb, int attrtype,
-				  __be32 addr)
-{
-	return nla_put_be32(skb, attrtype, addr);
-}
-
-static inline __be32 nla_get_in_addr(const struct nlattr *nla)
-{
-	return *(__be32 *) nla_data(nla);
-}
-#endif /* < 4.1 */
-
-#if LINUX_VERSION_IS_LESS(4,10,0)
-static inline void *nla_memdup(const struct nlattr *src, gfp_t gfp)
-{
-	return kmemdup(nla_data(src), nla_len(src), gfp);
-}
-#endif
-
-#ifndef GENLMSG_DEFAULT_SIZE
-#define GENLMSG_DEFAULT_SIZE (NLMSG_DEFAULT_SIZE - GENL_HDRLEN)
-#endif
-
-#if LINUX_VERSION_IS_LESS(3,13,0)
-static inline int __real_genl_register_family(struct genl_family *family)
-{
-	return genl_register_family(family);
-}
-
-/* Needed for the mcgrps pointer */
-struct backport_genl_family {
-	struct genl_family family;
-
-	unsigned int id, hdrsize, version, maxattr;
-	char name[GENL_NAMSIZ];
-	bool netnsok;
-	bool parallel_ops;
-
-	struct nlattr **attrbuf;
-
-	int (*pre_doit)(struct genl_ops *ops, struct sk_buff *skb,
-			struct genl_info *info);
-
-	void (*post_doit)(struct genl_ops *ops, struct sk_buff *skb,
-			  struct genl_info *info);
-
-	struct genl_multicast_group *mcgrps;
-	struct genl_ops *ops;
-	unsigned int n_mcgrps, n_ops;
-
-	struct module *module;
-};
-#define genl_family LINUX_BACKPORT(genl_family)
-
-int __backport_genl_register_family(struct genl_family *family);
-
-#define genl_register_family LINUX_BACKPORT(genl_register_family)
-static inline int
-genl_register_family(struct genl_family *family)
-{
-	family->module = THIS_MODULE;
-	return __backport_genl_register_family(family);
-}
-
-#define _genl_register_family_with_ops_grps \
-	_backport_genl_register_family_with_ops_grps
-static inline int
-_genl_register_family_with_ops_grps(struct genl_family *family,
-				    struct genl_ops *ops, size_t n_ops,
-				    struct genl_multicast_group *mcgrps,
-				    size_t n_mcgrps)
-{
-	family->ops = ops;
-	family->n_ops = n_ops;
-	family->mcgrps = mcgrps;
-	family->n_mcgrps = n_mcgrps;
-	return genl_register_family(family);
-}
-
-#define genl_register_family_with_ops(family, ops)			\
-	_genl_register_family_with_ops_grps((family),			\
-					    (ops), ARRAY_SIZE(ops),	\
-					    NULL, 0)
-#define genl_register_family_with_ops_groups(family, ops, grps)		\
-	_genl_register_family_with_ops_grps((family),			\
-					    (ops), ARRAY_SIZE(ops),	\
-					    (grps), ARRAY_SIZE(grps))
-
-#define genl_unregister_family backport_genl_unregister_family
-int genl_unregister_family(struct genl_family *family);
-
-#define genl_notify(_fam, _skb, _info, _group, _flags)			\
-	genl_notify(_skb, genl_info_net(_info),				\
-		    genl_info_snd_portid(_info),			\
-		    (_fam)->mcgrps[_group].id, _info->nlhdr, _flags)
-#define genlmsg_put(_skb, _pid, _seq, _fam, _flags, _cmd)		\
-	genlmsg_put(_skb, _pid, _seq, &(_fam)->family, _flags, _cmd)
-#define genlmsg_nlhdr(_hdr, _fam)					\
-	genlmsg_nlhdr(_hdr, &(_fam)->family)
-#ifndef genl_dump_check_consistent
-#define genl_dump_check_consistent(_cb, _hdr, _fam)			\
-	genl_dump_check_consistent(_cb, _hdr, &(_fam)->family)
-#endif
-#ifndef genlmsg_put_reply /* might already be there from _info override above */
-#define genlmsg_put_reply(_skb, _info, _fam, _flags, _cmd)		\
-	genlmsg_put_reply(_skb, _info, &(_fam)->family, _flags, _cmd)
-#endif
-#define genlmsg_multicast_netns LINUX_BACKPORT(genlmsg_multicast_netns)
-static inline int genlmsg_multicast_netns(struct genl_family *family,
-					  struct net *net, struct sk_buff *skb,
-					  u32 portid, unsigned int group,
-					  gfp_t flags)
-{
-	if (WARN_ON_ONCE(group >= family->n_mcgrps))
-		return -EINVAL;
-	group = family->mcgrps[group].id;
-	return nlmsg_multicast(
-		net->genl_sock,
-		skb, portid, group, flags);
-}
-#define genlmsg_multicast LINUX_BACKPORT(genlmsg_multicast)
-static inline int genlmsg_multicast(struct genl_family *family,
-				    struct sk_buff *skb, u32 portid,
-				    unsigned int group, gfp_t flags)
-{
-	if (WARN_ON_ONCE(group >= family->n_mcgrps))
-		return -EINVAL;
-	group = family->mcgrps[group].id;
-	return nlmsg_multicast(
-		init_net.genl_sock,
-		skb, portid, group, flags);
-}
-static inline int
-backport_genlmsg_multicast_allns(struct genl_family *family,
-				 struct sk_buff *skb, u32 portid,
-				 unsigned int group, gfp_t flags)
-{
-	if (WARN_ON_ONCE(group >= family->n_mcgrps))
-		return -EINVAL;
-	group = family->mcgrps[group].id;
-	return genlmsg_multicast_allns(skb, portid, group, flags);
-}
-#define genlmsg_multicast_allns LINUX_BACKPORT(genlmsg_multicast_allns)
-
-#define __genl_const
-#else /* < 3.13 */
-#define __genl_const const
-#if LINUX_VERSION_IS_LESS(4,4,0)
-#define genl_notify(_fam, _skb, _info, _group, _flags)			\
-	genl_notify(_fam, _skb, genl_info_net(_info),			\
-		    genl_info_snd_portid(_info),			\
-		    _group, _info->nlhdr, _flags)
-#endif /* < 4.4 */
-#endif /* < 3.13 */
-
-#if LINUX_VERSION_IS_LESS(4,10,0)
-/**
- * genl_family_attrbuf - return family's attrbuf
- * @family: the family
- *
- * Return the family's attrbuf, while validating that it's
- * actually valid to access it.
- *
- * You cannot use this function with a family that has parallel_ops
- * and you can only use it within (pre/post) doit/dumpit callbacks.
- */
-#define genl_family_attrbuf LINUX_BACKPORT(genl_family_attrbuf)
-static inline struct nlattr **genl_family_attrbuf(struct genl_family *family)
-{
-	WARN_ON(family->parallel_ops);
-
-	return family->attrbuf;
-}
-
-#define __genl_ro_after_init
-#else
-#define __genl_ro_after_init __ro_after_init
-#endif
-
-#ifndef GENL_UNS_ADMIN_PERM
-#define GENL_UNS_ADMIN_PERM GENL_ADMIN_PERM
-#endif
-
-#if LINUX_VERSION_IS_LESS(4, 1, 0)
-#define dev_of_node LINUX_BACKPORT(dev_of_node)
-static inline struct device_node *dev_of_node(struct device *dev)
-{
-#ifndef CONFIG_OF
-	return NULL;
-#else
-	return dev->of_node;
-#endif
-}
-#endif /* LINUX_VERSION_IS_LESS(4, 1, 0) */
-
-#if LINUX_VERSION_IS_LESS(4,12,0)
-#include "magic.h"
-
-static inline int nla_validate5(const struct nlattr *head,
-				int len, int maxtype,
-				const struct nla_policy *policy,
-				struct netlink_ext_ack *extack)
-{
-	return nla_validate(head, len, maxtype, policy);
-}
-#define nla_validate4 nla_validate
-#define nla_validate(...) \
-	macro_dispatcher(nla_validate, __VA_ARGS__)(__VA_ARGS__)
-
-static inline int nla_parse6(struct nlattr **tb, int maxtype,
-			     const struct nlattr *head,
-			     int len, const struct nla_policy *policy,
-			     struct netlink_ext_ack *extack)
-{
-	return nla_parse(tb, maxtype, head, len, policy);
-}
-#define nla_parse5(...) nla_parse(__VA_ARGS__)
-#define nla_parse(...) \
-	macro_dispatcher(nla_parse, __VA_ARGS__)(__VA_ARGS__)
-
-static inline int nlmsg_parse6(const struct nlmsghdr *nlh, int hdrlen,
-			       struct nlattr *tb[], int maxtype,
-			       const struct nla_policy *policy,
-			       struct netlink_ext_ack *extack)
-{
-	return nlmsg_parse(nlh, hdrlen, tb, maxtype, policy);
-}
-#define nlmsg_parse5 nlmsg_parse
-#define nlmsg_parse(...) \
-	macro_dispatcher(nlmsg_parse, __VA_ARGS__)(__VA_ARGS__)
-
-static inline int nlmsg_validate5(const struct nlmsghdr *nlh,
-				  int hdrlen, int maxtype,
-				  const struct nla_policy *policy,
-				  struct netlink_ext_ack *extack)
-{
-	return nlmsg_validate(nlh, hdrlen, maxtype, policy);
-}
-#define nlmsg_validate4 nlmsg_validate
-#define nlmsg_validate(...) \
-	macro_dispatcher(nlmsg_validate, __VA_ARGS__)(__VA_ARGS__)
-
-static inline int nla_parse_nested5(struct nlattr *tb[], int maxtype,
-				    const struct nlattr *nla,
-				    const struct nla_policy *policy,
-				    struct netlink_ext_ack *extack)
-{
-	return nla_parse_nested(tb, maxtype, nla, policy);
-}
-#define nla_parse_nested4 nla_parse_nested
-#define nla_parse_nested(...) \
-	macro_dispatcher(nla_parse_nested, __VA_ARGS__)(__VA_ARGS__)
-
-static inline int nla_validate_nested4(const struct nlattr *start, int maxtype,
-				       const struct nla_policy *policy,
-				       struct netlink_ext_ack *extack)
-{
-	return nla_validate_nested(start, maxtype, policy);
-}
-#define nla_validate_nested3 nla_validate_nested
-#define nla_validate_nested(...) \
-	macro_dispatcher(nla_validate_nested, __VA_ARGS__)(__VA_ARGS__)
-#endif /* LINUX_VERSION_IS_LESS(4,12,0) */
 
 #endif /* __IWL_CHROME */

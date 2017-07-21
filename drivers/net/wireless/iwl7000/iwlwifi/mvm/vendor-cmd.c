@@ -64,6 +64,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *****************************************************************************/
+#if CFG80211_VERSION > KERNEL_VERSION(3, 14, 0)
+
 #include <linux/etherdevice.h>
 #include <net/mac80211.h>
 #include <net/netlink.h>
@@ -1171,3 +1173,4 @@ void iwl_mvm_vendor_lqm_notif(struct iwl_mvm *mvm,
 		mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
 		iwl_mvm_lqm_notif_iterator, report);
 }
+#endif

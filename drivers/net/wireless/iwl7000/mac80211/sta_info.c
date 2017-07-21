@@ -1957,8 +1957,10 @@ sta_get_last_rx_stats(struct sta_info *sta)
 static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 				  struct rate_info *rinfo)
 {
+#if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
 	rinfo->bw = (rate & STA_STATS_RATE_BW_MASK) >>
 		STA_STATS_RATE_BW_SHIFT;
+#endif
 
 	if (rate & STA_STATS_RATE_VHT) {
 		rinfo->flags = RATE_INFO_FLAGS_VHT_MCS;
@@ -1975,14 +1977,37 @@ static void sta_stats_decode_rate(struct ieee80211_local *local, u16 rate,
 		rinfo->flags = 0;
 		sband = local->hw.wiphy->bands[(rate >> 4) & 0xf];
 		brate = sband->bitrates[rate & 0xf].bitrate;
+#if CFG80211_VERSION >= KERNEL_VERSION(3,20,0)
 		if (rinfo->bw == RATE_INFO_BW_5)
 			shift = 2;
 		else if (rinfo->bw == RATE_INFO_BW_10)
 			shift = 1;
 		else
+#endif
 			shift = 0;
 		rinfo->legacy = DIV_ROUND_UP(brate, 1 << shift);
 	}
+
+#if CFG80211_VERSION < KERNEL_VERSION(3,20,0)
+	switch ((rate & STA_STATS_RATE_BW_MASK) >> STA_STATS_RATE_BW_SHIFT) {
+	case RATE_INFO_BW_5:
+	case RATE_INFO_BW_10:
+		rinfo->flags = 0;
+		WARN_ON(1);
+		return;
+	case RATE_INFO_BW_20:
+		break;
+	case RATE_INFO_BW_40:
+		rinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
+		break;
+	case RATE_INFO_BW_80:
+		rinfo->flags |= RATE_INFO_FLAGS_80_MHZ_WIDTH;
+		break;
+	case RATE_INFO_BW_160:
+		rinfo->flags |= RATE_INFO_FLAGS_160_MHZ_WIDTH;
+		break;
+	}
+#endif
 
 	if (rate & STA_STATS_RATE_SGI)
 		rinfo->flags |= RATE_INFO_FLAGS_SHORT_GI;
