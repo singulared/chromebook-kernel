@@ -1570,9 +1570,12 @@ cfg80211_sta_support_p2p_ps(struct station_parameters *params, bool p2p_go)
 	return p2p_go;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,5,0)
+#if LINUX_VERSION_IS_LESS(4,5,0)
 void *memdup_user_nul(const void __user *src, size_t len);
-#endif
+
+/* we don't have wext */
+static inline void wireless_nlevent_flush(void) {}
+#endif /* LINUX_VERSION_IS_LESS(4,5,0) */
 
 static inline u8*
 cfg80211_scan_req_bssid(struct cfg80211_scan_request *scan_req)
@@ -1835,3 +1838,30 @@ static inline void *backport_idr_remove(struct idr *idr, int id)
 }
 #define idr_remove     backport_idr_remove
 #endif
+
+#if LINUX_VERSION_IS_LESS(4,1,0)
+typedef struct {
+#ifdef CONFIG_NET_NS
+	struct net *net;
+#endif
+} possible_net_t;
+
+static inline void possible_write_pnet(possible_net_t *pnet, struct net *net)
+{
+#ifdef CONFIG_NET_NS
+	pnet->net = net;
+#endif
+}
+
+static inline struct net *possible_read_pnet(const possible_net_t *pnet)
+{
+#ifdef CONFIG_NET_NS
+	return pnet->net;
+#else
+	return &init_net;
+#endif
+}
+#else
+#define possible_write_pnet(pnet, net) write_pnet(pnet, net)
+#define possible_read_pnet(pnet) read_pnet(pnet)
+#endif /* LINUX_VERSION_IS_LESS(4,1,0) */

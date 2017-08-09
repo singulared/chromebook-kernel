@@ -391,6 +391,7 @@ static const struct iwl_hcmd_names iwl_mvm_legacy_names[] = {
 	HCMD_NAME(BINDING_CONTEXT_CMD),
 	HCMD_NAME(TIME_QUOTA_CMD),
 	HCMD_NAME(NON_QOS_TX_COUNTER_CMD),
+	HCMD_NAME(LEDS_CMD),
 	HCMD_NAME(LQ_CMD),
 	HCMD_NAME(FW_PAGING_BLOCK_CMD),
 	HCMD_NAME(SCAN_OFFLOAD_REQUEST_CMD),
@@ -712,9 +713,13 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 		if (mvm->cfg->base_params->num_of_queues == 16) {
 			mvm->aux_queue = 11;
 			mvm->first_agg_queue = 12;
+			BUILD_BUG_ON(BITS_PER_BYTE *
+				     sizeof(mvm->hw_queue_to_mac80211[0]) < 12);
 		} else {
 			mvm->aux_queue = 15;
 			mvm->first_agg_queue = 16;
+			BUILD_BUG_ON(BITS_PER_BYTE *
+				     sizeof(mvm->hw_queue_to_mac80211[0]) < 16);
 		}
 	} else {
 		mvm->aux_queue = IWL_MVM_DQA_AUX_QUEUE;
@@ -875,7 +880,7 @@ iwl_op_mode_mvm_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	mutex_lock(&mvm->mutex);
 	iwl_mvm_ref(mvm, IWL_MVM_REF_INIT_UCODE);
 	err = iwl_run_init_mvm_ucode(mvm, true);
-	if (!err || !iwlmvm_mod_params.init_dbg)
+	if (!iwlmvm_mod_params.init_dbg)
 		iwl_mvm_stop_device(mvm);
 	iwl_mvm_unref(mvm, IWL_MVM_REF_INIT_UCODE);
 	mutex_unlock(&mvm->mutex);
@@ -1405,8 +1410,7 @@ void iwl_mvm_nic_restart(struct iwl_mvm *mvm, bool fw_error)
 	if (!mvm->restart_fw && fw_error) {
 		iwl_mvm_fw_dbg_collect_desc(mvm, &iwl_mvm_dump_desc_assert,
 					    NULL);
-	} else if (test_and_set_bit(IWL_MVM_STATUS_IN_HW_RESTART,
-				    &mvm->status)) {
+	} else if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status)) {
 		struct iwl_mvm_reprobe *reprobe;
 
 		IWL_ERR(mvm,
@@ -1437,6 +1441,7 @@ void iwl_mvm_nic_restart(struct iwl_mvm *mvm, bool fw_error)
 
 		if (fw_error && mvm->restart_fw > 0)
 			mvm->restart_fw--;
+		set_bit(IWL_MVM_STATUS_HW_RESTART_REQUESTED, &mvm->status);
 		ieee80211_restart_hw(mvm->hw);
 	}
 }

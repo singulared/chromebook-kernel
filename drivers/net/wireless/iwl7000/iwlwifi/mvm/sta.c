@@ -277,9 +277,21 @@ static void iwl_mvm_rx_agg_session_expired(unsigned long data)
 
 	/* Timer expired */
 	sta = rcu_dereference(ba_data->mvm->fw_id_to_mac_id[ba_data->sta_id]);
+
+	/*
+	 * sta should be valid unless the following happens:
+	 * The firmware asserts which triggers a reconfig flow, but
+	 * the reconfig fails before we set the pointer to sta into
+	 * the fw_id_to_mac_id pointer table. Mac80211 can't stop
+	 * A-MDPU and hence the timer continues to run. Then, the
+	 * timer expires and sta is NULL.
+	 */
+	if (!sta)
+		goto unlock;
+
 	mvm_sta = iwl_mvm_sta_from_mac80211(sta);
-	ieee80211_stop_rx_ba_session_offl(mvm_sta->vif,
-					  sta->addr, ba_data->tid);
+	ieee80211_rx_ba_timer_expired(mvm_sta->vif,
+				      sta->addr, ba_data->tid);
 unlock:
 	rcu_read_unlock();
 }
@@ -398,7 +410,7 @@ static int iwl_mvm_get_queue_agg_tids(struct iwl_mvm *mvm, int queue)
 	struct iwl_mvm_sta *mvmsta;
 	unsigned long tid_bitmap;
 	unsigned long agg_tids = 0;
-	s8 sta_id;
+	u8 sta_id;
 	int tid;
 
 	lockdep_assert_held(&mvm->mutex);
@@ -990,7 +1002,7 @@ static void iwl_mvm_unshare_queue(struct iwl_mvm *mvm, int queue)
 {
 	struct ieee80211_sta *sta;
 	struct iwl_mvm_sta *mvmsta;
-	s8 sta_id;
+	u8 sta_id;
 	int tid = -1;
 	unsigned long tid_bitmap;
 	unsigned int wdg_timeout;
@@ -1400,11 +1412,24 @@ int iwl_mvm_add_sta(struct iwl_mvm *mvm,
 
 	if (iwl_mvm_has_new_rx_api(mvm) &&
 	    !test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status)) {
+		int q;
+
 		dup_data = kcalloc(mvm->trans->num_rx_queues,
-				   sizeof(*dup_data),
-				   GFP_KERNEL);
+				   sizeof(*dup_data), GFP_KERNEL);
 		if (!dup_data)
 			return -ENOMEM;
+		/*
+		 * Initialize all the last_seq values to 0xffff which can never
+		 * compare equal to the frame's seq_ctrl in the check in
+		 * iwl_mvm_is_dup() since the lower 4 bits are the fragment
+		 * number and fragmented packets don't reach that function.
+		 *
+		 * This thus allows receiving a packet with seqno 0 and the
+		 * retry bit set as the very first packet on a new TID.
+		 */
+		for (q = 0; q < mvm->trans->num_rx_queues; q++)
+			memset(dup_data[q].last_seq, 0xff,
+			       sizeof(dup_data[q].last_seq));
 		mvm_sta->dup_data = dup_data;
 	}
 
@@ -1604,10 +1629,11 @@ static void iwl_mvm_disable_sta_queues(struct iwl_mvm *mvm,
 int iwl_mvm_wait_sta_queues_empty(struct iwl_mvm *mvm,
 				  struct iwl_mvm_sta *mvm_sta)
 {
-	int i, ret;
+	int i;
 
 	for (i = 0; i < ARRAY_SIZE(mvm_sta->tid_data); i++) {
 		u16 txq_id;
+		int ret;
 
 		spin_lock_bh(&mvm_sta->lock);
 		txq_id = mvm_sta->tid_data[i].txq_id;
@@ -1618,10 +1644,10 @@ int iwl_mvm_wait_sta_queues_empty(struct iwl_mvm *mvm,
 
 		ret = iwl_trans_wait_txq_empty(mvm->trans, txq_id);
 		if (ret)
-			break;
+			return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 int iwl_mvm_rm_sta(struct iwl_mvm *mvm,

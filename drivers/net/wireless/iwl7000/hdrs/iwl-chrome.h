@@ -3,7 +3,7 @@
 /* This file is pre-included from the Makefile (cc command line)
  *
  * ChromeOS backport definitions
- * Copyright (C) 2016 Intel Deutschland GmbH
+ * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
 
 #include <linux/version.h>
@@ -18,6 +18,12 @@
 #include <linux/hrtimer.h>
 #include <crypto/algapi.h>
 #include <linux/pci.h>
+
+#define LINUX_VERSION_IS_LESS(x1,x2,x3) (LINUX_VERSION_CODE < KERNEL_VERSION(x1,x2,x3))
+#define LINUX_VERSION_IS_GEQ(x1,x2,x3)  (LINUX_VERSION_CODE >= KERNEL_VERSION(x1,x2,x3))
+#define LINUX_VERSION_IN_RANGE(x1,x2,x3, y1,y2,y3) \
+        (LINUX_VERSION_IS_GEQ(x1,x2,x3) && LINUX_VERSION_IS_LESS(y1,y2,y3))
+
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,17,0)
 static inline u64 ktime_get_ns(void)
@@ -41,20 +47,28 @@ static inline u64 ktime_get_real_ns(void)
 #define CFG80211_VERSION LINUX_VERSION_CODE
 #endif
 
+/*
+ * Need to include these here, otherwise we get the regular kernel ones
+ * pre-including them makes it work, even though later the kernel ones
+ * are included again, but they (hopefully) have the same include guard
+ * ifdef/define so the second time around nothing happens
+ *
+ * We still keep them in the correct directory so if they don't exist in
+ * the kernel (e.g. bitfield.h won't) the preprocessor can find them.
+ */
+#include <hdrs/linux/ieee80211.h>
+#include <hdrs/linux/average.h>
+#include <hdrs/linux/bitfield.h>
+
+/* mac80211 & backport - order matters, need this inbetween */
+#include <hdrs/mac80211-exp.h>
+#include <hdrs/mac80211-bp.h>
+
 #include <hdrs/net/codel.h>
 #include <hdrs/net/codel_impl.h>
-
 #include <hdrs/net/fq.h>
 #include <hdrs/net/fq_impl.h>
-
-/* mac80211 & backport */
-#include <hdrs/mac80211-exp.h>
-#include <hdrs/ieee80211.h>
-#include <hdrs/mac80211-bp.h>
-/* need to include these here, otherwise we get the regular kernel one */
-#include <hdrs/mac80211.h>
-#include <hdrs/average.h>
-#include <hdrs/bitfield.h>
+#include <hdrs/net/mac80211.h>
 
 /* include rhashtable this way to get our copy if another exists */
 #include <linux/list_nulls.h>
@@ -451,10 +465,5 @@ void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 #else
 #define __genl_ro_after_init __ro_after_init
 #endif
-
-#define LINUX_VERSION_IS_LESS(x1,x2,x3) (LINUX_VERSION_CODE < KERNEL_VERSION(x1,x2,x3))
-#define LINUX_VERSION_IS_GEQ(x1,x2,x3)  (LINUX_VERSION_CODE >= KERNEL_VERSION(x1,x2,x3))
-#define LINUX_VERSION_IN_RANGE(x1,x2,x3, y1,y2,y3) \
-        (LINUX_VERSION_IS_GEQ(x1,x2,x3) && LINUX_VERSION_IS_LESS(y1,y2,y3))
 
 #endif /* __IWL_CHROME */

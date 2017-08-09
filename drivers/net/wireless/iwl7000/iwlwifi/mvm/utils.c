@@ -534,7 +534,7 @@ static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 
 		/* reset the device */
 		iwl_set_bit(trans, CSR_RESET, CSR_RESET_REG_FLAG_SW_RESET);
-		usleep_range(1000, 2000);
+		usleep_range(5000, 6000);
 
 		/* set INIT_DONE flag */
 		iwl_set_bit(trans, CSR_GP_CNTRL,
@@ -706,7 +706,13 @@ static bool iwl_mvm_update_txq_mapping(struct iwl_mvm *mvm, int queue,
 	if (mvm->queue_info[queue].hw_queue_refcount > 0)
 		enable_queue = false;
 
-	mvm->hw_queue_to_mac80211[queue] |= BIT(mac80211_queue);
+	if (mac80211_queue != IEEE80211_INVAL_HW_QUEUE) {
+		WARN(mac80211_queue >=
+		     BITS_PER_BYTE * sizeof(mvm->hw_queue_to_mac80211[0]),
+		     "cannot track mac80211 queue %d (queue %d, sta %d, tid %d)\n",
+		     mac80211_queue, queue, sta_id, tid);
+		mvm->hw_queue_to_mac80211[queue] |= BIT(mac80211_queue);
+	}
 
 	mvm->queue_info[queue].hw_queue_refcount++;
 	mvm->queue_info[queue].tid_bitmap |= BIT(tid);
@@ -1557,8 +1563,16 @@ static void iwl_mvm_check_uapsd_agg_expected_tpt(struct iwl_mvm *mvm,
 		if (tpt < 22 * rate / 100)
 			return;
 	} else {
-		tpt = 100 * 8 * bytes;
-		do_div(tpt, elapsed); /* 100Kbps */
+		/*
+		 * the rate here is actually the threshold, in 100Kbps units,
+		 * so do the needed conversion from bytes to 100Kbps:
+		 * 100kb = bits / (100 * 1000),
+		 * 100kbps = 100kb / (msecs / 1000) ==
+		 *           (bits / (100 * 1000)) / (msecs / 1000) ==
+		 *           bits / (100 * msecs)
+		 */
+		tpt = (8 * bytes);
+		do_div(tpt, elapsed * 100);
 		if (tpt < rate)
 			return;
 	}

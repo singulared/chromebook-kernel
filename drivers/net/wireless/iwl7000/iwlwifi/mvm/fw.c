@@ -1216,14 +1216,12 @@ static union acpi_object *iwl_mvm_sar_find_wifi_pkg(struct iwl_mvm *mvm,
 		domain = &wifi_pkg->package.elements[0];
 		if (domain->type == ACPI_TYPE_INTEGER &&
 		    domain->integer.value == ACPI_WIFI_DOMAIN)
-			break;
-
-		wifi_pkg = NULL;
+			goto found;
 	}
 
-	if (!wifi_pkg)
-		return ERR_PTR(-ENOENT);
+	return ERR_PTR(-ENOENT);
 
+found:
 	return wifi_pkg;
 }
 
@@ -1832,6 +1830,8 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	ret = iwl_mvm_sar_geo_init(mvm);
 	if (ret)
 		goto error;
+
+	iwl_mvm_leds_sync(mvm);
 
 	IWL_DEBUG_INFO(mvm, "RT uCode started.\n");
 	return 0;

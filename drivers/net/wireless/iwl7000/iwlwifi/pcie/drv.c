@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016 Intel Deutschland GmbH
+ * Copyright(c) 2016-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -35,6 +35,7 @@
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * All rights reserved.
+ * Copyright(c) 2017 Intel Deutschland GmbH
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -330,29 +331,41 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0x2526, 0x0000, iwl9260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x2526, 0x0010, iwl9260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x2526, 0x1410, iwl9270_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0A10, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0010, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0210, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0410, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0610, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0310, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0000, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0510, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x2010, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x2526, 0x1420, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0710, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x2A10, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x30DC, 0x0060, iwl9460_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0A10, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0010, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0210, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0410, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0610, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0310, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0000, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0510, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x2010, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x1420, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0710, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x2A10, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x30DC, 0x0060, iwl9460_2ac_cfg_soc)},
 	{IWL_PCI_DEVICE(0x2526, 0x0060, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0060, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0xA370, 0x0060, iwl9460_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x31DC, 0x0060, iwl9460_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0060, iwl9460_2ac_cfg_soc)},
 	{IWL_PCI_DEVICE(0x2526, 0x0030, iwl9560_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x9DF0, 0x0030, iwl9560_2ac_cfg)},
-	{IWL_PCI_DEVICE(0xA370, 0x0030, iwl9560_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x31DC, 0x0030, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0030, iwl9560_2ac_cfg_soc)},
 	{IWL_PCI_DEVICE(0x2526, 0x1030, iwl9560_2ac_cfg)},
-	{IWL_PCI_DEVICE(0xA370, 0x1030, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0xA370, 0x1030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0038, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2526, 0x003C, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0034, iwl9560_2ac_cfg)},
 
 /* a000 Series */
 	{IWL_PCI_DEVICE(0x2720, 0x0A10, iwla000_2ac_cfg_hr_cdb)},
@@ -604,7 +617,6 @@ static int iwl_pci_resume(struct device *device)
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct iwl_trans *trans = pci_get_drvdata(pdev);
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	bool hw_rfkill;
 
 	/* Before you put code here, think about WoWLAN. You cannot check here
 	 * whether WoWLAN is enabled or not, and your code will run even if
@@ -620,17 +632,17 @@ static int iwl_pci_resume(struct device *device)
 	if (!trans->op_mode)
 		return 0;
 
+	/* reconfigure the MSI-X mapping to get the correct IRQ for rfkill */
+	iwl_pcie_conf_msix_hw(trans_pcie);
+
 	/*
-	 * Enable rfkill interrupt (in order to keep track of
-	 * the rfkill status). Must be locked to avoid processing
-	 * a possible rfkill interrupt between reading the state
-	 * and calling iwl_trans_pcie_rf_kill() with it.
+	 * Enable rfkill interrupt (in order to keep track of the rfkill
+	 * status). Must be locked to avoid processing a possible rfkill
+	 * interrupt while in iwl_trans_check_hw_rf_kill().
 	 */
 	mutex_lock(&trans_pcie->mutex);
 	iwl_enable_rfkill_int(trans);
-
-	hw_rfkill = iwl_is_rfkill_set(trans);
-	iwl_trans_pcie_rf_kill(trans, hw_rfkill);
+	iwl_trans_check_hw_rf_kill(trans);
 	mutex_unlock(&trans_pcie->mutex);
 
 	return 0;

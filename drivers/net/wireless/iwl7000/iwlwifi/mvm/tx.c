@@ -105,9 +105,9 @@ iwl_mvm_bar_check_trigger(struct iwl_mvm *mvm, const u8 *addr,
 
 static u16 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 			   struct ieee80211_hdr *hdr,
-			   struct ieee80211_tx_info *info)
+			   struct ieee80211_tx_info *info,
+			   u16 offload_assist)
 {
-	u16 offload_assist = 0;
 #if IS_ENABLED(CONFIG_INET)
 	u16 mh_len = ieee80211_hdrlen(hdr->frame_control);
 	u8 protocol = 0;
@@ -185,8 +185,14 @@ static u16 iwl_mvm_tx_csum(struct iwl_mvm *mvm, struct sk_buff *skb,
 	else
 		udp_hdr(skb)->check = 0;
 
-	/* mac header len should include IV, size is in words */
-	if (info->control.hw_key)
+	/*
+	 * mac header len should include IV, size is in words unless
+	 * the IV is added by the firmware like in WEP.
+	 * In new Tx API, the IV is always added by the firmware.
+	 */
+	if (!iwl_mvm_has_new_tx_api(mvm) && info->control.hw_key &&
+	    info->control.hw_key->cipher != WLAN_CIPHER_SUITE_WEP40 &&
+	    info->control.hw_key->cipher != WLAN_CIPHER_SUITE_WEP104)
 		mh_len += info->control.hw_key->iv_len;
 	mh_len /= 2;
 	offload_assist |= mh_len << TX_CMD_OFFLD_MH_SIZE;
@@ -207,6 +213,7 @@ void iwl_mvm_set_tx_cmd(struct iwl_mvm *mvm, struct sk_buff *skb,
 	__le16 fc = hdr->frame_control;
 	u32 tx_flags = le32_to_cpu(tx_cmd->tx_flags);
 	u32 len = skb->len + FCS_LEN;
+	u16 offload_assist = 0;
 	u8 ac;
 
 	if (!(info->flags & IEEE80211_TX_CTL_NO_ACK))
@@ -225,8 +232,7 @@ void iwl_mvm_set_tx_cmd(struct iwl_mvm *mvm, struct sk_buff *skb,
 		tx_cmd->tid_tspec = qc[0] & 0xf;
 		tx_flags &= ~TX_CMD_FLG_SEQ_CTL;
 		if (*qc & IEEE80211_QOS_CTL_A_MSDU_PRESENT)
-			tx_cmd->offload_assist |=
-				cpu_to_le16(BIT(TX_CMD_OFFLD_AMSDU));
+			offload_assist |= BIT(TX_CMD_OFFLD_AMSDU);
 	} else if (ieee80211_is_back_req(fc)) {
 		struct ieee80211_bar *bar = (void *)skb->data;
 		u16 control = le16_to_cpu(bar->control);
@@ -291,11 +297,12 @@ void iwl_mvm_set_tx_cmd(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	/* padding is inserted later in transport */
 	if (ieee80211_hdrlen(fc) % 4 &&
-	    !(tx_cmd->offload_assist & cpu_to_le16(BIT(TX_CMD_OFFLD_AMSDU))))
-		tx_cmd->offload_assist |= cpu_to_le16(BIT(TX_CMD_OFFLD_PAD));
+	    !(offload_assist & BIT(TX_CMD_OFFLD_AMSDU)))
+		offload_assist |= BIT(TX_CMD_OFFLD_PAD);
 
 	tx_cmd->offload_assist |=
-		cpu_to_le16(iwl_mvm_tx_csum(mvm, skb, hdr, info));
+		cpu_to_le16(iwl_mvm_tx_csum(mvm, skb, hdr, info,
+					    offload_assist));
 }
 
 static u32 iwl_mvm_get_tx_rate(struct iwl_mvm *mvm,
@@ -478,7 +485,7 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 
 	if (iwl_mvm_has_new_tx_api(mvm)) {
 		struct iwl_tx_cmd_gen2 *cmd = (void *)dev_cmd->payload;
-		u16 offload_assist = iwl_mvm_tx_csum(mvm, skb, hdr, info);
+		u16 offload_assist = 0;
 
 		if (ieee80211_is_data_qos(hdr->frame_control)) {
 			u8 *qc = ieee80211_get_qos_ctl(hdr);
@@ -486,6 +493,9 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 			if (*qc & IEEE80211_QOS_CTL_A_MSDU_PRESENT)
 				offload_assist |= BIT(TX_CMD_OFFLD_AMSDU);
 		}
+
+		offload_assist = iwl_mvm_tx_csum(mvm, skb, hdr, info,
+						 offload_assist);
 
 		/* padding is inserted later in transport */
 		if (ieee80211_hdrlen(hdr->frame_control) % 4 &&
@@ -551,12 +561,18 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_ADHOC:
 		/*
-		 * Handle legacy hostapd as well, where station may be added
-		 * only after assoc. Take care of the case where we send a
-		 * deauth to a station that we don't have.
+		 * Handle legacy hostapd as well, where station will be added
+		 * only just before sending the association response.
+		 * Also take care of the case where we send a deauth to a
+		 * station that we don't have, or similarly an association
+		 * response (with non-success status) for a station we can't
+		 * accept.
+		 * Also, disassociate frames might happen, particular with
+		 * reason 7 ("Class 3 frame received from nonassociated STA").
 		 */
 		if (ieee80211_is_probe_resp(fc) || ieee80211_is_auth(fc) ||
-		    ieee80211_is_deauth(fc))
+		    ieee80211_is_deauth(fc) || ieee80211_is_assoc_resp(fc) ||
+		    ieee80211_is_disassoc(fc))
 			return mvm->probe_queue;
 		if (info->hw_queue == info->control.vif->cab_queue)
 			return info->hw_queue;
@@ -617,10 +633,6 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 	 * (this is not possible for unicast packets as a TLDS discovery
 	 * response are sent without a station entry); otherwise use the
 	 * AUX station.
-	 * In DQA mode, if vif is of type STATION and frames are not multicast
-	 * or offchannel, they should be sent from the BSS queue.
-	 * For example, TDLS setup frames should be sent on this queue,
-	 * as they go through the AP.
 	 */
 	sta_id = mvm->aux_sta.sta_id;
 	if (info.control.vif) {
@@ -644,10 +656,6 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 
 			if (ap_sta_id != IWL_MVM_INVALID_STA)
 				sta_id = ap_sta_id;
-		} else if (iwl_mvm_is_dqa_supported(mvm) &&
-			   info.control.vif->type == NL80211_IFTYPE_STATION &&
-			   queue != mvm->aux_queue) {
-			queue = IWL_MVM_DQA_BSS_CLIENT_QUEUE;
 		}
 	}
 
@@ -701,11 +709,6 @@ static int iwl_mvm_tx_tso(struct iwl_mvm *mvm, struct sk_buff *skb,
 	snap_ip_tcp = 8 + skb_transport_header(skb) - skb_network_header(skb) +
 		tcp_hdrlen(skb);
 
-	qc = ieee80211_get_qos_ctl(hdr);
-	tid = *qc & IEEE80211_QOS_CTL_TID_MASK;
-	if (WARN_ON_ONCE(tid >= IWL_MAX_TID_COUNT))
-		return -EINVAL;
-
 	dbg_max_amsdu_len = ACCESS_ONCE(mvm->max_amsdu_len);
 
 	if (!sta->max_amsdu_len ||
@@ -715,6 +718,11 @@ static int iwl_mvm_tx_tso(struct iwl_mvm *mvm, struct sk_buff *skb,
 		pad = 0;
 		goto segment;
 	}
+
+	qc = ieee80211_get_qos_ctl(hdr);
+	tid = *qc & IEEE80211_QOS_CTL_TID_MASK;
+	if (WARN_ON_ONCE(tid >= IWL_MAX_TID_COUNT))
+		return -EINVAL;
 
 	/*
 	 * Do not build AMSDU for IPv6 with extension headers.
@@ -835,11 +843,13 @@ segment:
 		if (tcp_payload_len > mss) {
 			skb_shinfo(tmp)->gso_size = mss;
 		} else {
-			qc = ieee80211_get_qos_ctl((void *)tmp->data);
+			if (ieee80211_is_data_qos(hdr->frame_control)) {
+				qc = ieee80211_get_qos_ctl((void *)tmp->data);
 
-			if (ipv4)
-				ip_send_check(ip_hdr(tmp));
-			*qc &= ~IEEE80211_QOS_CTL_A_MSDU_PRESENT;
+				if (ipv4)
+					ip_send_check(ip_hdr(tmp));
+				*qc &= ~IEEE80211_QOS_CTL_A_MSDU_PRESENT;
+			}
 			skb_shinfo(tmp)->gso_size = 0;
 		}
 

@@ -864,7 +864,7 @@ struct iwl_mvm {
 		u64 on_time_scan;
 	} radio_stats, accu_radio_stats;
 
-	u8 hw_queue_to_mac80211[IWL_MAX_TVQM_QUEUES];
+	u16 hw_queue_to_mac80211[IWL_MAX_TVQM_QUEUES];
 
 	struct {
 		u8 hw_queue_refcount;
@@ -1199,10 +1199,23 @@ struct iwl_mvm {
 #define IWL_MAC80211_GET_MVM(_hw)			\
 	IWL_OP_MODE_GET_MVM((struct iwl_op_mode *)((_hw)->priv))
 
+/**
+ * enum iwl_mvm_status - MVM status bits
+ * @IWL_MVM_STATUS_HW_RFKILL: HW RF-kill is asserted
+ * @IWL_MVM_STATUS_HW_CTKILL: CT-kill is active
+ * @IWL_MVM_STATUS_ROC_RUNNING: remain-on-channel is running
+ * @IWL_MVM_STATUS_HW_RESTART_REQUESTED: HW restart was requested
+ * @IWL_MVM_STATUS_IN_HW_RESTART: HW restart is active
+ * @IWL_MVM_STATUS_IN_D0I3: NIC is in D0i3
+ * @IWL_MVM_STATUS_ROC_AUX_RUNNING: AUX remain-on-channel is running
+ * @IWL_MVM_STATUS_D3_RECONFIG: D3 reconfiguration is being done
+ * @IWL_MVM_STATUS_FIRMWARE_RUNNING: firmware is running
+ */
 enum iwl_mvm_status {
 	IWL_MVM_STATUS_HW_RFKILL,
 	IWL_MVM_STATUS_HW_CTKILL,
 	IWL_MVM_STATUS_ROC_RUNNING,
+	IWL_MVM_STATUS_HW_RESTART_REQUESTED,
 	IWL_MVM_STATUS_IN_HW_RESTART,
 	IWL_MVM_STATUS_IN_D0I3,
 	IWL_MVM_STATUS_ROC_AUX_RUNNING,
@@ -1733,12 +1746,16 @@ void iwl_mvm_power_uapsd_misbehaving_ap_notif(struct iwl_mvm *mvm,
 #ifdef CPTCFG_IWLWIFI_LEDS
 int iwl_mvm_leds_init(struct iwl_mvm *mvm);
 void iwl_mvm_leds_exit(struct iwl_mvm *mvm);
+void iwl_mvm_leds_sync(struct iwl_mvm *mvm);
 #else
 static inline int iwl_mvm_leds_init(struct iwl_mvm *mvm)
 {
 	return 0;
 }
 static inline void iwl_mvm_leds_exit(struct iwl_mvm *mvm)
+{
+}
+static inline void iwl_mvm_leds_sync(struct iwl_mvm *mvm)
 {
 }
 #endif

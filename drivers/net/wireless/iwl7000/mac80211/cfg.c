@@ -909,7 +909,9 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	default:
 		return -EINVAL;
 	}
+	sdata->u.ap.req_smps = sdata->smps_mode;
 #endif
+
 	sdata->needed_rx_chains = sdata->local->rx_chains;
 
 	sdata->vif.bss_conf.beacon_int = params->beacon_interval;
