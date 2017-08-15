@@ -325,6 +325,10 @@ enum iwl_mvm_agg_state {
  * @is_tid_active: has this TID sent traffic in the last
  *	%IWL_MVM_DQA_QUEUE_TIMEOUT time period. If %txq_id is invalid, this
  *	field should be ignored.
+ * @tpt_meas_start: time of the throughput measurements start, is reset every HZ
+ * @tx_count_last: number of frames transmitted during the last second
+ * @tx_count: counts the number of frames transmitted since the last reset of
+ *	 tpt_meas_start
  */
 struct iwl_mvm_tid_data {
 	struct sk_buff_head deferred_tx_frames;
@@ -339,6 +343,9 @@ struct iwl_mvm_tid_data {
 	u16 ssn;
 	u16 tx_time;
 	bool is_tid_active;
+	unsigned long tpt_meas_start;
+	u32 tx_count_last;
+	u32 tx_count;
 };
 
 static inline u16 iwl_mvm_tid_queued(struct iwl_mvm_tid_data *tid_data)
