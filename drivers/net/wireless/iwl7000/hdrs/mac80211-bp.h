@@ -1877,3 +1877,17 @@ static inline struct net *possible_read_pnet(const possible_net_t *pnet)
 #define possible_write_pnet(pnet, net) write_pnet(pnet, net)
 #define possible_read_pnet(pnet) read_pnet(pnet)
 #endif /* LINUX_VERSION_IS_LESS(4,1,0) */
+
+#if LINUX_VERSION_IS_LESS(4,12,0) &&		\
+	!LINUX_VERSION_IN_RANGE(4,11,9, 4,12,0)
+#define netdev_set_priv_destructor(_dev, _destructor) \
+	(_dev)->destructor = __ ## _destructor
+#define netdev_set_def_destructor(_dev) \
+	(_dev)->destructor = free_netdev
+#else
+#define netdev_set_priv_destructor(_dev, _destructor) \
+	(_dev)->needs_free_netdev = true; \
+	(_dev)->priv_destructor = (_destructor);
+#define netdev_set_def_destructor(_dev) \
+	(_dev)->needs_free_netdev = true;
+#endif
