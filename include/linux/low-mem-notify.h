@@ -54,10 +54,7 @@ static inline unsigned long get_available_mem_adj(int lru_base)
 	 * The contribution of swap is reduced by a factor of
 	 * low_mem_ram_vs_swap_weight.
 	 */
-	unsigned long swap_adj = nr_swap_pages;
-
-	do_div(swap_adj, low_mem_ram_vs_swap_weight);
-	return available_mem + swap_adj;
+	return available_mem + nr_swap_pages / low_mem_ram_vs_swap_weight;
 }
 
 /*
