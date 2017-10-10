@@ -13,6 +13,7 @@
 #
 
 
+
 ==============================
 kds - Kernel Dependency System
 ==============================
@@ -115,21 +116,21 @@ The LCD driver will call kds resource set release on the previous on-screen buff
 
 ===============================================
 Kernel driver kds client design considerations
-===============================================
+=============================================== 
 
 Number of resources
 --------------------
 
-The kds api allows a client to wait for ownership of a number of resources, where by the client does not take on ownership of any of the resources in the resource set
+The kds api allows a client to wait for ownership of a number of resources, where by the client does not take on ownership of any of the resources in the resource set 
 until all of the resources in the set are released.  Consideration must be made with respect to performance, as waiting on large number of resources will incur
-a greater overhead and may increase system latency.  It may be worth considering how independent each of the resources are, for example if the same set of resources
+a greater overhead and may increase system latency.  It may be worth considering how independent each of the resources are, for example if the same set of resources 
 are waited upon by each of the clients, then it may be possible to aggregate these into one resource that each client waits upon.
 
 Clients with shared access
 ---------------------------
 
 The kds api allows a number of clients to gain shared access to a resource simultaneously, consideration must be made with respect to performance, large numbers of clients
-wanting shared access can incur a performance penalty and may increase system latency, specifically when the clients are granted access. Having an excessively high
+wanting shared access can incur a performance penalty and may increase system latency, specifically when the clients are granted access. Having an excessively high 
 number of clients with shared access should be avoided, consideration should be made to the call back configuration being used. See Callbacks and Scenario 1 below.
 
 Callbacks
@@ -137,21 +138,21 @@ Callbacks
 
 Careful consideration must be made as to which callback type is most appropriate for kds clients, direct callbacks are called immediately from the context in which the
 ownership of the resource is passed to the next waiter in the list.  Where as when using deferred callbacks the callback is deferred and called from outside the context
-that is relinquishing ownership, while this reduces the latency in the releasing clients context it does incur a cost as there is more latency between a resource
-becoming free and the new client owning the resource callback being executed.
+that is relinquishing ownership, while this reduces the latency in the releasing clients context it does incur a cost as there is more latency between a resource 
+becoming free and the new client owning the resource callback being executed.  
 
-Obviously direct callbacks have a performance advantage, as the call back is immediate and does not have to wait for the kernel to context switch to schedule in the
-execution of the callback.
+Obviously direct callbacks have a performance advantage, as the call back is immediate and does not have to wait for the kernel to context switch to schedule in the 
+execution of the callback.  
 
-However as the callback is immediate and within the context that is granting ownership it is important that the callback perform the MINIMUM amount of work necessary,
-long call backs could cause poor system latency.  Special care and attention must be taken if the direct callbacks can be called from IRQ handlers, such as when
-kds_resource_set_release is called from an IRQ handler, in this case you have to avoid any calls that may sleep.
+However as the callback is immediate and within the context that is granting ownership it is important that the callback perform the MINIMUM amount of work necessary, 
+long call backs could cause poor system latency.  Special care and attention must be taken if the direct callbacks can be called from IRQ handlers, such as when 
+kds_resource_set_release is called from an IRQ handler, in this case you have to avoid any calls that may sleep.  
 
 Deferred contexts have the advantage that the call backs are deferred until they are scheduled by the kernel, therefore they are allowed to call functions that may sleep
 and if scheduled from IRQ context not incur as much system latency as would be seen with direct callbacks from within the IRQ.
 
 Once the clients callback has been called, the client is considered to be owning the resource.  Within the callback the client may only need to perform a small amount of work
-before the client need to give up owner ship.  The kds_resource_release function may be called from with in the call back, but consideration must be made when using direct
+before the client need to give up owner ship.  The kds_resource_release function may be called from with in the call back, but consideration must be made when using direct 
 callbacks, with both respect to execution time and stack usage. Consider the example in Scenario 2 with direct callbacks:
 
 Scenario 1 - Shared client access - direct callbacks:
@@ -167,7 +168,7 @@ client_<client>_cb( p1, p2 )
 }
 
 Where <client> is either A,B,C,D
-                                        Queue   |Owner
+                                        Queue   |Owner 
 1.  E Requests X exclusive                      |
 2.  E Owns     X exclusive                      |E
 3.  A Requests X shared                        A|E
@@ -238,8 +239,8 @@ Releasing ownership and wait cancellation
 Client Wait Cancellation
 -------------------------
 
-It may be necessary in certain circumstances for the client to cancel the wait for kds resources for error handling, process termination etc.  Cancellation is
-performed using kds_resource_set_release or kds_resource_set_release_sync using the rset that was received from kds_async_waitall, kds_resource_set_release_sync
+It may be necessary in certain circumstances for the client to cancel the wait for kds resources for error handling, process termination etc.  Cancellation is 
+performed using kds_resource_set_release or kds_resource_set_release_sync using the rset that was received from kds_async_waitall, kds_resource_set_release_sync 
 being used for waits which are using deferred callbacks.
 
 It is possible that while the request to cancel the wait is being issued by the client, the client is granted access to the resources.  Normally after the client

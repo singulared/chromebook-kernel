@@ -1,5 +1,6 @@
 /*
- * (C) COPYRIGHT 2014 ARM Limited. All rights reserved.
+ *
+ * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -11,6 +12,8 @@
  * Boston, MA  02110-1301, USA.
  *
  */
+
+
 
 /**
  * Maximum frequency GPU will be clocked at. Given in kHz.
@@ -66,12 +69,6 @@
  * Default value: See @ref kbase_platform_funcs_conf
  */
 #define PLATFORM_FUNCS (&platform_funcs)
-
-/** Power model for IPA
- *
- * Attached value: pointer to @ref mali_pa_model_ops
- */
-#define POWER_MODEL_CALLBACKS (NULL)
 
 int get_cpu_clock_speed(u32* cpu_clock);
 extern struct kbase_pm_callback_conf pm_callbacks;

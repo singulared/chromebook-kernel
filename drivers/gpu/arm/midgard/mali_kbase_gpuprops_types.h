@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2014 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -51,6 +51,7 @@ struct kbase_gpuprops_regdump {
 	u32 tiler_present_hi;
 	u32 l2_present_lo;
 	u32 l2_present_hi;
+	u32 coherency_features;
 };
 
 struct kbase_gpu_cache_props {

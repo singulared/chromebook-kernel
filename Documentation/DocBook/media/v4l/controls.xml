@@ -2277,6 +2277,14 @@ VBV buffer control.</entry>
 	      </row>
 
 	      <row><entry></entry></row>
+	      <row id="v4l2-mpeg-video-force-key-frame">
+		<entry spanname="id"><constant>V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME</constant>&nbsp;</entry>
+		<entry>button</entry>
+	      </row><row><entry spanname="descr">Force a key frame for the next queued buffer. Applicable to encoders.
+This is a general, codec-agnostic keyframe control.</entry>
+	      </row>
+
+	      <row><entry></entry></row>
 	      <row>
 		<entry spanname="id"><constant>V4L2_CID_MPEG_VIDEO_H264_CPB_SIZE</constant>&nbsp;</entry>
 		<entry>integer</entry>

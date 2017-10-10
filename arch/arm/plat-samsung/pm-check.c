@@ -130,6 +130,10 @@ static bool s3c_pm_should_skip_page(phys_addr_t addr)
 		s3c_pm_printskip("bitfix", addr);
 		return true;
 	}
+	if (!pfn_valid(__phys_to_pfn(addr))) {
+		s3c_pm_printskip("removed", addr);
+		return true;
+	}
 
 	return false;
 }

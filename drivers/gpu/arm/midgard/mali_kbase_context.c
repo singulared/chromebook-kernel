@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -24,9 +24,7 @@
 #include <mali_kbase.h>
 #include <mali_midg_regmap.h>
 #include <mali_kbase_instr.h>
-
-#define MEMPOOL_PAGES 16384
-
+#include <mali_kbase_mem_linux.h>
 
 /**
  * kbase_create_context() - Create a kernel base context.
@@ -41,7 +39,7 @@ struct kbase_context *
 kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 {
 	struct kbase_context *kctx;
-	int mali_err;
+	int err;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
@@ -68,39 +66,48 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	atomic_set(&kctx->nonmapped_pages, 0);
 	kctx->slots_pullable = 0;
 
-	if (kbase_mem_allocator_init(&kctx->osalloc, MEMPOOL_PAGES, kctx->kbdev) != 0)
+	err = kbase_mem_pool_init(&kctx->mem_pool,
+			kbdev->mem_pool_max_size_default,
+			kctx->kbdev, &kbdev->mem_pool);
+	if (err)
 		goto free_kctx;
 
-	kctx->pgd_allocator = &kctx->osalloc;
+	err = kbase_mem_evictable_init(kctx);
+	if (err)
+		goto free_pool;
+
 	atomic_set(&kctx->used_pages, 0);
 
-	if (kbase_jd_init(kctx))
-		goto free_allocator;
+	err = kbase_jd_init(kctx);
+	if (err)
+		goto deinit_evictable;
 
-	mali_err = kbasep_js_kctx_init(kctx);
-	if (mali_err)
+	err = kbasep_js_kctx_init(kctx);
+	if (err)
 		goto free_jd;	/* safe to call kbasep_js_kctx_term  in this case */
 
-	mali_err = kbase_event_init(kctx);
-	if (mali_err)
+	err = kbase_event_init(kctx);
+	if (err)
 		goto free_jd;
 
 	mutex_init(&kctx->reg_lock);
 
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
+	spin_lock_init(&kctx->waiting_soft_jobs_lock);
 #if defined(CONFIG_KDS) || defined(CONFIG_DRM_DMA_SYNC)
 	INIT_LIST_HEAD(&kctx->waiting_resource);
 #endif				/* CONFIG_KDS or CONFIG_DRM_DMA_SYNC */
 
-	mali_err = kbase_mmu_init(kctx);
-	if (mali_err)
+	err = kbase_mmu_init(kctx);
+	if (err)
 		goto free_event;
 
 	kctx->pgd = kbase_mmu_alloc_pgd(kctx);
 	if (!kctx->pgd)
 		goto free_mmu;
 
-	if (kbase_mem_allocator_alloc(&kctx->osalloc, 1, &kctx->aliasing_sink_page) != 0)
+	kctx->aliasing_sink_page = kbase_mem_pool_alloc(&kctx->mem_pool);
+	if (!kctx->aliasing_sink_page)
 		goto no_sink_page;
 
 	kctx->tgid = current->tgid;
@@ -110,8 +117,17 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	kctx->cookies = KBASE_COOKIE_MASK;
 
 	/* Make sure page 0 is not used... */
-	if (kbase_region_tracker_init(kctx))
+	err = kbase_region_tracker_init(kctx);
+	if (err)
 		goto no_region_tracker;
+
+	err = kbase_sticky_resource_init(kctx);
+	if (err)
+		goto no_sticky;
+
+	err = kbase_jit_init(kctx);
+	if (err)
+		goto no_jit;
 #ifdef CONFIG_GPU_TRACEPOINTS
 	atomic_set(&kctx->jctx.work_id, 0);
 #endif
@@ -123,11 +139,21 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 
 	mutex_init(&kctx->vinstr_cli_lock);
 
+	hrtimer_init(&kctx->soft_event_timeout, CLOCK_MONOTONIC,
+		     HRTIMER_MODE_REL);
+	kctx->soft_event_timeout.function = &kbasep_soft_event_timeout_worker;
+
 	return kctx;
 
+no_jit:
+	kbase_gpu_vm_lock(kctx);
+	kbase_sticky_resource_term(kctx);
+	kbase_gpu_vm_unlock(kctx);
+no_sticky:
+	kbase_region_tracker_term(kctx);
 no_region_tracker:
+	kbase_mem_pool_free(&kctx->mem_pool, kctx->aliasing_sink_page, false);
 no_sink_page:
-	kbase_mem_allocator_free(&kctx->osalloc, 1, &kctx->aliasing_sink_page, 0);
 	/* VM lock needed for the call to kbase_mmu_free_pgd */
 	kbase_gpu_vm_lock(kctx);
 	kbase_mmu_free_pgd(kctx);
@@ -140,8 +166,10 @@ free_jd:
 	/* Safe to call this one even when didn't initialize (assuming kctx was sufficiently zeroed) */
 	kbasep_js_kctx_term(kctx);
 	kbase_jd_exit(kctx);
-free_allocator:
-	kbase_mem_allocator_term(&kctx->osalloc);
+deinit_evictable:
+	kbase_mem_evictable_deinit(kctx);
+free_pool:
+	kbase_mem_pool_term(&kctx->mem_pool);
 free_kctx:
 	vfree(kctx);
 out:
@@ -185,13 +213,23 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	kbase_jd_zap_context(kctx);
 	kbase_event_cleanup(kctx);
 
+	/*
+	 * JIT must be terminated before the code below as it must be called
+	 * without the region lock being held.
+	 * The code above ensures no new JIT allocations can be made by
+	 * by the time we get to this point of context tear down.
+	 */
+	kbase_jit_term(kctx);
+
 	kbase_gpu_vm_lock(kctx);
+
+	kbase_sticky_resource_term(kctx);
 
 	/* MMU is disabled as part of scheduling out the context */
 	kbase_mmu_free_pgd(kctx);
 
 	/* drop the aliasing sink page now that it can't be mapped anymore */
-	kbase_mem_allocator_free(&kctx->osalloc, 1, &kctx->aliasing_sink_page, 0);
+	kbase_mem_pool_free(&kctx->mem_pool, kctx->aliasing_sink_page, false);
 
 	/* free pending region setups */
 	pending_regions_to_clean = (~kctx->cookies) & KBASE_COOKIE_MASK;
@@ -222,11 +260,9 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	if (pages != 0)
 		dev_warn(kbdev->dev, "%s: %d pages in use!\n", __func__, pages);
 
-	kbase_mem_allocator_term(&kctx->osalloc);
+	kbase_mem_evictable_deinit(kctx);
+	kbase_mem_pool_term(&kctx->mem_pool);
 	WARN_ON(atomic_read(&kctx->nonmapped_pages) != 0);
-
-	/* Purposely corrupt the traceback to see if someone keeps using it */
-	kctx->jctx.tb = (void *)0xe7;
 
 	vfree(kctx);
 }
@@ -261,9 +297,6 @@ int kbase_context_set_create_flags(struct kbase_context *kctx, u32 flags)
 	/* Translate the flags */
 	if ((flags & BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED) == 0)
 		js_kctx_info->ctx.flags &= ~((u32) KBASE_CTX_FLAG_SUBMIT_DISABLED);
-
-	if ((flags & BASE_CONTEXT_HINT_ONLY_COMPUTE) != 0)
-		js_kctx_info->ctx.flags |= (u32) KBASE_CTX_FLAG_HINT_ONLY_COMPUTE;
 
 	/* Latch the initial attributes into the Job Scheduler */
 	kbasep_js_ctx_attr_set_initial_attrs(kctx->kbdev, kctx);

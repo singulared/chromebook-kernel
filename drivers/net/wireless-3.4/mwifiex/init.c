@@ -315,7 +315,7 @@ static void mwifiex_init_adapter(struct mwifiex_adapter *adapter)
 	adapter->active_scan_time = MWIFIEX_ACTIVE_SCAN_CHAN_TIME;
 	adapter->passive_scan_time = MWIFIEX_PASSIVE_SCAN_CHAN_TIME;
 
-	adapter->scan_probes = 1;
+	adapter->scan_probes = 4;
 
 	adapter->multiple_dtim = 1;
 

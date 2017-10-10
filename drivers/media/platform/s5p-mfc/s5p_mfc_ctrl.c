@@ -259,34 +259,74 @@ static void s5p_mfc_release_mfc_inst(struct s5p_mfc_dev *dev,
 				     struct s5p_mfc_ctx *ctx)
 {
 	unsigned long flags;
+	bool inst_released;
 
 	/*
-	 * Even though this instance should not be running at this point,
-	 * another one might have crashed the hardware and triggered watchdog
-	 * worker, which might have changed the state of all instances to
-	 * MFCINST_ERROR.
+	 * At this point there might be still the timeout watchdog running
+	 * and it might overwrite the state with MFCINST_ERROR. However, it
+	 * will also set dev->hw_error, reset ctx->inst_no and fully reset
+	 * the hardware, so that it no longer uses any resources acquired
+	 * before the timeout. Both _try_ctx() and _wait_for_done_ctx() are
+	 * designed to handle this case.
 	 */
 	spin_lock_irqsave(&dev->irqlock, flags);
-
-	if (ctx->state != MFCINST_ERROR)
-		ctx->state = MFCINST_RETURN_INST;
-
+	ctx->state = MFCINST_RETURN_INST;
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	s5p_mfc_try_ctx(ctx);
-	/* Wait	until instance is returned or timeout occurred */
-	if (s5p_mfc_wait_for_done_ctx(ctx))
-		mfc_err("Err returning instance\n");
-	else
-		ctx->state = MFCINST_FREE;
-	ctx->inst_no = MFC_NO_INSTANCE_SET;
+	if (!s5p_mfc_wait_for_done_ctx(ctx))
+		return;
+
+	/*
+	 * Error handling here is really tricky because if this particular
+	 * operation fails, the hardware might still keep referencing
+	 * some resources we want to free. The sequence below is carefully
+	 * crafted to make sure that the resources are released at any cost,
+	 * including resetting the hardware.
+	 */
+
+	/*
+	 * Even in case of error the instance might have been released
+	 * for us, so bail out if this happened without affecting other
+	 * instances.
+	 */
+	spin_lock_irqsave(&dev->irqlock, flags);
+	inst_released = ctx->inst_no == MFC_NO_INSTANCE_SET;
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	if (inst_released)
+		return;
+
+	mfc_err("Err returning instance, resetting the hardware\n");
+
+	/*
+	 * The following will prevent scheduling new contexts
+	 * and wait until the hardware completes processing current
+	 * run or timeout watchdog kicks in.
+	 */
+	set_bit(0, &dev->hw_error);
+	wait_event(dev->queue, !s5p_mfc_hw_is_locked(dev));
+
+	/*
+	 * If the watchdog wakes us up, we have no instance set anymore
+	 * and we can bail out and let it do the work.
+	 */
+	spin_lock_irqsave(&dev->irqlock, flags);
+	inst_released = ctx->inst_no == MFC_NO_INSTANCE_SET;
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	if (inst_released)
+		return;
+
+	/* Schedule the watchdog for instant execution otherwise. */
+	WARN_ON(s5p_mfc_hw_trylock(dev));
+	schedule_delayed_work(&dev->watchdog_work, 0);
 }
 
 void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 {
 	/* Release hardware instance if needed. */
-	if (ctx->inst_no != MFC_NO_INSTANCE_SET)
-		s5p_mfc_release_mfc_inst(dev, ctx);
+	s5p_mfc_release_mfc_inst(dev, ctx);
 
 	/* Free resources */
 	s5p_mfc_free_mfc_inst(dev, ctx);

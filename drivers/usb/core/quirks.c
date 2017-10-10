@@ -83,6 +83,12 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* Philips PSC805 audio device */
 	{ USB_DEVICE(0x0471, 0x0155), .driver_info = USB_QUIRK_RESET_RESUME },
 
+	/* Plantronic Audio 655 DSP */
+	{ USB_DEVICE(0x047f, 0xc008), .driver_info = USB_QUIRK_RESET_RESUME },
+
+	/* Plantronic Audio 648 USB */
+	{ USB_DEVICE(0x047f, 0xc013), .driver_info = USB_QUIRK_RESET_RESUME },
+
 	/* Artisman Watchdog Dongle */
 	{ USB_DEVICE(0x04b4, 0x0526), .driver_info =
 			USB_QUIRK_CONFIG_INTF_STRINGS },
@@ -231,6 +237,13 @@ void usb_detect_interface_quirks(struct usb_device *udev)
 	quirks = __usb_detect_quirks(udev, usb_interface_quirk_list);
 	if (quirks == 0)
 		return;
+
+	/* crbug.com/706603: Do not reset-resume Logitech C920 and C930. */
+	if (le16_to_cpu(udev->descriptor.idVendor) == 0x046d) {
+		u16 pid = le16_to_cpu(udev->descriptor.idProduct);
+		if (pid == 0x082d || pid == 0x0843)
+			quirks &= ~USB_QUIRK_RESET_RESUME;
+	}
 
 	dev_dbg(&udev->dev, "USB interface quirks for this device: %x\n",
 		quirks);
