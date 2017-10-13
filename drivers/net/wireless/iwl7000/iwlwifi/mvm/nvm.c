@@ -643,7 +643,7 @@ int iwl_mvm_nvm_get_from_fw(struct iwl_mvm *mvm)
 			rsp->regulatory.channel_profile,
 			mvm->nvm_data->valid_tx_ant & mvm->fw->valid_tx_ant,
 			mvm->nvm_data->valid_rx_ant & mvm->fw->valid_rx_ant,
-			rsp->regulatory.lar_enabled && lar_fw_supported);
+			mvm->nvm_data->lar_enabled, false);
 
 	iwl_free_resp(&hcmd);
 	return 0;

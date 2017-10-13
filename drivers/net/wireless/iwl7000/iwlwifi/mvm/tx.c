@@ -561,8 +561,8 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_ADHOC:
 		/*
-		 * Handle legacy hostapd as well, where station will be added
-		 * only just before sending the association response.
+		 * Non-bufferable frames use the broadcast station, thus they
+		 * use the probe queue.
 		 * Also take care of the case where we send a deauth to a
 		 * station that we don't have, or similarly an association
 		 * response (with non-success status) for a station we can't
@@ -570,9 +570,9 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 		 * Also, disassociate frames might happen, particular with
 		 * reason 7 ("Class 3 frame received from nonassociated STA").
 		 */
-		if (ieee80211_is_probe_resp(fc) || ieee80211_is_auth(fc) ||
-		    ieee80211_is_deauth(fc) || ieee80211_is_assoc_resp(fc) ||
-		    ieee80211_is_disassoc(fc))
+		if (ieee80211_is_mgmt(fc) &&
+		    (!ieee80211_is_bufferable_mmpdu(fc) ||
+		     ieee80211_is_deauth(fc) || ieee80211_is_disassoc(fc)))
 			return mvm->probe_queue;
 		if (info->hw_queue == info->control.vif->cab_queue)
 			return info->hw_queue;
@@ -1389,6 +1389,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 	while (!skb_queue_empty(&skbs)) {
 		struct sk_buff *skb = __skb_dequeue(&skbs);
 		struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+		bool flushed = false;
 
 		skb_freed++;
 
@@ -1401,6 +1402,10 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 		case TX_STATUS_SUCCESS:
 		case TX_STATUS_DIRECT_DONE:
 			info->flags |= IEEE80211_TX_STAT_ACK;
+			break;
+		case TX_STATUS_FAIL_FIFO_FLUSHED:
+		case TX_STATUS_FAIL_DRAIN_FLOW:
+			flushed = true;
 			break;
 		case TX_STATUS_FAIL_DEST_PS:
 			/* In DQA, the FW should have stopped the queue and not
@@ -1424,7 +1429,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 		/* Single frame failure in an AMPDU queue => send BAR */
 		if (info->flags & IEEE80211_TX_CTL_AMPDU &&
 		    !(info->flags & IEEE80211_TX_STAT_ACK) &&
-		    !(info->flags & IEEE80211_TX_STAT_TX_FILTERED))
+		    !(info->flags & IEEE80211_TX_STAT_TX_FILTERED) && !flushed)
 			info->flags |= IEEE80211_TX_STAT_AMPDU_NO_BACK;
 		info->flags &= ~IEEE80211_TX_CTL_AMPDU;
 

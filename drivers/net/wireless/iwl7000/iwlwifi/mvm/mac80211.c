@@ -901,12 +901,11 @@ static void iwl_mvm_mac_tx(struct ieee80211_hw *hw,
 	    !test_bit(IWL_MVM_STATUS_ROC_AUX_RUNNING, &mvm->status))
 		goto drop;
 
-	/* treat non-bufferable MMPDUs as broadcast if sta is sleeping */
-	if (unlikely(info->flags & IEEE80211_TX_CTL_NO_PS_BUFFER &&
-		     ieee80211_is_mgmt(hdr->frame_control) &&
-		     !ieee80211_is_deauth(hdr->frame_control) &&
-		     !ieee80211_is_disassoc(hdr->frame_control) &&
-		     !ieee80211_is_action(hdr->frame_control)))
+	/* treat non-bufferable MMPDUs on AP interfaces as broadcast */
+	if ((info->control.vif->type == NL80211_IFTYPE_AP ||
+	     info->control.vif->type == NL80211_IFTYPE_ADHOC) &&
+	    ieee80211_is_mgmt(hdr->frame_control) &&
+	    !ieee80211_is_bufferable_mmpdu(hdr->frame_control))
 		sta = NULL;
 
 	if (sta) {
@@ -1673,7 +1672,9 @@ static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
 	}
 
 #ifdef CPTCFG_IWLMVM_TCM
-	iwl_mvm_tcm_rm_vif(mvm, vif);
+	if (!(vif->type == NL80211_IFTYPE_AP ||
+	      vif->type == NL80211_IFTYPE_ADHOC))
+		iwl_mvm_tcm_rm_vif(mvm, vif);
 #endif
 
 	mutex_lock(&mvm->mutex);
@@ -1750,6 +1751,11 @@ static void iwl_mvm_mc_iface_iterator(void *_data, u8 *mac,
 	struct iwl_mvm_mc_iter_data *data = _data;
 	struct iwl_mvm *mvm = data->mvm;
 	struct iwl_mcast_filter_cmd *cmd = mvm->mcast_filter_cmd;
+	struct iwl_host_cmd hcmd = {
+		.id = MCAST_FILTER_CMD,
+		.flags = CMD_ASYNC,
+		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
+	};
 	int ret, len;
 
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
@@ -1770,7 +1776,10 @@ static void iwl_mvm_mc_iface_iterator(void *_data, u8 *mac,
 	memcpy(cmd->bssid, vif->bss_conf.bssid, ETH_ALEN);
 	len = roundup(sizeof(*cmd) + cmd->count * ETH_ALEN, 4);
 
-	ret = iwl_mvm_send_cmd_pdu(mvm, MCAST_FILTER_CMD, CMD_ASYNC, len, cmd);
+	hcmd.len[0] = len;
+	hcmd.data[0] = cmd;
+
+	ret = iwl_mvm_send_cmd(mvm, &hcmd);
 	if (ret)
 		IWL_ERR(mvm, "mcast filter cmd error. ret=%d\n", ret);
 }
@@ -1847,6 +1856,12 @@ static void iwl_mvm_configure_filter(struct ieee80211_hw *hw,
 
 	if (!cmd)
 		goto out;
+
+	if (changed_flags & FIF_ALLMULTI)
+		cmd->pass_all = !!(*total_flags & FIF_ALLMULTI);
+
+	if (cmd->pass_all)
+		cmd->count = 0;
 
 #ifdef CPTCFG_IWLMVM_VENDOR_CMDS
 	iwl_mvm_active_rx_filters(mvm);
@@ -2247,8 +2262,7 @@ static void iwl_mvm_bss_info_changed_station(struct iwl_mvm *mvm,
 		 * We received a beacon from the associated AP so
 		 * remove the session protection.
 		 */
-		iwl_mvm_remove_time_event(mvm, mvmvif,
-					  &mvmvif->time_event_data);
+		iwl_mvm_stop_session_protection(mvm, vif);
 
 		iwl_mvm_sf_update(mvm, vif, false);
 		WARN_ON(iwl_mvm_enable_beacon_filter(mvm, vif, 0));
@@ -2801,8 +2815,18 @@ static void iwl_mvm_purge_deferred_tx_frames(struct iwl_mvm *mvm,
 	spin_lock_bh(&mvm_sta->lock);
 	for (i = 0; i <= IWL_MAX_TID_COUNT; i++) {
 		tid_data = &mvm_sta->tid_data[i];
-		while ((skb = __skb_dequeue(&tid_data->deferred_tx_frames)))
+
+		while ((skb = __skb_dequeue(&tid_data->deferred_tx_frames))) {
+			struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+
+			/*
+			 * The first deferred frame should've stopped the MAC
+			 * queues, so we should never get a second deferred
+			 * frame for the RA/TID.
+			 */
+			iwl_mvm_start_mac_queues(mvm, BIT(info->hw_queue));
 			ieee80211_free_txskb(mvm->hw, skb);
+		}
 	}
 	spin_unlock_bh(&mvm_sta->lock);
 }
@@ -4154,11 +4178,16 @@ static int iwl_mvm_pre_channel_switch(struct ieee80211_hw *hw,
 
 		/* Schedule the time event to a bit before beacon 1,
 		 * to make sure we're in the new channel when the
-		 * GO/AP arrives.
+		 * GO/AP arrives. In case count <= 1 immediately schedule the
+		 * TE (this might result with some packet loss or connection
+		 * loss).
 		 */
-		apply_time = chsw->device_timestamp +
-			((vif->bss_conf.beacon_int * (chsw->count - 1) -
-			  IWL_MVM_CHANNEL_SWITCH_TIME_CLIENT) * 1024);
+		if (chsw->count <= 1)
+			apply_time = 0;
+		else
+			apply_time = chsw->device_timestamp +
+				((vif->bss_conf.beacon_int * (chsw->count - 1) -
+				  IWL_MVM_CHANNEL_SWITCH_TIME_CLIENT) * 1024);
 
 		if (chsw->block_tx)
 			iwl_mvm_csa_client_absent(mvm, vif);
@@ -4238,6 +4267,43 @@ out_unlock:
 	return ret;
 }
 
+static void iwl_mvm_flush_no_vif(struct iwl_mvm *mvm, u32 queues, bool drop)
+{
+	if (drop) {
+		if (iwl_mvm_has_new_tx_api(mvm))
+			/* TODO new tx api */
+			WARN_ONCE(1,
+				  "Need to implement flush TX queue\n");
+		else
+			iwl_mvm_flush_tx_path(mvm,
+				iwl_mvm_flushable_queues(mvm) & queues,
+				0);
+	} else {
+		if (iwl_mvm_has_new_tx_api(mvm)) {
+			struct ieee80211_sta *sta;
+			int i;
+
+			mutex_lock(&mvm->mutex);
+
+			for (i = 0; i < ARRAY_SIZE(mvm->fw_id_to_mac_id); i++) {
+				sta = rcu_dereference_protected(
+						mvm->fw_id_to_mac_id[i],
+						lockdep_is_held(&mvm->mutex));
+				if (IS_ERR_OR_NULL(sta))
+					continue;
+
+				iwl_mvm_wait_sta_queues_empty(mvm,
+						iwl_mvm_sta_from_mac80211(sta));
+			}
+
+			mutex_unlock(&mvm->mutex);
+		} else {
+			iwl_trans_wait_tx_queues_empty(mvm->trans,
+						       queues);
+		}
+	}
+}
+
 static void iwl_mvm_mac_flush(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif, u32 queues, bool drop)
 {
@@ -4248,7 +4314,12 @@ static void iwl_mvm_mac_flush(struct ieee80211_hw *hw,
 	int i;
 	u32 msk = 0;
 
-	if (!vif || vif->type != NL80211_IFTYPE_STATION)
+	if (!vif) {
+		iwl_mvm_flush_no_vif(mvm, queues, drop);
+		return;
+	}
+
+	if (vif->type != NL80211_IFTYPE_STATION)
 		return;
 
 	/* Make sure we're done with the deferred traffic before flushing */

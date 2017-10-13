@@ -10,6 +10,9 @@
 #include <net/addrconf.h>
 #include <net/ieee80211_radiotap.h>
 
+/* make sure we include iw_handler.h to get wireless_nlevent_flush() */
+#include <net/iw_handler.h>
+
 /* common backward compat code */
 
 #define BACKPORTS_GIT_TRACKED "chromium:" UTS_RELEASE
@@ -1572,10 +1575,19 @@ cfg80211_sta_support_p2p_ps(struct station_parameters *params, bool p2p_go)
 
 #if LINUX_VERSION_IS_LESS(4,5,0)
 void *memdup_user_nul(const void __user *src, size_t len);
+#endif /* LINUX_VERSION_IS_LESS(4,5,0) */
 
+/* this was added in v3.2.79, v3.18.30, v4.1.21, v4.4.6 and 4.5 */
+#if !(LINUX_VERSION_IS_GEQ(4,4,6) || \
+      (LINUX_VERSION_IS_GEQ(4,1,21) && \
+       LINUX_VERSION_IS_LESS(4,2,0)) || \
+      (LINUX_VERSION_IS_GEQ(3,18,30) && \
+       LINUX_VERSION_IS_LESS(3,19,0)) || \
+      (LINUX_VERSION_IS_GEQ(3,2,79) && \
+       LINUX_VERSION_IS_LESS(3,3,0)))
 /* we don't have wext */
 static inline void wireless_nlevent_flush(void) {}
-#endif /* LINUX_VERSION_IS_LESS(4,5,0) */
+#endif
 
 static inline u8*
 cfg80211_scan_req_bssid(struct cfg80211_scan_request *scan_req)
@@ -1865,3 +1877,17 @@ static inline struct net *possible_read_pnet(const possible_net_t *pnet)
 #define possible_write_pnet(pnet, net) write_pnet(pnet, net)
 #define possible_read_pnet(pnet) read_pnet(pnet)
 #endif /* LINUX_VERSION_IS_LESS(4,1,0) */
+
+#if LINUX_VERSION_IS_LESS(4,12,0) &&		\
+	!LINUX_VERSION_IN_RANGE(4,11,9, 4,12,0)
+#define netdev_set_priv_destructor(_dev, _destructor) \
+	(_dev)->destructor = __ ## _destructor
+#define netdev_set_def_destructor(_dev) \
+	(_dev)->destructor = free_netdev
+#else
+#define netdev_set_priv_destructor(_dev, _destructor) \
+	(_dev)->needs_free_netdev = true; \
+	(_dev)->priv_destructor = (_destructor);
+#define netdev_set_def_destructor(_dev) \
+	(_dev)->needs_free_netdev = true;
+#endif
