@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -51,15 +51,15 @@
 #include "mali_kbase_trace_timeline.h"
 #include "mali_kbase_js.h"
 #include "mali_kbase_mem.h"
-#include "mali_kbase_security.h"
 #include "mali_kbase_utility.h"
 #include "mali_kbase_gpu_memory_debugfs.h"
 #include "mali_kbase_mem_profile_debugfs.h"
+#include "mali_kbase_debug_job_fault.h"
 #include "mali_kbase_jd_debugfs.h"
-#include "mali_kbase_cpuprops.h"
 #include "mali_kbase_gpuprops.h"
 #include "mali_kbase_jm.h"
 #include "mali_kbase_vinstr.h"
+#include "mali_kbase_ipa.h"
 #ifdef CONFIG_GPU_TRACEPOINTS
 #include <trace/events/gpu.h>
 #endif
@@ -81,7 +81,7 @@ struct kbase_device *kbase_device_alloc(void);
 */
 
 /*
-* API to acquire device list semaphone and return pointer
+* API to acquire device list semaphore and return pointer
 * to the device list head
 */
 const struct list_head *kbase_dev_list_get(void);
@@ -116,12 +116,32 @@ int kbase_jd_submit(struct kbase_context *kctx,
 int kbase_jd_submit(struct kbase_context *kctx,
 		const struct kbase_uk_job_submit *submit_data);
 #endif
+
+/**
+ * kbase_jd_done_worker - Handle a job completion
+ * @data: a &struct work_struct
+ *
+ * This function requeues the job from the runpool (if it was soft-stopped or
+ * removed from NEXT registers).
+ *
+ * Removes it from the system if it finished/failed/was cancelled.
+ *
+ * Resolves dependencies to add dependent jobs to the context, potentially
+ * starting them if necessary (which may add more references to the context)
+ *
+ * Releases the reference to the context from the no-longer-running job.
+ *
+ * Handles retrying submission outside of IRQ context if it failed from within
+ * IRQ context.
+ */
+void kbase_jd_done_worker(struct work_struct *data);
+
 void kbase_jd_done(struct kbase_jd_atom *katom, int slot_nr, ktime_t *end_timestamp,
 		kbasep_js_atom_done_code done_code);
 void kbase_jd_cancel(struct kbase_device *kbdev, struct kbase_jd_atom *katom);
-void kbase_jd_evict(struct kbase_device *kbdev, struct kbase_jd_atom *katom);
 void kbase_jd_zap_context(struct kbase_context *kctx);
-bool jd_done_nolock(struct kbase_jd_atom *katom);
+bool jd_done_nolock(struct kbase_jd_atom *katom,
+		struct list_head *completed_jobs_ctx);
 void kbase_jd_free_external_resources(struct kbase_jd_atom *katom);
 bool jd_submit_atom(struct kbase_context *kctx,
 			 const struct base_jd_atom_v2 *user_atom,
@@ -129,6 +149,8 @@ bool jd_submit_atom(struct kbase_context *kctx,
 
 void kbase_job_done(struct kbase_device *kbdev, u32 done);
 
+void kbase_gpu_cacheclean(struct kbase_device *kbdev,
+					struct kbase_jd_atom *katom);
 /**
  * kbase_job_slot_ctx_priority_check_locked(): - Check for lower priority atoms
  *                                               and soft stop them
@@ -168,18 +190,26 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom);
 void kbase_finish_soft_job(struct kbase_jd_atom *katom);
 void kbase_cancel_soft_job(struct kbase_jd_atom *katom);
 void kbase_resume_suspended_soft_jobs(struct kbase_device *kbdev);
+void kbasep_add_waiting_soft_job(struct kbase_jd_atom *katom);
 
 bool kbase_replay_process(struct kbase_jd_atom *katom);
 
+enum hrtimer_restart kbasep_soft_event_timeout_worker(struct hrtimer *timer);
+void kbasep_complete_triggered_soft_events(struct kbase_context *kctx, u64 evt);
+int kbasep_read_soft_event_status(
+		struct kbase_context *kctx, u64 evt, unsigned char *status);
+int kbasep_write_soft_event_status(
+		struct kbase_context *kctx, u64 evt, unsigned char new_status);
+
 /* api used internally for register access. Contains validation and tracing */
 void kbase_device_trace_register_access(struct kbase_context *kctx, enum kbase_reg_access_type type, u16 reg_offset, u32 reg_value);
-void kbase_device_trace_buffer_install(struct kbase_context *kctx, u32 *tb, size_t size);
+int kbase_device_trace_buffer_install(
+		struct kbase_context *kctx, u32 *tb, size_t size);
 void kbase_device_trace_buffer_uninstall(struct kbase_context *kctx);
 
 /* api to be ported per OS, only need to do the raw register access */
 void kbase_os_reg_write(struct kbase_device *kbdev, u16 offset, u32 value);
 u32 kbase_os_reg_read(struct kbase_device *kbdev, u16 offset);
-
 
 void kbasep_as_do_poke(struct work_struct *work);
 
@@ -321,6 +351,10 @@ void kbase_disjoint_state_down(struct kbase_device *kbdev);
  * it is reported as a disjoint event
  */
 #define KBASE_DISJOINT_STATE_INTERLEAVED_CONTEXT_COUNT_THRESHOLD 2
+
+#if !defined(UINT64_MAX)
+	#define UINT64_MAX ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
+#endif
 
 #if KBASE_TRACE_ENABLE
 void kbasep_trace_debugfs_init(struct kbase_device *kbdev);
@@ -496,4 +530,18 @@ void kbasep_trace_clear(struct kbase_device *kbdev);
 #endif /* KBASE_TRACE_ENABLE */
 /** PRIVATE - do not use directly. Use KBASE_TRACE_DUMP() instead */
 void kbasep_trace_dump(struct kbase_device *kbdev);
+
+#ifdef CONFIG_MALI_DEBUG
+/**
+ * kbase_set_driver_inactive - Force driver to go inactive
+ * @kbdev:    Device pointer
+ * @inactive: true if driver should go inactive, false otherwise
+ *
+ * Forcing the driver inactive will cause all future IOCTLs to wait until the
+ * driver is made active again. This is intended solely for the use of tests
+ * which require that no jobs are running while the test executes.
+ */
+void kbase_set_driver_inactive(struct kbase_device *kbdev, bool inactive);
+#endif /* CONFIG_MALI_DEBUG */
+
 #endif

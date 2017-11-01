@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -22,7 +22,6 @@
  */
 
 #include <linux/debugfs.h>
-#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/seq_file.h>
 #include <linux/kernel.h>
@@ -146,22 +145,50 @@ static void kbase_device_all_as_term(struct kbase_device *kbdev)
 int kbase_device_init(struct kbase_device * const kbdev)
 {
 	int i, err;
+#ifdef CONFIG_ARM64
+	struct device_node *np = NULL;
+#endif /* CONFIG_ARM64 */
 
 	spin_lock_init(&kbdev->mmu_mask_change);
+#ifdef CONFIG_ARM64
+	kbdev->cci_snoop_enabled = false;
+	np = kbdev->dev->of_node;
+	if (np != NULL) {
+		if (of_property_read_u32(np, "snoop_enable_smc",
+					&kbdev->snoop_enable_smc))
+			kbdev->snoop_enable_smc = 0;
+		if (of_property_read_u32(np, "snoop_disable_smc",
+					&kbdev->snoop_disable_smc))
+			kbdev->snoop_disable_smc = 0;
+		/* Either both or none of the calls should be provided. */
+		if (!((kbdev->snoop_disable_smc == 0
+			&& kbdev->snoop_enable_smc == 0)
+			|| (kbdev->snoop_disable_smc != 0
+			&& kbdev->snoop_enable_smc != 0))) {
+			WARN_ON(1);
+			err = -EINVAL;
+			goto fail;
+		}
+	}
+#endif /* CONFIG_ARM64 */
 	/* Get the list of workarounds for issues on the current HW
 	 * (identified by the GPU_ID register)
 	 */
 	err = kbase_hw_set_issues_mask(kbdev);
 	if (err)
 		goto fail;
+
 	/* Set the list of features available on the current HW
 	 * (identified by the GPU_ID register)
 	 */
 	kbase_hw_set_features_mask(kbdev);
 
-#if defined(CONFIG_ARM64)
+	kbase_gpuprops_set_features(kbdev);
+
+	/* On Linux 4.0+, dma coherency is determined from device tree */
+#if defined(CONFIG_ARM64) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	set_dma_ops(kbdev->dev, &noncoherent_swiotlb_dma_ops);
-#endif /* CONFIG_ARM64 */
+#endif
 
 	/* Workaround a pre-3.13 Linux issue, where dma_mask is NULL when our
 	 * device structure was created by device-tree
@@ -179,15 +206,11 @@ int kbase_device_init(struct kbase_device * const kbdev)
 	if (err)
 		goto dma_set_mask_failed;
 
-	err = kbase_mem_lowlevel_init(kbdev);
-	if (err)
-		goto mem_lowlevel_init_failed;
-
 	kbdev->nr_hw_address_spaces = kbdev->gpu_props.num_address_spaces;
 
 	err = kbase_device_all_as_init(kbdev);
 	if (err)
-		goto term_lowlevel_mem;
+		goto as_init_failed;
 
 	spin_lock_init(&kbdev->hwcnt.lock);
 
@@ -209,7 +232,7 @@ int kbase_device_init(struct kbase_device * const kbdev)
 	for (i = 0; i < FBDUMP_CONTROL_MAX; i++)
 		kbdev->kbase_profiling_controls[i] = 0;
 
-		kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
+	kbase_debug_assert_register_hook(&kbasep_trace_hook_wrapper, kbdev);
 
 	atomic_set(&kbdev->ctx_num, 0);
 
@@ -221,16 +244,22 @@ int kbase_device_init(struct kbase_device * const kbdev)
 
 	kbdev->reset_timeout_ms = DEFAULT_RESET_TIMEOUT_MS;
 
+#ifdef CONFIG_MALI_GPU_MMU_AARCH64
+	kbdev->mmu_mode = kbase_mmu_mode_get_aarch64();
+#else
 	kbdev->mmu_mode = kbase_mmu_mode_get_lpae();
+#endif /* CONFIG_MALI_GPU_MMU_AARCH64 */
+
+#ifdef CONFIG_MALI_DEBUG
+	init_waitqueue_head(&kbdev->driver_inactive_wait);
+#endif /* CONFIG_MALI_DEBUG */
 
 	return 0;
 term_trace:
 	kbasep_trace_term(kbdev);
 term_as:
 	kbase_device_all_as_term(kbdev);
-term_lowlevel_mem:
-	kbase_mem_lowlevel_term(kbdev);
-mem_lowlevel_init_failed:
+as_init_failed:
 dma_set_mask_failed:
 fail:
 	return err;
@@ -249,8 +278,6 @@ void kbase_device_term(struct kbase_device *kbdev)
 	kbasep_trace_term(kbdev);
 
 	kbase_device_all_as_term(kbdev);
-
-	kbase_mem_lowlevel_term(kbdev);
 }
 
 void kbase_device_free(struct kbase_device *kbdev)
@@ -258,12 +285,19 @@ void kbase_device_free(struct kbase_device *kbdev)
 	kfree(kbdev);
 }
 
-void kbase_device_trace_buffer_install(struct kbase_context *kctx, u32 *tb, size_t size)
+int kbase_device_trace_buffer_install(
+		struct kbase_context *kctx, u32 *tb, size_t size)
 {
 	unsigned long flags;
 
 	KBASE_DEBUG_ASSERT(kctx);
 	KBASE_DEBUG_ASSERT(tb);
+
+	/* Interface uses 16-bit value to track last accessed entry. Each entry
+	 * is composed of two 32-bit words.
+	 * This limits the size that can be handled without an overflow. */
+	if (0xFFFF * (2 * sizeof(u32)) < size)
+		return -EINVAL;
 
 	/* set up the header */
 	/* magic number in the first 4 bytes */
@@ -279,6 +313,8 @@ void kbase_device_trace_buffer_install(struct kbase_context *kctx, u32 *tb, size
 	kctx->jctx.tb_wrap_offset = size / 8;
 	kctx->jctx.tb = tb;
 	spin_unlock_irqrestore(&kctx->jctx.tb_lock, flags);
+
+	return 0;
 }
 
 void kbase_device_trace_buffer_uninstall(struct kbase_context *kctx)
@@ -297,31 +333,6 @@ void kbase_device_trace_register_access(struct kbase_context *kctx, enum kbase_r
 	unsigned long flags;
 
 	spin_lock_irqsave(&kctx->jctx.tb_lock, flags);
-
-	/*
-	 * We've seen corruption of the low bits when tb is supposed to be
-	 * NULL.  Collect some data, print and warning, and then fix it up.
-	 *
-	 * Note that delays / barriers below are just throwing things at the
-	 * wall to see what sticks--we don't know that any of them will do
-	 * anything useful.
-	 */
-	if (kctx->jctx.tb && (u32)kctx->jctx.tb < 0x100) {
-		void *tb1, *tb2, *tb3, *tb4;
-
-		tb1 = kctx->jctx.tb;
-		dsb();
-		tb2 = kctx->jctx.tb;
-		udelay(5);
-		tb3 = ((volatile struct kbase_context *)kctx)->jctx.tb;
-		flush_cache_all();
-		tb4 = kctx->jctx.tb;
-
-		WARN(1, "tb failure: %p %p %p %p\n", tb1, tb2, tb3, tb4);
-
-		kctx->jctx.tb = NULL;
-	}
-
 	if (kctx->jctx.tb) {
 		u16 wrap_count;
 		u16 write_offset;

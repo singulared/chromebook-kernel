@@ -49,7 +49,6 @@ static inline dma_addr_t s5p_mfc_mem_cookie(void *a, void *b)
 }
 
 /* MFC definitions */
-#define MFC_MAX_EXTRA_DPB       5
 #define MFC_MAX_BUFFERS		32
 #define MFC_NUM_CONTEXTS	8
 /* Interrupt timeout */
@@ -420,6 +419,7 @@ struct s5p_mfc_h264_enc_params {
 	u32 fmo_run_len[4];
 	u8 aso;
 	u32 aso_slice_order[8];
+	u8 sps_pps_before_idr;
 };
 
 /**

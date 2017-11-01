@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2008-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2008-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -41,8 +41,17 @@
 
 #include "mali_kbase_gpuprops_types.h"
 
-#define BASE_UK_VERSION_MAJOR 9
-#define BASE_UK_VERSION_MINOR 0
+/*
+ * 10.1:
+ * - Do mmap in kernel for SAME_VA memory allocations rather then
+ *   calling back into the kernel as a 2nd stage of the allocation request.
+ *
+ * 10.2:
+ * - Add KBASE_FUNC_MEM_JIT_INIT which allows clients to request a custom VA
+ *   region for use with JIT (ignored on 32-bit platforms)
+ */
+#define BASE_UK_VERSION_MAJOR 10
+#define BASE_UK_VERSION_MINOR 2
 
 struct kbase_uk_mem_alloc {
 	union uk_header header;
@@ -112,10 +121,6 @@ struct kbase_uk_post_term {
 	union uk_header header;
 };
 
-struct kbase_uk_dump_fault_term {
-	union uk_header header;
-};
-
 struct kbase_uk_sync_now {
 	union uk_header header;
 
@@ -137,6 +142,33 @@ struct kbase_uk_hwcnt_setup {
 	u32 mmu_l2_bm;
 	u32 padding;
 	/* OUT */
+};
+
+/**
+ * struct kbase_uk_hwcnt_reader_setup - User/Kernel space data exchange structure
+ * @header:       UK structure header
+ * @buffer_count: requested number of dumping buffers
+ * @jm_bm:        counters selection bitmask (JM)
+ * @shader_bm:    counters selection bitmask (Shader)
+ * @tiler_bm:     counters selection bitmask (Tiler)
+ * @mmu_l2_bm:    counters selection bitmask (MMU_L2)
+ * @fd:           dumping notification file descriptor
+ *
+ * This structure sets up HWC dumper/reader for this context.
+ * Multiple instances can be created for single context.
+ */
+struct kbase_uk_hwcnt_reader_setup {
+	union uk_header header;
+
+	/* IN */
+	u32 buffer_count;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 mmu_l2_bm;
+
+	/* OUT */
+	s32 fd;
 };
 
 struct kbase_uk_hwcnt_dump {
@@ -163,137 +195,6 @@ struct kbase_uk_stream_create {
 	s32 fd;
 	u32 padding;
 };
-
-#ifdef BASE_LEGACY_UK7_SUPPORT
-/**
- * This structure is kept for the backward compatibility reasons.
- * It shall be removed as soon as KBASE_FUNC_CPU_PROPS_REG_DUMP_OBSOLETE
- * (previously KBASE_FUNC_CPU_PROPS_REG_DUMP) ioctl call
- * is removed. Removal of KBASE_FUNC_CPU_PROPS_REG_DUMP is part of having
- * the function for reading cpu properties moved from base to osu.
- */
-#define BASE_CPU_PROPERTY_FLAG_LITTLE_ENDIAN ((u32)0x00000001)
-struct base_cpu_id_props {
-	/**
-	 * CPU ID
-	 */
-	u32 id;
-
-	/**
-	 * CPU Part number
-	 */
-	u16 part;
-	/**
-	 * ASCII code of implementer trademark
-	 */
-	u8 implementer;
-
-	/**
-	 * CPU Variant
-	 */
-	u8 variant;
-	/**
-	 * CPU Architecture
-	 */
-	u8 arch;
-
-	/**
-	 * CPU revision
-	 */
-	u8 rev;
-
-	/**
-	 * Validity of CPU id where 0-invalid and
-	 * 1-valid only if ALL the cpu_id props are valid
-	 */
-	u8 valid;
-
-	u8 padding[1];
-};
-
-/**
- * This structure is kept for the backward compatibility reasons.
- * It shall be removed as soon as KBASE_FUNC_CPU_PROPS_REG_DUMP_OBSOLETE
- * (previously KBASE_FUNC_CPU_PROPS_REG_DUMP) ioctl call
- * is removed. Removal of KBASE_FUNC_CPU_PROPS_REG_DUMP is part of having
- * the function for reading cpu properties moved from base to osu.
- */
-struct base_cpu_props {
-	u32 nr_cores;        /**< Number of CPU cores */
-
-	/**
-	 * CPU page size as a Logarithm to Base 2. The compile-time
-	 * equivalent is @ref OSU_CONFIG_CPU_PAGE_SIZE_LOG2
-	 */
-	u32 cpu_page_size_log2;
-
-	/**
-	 * CPU L1 Data cache line size as a Logarithm to Base 2. The compile-time
-	 * equivalent is @ref OSU_CONFIG_CPU_L1_DCACHE_LINE_SIZE_LOG2.
-	 */
-	u32 cpu_l1_dcache_line_size_log2;
-
-	/**
-	 * CPU L1 Data cache size, in bytes. The compile-time equivalient is
-	 * @ref OSU_CONFIG_CPU_L1_DCACHE_SIZE.
-	 *
-	 * This CPU Property is mainly provided to implement OpenCL's
-	 * clGetDeviceInfo(), which allows the CL_DEVICE_GLOBAL_MEM_CACHE_SIZE
-	 * hint to be queried.
-	 */
-	u32 cpu_l1_dcache_size;
-
-	/**
-	 * CPU Property Flags bitpattern.
-	 *
-	 * This is a combination of bits as specified by the macros prefixed with
-	 * 'BASE_CPU_PROPERTY_FLAG_'.
-	 */
-	u32 cpu_flags;
-
-	/**
-	 * Maximum clock speed in MHz.
-	 * @usecase 'Maximum' CPU Clock Speed information is required by OpenCL's
-	 * clGetDeviceInfo() function for the CL_DEVICE_MAX_CLOCK_FREQUENCY hint.
-	 */
-	u32 max_cpu_clock_speed_mhz;
-
-	/**
-	 * @brief Total memory, in bytes.
-	 *
-	 * This is the theoretical maximum memory available to the CPU. It is
-	 * unlikely that a client will be able to allocate all of this memory for
-	 * their own purposes, but this at least provides an upper bound on the
-	 * memory available to the CPU.
-	 *
-	 * This is required for OpenCL's clGetDeviceInfo() call when
-	 * CL_DEVICE_GLOBAL_MEM_SIZE is requested, for OpenCL CPU devices.
-	 */
-	u64 available_memory_size;
-
-	/**
-	 * CPU ID detailed info
-	 */
-	struct base_cpu_id_props cpu_id;
-
-	u32 padding;
-};
-
-/**
- * This structure is kept for the backward compatibility reasons.
- * It shall be removed as soon as KBASE_FUNC_CPU_PROPS_REG_DUMP_OBSOLETE
- * (previously KBASE_FUNC_CPU_PROPS_REG_DUMP) ioctl call
- * is removed. Removal of KBASE_FUNC_CPU_PROPS_REG_DUMP is part of having
- * the function for reading cpu properties moved from base to osu.
- */
-struct kbase_uk_cpuprops {
-	union uk_header header;
-
-	/* IN */
-	struct base_cpu_props props;
-	/* OUT */
-};
-#endif /* BASE_LEGACY_UK7_SUPPORT */
 
 struct kbase_uk_gpuprops {
 	union uk_header header;
@@ -429,8 +330,8 @@ struct kbase_uk_context_id {
 	int id;
 };
 
-#if (defined(MALI_KTLSTREAM_ENABLED) && MALI_KTLSTREAM_ENABLED) || \
-	defined(CONFIG_MALI_MIPE_ENABLED)
+#if (defined(MALI_MIPE_ENABLED) && MALI_MIPE_ENABLED) || \
+	!defined(MALI_MIPE_ENABLED)
 /**
  * struct kbase_uk_tlstream_acquire - User/Kernel space data exchange structure
  * @header: UK structure header
@@ -461,7 +362,7 @@ struct kbase_uk_tlstream_flush {
 
 #if MALI_UNIT_TEST
 /**
- * struct kbase_uk_tlstream_acquire - User/Kernel space data exchange structure
+ * struct kbase_uk_tlstream_test - User/Kernel space data exchange structure
  * @header:    UK structure header
  * @tpw_count: number of trace point writers in each context
  * @msg_delay: time delay between tracepoints from one writer in milliseconds
@@ -482,7 +383,7 @@ struct kbase_uk_tlstream_test {
 };
 
 /**
- * struct kbase_uk_tlstream_acquire - User/Kernel space data exchange structure
+ * struct kbase_uk_tlstream_stats - User/Kernel space data exchange structure
  * @header:          UK structure header
  * @bytes_collected: number of bytes read by user
  * @bytes_generated: number of bytes generated by tracepoints
@@ -498,7 +399,53 @@ struct kbase_uk_tlstream_stats {
 	u32 bytes_generated;
 };
 #endif /* MALI_UNIT_TEST */
-#endif /* MALI_KTLSTREAM_ENABLED */
+#endif /* MALI_MIPE_ENABLED */
+
+/**
+ * struct struct kbase_uk_prfcnt_value for the KBASE_FUNC_SET_PRFCNT_VALUES ioctl
+ * @header:          UK structure header
+ * @data:            Counter samples for the dummy model
+ * @size:............Size of the counter sample data
+ */
+struct kbase_uk_prfcnt_values {
+	union uk_header header;
+	/* IN */
+	u32 *data;
+	u32 size;
+};
+
+/**
+ * struct kbase_uk_soft_event_update - User/Kernel space data exchange structure
+ * @header:     UK structure header
+ * @evt:        the GPU address containing the event
+ * @new_status: the new event status, must be either BASE_JD_SOFT_EVENT_SET or
+ *              BASE_JD_SOFT_EVENT_RESET
+ * @flags:      reserved for future uses, must be set to 0
+ *
+ * This structure is used to update the status of a software event. If the
+ * event's status is set to BASE_JD_SOFT_EVENT_SET, any job currently waiting
+ * on this event will complete.
+ */
+struct kbase_uk_soft_event_update {
+	union uk_header header;
+	/* IN */
+	u64 evt;
+	u32 new_status;
+	u32 flags;
+};
+
+/**
+ * struct kbase_uk_mem_jit_init - User/Kernel space data exchange structure
+ * @header:     UK structure header
+ * @va_pages:   Number of virtual pages required for JIT
+ *
+ * This structure is used when requesting initialization of JIT.
+ */
+struct kbase_uk_mem_jit_init {
+	union uk_header header;
+	/* IN */
+	u64 va_pages;
+};
 
 enum kbase_uk_function_id {
 	KBASE_FUNC_MEM_ALLOC = (UK_FUNC_ID + 0),
@@ -521,9 +468,6 @@ enum kbase_uk_function_id {
 	KBASE_FUNC_HWCNT_DUMP = (UK_FUNC_ID + 11),
 	KBASE_FUNC_HWCNT_CLEAR = (UK_FUNC_ID + 12),
 
-#ifdef BASE_LEGACY_UK7_SUPPORT
-	KBASE_FUNC_CPU_PROPS_REG_DUMP_OBSOLETE = (UK_FUNC_ID + 13),
-#endif /* BASE_LEGACY_UK7_SUPPORT */
 	KBASE_FUNC_GPU_PROPS_REG_DUMP = (UK_FUNC_ID + 14),
 
 	KBASE_FUNC_FIND_CPU_OFFSET = (UK_FUNC_ID + 15),
@@ -552,19 +496,27 @@ enum kbase_uk_function_id {
 	KBASE_FUNC_JOB_SUBMIT = (UK_FUNC_ID + 28),
 	KBASE_FUNC_DISJOINT_QUERY = (UK_FUNC_ID + 29),
 
-	KBASE_FUNC_DUMP_FAULT_TERM = (UK_FUNC_ID + 30),
-
 	KBASE_FUNC_GET_CONTEXT_ID = (UK_FUNC_ID + 31),
 
-#if (defined(MALI_KTLSTREAM_ENABLED) && MALI_KTLSTREAM_ENABLED) || \
-	defined(CONFIG_MALI_MIPE_ENABLED)
+#if (defined(MALI_MIPE_ENABLED) && MALI_MIPE_ENABLED) || \
+	!defined(MALI_MIPE_ENABLED)
 	KBASE_FUNC_TLSTREAM_ACQUIRE = (UK_FUNC_ID + 32),
 #if MALI_UNIT_TEST
 	KBASE_FUNC_TLSTREAM_TEST = (UK_FUNC_ID + 33),
 	KBASE_FUNC_TLSTREAM_STATS = (UK_FUNC_ID + 34),
 #endif /* MALI_UNIT_TEST */
 	KBASE_FUNC_TLSTREAM_FLUSH = (UK_FUNC_ID + 35),
-#endif /* MALI_KTLSTREAM_ENABLED */
+#endif /* MALI_MIPE_ENABLED */
+
+	KBASE_FUNC_HWCNT_READER_SETUP = (UK_FUNC_ID + 36),
+
+#ifdef SUPPORT_MALI_NO_MALI
+	KBASE_FUNC_SET_PRFCNT_VALUES = (UK_FUNC_ID + 37),
+#endif
+
+	KBASE_FUNC_SOFT_EVENT_UPDATE = (UK_FUNC_ID + 38),
+
+	KBASE_FUNC_MEM_JIT_INIT = (UK_FUNC_ID + 39),
 
 	KBASE_FUNC_MAX
 };

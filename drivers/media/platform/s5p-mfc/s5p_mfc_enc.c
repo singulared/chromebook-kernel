@@ -276,6 +276,14 @@ static struct mfc_control controls[] = {
 		.menu_skip_mask = 0,
 	},
 	{
+		.id = V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME,
+		.type = V4L2_CTRL_TYPE_BUTTON,
+		.minimum = 0,
+		.maximum = 0,
+		.step = 0,
+		.default_value = 0,
+	},
+	{
 		.id = V4L2_CID_MPEG_VIDEO_VBV_SIZE,
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
@@ -449,6 +457,13 @@ static struct mfc_control controls[] = {
 		.maximum = 51,
 		.step = 1,
 		.default_value = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR,
+		.minimum = 0,
+		.maximum = 1,
+		.step = 1,
+		.default_value = 0,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP,
@@ -753,7 +768,7 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		break;
 	/* Context is to free instance ID */
 	case MFCINST_RETURN_INST:
-		return true;
+		return ctx->inst_no != MFC_NO_INSTANCE_SET;
 	default:
 		break;
 	}
@@ -793,14 +808,14 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 	assert_spin_locked(&dev->irqlock);
 
 	if (p->seq_hdr_mode == V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE) {
-		if (!list_empty(&ctx->dst_queue)) {
+		int strm_size = s5p_mfc_hw_call(dev->mfc_ops,
+						get_enc_strm_size, dev);
+		if (strm_size > 0 && !list_empty(&ctx->dst_queue)) {
 			dst_mb = list_entry(ctx->dst_queue.next,
 					struct s5p_mfc_buf, list);
 			list_del(&dst_mb->list);
 			ctx->dst_queue_cnt--;
-			vb2_set_plane_payload(dst_mb->b, 0,
-				s5p_mfc_hw_call(dev->mfc_ops, get_enc_strm_size,
-						dev));
+			vb2_set_plane_payload(dst_mb->b, 0, strm_size);
 			vb2_buffer_done(dst_mb->b, VB2_BUF_STATE_DONE);
 		}
 	}
@@ -1454,6 +1469,12 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 			(1 << MFC_ENC_FRAME_INSERTION);
 		p->codec.runtime.force_frame_type = ctrl->val;
 		break;
+	case V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME:
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_FRAME_INSERTION);
+		p->codec.runtime.force_frame_type =
+			V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME;
+		break;
 	case V4L2_CID_MPEG_VIDEO_VBV_SIZE:
 		p->vbv_size = ctrl->val;
 		break;
@@ -1548,6 +1569,9 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP:
 		p->codec.h264.rc_b_frame_qp = ctrl->val;
+		break;
+	case V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR:
+		p->codec.h264.sps_pps_before_idr = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_MPEG4_I_FRAME_QP:
 	case V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP:
@@ -1774,23 +1798,37 @@ static int vidioc_s_crop(struct file *file, void *priv,
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
 
 	if (a->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		int left, right, top, bottom;
-		left = round_down(a->c.left, 16);
-		right = ctx->img_width - (left + a->c.width);
-		top = round_down(a->c.top, 16);
-		bottom = ctx->img_height - (top + a->c.height);
-		if (left > ctx->img_width)
-			left = ctx->img_width;
-		if (right < 0)
-			right = 0;
-		if (top > ctx->img_height)
-			top = ctx->img_height;
-		if (bottom < 0)
-			bottom = 0;
-		p->crop_left_offset = left;
-		p->crop_right_offset = right;
-		p->crop_top_offset = top;
-		p->crop_bottom_offset = bottom;
+		int margin_l, margin_r, margin_t, margin_b;
+
+		/*
+		 * Make sure that left and top are inside image bounds
+		 * and round them down to full macroblocks as required
+		 * by hardware.
+		 */
+		margin_l = a->c.left;
+		margin_l = clamp(margin_l, 0, ctx->img_width);
+		margin_l = round_down(margin_l, 16);
+
+		margin_t = a->c.top;
+		margin_t = clamp(margin_t, 0, ctx->img_height);
+		margin_t = round_down(margin_t, 16);
+
+		/*
+		 * Find the original size of right/bottom margin based
+		 * on original value of left/top. Then adjust it to stay
+		 * between left/top margin and right/bottom image edges.
+		 */
+		margin_r = ctx->img_width - (a->c.left + a->c.width);
+		margin_r = clamp(margin_r, 0, ctx->img_width - margin_l);
+
+		margin_b = ctx->img_height - (a->c.top + a->c.height);
+		margin_b = round_down(margin_b, 2);
+		margin_b = clamp(margin_b, 0, ctx->img_height - margin_t);
+
+		p->crop_left_offset = margin_l;
+		p->crop_right_offset = margin_r;
+		p->crop_top_offset = margin_t;
+		p->crop_bottom_offset = margin_b;
 	} else {
 		mfc_err("Setting crop is only possible for the output queue\n");
 		return -EINVAL;
@@ -2143,6 +2181,22 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 		runtime_params->params_changed = 0;
 		/* force_frame_type needs to revert to 0 after being sent. */
 		if (runtime_params->force_frame_type != 0) {
+			/*
+			 * If force_frame_type was set to != 0 from
+			 * V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME's handler, the
+			 * value of V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE
+			 * wasn't changed. If we were to call v4l2_ctrl_s_ctrl
+			 * for V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE with
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED, it
+			 * could have been ignored, as the value could have
+			 * already been DISABLED. Explicitly set it to
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME first,
+			 * in order for the change back to DISABLED not to be
+			 * ignored.
+			 */
+			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
+				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
+				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME);
 			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
 				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
 				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED);

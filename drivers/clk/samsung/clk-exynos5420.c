@@ -682,7 +682,8 @@ struct samsung_mux_clock exynos542x_mux_clks[] __initdata = {
 							SRC_TOP11, 28, 1),
 	MUX(mout_user_aclk333, "mout_user_aclk333", mout_user_aclk333_p,
 							SRC_TOP4, 28, 1),
-	MUX_A(none, "mout_aclk166", mout_group1_p, SRC_TOP1, 24, 2, "aclk166"),
+	MUX_A(none, "mout_aclk166", mout_group1_p, SRC_TOP1, 24, 2,
+							"aclk166_m"),
 	MUX(none, "mout_sw_aclk166", mout_sw_aclk166_p, SRC_TOP11, 24, 1),
 	MUX(none, "mout_user_aclk166", mout_user_aclk166_p, SRC_TOP4, 24, 1),
 	MUX(none, "mout_sw_aclk266", mout_sw_aclk266_p, SRC_TOP11, 20, 1),
@@ -858,7 +859,7 @@ struct samsung_div_clock exynos542x_div_clks[] __initdata = {
 	/* Psgen */
 	DIV(none, "dout_gen_blk", "mout_user_aclk266", DIV2_RATIO0, 8, 1),
 	/* Jpeg */
-	DIV(none, "dout_jpg_blk", "aclk166", DIV2_RATIO0, 20, 1),
+	DIV(none, "dout_jpg_blk", "mout_user_aclk166", DIV2_RATIO0, 20, 1),
 	/* isp */
 	DIV(none, "dout_pwm_isp", "mout_pwm_isp", SCLK_DIV_ISP1, 28, 4),
 	DIV(none, "dout_uart_isp", "mout_uart_isp", SCLK_DIV_ISP1, 24, 4),

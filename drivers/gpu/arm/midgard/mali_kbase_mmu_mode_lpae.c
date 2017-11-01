@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -68,29 +68,43 @@ static inline void page_table_entry_set(u64 *pte, u64 phy)
 #endif
 }
 
+static void mmu_get_as_setup(struct kbase_context *kctx,
+		struct kbase_mmu_setup * const setup)
+{
+	/* Set up the required caching policies at the correct indices
+	 * in the memattr register. */
+	setup->memattr =
+		(AS_MEMATTR_LPAE_IMPL_DEF_CACHE_POLICY <<
+		(AS_MEMATTR_INDEX_IMPL_DEF_CACHE_POLICY * 8)) |
+		(AS_MEMATTR_LPAE_FORCE_TO_CACHE_ALL    <<
+		(AS_MEMATTR_INDEX_FORCE_TO_CACHE_ALL * 8))    |
+		(AS_MEMATTR_LPAE_WRITE_ALLOC           <<
+		(AS_MEMATTR_INDEX_WRITE_ALLOC * 8))           |
+		(AS_MEMATTR_LPAE_OUTER_IMPL_DEF        <<
+		(AS_MEMATTR_INDEX_OUTER_IMPL_DEF * 8))        |
+		(AS_MEMATTR_LPAE_OUTER_WA              <<
+		(AS_MEMATTR_INDEX_OUTER_WA * 8))              |
+		0; /* The other indices are unused for now */
+
+	setup->transtab = ((u64)kctx->pgd &
+		((0xFFFFFFFFULL << 32) | AS_TRANSTAB_LPAE_ADDR_SPACE_MASK)) |
+		AS_TRANSTAB_LPAE_ADRMODE_TABLE |
+		AS_TRANSTAB_LPAE_READ_INNER;
+
+#ifdef CONFIG_MALI_GPU_MMU_AARCH64
+	setup->transcfg = AS_TRANSCFG_ADRMODE_LEGACY;
+#else
+	setup->transcfg = 0;
+#endif
+}
+
 static void mmu_update(struct kbase_context *kctx)
 {
 	struct kbase_device * const kbdev = kctx->kbdev;
 	struct kbase_as * const as = &kbdev->as[kctx->as_nr];
 	struct kbase_mmu_setup * const current_setup = &as->current_setup;
 
-	/* Set up the required caching policies at the correct indices
-	 * in the memattr register. */
-	current_setup->memattr =
-		(AS_MEMATTR_LPAE_IMPL_DEF_CACHE_POLICY <<
-		(AS_MEMATTR_INDEX_IMPL_DEF_CACHE_POLICY * 8)) |
-		(AS_MEMATTR_LPAE_FORCE_TO_CACHE_ALL    <<
-		(AS_MEMATTR_INDEX_FORCE_TO_CACHE_ALL * 8)) |
-		(AS_MEMATTR_LPAE_WRITE_ALLOC           <<
-		(AS_MEMATTR_INDEX_WRITE_ALLOC * 8)) |
-		0; /* The other indices are unused for now */
-
-	current_setup->transtab = (u64)kctx->pgd &
-		((0xFFFFFFFFULL << 32) | AS_TRANSTAB_LPAE_ADDR_SPACE_MASK);
-
-	current_setup->transtab |= AS_TRANSTAB_LPAE_ADRMODE_TABLE;
-	current_setup->transtab |= AS_TRANSTAB_LPAE_READ_INNER;
-
+	mmu_get_as_setup(kctx, current_setup);
 
 	/* Apply the address space setting */
 	kbase_mmu_hw_configure(kbdev, as, kctx);
@@ -103,6 +117,9 @@ static void mmu_disable_as(struct kbase_device *kbdev, int as_nr)
 
 	current_setup->transtab = AS_TRANSTAB_LPAE_ADRMODE_UNMAPPED;
 
+#ifdef CONFIG_MALI_GPU_MMU_AARCH64
+	current_setup->transcfg = AS_TRANSCFG_ADRMODE_LEGACY;
+#endif
 
 	/* Apply the address space setting */
 	kbase_mmu_hw_configure(kbdev, as, NULL);
@@ -173,6 +190,7 @@ static void entry_invalidate(u64 *entry)
 
 static struct kbase_mmu_mode const lpae_mode = {
 	.update = mmu_update,
+	.get_as_setup = mmu_get_as_setup,
 	.disable_as = mmu_disable_as,
 	.pte_to_phy_addr = pte_to_phy_addr,
 	.ate_is_valid = ate_is_valid,
