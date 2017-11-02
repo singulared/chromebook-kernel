@@ -120,16 +120,15 @@ struct dentry {
 	void *d_fsdata;			/* fs-specific data */
 
 	struct list_head d_lru;		/* LRU list */
-	struct list_head d_child;	/* child of parent list */
-	struct list_head d_subdirs;	/* our children */
-
 	/*
-	 * d_alias and d_rcu can share memory
+	 * d_child and d_rcu can share memory
 	 */
 	union {
-		struct hlist_node d_alias;	/* inode alias list */
+		struct list_head d_child;	/* child of parent list */
 	 	struct rcu_head d_rcu;
 	} d_u;
+	struct list_head d_subdirs;	/* our children */
+	struct hlist_node d_alias;	/* inode alias list */
 };
 
 /*
