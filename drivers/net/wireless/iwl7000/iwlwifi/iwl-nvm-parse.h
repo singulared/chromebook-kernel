@@ -5,7 +5,8 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2008 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2008 - 2015 Intel Corporation. All rights reserved.
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,12 +26,13 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,12 +76,25 @@
  * later with iwl_free_nvm_data().
  */
 struct iwl_nvm_data *
-iwl_parse_nvm_data(struct device *dev, const struct iwl_cfg *cfg,
+iwl_parse_nvm_data(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 		   const __le16 *nvm_hw, const __le16 *nvm_sw,
 		   const __le16 *nvm_calib, const __le16 *regulatory,
 		   const __le16 *mac_override, const __le16 *phy_sku,
-		   u8 tx_chains, u8 rx_chains, bool lar_fw_supported,
-		   u32 mac_addr0, u32 mac_addr1, u32 hw_id);
+		   u8 tx_chains, u8 rx_chains, bool lar_fw_supported);
+
+/**
+ * iwl_set_hw_address_from_csr - sets HW address for 9000 devices and on
+ */
+void iwl_set_hw_address_from_csr(struct iwl_trans *trans,
+				 struct iwl_nvm_data *data);
+
+/**
+ * iwl_init_sbands - parse and set all channel profiles
+ */
+void iwl_init_sbands(struct device *dev, const struct iwl_cfg *cfg,
+		     struct iwl_nvm_data *data, const __le16 *nvm_ch_flags,
+		     u8 tx_chains, u8 rx_chains, bool lar_supported,
+		     bool no_wide_in_5ghz);
 
 /**
  * iwl_parse_mcc_info - parse MCC (mobile country code) info coming from FW
@@ -93,5 +108,22 @@ iwl_parse_nvm_data(struct device *dev, const struct iwl_cfg *cfg,
 struct ieee80211_regdomain *
 iwl_parse_nvm_mcc_info(struct device *dev, const struct iwl_cfg *cfg,
 		       int num_of_ch, __le32 *channels, u16 fw_mcc);
+
+#ifdef CONFIG_ACPI
+/**
+ * iwl_get_bios_mcc - read MCC from BIOS, if available
+ *
+ * @dev: the struct device
+ * @mcc: output buffer (3 bytes) that will get the MCC
+ *
+ * This function tries to read the current MCC from ACPI if available.
+ */
+int iwl_get_bios_mcc(struct device *dev, char *mcc);
+#else
+static inline int iwl_get_bios_mcc(struct device *dev, char *mcc)
+{
+	return -ENOENT;
+}
+#endif
 
 #endif /* __iwl_nvm_parse_h__ */

@@ -12,16 +12,13 @@
 #include <drm/drmP.h>
 #include <drm/drm_atomic.h>
 
-#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
+#if defined(CONFIG_DRM_DMA_SYNC)
 #include <linux/dma-buf.h>
-#endif
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-#include <linux/kds.h>
 #endif
 
 #include <drm/exynos_drm.h>
 #include "exynos_drm_drv.h"
-#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
+#if defined(CONFIG_DRM_DMA_SYNC)
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
 #endif
@@ -150,15 +147,6 @@ void exynos_plane_helper_finish_update(struct drm_plane *plane,
 
 	old_fb = exynos_plane->fb;
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	if (exynos_plane->kds) {
-		kds_resource_set_release(&exynos_plane->kds);
-		exynos_plane->kds = NULL;
-	}
-
-	if (exynos_plane->kds_cb.user_cb)
-		kds_callback_term(&exynos_plane->kds_cb);
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 	if (update_fb || exynos_plane->pending_fence) {
 		drm_fence_signal_and_put(&exynos_plane->fence);
@@ -349,16 +337,12 @@ static int do_update_plane(struct drm_plane *plane,
 		uint32_t src_x, uint32_t src_y, uint32_t src_w, uint32_t src_h)
 {
 	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
-#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS) || defined(CONFIG_DRM_DMA_SYNC)
+#if defined(CONFIG_DRM_DMA_SYNC)
 	int ret;
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
 	struct exynos_drm_gem_obj *exynos_gem_obj;
 	struct dma_buf *buf;
 	struct sync_callback_cookie *cookie;
-#endif
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct kds_resource *res_list;
-	unsigned long shared = 0UL;
 #endif
 
 	/* Copy the plane parameters so we can restore it later */
@@ -386,46 +370,7 @@ static int do_update_plane(struct drm_plane *plane,
 
 	cookie->fb = fb;
 
-#if defined(CONFIG_DMA_SHARED_BUFFER_USES_KDS)
-	BUG_ON(exynos_plane->kds);
-
-	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);
-	if (!exynos_gem_obj->base.dma_buf) {
-		exynos_plane_helper_commit_cb(cookie, NULL);
-		return 0;
-	}
-
-	ret = kds_callback_init(&exynos_plane->kds_cb, 1,
-			exynos_plane_helper_commit_cb);
-	if (ret) {
-		DRM_ERROR("Failed to initialize kds callback ret=%d\n", ret);
-		goto err;
-	}
-
-	buf = exynos_gem_obj->base.dma_buf;
-	res_list = get_dma_buf_kds_resource(buf);
-
-	exynos_drm_fb_attach_dma_buf(exynos_fb, buf);
-
-	/* Waiting for the KDS resource*/
-	trace_exynos_page_flip_state(exynos_drm_pipe_from_crtc(crtc),
-			DRM_BASE_ID(fb), "wait_kds");
-
-	ret = kds_async_waitall(&exynos_plane->kds, &exynos_plane->kds_cb,
-			cookie, NULL, 1, &shared, &res_list);
-	if (ret) {
-		DRM_ERROR("Failed kds waitall ret=%d\n", ret);
-		goto err;
-	}
-
-	return 0;
-
-err:
-	drm_framebuffer_unreference(fb);
-	kfree(cookie);
-
-	return ret;
-#elif defined(CONFIG_DRM_DMA_SYNC)
+#if defined(CONFIG_DRM_DMA_SYNC)
 	BUG_ON(exynos_plane->pending_fence);
 
 	exynos_gem_obj = exynos_drm_fb_obj(exynos_fb, 0);

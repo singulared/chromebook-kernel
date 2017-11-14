@@ -699,6 +699,7 @@ struct mwifiex_adapter {
 };
 
 int mwifiex_init_lock_list(struct mwifiex_adapter *adapter);
+void mwifiex_free_lock_list(struct mwifiex_adapter *adapter);
 
 void mwifiex_set_trans_start(struct net_device *dev);
 

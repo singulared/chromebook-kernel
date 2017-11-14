@@ -21,7 +21,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
@@ -32,24 +32,10 @@
 #include "iwl-devtrace.h"
 #include "iwl-trans.h"
 
-static inline void iwl_write8(struct iwl_trans *trans, u32 ofs, u8 val)
-{
-	trace_iwlwifi_dev_iowrite8(trans->dev, ofs, val);
-	iwl_trans_write8(trans, ofs, val);
-}
-
-static inline void iwl_write32(struct iwl_trans *trans, u32 ofs, u32 val)
-{
-	trace_iwlwifi_dev_iowrite32(trans->dev, ofs, val);
-	iwl_trans_write32(trans, ofs, val);
-}
-
-static inline u32 iwl_read32(struct iwl_trans *trans, u32 ofs)
-{
-	u32 val = iwl_trans_read32(trans, ofs);
-	trace_iwlwifi_dev_ioread32(trans->dev, ofs, val);
-	return val;
-}
+void iwl_write8(struct iwl_trans *trans, u32 ofs, u8 val);
+void iwl_write32(struct iwl_trans *trans, u32 ofs, u32 val);
+void iwl_write64(struct iwl_trans *trans, u64 ofs, u64 val);
+u32 iwl_read32(struct iwl_trans *trans, u32 ofs);
 
 static inline void iwl_set_bit(struct iwl_trans *trans, u32 reg, u32 mask)
 {
@@ -68,11 +54,13 @@ int iwl_poll_direct_bit(struct iwl_trans *trans, u32 addr, u32 mask,
 
 u32 iwl_read_direct32(struct iwl_trans *trans, u32 reg);
 void iwl_write_direct32(struct iwl_trans *trans, u32 reg, u32 value);
+void iwl_write_direct64(struct iwl_trans *trans, u64 reg, u64 value);
 
 
-u32 __iwl_read_prph(struct iwl_trans *trans, u32 ofs);
+u32 iwl_read_prph_no_grab(struct iwl_trans *trans, u32 ofs);
 u32 iwl_read_prph(struct iwl_trans *trans, u32 ofs);
-void __iwl_write_prph(struct iwl_trans *trans, u32 ofs, u32 val);
+void iwl_write_prph_no_grab(struct iwl_trans *trans, u32 ofs, u32 val);
+void iwl_write_prph64_no_grab(struct iwl_trans *trans, u64 ofs, u64 val);
 void iwl_write_prph(struct iwl_trans *trans, u32 ofs, u32 val);
 int iwl_poll_prph_bit(struct iwl_trans *trans, u32 addr,
 		      u32 bits, u32 mask, int timeout);

@@ -59,8 +59,6 @@ struct exynos_drm_gem_buf {
  *	continuous memory region allocated by user request
  *	or at framebuffer creation.
  * @vma: a pointer to vm_area.
- * @resource_set: the KDS resource set held by the currently outstanding CPU
- *	acquire (if any).
  * @flags: indicate memory type to allocated buffer and cache attribute.
  *
  * P.S. this object would be transfered to user as kms_bo.handle so
@@ -70,14 +68,6 @@ struct exynos_drm_gem_obj {
 	struct drm_gem_object		base;
 	struct exynos_drm_gem_buf	*buffer;
 	struct vm_area_struct		*vma;
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-	struct kds_resource_set         *resource_set;
-#endif
-#ifdef CONFIG_DRM_DMA_SYNC
-	struct fence			*acquire_fence;
-	atomic_t			acquire_shared_count;
-	bool				acquire_exclusive;
-#endif
 	unsigned int			flags;
 };
 
@@ -150,28 +140,6 @@ int exynos_drm_gem_userptr_ioctl(struct drm_device *dev, void *data,
 /* get buffer information to memory region allocated by gem. */
 int exynos_drm_gem_get_ioctl(struct drm_device *dev, void *data,
 				      struct drm_file *file_priv);
-/*
- * acquire gem object for CPU access.
- */
-int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void* data,
-			       struct drm_file *file_priv);
-/*
- * release gem object after CPU access.
- */
-int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
-			       struct drm_file *file_priv);
-
-/*
- * acquire gem object for CPU access.
- */
-int exynos_drm_gem_cpu_acquire_ioctl(struct drm_device *dev, void* data,
-			       struct drm_file *file_priv);
-/*
- * release gem object after CPU access.
- */
-int exynos_drm_gem_cpu_release_ioctl(struct drm_device *dev, void* data,
-			       struct drm_file *file_priv);
-
 /* free gem object. */
 void exynos_drm_gem_free_object(struct drm_gem_object *gem_obj);
 

@@ -231,9 +231,6 @@ ieee80211_get_max_required_bw(struct ieee80211_sub_if_data *sdata)
 		    !(sta->sdata->bss && sta->sdata->bss == sdata->bss))
 			continue;
 
-		if (!sta->uploaded)
-			continue;
-
 		max_bw = max(max_bw, ieee80211_get_sta_bw(&sta->sta));
 	}
 	rcu_read_unlock();
@@ -274,12 +271,17 @@ ieee80211_get_chanctx_max_required_bw(struct ieee80211_local *local,
 				    ieee80211_get_max_required_bw(sdata));
 			break;
 		case NL80211_IFTYPE_P2P_DEVICE:
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
+		case NL80211_IFTYPE_NAN:
+			/* keep code in case of fall-through (spatch generated) */
+#endif
 			continue;
 		case NL80211_IFTYPE_ADHOC:
 		case NL80211_IFTYPE_WDS:
 		case NL80211_IFTYPE_MESH_POINT:
 #if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
 		case NL80211_IFTYPE_OCB:
+			/* keep code in case of fall-through (spatch generated) */
 #endif
 			width = vif->bss_conf.chandef.width;
 			break;
@@ -317,11 +319,8 @@ void ieee80211_recalc_chanctx_min_def(struct ieee80211_local *local,
 	lockdep_assert_held(&local->chanctx_mtx);
 
 	/* don't optimize 5MHz, 10MHz, and radar_enabled confs */
-	if (
-#if CFG80211_VERSION >= KERNEL_VERSION(3,11,0)
-	    ctx->conf.def.width == NL80211_CHAN_WIDTH_5 ||
+	if (ctx->conf.def.width == NL80211_CHAN_WIDTH_5 ||
 	    ctx->conf.def.width == NL80211_CHAN_WIDTH_10 ||
-#endif
 	    ctx->conf.radar_enabled) {
 		ctx->conf.min_def = ctx->conf.def;
 		return;
@@ -348,8 +347,10 @@ static void ieee80211_change_chanctx(struct ieee80211_local *local,
 				     struct ieee80211_chanctx *ctx,
 				     const struct cfg80211_chan_def *chandef)
 {
-	if (cfg80211_chandef_identical(&ctx->conf.def, chandef))
+	if (cfg80211_chandef_identical(&ctx->conf.def, chandef)) {
+		ieee80211_recalc_chanctx_min_def(local, ctx);
 		return;
+	}
 
 	WARN_ON(!cfg80211_chandef_compatible(&ctx->conf.def, chandef));
 
@@ -649,6 +650,9 @@ static int ieee80211_assign_vif_chanctx(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_chanctx *curr_ctx = NULL;
 	int ret = 0;
 
+	if (WARN_ON(ieee80211_viftype_nan(sdata->vif.type)))
+		return -ENOTSUPP;
+
 	conf = rcu_dereference_protected(sdata->vif.chanctx_conf,
 					 lockdep_is_held(&local->chanctx_mtx));
 
@@ -721,6 +725,10 @@ void ieee80211_recalc_smps_chanctx(struct ieee80211_local *local,
 
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_P2P_DEVICE:
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
+		case NL80211_IFTYPE_NAN:
+			/* keep code in case of fall-through (spatch generated) */
+#endif
 			continue;
 		case NL80211_IFTYPE_STATION:
 			if (!sdata->u.mgd.associated)
@@ -734,6 +742,7 @@ void ieee80211_recalc_smps_chanctx(struct ieee80211_local *local,
 		case NL80211_IFTYPE_MESH_POINT:
 #if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
 		case NL80211_IFTYPE_OCB:
+			/* keep code in case of fall-through (spatch generated) */
 #endif
 			break;
 		default:
@@ -972,11 +981,10 @@ ieee80211_vif_chanctx_reservation_complete(struct ieee80211_sub_if_data *sdata)
 	case NL80211_IFTYPE_MESH_POINT:
 #if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
 	case NL80211_IFTYPE_OCB:
+		/* keep code in case of fall-through (spatch generated) */
 #endif
-#if CFG80211_VERSION >= KERNEL_VERSION(3,12,0)
 		ieee80211_queue_work(&sdata->local->hw,
 				     &sdata->csa_finalize_work);
-#endif
 		break;
 	case NL80211_IFTYPE_STATION:
 		ieee80211_queue_work(&sdata->local->hw,
@@ -989,6 +997,10 @@ ieee80211_vif_chanctx_reservation_complete(struct ieee80211_sub_if_data *sdata)
 	case NL80211_IFTYPE_P2P_CLIENT:
 	case NL80211_IFTYPE_P2P_GO:
 	case NL80211_IFTYPE_P2P_DEVICE:
+#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
+	case NL80211_IFTYPE_NAN:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 	case NUM_NL80211_IFTYPES:
 		WARN_ON(1);
 		break;
@@ -1273,7 +1285,7 @@ static int ieee80211_vif_use_reserved_switch(struct ieee80211_local *local)
 	struct ieee80211_sub_if_data *sdata, *sdata_tmp;
 	struct ieee80211_chanctx *ctx, *ctx_tmp, *old_ctx;
 	struct ieee80211_chanctx *new_ctx = NULL;
-	int i, err, n_assigned, n_reserved, n_ready;
+	int err, n_assigned, n_reserved, n_ready;
 	int n_ctx = 0, n_vifs_switch = 0, n_vifs_assign = 0, n_vifs_ctxless = 0;
 
 	lockdep_assert_held(&local->mtx);
@@ -1394,8 +1406,6 @@ static int ieee80211_vif_use_reserved_switch(struct ieee80211_local *local)
 	 * Update all structures, values and pointers to point to new channel
 	 * context(s).
 	 */
-
-	i = 0;
 	list_for_each_entry(ctx, &local->chanctx_list, list) {
 		if (ctx->replace_state != IEEE80211_CHANCTX_REPLACES_OTHER)
 			continue;

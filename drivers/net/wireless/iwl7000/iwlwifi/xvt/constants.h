@@ -6,6 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2017   Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,12 +26,13 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2017   Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,6 +64,8 @@
  *****************************************************************************/
 #ifndef __XVT_CONSTANTS_H
 #define __XVT_CONSTANTS_H
+
+#define IWL_XVT_ENABLE_DQA			1
 
 #ifndef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #define IWL_XVT_DEFAULT_DBGM_MEM_POWER	0

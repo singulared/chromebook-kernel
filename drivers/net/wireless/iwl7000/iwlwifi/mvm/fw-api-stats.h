@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,7 +27,7 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -71,7 +72,7 @@ struct mvm_statistics_dbg {
 	__le32 burst_check;
 	__le32 burst_count;
 	__le32 wait_for_silence_timeout_cnt;
-	__le32 reserved[3];
+	u8 reserved[12];
 } __packed; /* STATISTICS_DEBUG_API_S_VER_2 */
 
 struct mvm_statistics_div {
@@ -219,7 +220,7 @@ struct mvm_statistics_bt_activity {
 	__le32 lo_priority_rx_denied_cnt;
 } __packed;  /* STATISTICS_BT_ACTIVITY_API_S_VER_1 */
 
-struct mvm_statistics_general_v5 {
+struct mvm_statistics_general_common {
 	__le32 radio_temperature;
 	__le32 radio_voltage;
 	struct mvm_statistics_dbg dbg;
@@ -237,46 +238,52 @@ struct mvm_statistics_general_v5 {
 	__le32 num_of_sos_states;
 	__le32 beacon_filtered;
 	__le32 missed_beacons;
-	__s8 beacon_filter_average_energy;
-	__s8 beacon_filter_reason;
-	__s8 beacon_filter_current_energy;
-	__s8 beacon_filter_reserved;
-	__le32 beacon_filter_delta_time;
-	struct mvm_statistics_bt_activity bt_activity;
-} __packed; /* STATISTICS_GENERAL_API_S_VER_5 */
-
-struct mvm_statistics_general_v8 {
-	__le32 radio_temperature;
-	__le32 radio_voltage;
-	struct mvm_statistics_dbg dbg;
-	__le32 sleep_time;
-	__le32 slots_out;
-	__le32 slots_idle;
-	__le32 ttl_timestamp;
-	struct mvm_statistics_div slow_div;
-	__le32 rx_enable_counter;
-	/*
-	 * num_of_sos_states:
-	 *  count the number of times we have to re-tune
-	 *  in order to get out of bad PHY status
-	 */
-	__le32 num_of_sos_states;
-	__le32 beacon_filtered;
-	__le32 missed_beacons;
-	__s8 beacon_filter_average_energy;
-	__s8 beacon_filter_reason;
-	__s8 beacon_filter_current_energy;
-	__s8 beacon_filter_reserved;
+	u8 beacon_filter_average_energy;
+	u8 beacon_filter_reason;
+	u8 beacon_filter_current_energy;
+	u8 beacon_filter_reserved;
 	__le32 beacon_filter_delta_time;
 	struct mvm_statistics_bt_activity bt_activity;
 	__le64 rx_time;
 	__le64 on_time_rf;
 	__le64 on_time_scan;
 	__le64 tx_time;
+} __packed;
+
+struct mvm_statistics_general_v8 {
+	struct mvm_statistics_general_common common;
 	__le32 beacon_counter[NUM_MAC_INDEX];
 	u8 beacon_average_energy[NUM_MAC_INDEX];
 	u8 reserved[4 - (NUM_MAC_INDEX % 4)];
 } __packed; /* STATISTICS_GENERAL_API_S_VER_8 */
+
+struct mvm_statistics_general_cdb {
+	struct mvm_statistics_general_common common;
+	__le32 beacon_counter[NUM_MAC_INDEX_CDB];
+	u8 beacon_average_energy[NUM_MAC_INDEX_CDB];
+	u8 reserved[4 - (NUM_MAC_INDEX_CDB % 4)];
+} __packed; /* STATISTICS_GENERAL_API_S_VER_9 */
+
+/**
+ * struct mvm_statistics_load - RX statistics for multi-queue devices
+ * @air_time: accumulated air time, per mac
+ * @byte_count: accumulated byte count, per mac
+ * @pkt_count: accumulated packet count, per mac
+ * @avg_energy: average RSSI, per station
+ */
+struct mvm_statistics_load {
+	__le32 air_time[NUM_MAC_INDEX];
+	__le32 byte_count[NUM_MAC_INDEX];
+	__le32 pkt_count[NUM_MAC_INDEX];
+	u8 avg_energy[IWL_MVM_STATION_COUNT];
+} __packed; /* STATISTICS_RX_MAC_STATION_S_VER_1 */
+
+struct mvm_statistics_load_cdb {
+	__le32 air_time[NUM_MAC_INDEX_CDB];
+	__le32 byte_count[NUM_MAC_INDEX_CDB];
+	__le32 pkt_count[NUM_MAC_INDEX_CDB];
+	u8 avg_energy[IWL_MVM_STATION_COUNT];
+} __packed; /* STATISTICS_RX_MAC_STATION_S_VER_2 */
 
 struct mvm_statistics_rx {
 	struct mvm_statistics_rx_phy ofdm;
@@ -293,13 +300,6 @@ struct mvm_statistics_rx {
  * STATISTICS_CMD (0x9c), below.
  */
 
-struct iwl_notif_statistics_v8 {
-	__le32 flag;
-	struct mvm_statistics_rx rx;
-	struct mvm_statistics_tx tx;
-	struct mvm_statistics_general_v5 general;
-} __packed; /* STATISTICS_NTFY_API_S_VER_8 */
-
 struct iwl_notif_statistics_v10 {
 	__le32 flag;
 	struct mvm_statistics_rx rx;
@@ -307,9 +307,46 @@ struct iwl_notif_statistics_v10 {
 	struct mvm_statistics_general_v8 general;
 } __packed; /* STATISTICS_NTFY_API_S_VER_10 */
 
-#define IWL_STATISTICS_FLG_CLEAR		0x1
-#define IWL_STATISTICS_FLG_DISABLE_NOTIF	0x2
+struct iwl_notif_statistics_v11 {
+	__le32 flag;
+	struct mvm_statistics_rx rx;
+	struct mvm_statistics_tx tx;
+	struct mvm_statistics_general_v8 general;
+	struct mvm_statistics_load load_stats;
+} __packed; /* STATISTICS_NTFY_API_S_VER_11 */
 
+struct iwl_notif_statistics_cdb {
+	__le32 flag;
+	struct mvm_statistics_rx rx;
+	struct mvm_statistics_tx tx;
+	struct mvm_statistics_general_cdb general;
+	struct mvm_statistics_load_cdb load_stats;
+} __packed; /* STATISTICS_NTFY_API_S_VER_12 */
+
+/**
+ * enum iwl_statistics_notif_flags - flags used in statistics notification
+ * @IWL_STATISTICS_REPLY_FLG_CLEAR: statistics were cleared after this report
+ */
+enum iwl_statistics_notif_flags {
+	IWL_STATISTICS_REPLY_FLG_CLEAR		= 0x1,
+};
+
+/**
+ * enum iwl_statistics_cmd_flags - flags used in statistics command
+ * @IWL_STATISTICS_FLG_CLEAR: request to clear statistics after the report
+ *	that's sent after this command
+ * @IWL_STATISTICS_FLG_DISABLE_NOTIF: disable unilateral statistics
+ *	notifications
+ */
+enum iwl_statistics_cmd_flags {
+	IWL_STATISTICS_FLG_CLEAR		= 0x1,
+	IWL_STATISTICS_FLG_DISABLE_NOTIF	= 0x2,
+};
+
+/**
+ * struct iwl_statistics_cmd - statistics config command
+ * @flags: flags from &enum iwl_statistics_cmd_flags
+ */
 struct iwl_statistics_cmd {
 	__le32 flags;
 } __packed; /* STATISTICS_CMD_API_S_VER_1 */

@@ -6,6 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -25,12 +26,13 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2017   Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -97,19 +99,76 @@ static void __exit iwl_xvt_exit(void)
 }
 module_exit(iwl_xvt_exit);
 
-#define CMD(x) [x] = #x
-
-static const char *const iwl_xvt_cmd_strings[REPLY_MAX] = {
-	CMD(XVT_ALIVE),
-	CMD(INIT_COMPLETE_NOTIF),
-	CMD(TX_CMD),
-	CMD(PHY_CONFIGURATION_CMD),
-	CMD(CALIB_RES_NOTIF_PHY_DB),
-	CMD(REPLY_RX_PHY_CMD),
-	CMD(REPLY_RX_MPDU_CMD),
-	CMD(REPLY_RX_DSP_EXT_INFO),
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ * A warning will be triggered on violation.
+ */
+static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
+	HCMD_NAME(XVT_ALIVE),
+	HCMD_NAME(INIT_COMPLETE_NOTIF),
+	HCMD_NAME(TX_CMD),
+	HCMD_NAME(SCD_QUEUE_CFG),
+	HCMD_NAME(FW_PAGING_BLOCK_CMD),
+	HCMD_NAME(PHY_CONFIGURATION_CMD),
+	HCMD_NAME(CALIB_RES_NOTIF_PHY_DB),
+	HCMD_NAME(NVM_ACCESS_CMD),
+	HCMD_NAME(GET_SET_PHY_DB_CMD),
+	HCMD_NAME(REPLY_HD_PARAMS_CMD),
+	HCMD_NAME(NVM_COMMIT_COMPLETE_NOTIFICATION),
+	HCMD_NAME(REPLY_RX_PHY_CMD),
+	HCMD_NAME(REPLY_RX_MPDU_CMD),
+	HCMD_NAME(REPLY_RX_DSP_EXT_INFO),
+	HCMD_NAME(DTS_MEASUREMENT_NOTIFICATION),
+	HCMD_NAME(REPLY_DEBUG_XVT_CMD),
+	HCMD_NAME(DEBUG_LOG_MSG),
 };
-#undef CMD
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
+	HCMD_NAME(DTS_MEASUREMENT_NOTIF),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_data_path_names[] = {
+	HCMD_NAME(DQA_ENABLE_CMD),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_regulatory_and_nvm_names[] = {
+	HCMD_NAME(NVM_ACCESS_COMPLETE),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_tof_names[] = {
+	HCMD_NAME(LOCATION_GROUP_NOTIFICATION),
+	HCMD_NAME(LOCATION_MCSI_NOTIFICATION),
+	HCMD_NAME(LOCATION_RANGE_RESPONSE_NOTIFICATION),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
+static const struct iwl_hcmd_names iwl_xvt_system_names[] = {
+	HCMD_NAME(INIT_EXTENDED_CFG_CMD),
+};
+
+static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
+	[LEGACY_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[LONG_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[SYSTEM_GROUP] = HCMD_ARR(iwl_xvt_system_names),
+	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
+	[DATA_PATH_GROUP] = HCMD_ARR(iwl_xvt_data_path_names),
+	[CMD_GROUP_LOCATION] = HCMD_ARR(iwl_xvt_tof_names),
+	[REGULATORY_AND_NVM_GROUP] = HCMD_ARR(iwl_xvt_regulatory_and_nvm_names),
+};
 
 static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 					 const struct iwl_cfg *cfg,
@@ -122,6 +181,7 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	static const u8 no_reclaim_cmds[] = {
 		TX_CMD,
 	};
+	u8 i, num_of_lmacs;
 
 	op_mode = kzalloc(sizeof(struct iwl_op_mode) +
 			  sizeof(struct iwl_xvt), GFP_KERNEL);
@@ -137,6 +197,7 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	xvt->dev = trans->dev;
 
 	mutex_init(&xvt->mutex);
+	spin_lock_init(&xvt->notif_lock);
 
 	/*
 	 * Populate the state variables that the
@@ -145,17 +206,45 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	trans_cfg.op_mode = op_mode;
 	trans_cfg.no_reclaim_cmds = no_reclaim_cmds;
 	trans_cfg.n_no_reclaim_cmds = ARRAY_SIZE(no_reclaim_cmds);
-	trans_cfg.command_names = iwl_xvt_cmd_strings;
-
-	trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
+	trans_cfg.command_groups = iwl_xvt_cmd_groups;
+	trans_cfg.command_groups_size = ARRAY_SIZE(iwl_xvt_cmd_groups);
+	if (iwl_xvt_is_dqa_supported(xvt)) {
+		trans_cfg.cmd_queue = IWL_XVT_DQA_CMD_QUEUE;
+		IWL_DEBUG_INFO(xvt, "dqa supported\n");
+	} else {
+		trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
+	}
 	trans_cfg.cmd_fifo = IWL_XVT_CMD_FIFO;
-	trans_cfg.rx_buf_size_8k = false;
-	if (xvt->fw->ucode_capa.flags & IWL_UCODE_TLV_FLAGS_DW_BC_TABLE)
-		trans_cfg.bc_table_dword = true;
+	trans_cfg.bc_table_dword = true;
 	trans_cfg.scd_set_active = true;
+	trans->wide_cmd_header = true;
+
+	switch (iwlwifi_mod_params.amsdu_size) {
+	case IWL_AMSDU_DEF:
+	case IWL_AMSDU_4K:
+		trans_cfg.rx_buf_size = IWL_AMSDU_4K;
+		break;
+	case IWL_AMSDU_8K:
+		trans_cfg.rx_buf_size = IWL_AMSDU_8K;
+		break;
+	case IWL_AMSDU_12K:
+		trans_cfg.rx_buf_size = IWL_AMSDU_12K;
+		break;
+	default:
+		pr_err("%s: Unsupported amsdu_size: %d\n", KBUILD_MODNAME,
+		       iwlwifi_mod_params.amsdu_size);
+		trans_cfg.rx_buf_size = IWL_AMSDU_4K;
+	}
+	/* the hardware splits the A-MSDU */
+	if (xvt->trans->cfg->mq_rx_supported)
+		trans_cfg.rx_buf_size = IWL_AMSDU_4K;
+
+	trans_cfg.cb_data_offs = 0;
 
 	/* Configure transport layer */
 	iwl_trans_configure(xvt->trans, &trans_cfg);
+	trans->command_groups = trans_cfg.command_groups;
+	trans->command_groups_size = trans_cfg.command_groups_size;
 
 	/* set up notification wait support */
 	iwl_notification_wait_init(&xvt->notif_wait);
@@ -167,8 +256,15 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 
 	iwl_dnt_init(xvt->trans, dbgfs_dir);
 
-	init_waitqueue_head(&xvt->mod_tx_wq);
-	init_waitqueue_head(&xvt->mod_tx_done_wq);
+	num_of_lmacs = iwl_xvt_is_cdb_supported(xvt) ? NUM_OF_LMACS : 1;
+
+	for (i = 0; i < num_of_lmacs; i++) {
+		init_waitqueue_head(&xvt->tx_meta_data[i].mod_tx_wq);
+		init_waitqueue_head(&xvt->tx_meta_data[i].mod_tx_done_wq);
+		xvt->tx_meta_data[i].queue = -1;
+		xvt->tx_meta_data[i].tx_mod_thread = NULL;
+		xvt->tx_meta_data[i].txq_full = false;
+	};
 
 	IWL_INFO(xvt, "Detected %s, REV=0x%X, xVT operation mode\n",
 		 xvt->cfg->name, xvt->trans->hw_rev);
@@ -206,24 +302,41 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 {
 	struct iwl_xvt_tx_resp *tx_resp = (void *)pkt->data;
 	int txq_id = SEQ_TO_QUEUE(le16_to_cpu(pkt->hdr.sequence));
-	u16 ssn = iwl_xvt_get_scd_ssn(tx_resp);
+	u16 ssn = iwl_xvt_get_scd_ssn(xvt, tx_resp);
 	struct sk_buff_head skbs;
 	struct sk_buff *skb;
 	struct iwl_device_cmd **cb_dev_cmd;
+	struct tx_meta_data *tx_data;
 
 	__skb_queue_head_init(&skbs);
+
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		txq_id = le16_to_cpu(tx_resp->v6.tx_queue);
+
+		if (txq_id == xvt->tx_meta_data[XVT_LMAC_0_ID].queue) {
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+		} else if (txq_id == xvt->tx_meta_data[XVT_LMAC_1_ID].queue) {
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+		} else {
+			IWL_ERR(xvt, "got TX_CMD from unidentified queque\n");
+			return;
+		}
+	} else {
+		tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+	}
 
 	iwl_trans_reclaim(xvt->trans, txq_id, ssn, &skbs);
 
 	while (!skb_queue_empty(&skbs)) {
 		skb = __skb_dequeue(&skbs);
 		cb_dev_cmd = (void *)skb->cb;
-		xvt->tx_counter++;
-		iwl_trans_free_tx_cmd(xvt->trans, *cb_dev_cmd);
+		tx_data->tx_counter++;
+		if (cb_dev_cmd && *cb_dev_cmd)
+			iwl_trans_free_tx_cmd(xvt->trans, *cb_dev_cmd);
 		kfree_skb(skb);
 	}
-	if (xvt->tot_tx == xvt->tx_counter)
-		wake_up_interruptible(&xvt->mod_tx_done_wq);
+	if (tx_data->tot_tx == tx_data->tx_counter)
+		wake_up_interruptible(&tx_data->mod_tx_done_wq);
 }
 
 static void iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
@@ -233,12 +346,15 @@ static void iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 
+	spin_lock(&xvt->notif_lock);
 	iwl_notification_wait_notify(&xvt->notif_wait, pkt);
+	IWL_DEBUG_INFO(xvt, "rx dispatch got notification\n");
 
 	if (pkt->hdr.cmd == TX_CMD)
 		iwl_xvt_rx_tx_cmd_handler(xvt, pkt);
 
 	iwl_xvt_send_user_rx_notif(xvt, rxb);
+	spin_unlock(&xvt->notif_lock);
 }
 
 static void iwl_xvt_nic_config(struct iwl_op_mode *op_mode)
@@ -262,24 +378,26 @@ static void iwl_xvt_nic_error(struct iwl_op_mode *op_mode)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
 	void *p_table;
-	struct iwl_error_event_table_v1 table_v1;
+	void *p_table_umac = NULL;
 	struct iwl_error_event_table_v2 table_v2;
+	struct iwl_umac_error_event_table table_umac;
 	int err, table_size;
 
 	xvt->fw_error = true;
-	wake_up_interruptible(&xvt->mod_tx_wq);
+	wake_up_interruptible(&xvt->tx_meta_data[XVT_LMAC_0_ID].mod_tx_wq);
 
-	if (fw_has_api(&xvt->fw->ucode_capa, IWL_UCODE_TLV_API_NEW_VERSION)) {
-		iwl_xvt_get_nic_error_log_v2(xvt, &table_v2);
-		iwl_xvt_dump_nic_error_log_v2(xvt, &table_v2);
-		p_table = kmemdup(&table_v2, sizeof(table_v2), GFP_ATOMIC);
-		table_size = sizeof(table_v2);
-	} else {
-		iwl_xvt_get_nic_error_log_v1(xvt, &table_v1);
-		iwl_xvt_dump_nic_error_log_v1(xvt, &table_v1);
-		p_table = kmemdup(&table_v1, sizeof(table_v1), GFP_ATOMIC);
-		table_size = sizeof(table_v1);
+	iwl_xvt_get_nic_error_log_v2(xvt, &table_v2);
+	iwl_xvt_dump_nic_error_log_v2(xvt, &table_v2);
+	p_table = kmemdup(&table_v2, sizeof(table_v2), GFP_ATOMIC);
+	table_size = sizeof(table_v2);
+
+	if (xvt->support_umac_log) {
+		iwl_xvt_get_umac_error_log(xvt, &table_umac);
+		iwl_xvt_dump_umac_error_log(xvt, &table_umac);
+		p_table_umac = kmemdup(&table_umac, sizeof(table_umac),
+				       GFP_ATOMIC);
 	}
+
 	if (p_table) {
 		err = iwl_xvt_user_send_notif(xvt, IWL_XVT_CMD_SEND_NIC_ERROR,
 					      (void *)p_table, table_size,
@@ -288,7 +406,21 @@ static void iwl_xvt_nic_error(struct iwl_op_mode *op_mode)
 			IWL_WARN(xvt,
 				 "Error %d sending NIC error notification\n",
 				 err);
+		kfree(p_table);
 	}
+
+	if (p_table_umac) {
+		err = iwl_xvt_user_send_notif(xvt,
+					      IWL_XVT_CMD_SEND_NIC_UMAC_ERROR,
+					      (void *)p_table_umac,
+					      sizeof(table_umac), GFP_ATOMIC);
+		if (err)
+			IWL_WARN(xvt,
+				 "Error %d sending NIC umac error notification\n",
+				 err);
+		kfree(p_table_umac);
+	}
+
 }
 
 static bool iwl_xvt_set_hw_rfkill_state(struct iwl_op_mode *op_mode, bool state)
@@ -324,16 +456,28 @@ static void iwl_xvt_free_skb(struct iwl_op_mode *op_mode, struct sk_buff *skb)
 static void iwl_xvt_stop_sw_queue(struct iwl_op_mode *op_mode, int queue)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
+	u8 i;
 
-	xvt->txq_full = true;
+	for (i = 0; i < NUM_OF_LMACS; i++) {
+		if (queue == xvt->tx_meta_data[i].queue) {
+			xvt->tx_meta_data[i].txq_full = true;
+			break;
+		}
+	}
 }
 
 static void iwl_xvt_wake_sw_queue(struct iwl_op_mode *op_mode, int queue)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
+	u8 i;
 
-	xvt->txq_full = false;
-	wake_up_interruptible(&xvt->mod_tx_wq);
+	for (i = 0; i < NUM_OF_LMACS; i++) {
+		if (queue == xvt->tx_meta_data[i].queue) {
+			xvt->tx_meta_data[i].txq_full = false;
+			wake_up_interruptible(&xvt->tx_meta_data[i].mod_tx_wq);
+			break;
+		}
+	}
 }
 
 static const struct iwl_op_mode_ops iwl_xvt_ops = {

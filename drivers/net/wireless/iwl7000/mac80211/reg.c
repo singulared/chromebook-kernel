@@ -4,6 +4,7 @@
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2008-2011	Luis R. Rodriguez <mcgrof@qca.qualcomm.com>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
+ * Copyright 2017	Intel Deutschland GmbH
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,7 +19,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
 /**
  * DOC: Wireless regulatory infrastructure
  *
@@ -51,14 +52,14 @@
 #include <net/cfg80211.h>
 #include "ieee80211_i.h"
 
-static bool reg_initialized;
-
 static LIST_HEAD(cfg80211_rdev_list);
 
 static struct cfg80211_registered_device *wiphy_to_rdev(struct wiphy *wiphy)
 {
 	struct cfg80211_registered_device *rdev;
 	struct ieee80211_local *local;
+
+	/* must have RTNL or reg_requests_lock held */
 
 	list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
 		local = container_of(rdev, struct ieee80211_local, rdev);
@@ -76,7 +77,7 @@ static struct cfg80211_registered_device *wiphy_to_rdev(struct wiphy *wiphy)
 #define REG_DBG_PRINT(args...)
 #endif
 
-static spinlock_t reg_requests_lock;
+static DEFINE_SPINLOCK(reg_requests_lock);
 
 static void reg_todo(struct work_struct *work);
 static DECLARE_WORK(reg_work, reg_todo);
@@ -442,12 +443,12 @@ static void reg_process_ht_flags_band(struct wiphy *wiphy,
 
 static void reg_process_ht_flags(struct wiphy *wiphy)
 {
-	enum ieee80211_band band;
+	enum nl80211_band band;
 
 	if (!wiphy)
 		return;
 
-	for (band = 0; band < IEEE80211_NUM_BANDS; band++)
+	for (band = 0; band < NUM_NL80211_BANDS; band++)
 		reg_process_ht_flags_band(wiphy, wiphy->bands[band]);
 }
 
@@ -526,8 +527,10 @@ static void reg_process_self_managed_hints(void)
 	struct cfg80211_registered_device *rdev;
 	struct wiphy *wiphy;
 	const struct ieee80211_regdomain *regd;
-	enum ieee80211_band band;
+	enum nl80211_band band;
 	struct ieee80211_local *local;
+
+	ASSERT_RTNL();
 
 	list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
 		local = container_of(rdev, struct ieee80211_local, rdev);
@@ -543,7 +546,7 @@ static void reg_process_self_managed_hints(void)
 		if (regd == NULL)
 			continue;
 
-		for (band = 0; band < IEEE80211_NUM_BANDS; band++)
+		for (band = 0; band < NUM_NL80211_BANDS; band++)
 			handle_band_custom(wiphy, wiphy->bands[band], regd);
 
 		reg_process_ht_flags(wiphy);
@@ -633,9 +636,13 @@ int regulatory_set_wiphy_regd(struct wiphy *wiphy,
 	if (IS_ERR(regd))
 		return PTR_ERR(regd);
 
-	rdev = wiphy_to_rdev(wiphy);
-
 	spin_lock(&reg_requests_lock);
+	rdev = wiphy_to_rdev(wiphy);
+	if (WARN_ON(!rdev)) {
+		spin_unlock(&reg_requests_lock);
+		return -ENODEV;
+	}
+
 	prev_regd = rdev->requested_regd;
 	rdev->requested_regd = regd;
 	spin_unlock(&reg_requests_lock);
@@ -668,36 +675,45 @@ void intel_regulatory_register(struct ieee80211_local *local)
 {
 	struct wiphy *wiphy = local->hw.wiphy;
 
-	if (!reg_initialized) {
-		spin_lock_init(&reg_requests_lock);
-		reg_initialized = true;
-	}
-
+	rtnl_lock();
 	/* self-managed devices ignore external hints */
 	if (wiphy->regulatory_flags & REGULATORY_WIPHY_SELF_MANAGED) {
+		unsigned long flags;
+
 		wiphy->regulatory_flags |= REGULATORY_DISABLE_BEACON_HINTS |
 					   REGULATORY_COUNTRY_IE_IGNORE;
+
+		spin_lock_irqsave(&reg_requests_lock, flags);
 		list_add(&local->rdev.list, &cfg80211_rdev_list);
+		spin_unlock_irqrestore(&reg_requests_lock, flags);
 		dev_info(&wiphy->dev, "LAR device registered\n");
 	}
+	rtnl_unlock();
 }
 
 void intel_regulatory_deregister(struct ieee80211_local *local)
 {
 	struct wiphy *wiphy = local->hw.wiphy;
-	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
-
-	/* intel non-LAR device */
-	if (!rdev)
-		return;
+	struct cfg80211_registered_device *rdev;
+	unsigned long flags;
 
 	rtnl_lock();
+	rdev = wiphy_to_rdev(wiphy);
+
+	/* intel non-LAR device */
+	if (!rdev) {
+		rtnl_unlock();
+		return;
+	}
+
+	spin_lock_irqsave(&reg_requests_lock, flags);
 	list_del(&rdev->list);
+	spin_unlock_irqrestore(&reg_requests_lock, flags);
 	kfree(rdev->requested_regd);
 	rdev->requested_regd = NULL;
 	rtnl_unlock();
 	dev_info(&wiphy->dev, "LAR device unregistered\n");
 
-	if (list_empty(&cfg80211_rdev_list))
-		cancel_work_sync(&reg_work);
+	flush_work(&reg_work);
 }
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */

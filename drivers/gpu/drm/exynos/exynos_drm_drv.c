@@ -17,9 +17,6 @@
 
 #include <drm/exynos_drm.h>
 
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-#include <linux/kds.h>
-#endif
 #ifdef CONFIG_DRM_DMA_SYNC
 #include <drm/drm_sync_helper.h>
 #endif
@@ -256,7 +253,6 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 	file_priv = kzalloc(sizeof(*file_priv), GFP_KERNEL);
 	if (!file_priv)
 		return -ENOMEM;
-	INIT_LIST_HEAD(&file_priv->gem_cpu_acquire_list);
 
 	file->driver_priv = file_priv;
 
@@ -266,28 +262,7 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 static void exynos_drm_preclose(struct drm_device *dev,
 				struct drm_file *file)
 {
-	struct drm_exynos_file_private *file_private = file->driver_priv;
-	struct exynos_drm_gem_obj_node *cur, *d;
-
 	DRM_DEBUG_DRIVER("\n");
-
-	mutex_lock(&dev->struct_mutex);
-	/* release kds resource sets for outstanding GEM object acquires */
-	list_for_each_entry_safe(cur, d,
-			&file_private->gem_cpu_acquire_list, list) {
-#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
-		BUG_ON(cur->exynos_gem_obj->resource_set == NULL);
-		kds_resource_set_release(&cur->exynos_gem_obj->resource_set);
-#endif
-#ifdef CONFIG_DRM_DMA_SYNC
-		BUG_ON(!cur->exynos_gem_obj->acquire_fence);
-		drm_fence_signal_and_put(&cur->exynos_gem_obj->acquire_fence);
-#endif
-		drm_gem_object_unreference(&cur->exynos_gem_obj->base);
-		kfree(cur);
-	}
-	mutex_unlock(&dev->struct_mutex);
-	INIT_LIST_HEAD(&file_private->gem_cpu_acquire_list);
 
 	exynos_drm_subdrv_close(dev, file);
 }

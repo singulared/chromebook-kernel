@@ -1126,6 +1126,14 @@ static int s5p_jpeg_querycap(struct file *file, void *priv,
 	 */
 	cap->capabilities = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_M2M |
 			    V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT;
+	/*
+	 * Advertise multi-planar capabilities. The driver supports only
+	 * single-planar pixel format at this moment so all the buffers will
+	 * have only one plane.
+	 */
+	cap->capabilities |= V4L2_CAP_VIDEO_M2M_MPLANE |
+			     V4L2_CAP_VIDEO_CAPTURE_MPLANE |
+			     V4L2_CAP_VIDEO_OUTPUT_MPLANE;
 	return 0;
 }
 
@@ -1184,12 +1192,10 @@ static int s5p_jpeg_enum_fmt_vid_out(struct file *file, void *priv,
 static struct s5p_jpeg_q_data *get_q_data(struct s5p_jpeg_ctx *ctx,
 					  enum v4l2_buf_type type)
 {
-	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
+	if (V4L2_TYPE_IS_OUTPUT(type))
 		return &ctx->out_q;
-	if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	else
 		return &ctx->cap_q;
-
-	return NULL;
 }
 
 static int s5p_jpeg_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
@@ -1203,16 +1209,13 @@ static int s5p_jpeg_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	if (!vq)
 		return -EINVAL;
 
-	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	if (!V4L2_TYPE_IS_OUTPUT(f->type) &&
 	    ct->mode == S5P_JPEG_DECODE && !ct->hdr_parsed)
 		return -EINVAL;
 	q_data = get_q_data(ct, f->type);
-	BUG_ON(q_data == NULL);
 
-	if ((f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
-			ct->mode == S5P_JPEG_ENCODE) ||
-			(f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT &&
-			ct->mode == S5P_JPEG_DECODE)) {
+	if ((!V4L2_TYPE_IS_OUTPUT(f->type) && ct->mode == S5P_JPEG_ENCODE) ||
+	    (V4L2_TYPE_IS_OUTPUT(f->type) && ct->mode == S5P_JPEG_DECODE)) {
 		pix->width = 0;
 		pix->height = 0;
 	} else {
@@ -1460,7 +1463,8 @@ static int s5p_jpeg_s_fmt(struct s5p_jpeg_ctx *ct, struct v4l2_format *f)
 		return -EINVAL;
 
 	q_data = get_q_data(ct, f->type);
-	BUG_ON(q_data == NULL);
+	vq->type = f->type;
+	q_data->type = f->type;
 
 	if (vb2_is_busy(vq)) {
 		v4l2_err(&ct->jpeg->v4l2_dev, "%s queue busy\n", __func__);
@@ -1667,7 +1671,9 @@ static int s5p_jpeg_g_selection(struct file *file, void *priv,
 	struct s5p_jpeg_ctx *ctx = fh_to_ctx(priv);
 
 	if (s->type != V4L2_BUF_TYPE_VIDEO_OUTPUT &&
-	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
 		return -EINVAL;
 
 	/* For JPEG blob active == default == bounds */
@@ -1705,7 +1711,8 @@ static int s5p_jpeg_s_selection(struct file *file, void *fh,
 	struct v4l2_rect *rect = &s->r;
 	int ret = -EINVAL;
 
-	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+	if (s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	    s->type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
 		return -EINVAL;
 
 	if (s->target == V4L2_SEL_TGT_COMPOSE) {
@@ -1865,6 +1872,107 @@ error_free:
 	return ret;
 }
 
+static void v4l2_format_pixmp_to_pix(struct v4l2_format *fmt_pix_mp,
+				     struct v4l2_format *fmt_pix) {
+	struct v4l2_pix_format *pix = &fmt_pix->fmt.pix;
+	struct v4l2_pix_format_mplane *pix_mp = &fmt_pix_mp->fmt.pix_mp;
+
+	fmt_pix->type = fmt_pix_mp->type;
+	pix->width = pix_mp->width;
+	pix->height = pix_mp->height;
+	pix->pixelformat = pix_mp->pixelformat;
+	pix->field = pix_mp->field;
+	pix->colorspace = pix_mp->colorspace;
+	pix->bytesperline = pix_mp->plane_fmt[0].bytesperline;
+	pix->sizeimage = pix_mp->plane_fmt[0].sizeimage;
+}
+
+static void v4l2_format_pixmp_from_pix(struct v4l2_format *fmt_pix_mp,
+				       struct v4l2_format *fmt_pix) {
+	struct v4l2_pix_format *pix = &fmt_pix->fmt.pix;
+	struct v4l2_pix_format_mplane *pix_mp = &fmt_pix_mp->fmt.pix_mp;
+
+	fmt_pix_mp->type = fmt_pix->type;
+	pix_mp->width = pix->width;
+	pix_mp->height = pix->height;
+	pix_mp->pixelformat = pix->pixelformat;
+	pix_mp->field = pix->field;
+	pix_mp->colorspace = pix->colorspace;
+	pix_mp->plane_fmt[0].bytesperline = pix->bytesperline;
+	pix_mp->plane_fmt[0].sizeimage = pix->sizeimage;
+	pix_mp->num_planes = 1;
+}
+
+static int s5p_jpeg_g_fmt_mplane(struct file *file, void *priv,
+				 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_g_fmt(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_try_fmt_vid_cap_mplane(struct file *file, void *priv,
+					   struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_try_fmt_vid_cap(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_try_fmt_vid_out_mplane(struct file *file, void *priv,
+					   struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_try_fmt_vid_out(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_s_fmt_vid_cap_mplane(struct file *file, void *priv,
+					 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_s_fmt_vid_cap(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
+static int s5p_jpeg_s_fmt_vid_out_mplane(struct file *file, void *priv,
+					 struct v4l2_format *f)
+{
+	struct v4l2_format tmp;
+	int ret;
+
+	memset(&tmp, 0, sizeof(tmp));
+	v4l2_format_pixmp_to_pix(f, &tmp);
+	ret = s5p_jpeg_s_fmt_vid_out(file, priv, &tmp);
+	v4l2_format_pixmp_from_pix(f, &tmp);
+
+	return ret;
+}
+
 static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 	.vidioc_querycap		= s5p_jpeg_querycap,
 
@@ -1879,6 +1987,18 @@ static const struct v4l2_ioctl_ops s5p_jpeg_ioctl_ops = {
 
 	.vidioc_s_fmt_vid_cap		= s5p_jpeg_s_fmt_vid_cap,
 	.vidioc_s_fmt_vid_out		= s5p_jpeg_s_fmt_vid_out,
+
+	.vidioc_enum_fmt_vid_cap_mplane	= s5p_jpeg_enum_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_out_mplane	= s5p_jpeg_enum_fmt_vid_out,
+
+	.vidioc_g_fmt_vid_cap_mplane	= s5p_jpeg_g_fmt_mplane,
+	.vidioc_g_fmt_vid_out_mplane	= s5p_jpeg_g_fmt_mplane,
+
+	.vidioc_try_fmt_vid_cap_mplane	= s5p_jpeg_try_fmt_vid_cap_mplane,
+	.vidioc_try_fmt_vid_out_mplane	= s5p_jpeg_try_fmt_vid_out_mplane,
+
+	.vidioc_s_fmt_vid_cap_mplane	= s5p_jpeg_s_fmt_vid_cap_mplane,
+	.vidioc_s_fmt_vid_out_mplane	= s5p_jpeg_s_fmt_vid_out_mplane,
 
 	.vidioc_reqbufs			= v4l2_m2m_ioctl_reqbufs,
 	.vidioc_querybuf		= v4l2_m2m_ioctl_querybuf,
@@ -2266,7 +2386,6 @@ static int s5p_jpeg_queue_setup(struct vb2_queue *vq,
 	unsigned int size, count = *nbuffers;
 
 	q_data = get_q_data(ctx, vq->type);
-	BUG_ON(q_data == NULL);
 
 	size = q_data->size;
 
@@ -2291,7 +2410,6 @@ static int s5p_jpeg_buf_prepare(struct vb2_buffer *vb)
 	struct s5p_jpeg_q_data *q_data = NULL;
 
 	q_data = get_q_data(ctx, vb->vb2_queue->type);
-	BUG_ON(q_data == NULL);
 
 	if (vb2_plane_size(vb, 0) < q_data->size) {
 		pr_err("%s data will not fit into plane (%lu < %lu)\n",
@@ -2324,14 +2442,14 @@ static void s5p_jpeg_buf_queue(struct vb2_buffer *vb)
 	struct s5p_jpeg_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	if (ctx->mode == S5P_JPEG_DECODE &&
-	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	    vb->vb2_queue->type == ctx->out_q.type) {
 		static const struct v4l2_event ev_src_ch = {
 			.type = V4L2_EVENT_SOURCE_CHANGE,
 			.u.src_change.changes =
 				V4L2_EVENT_SRC_CH_RESOLUTION,
 		};
 		struct vb2_queue *dst_vq = v4l2_m2m_get_vq(
-				ctx->fh.m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+				ctx->fh.m2m_ctx, ctx->cap_q.type);
 		u32 ori_w = ctx->out_q.w, ori_h = ctx->out_q.h;
 
 		ctx->hdr_parsed = s5p_jpeg_parse_hdr(&ctx->out_q,
@@ -2379,7 +2497,7 @@ static int s5p_jpeg_stop_streaming(struct vb2_queue *q)
 	 * subsampling. Update capture queue when the stream is off.
 	 */
 	if (ctx->state == JPEGCTX_RESOLUTION_CHANGE &&
-			q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+	    !V4L2_TYPE_IS_OUTPUT(q->type)) {
 		s5p_jpeg_set_capture_queue_data(ctx);
 		ctx->state = JPEGCTX_RUNNING;
 	}
@@ -2476,12 +2594,12 @@ static irqreturn_t s5p_jpeg_irq(int irq, void *dev_id)
 	if (curr_ctx->mode == S5P_JPEG_ENCODE)
 		vb2_set_plane_payload(dst_buf, 0, payload_size);
 	v4l2_m2m_buf_done(dst_buf, state);
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	curr_ctx->subsampling = s5p_jpeg_get_subsampling_mode(jpeg->regs);
+	s5p_jpeg_clear_int(jpeg->regs);
 	spin_unlock(&jpeg->slock);
 
-	s5p_jpeg_clear_int(jpeg->regs);
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
 }
@@ -2540,10 +2658,12 @@ static irqreturn_t exynos4_jpeg_irq(int irq, void *priv)
 		v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
 	}
 
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 	curr_ctx->subsampling = exynos4_jpeg_get_frame_fmt(jpeg->regs);
 
 	spin_unlock(&jpeg->slock);
+
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
+
 	return IRQ_HANDLED;
 }
 
@@ -2609,10 +2729,15 @@ static irqreturn_t exynos3250_jpeg_irq(int irq, void *dev_id)
 	if (curr_ctx->mode == S5P_JPEG_ENCODE)
 		vb2_set_plane_payload(dst_buf, 0, payload_size);
 	v4l2_m2m_buf_done(dst_buf, state);
-	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	curr_ctx->subsampling =
 			exynos3250_jpeg_get_subsampling_mode(jpeg->regs);
+
+	spin_unlock(&jpeg->slock);
+
+	v4l2_m2m_job_finish(jpeg->m2m_dev, curr_ctx->fh.m2m_ctx);
+	return IRQ_HANDLED;
+
 exit_unlock:
 	spin_unlock(&jpeg->slock);
 	return IRQ_HANDLED;

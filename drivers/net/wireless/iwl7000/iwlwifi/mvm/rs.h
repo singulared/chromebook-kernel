@@ -2,6 +2,7 @@
  *
  * Copyright(c) 2003 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2015 Intel Mobile Communications GmbH
+ * Copyright(c) 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -20,7 +21,7 @@
  * file called LICENSE.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  *****************************************************************************/
@@ -205,6 +206,7 @@ struct rs_rate {
 #define is_ht20(rate)         ((rate)->bw == RATE_MCS_CHAN_WIDTH_20)
 #define is_ht40(rate)         ((rate)->bw == RATE_MCS_CHAN_WIDTH_40)
 #define is_ht80(rate)         ((rate)->bw == RATE_MCS_CHAN_WIDTH_80)
+#define is_ht160(rate)        ((rate)->bw == RATE_MCS_CHAN_WIDTH_160)
 
 #define IWL_MAX_MCS_DISPLAY_SIZE	12
 
@@ -305,7 +307,7 @@ struct iwl_lq_sta {
 	bool stbc_capable;      /* Tx STBC is supported by chip and Rx by STA */
 	bool bfer_capable;      /* Remote supports beamformee and we BFer */
 
-	enum ieee80211_band band;
+	enum nl80211_band band;
 
 	/* The following are bitmaps of rates; IWL_RATE_6M_MASK, etc. */
 	unsigned long active_legacy_rate;
@@ -356,13 +358,27 @@ struct iwl_lq_sta {
 	} pers;
 };
 
+/* ieee80211_tx_info's status_driver_data[0] is packed with lq color and txp
+ * Note, it's iwlmvm <-> mac80211 interface.
+ * bits 0-7: reduced tx power
+ * bits 8-10: LQ command's color
+ */
+#define RS_DRV_DATA_TXP_MSK 0xff
+#define RS_DRV_DATA_LQ_COLOR_POS 8
+#define RS_DRV_DATA_LQ_COLOR_MSK (7 << RS_DRV_DATA_LQ_COLOR_POS)
+#define RS_DRV_DATA_LQ_COLOR_GET(_f) (((_f) & RS_DRV_DATA_LQ_COLOR_MSK) >>\
+				      RS_DRV_DATA_LQ_COLOR_POS)
+#define RS_DRV_DATA_PACK(_c, _p) ((void *)(uintptr_t)\
+				  (((uintptr_t)_p) |\
+				   ((_c) << RS_DRV_DATA_LQ_COLOR_POS)))
+
 /* Initialize station's rate scaling information after adding station */
 void iwl_mvm_rs_rate_init(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
-			  enum ieee80211_band band, bool init);
+			  enum nl80211_band band, bool init);
 
 /* Notify RS about Tx status */
 void iwl_mvm_rs_tx_status(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
-			  int tid, struct ieee80211_tx_info *info);
+			  int tid, struct ieee80211_tx_info *info, bool ndp);
 
 /**
  * iwl_rate_control_register - Register the rate control algorithm callbacks

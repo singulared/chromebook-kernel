@@ -26,7 +26,7 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -77,7 +77,7 @@
 
 static void iwl_dnt_dev_if_configure_mipi(struct iwl_trans *trans)
 {
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) {
+	if (trans->cfg->device_family >= IWL_DEVICE_FAMILY_8000) {
 		iwl_trans_set_bits_mask(trans,
 					trans->dbg_cfg.dbg_mipi_conf_reg,
 					trans->dbg_cfg.dbg_mipi_conf_mask,
@@ -86,32 +86,23 @@ static void iwl_dnt_dev_if_configure_mipi(struct iwl_trans *trans)
 	}
 
 	/* ABB_CguDTClkCtrl - set system trace and mtm clock souce as PLLA */
-	iowrite32(0x30303, (void __iomem *)0xe640110c);
+	iowrite32(0x30303, (void __force __iomem *)0xe640110c);
 
 	/* ABB_SpcuMemPower - set the power of the trace memory */
-	iowrite32(0x1, (void __iomem *)0xe640201c);
+	iowrite32(0x1, (void __force __iomem *)0xe640201c);
 
 	/* set MIPI2 PCL, PCL_26 - PCL_30 */
-	iowrite32(0x10, (void __iomem *)0xe6300274);
-	iowrite32(0x10, (void __iomem *)0xe6300278);
-	iowrite32(0x10, (void __iomem *)0xe630027c);
-	iowrite32(0x10, (void __iomem *)0xe6300280);
-	iowrite32(0x10, (void __iomem *)0xe6300284);
+	iowrite32(0x10, (void __force __iomem *)0xe6300274);
+	iowrite32(0x10, (void __force __iomem *)0xe6300278);
+	iowrite32(0x10, (void __force __iomem *)0xe630027c);
+	iowrite32(0x10, (void __force __iomem *)0xe6300280);
+	iowrite32(0x10, (void __force __iomem *)0xe6300284);
 
 	/* ARB0_CNF - enable generic arbiter */
-	iowrite32(0xc0000000, (void __iomem *)0xe6700108);
+	iowrite32(0xc0000000, (void __force __iomem *)0xe6700108);
 
 	/* enable WLAN arbiter */
-	iowrite32(0x80000006, (void __iomem *)0xe6700140);
-
-#ifdef IWL_MIPI_IDI
-	/* enable IDI arbiter for all channels - this code is
-	 * needed in case we'd like to look on IDI bus logs
-	 * via MIPI
-	 */
-	iowrite32(0xB0000004, (void __iomem *)0xe6700124);
-	iowrite32(0xC0000000, (void __iomem *)0xe6700128);
-#endif
+	iowrite32(0x80000006, (void __force __iomem *)0xe6700140);
 }
 
 static void iwl_dnt_dev_if_configure_marbh(struct iwl_trans *trans)
@@ -185,7 +176,7 @@ static void iwl_dnt_dev_if_configure_dbgm_registers(struct iwl_trans *trans,
 	struct iwl_dbg_cfg *cfg = &trans->dbg_cfg;
 
 	/* If we're running a device that supports DBGC - use it */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) {
+	if (trans->cfg->dbgc_supported) {
 		iwl_dnt_dev_if_configure_dbgc_registers(trans, base_addr,
 							end_addr);
 		return;
@@ -228,7 +219,7 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	/* If we're running a device that supports DBGC - use it */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000)
+	if (trans->cfg->dbgc_supported)
 		wr_ptr = iwl_read_prph(trans, cfg->dbgc_dram_wrptr_addr);
 	else
 		wr_ptr = iwl_read_prph(trans, cfg->dbg_mon_wr_ptr_addr);
@@ -240,28 +231,15 @@ static int iwl_dnt_dev_if_retrieve_dma_monitor_data(struct iwl_dnt *dnt,
 	}
 
 	/* If we're running a device that supports DBGC.... */
-	if (trans->cfg->device_family == IWL_DEVICE_FAMILY_8000) {
-		if (CSR_HW_REV_STEP(trans->hw_rev) == 0) /* A-step */
-			/*
-			 * Here the write pointer points to the chunk previously
-			 * written, and in this function we refer to it as
-			 * pointing to the oldest data in the buffer, so we
-			 * need to also increment the value we're using by a
-			 * chunk (256 bytes).
-			 */
-			wr_ptr = ((wr_ptr - (dnt->mon_base_addr >> 6)) << 6) +
-				 256;
-		else
-			/*
-			 * In the B-step, wr_ptr is given relative to the base
-			 * address, in DWORD granularity, and points to the
-			 * next chunk to write to - i.e., the oldest data in
-			 * the buffer.
-			 */
-			wr_ptr <<= 2;
-	} else {
+	if (trans->cfg->dbgc_supported)
+		/*
+		 * wr_ptr is given relative to the base address, in
+		 * DWORD granularity, and points to the next chunk to
+		 * write to - i.e., the oldest data in the buffer.
+		 */
+		wr_ptr <<= 2;
+	else
 		wr_ptr = (wr_ptr << 4) - dnt->mon_base_addr;
-	}
 
 	/* Misunderstanding wr_ptr can cause a page fault, so validate it... */
 	if (wr_ptr > dnt->mon_buf_size) {
@@ -499,7 +477,6 @@ static int iwl_dnt_dev_if_send_dbgm(struct iwl_dnt *dnt,
 		.data[0] = cfg->dbg_conf_monitor_host_command.data,
 		.len[0] = cfg->dbg_conf_monitor_host_command.len,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
 	int ret;
 
@@ -522,9 +499,7 @@ static int iwl_dnt_dev_if_send_ldbg(struct iwl_dnt *dnt,
 		.data[0] = cfg->ldbg_cmd[cmd_index].data,
 		.len[0] = DNT_LDBG_CMD_SIZE,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
-
 
 	return iwl_trans_send_cmd(trans, &host_cmd);
 }
@@ -564,7 +539,6 @@ int iwl_dnt_dev_if_set_log_level(struct iwl_dnt *dnt,
 		.data[0] = cfg->log_level_cmd.data,
 		.len[0] = cfg->log_level_cmd.len,
 		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-		.flags = CMD_WANT_SKB,
 	};
 	int ret;
 
@@ -644,7 +618,7 @@ int iwl_dnt_dev_if_read_rx(struct iwl_dnt *dnt, struct iwl_trans *trans)
 
 	buf32 = (u32 *)crash->rx;
 
-	if (!iwl_trans_grab_nic_access(trans, false, &flags)) {
+	if (!iwl_trans_grab_nic_access(trans, &flags)) {
 		vfree(crash->rx);
 		return -EBUSY;
 	}

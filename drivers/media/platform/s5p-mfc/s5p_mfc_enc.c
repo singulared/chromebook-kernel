@@ -276,6 +276,14 @@ static struct mfc_control controls[] = {
 		.menu_skip_mask = 0,
 	},
 	{
+		.id = V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME,
+		.type = V4L2_CTRL_TYPE_BUTTON,
+		.minimum = 0,
+		.maximum = 0,
+		.step = 0,
+		.default_value = 0,
+	},
+	{
 		.id = V4L2_CID_MPEG_VIDEO_VBV_SIZE,
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
@@ -449,6 +457,13 @@ static struct mfc_control controls[] = {
 		.maximum = 51,
 		.step = 1,
 		.default_value = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR,
+		.minimum = 0,
+		.maximum = 1,
+		.step = 1,
+		.default_value = 0,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP,
@@ -753,7 +768,7 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 		break;
 	/* Context is to free instance ID */
 	case MFCINST_RETURN_INST:
-		return true;
+		return ctx->inst_no != MFC_NO_INSTANCE_SET;
 	default:
 		break;
 	}
@@ -793,14 +808,14 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 	assert_spin_locked(&dev->irqlock);
 
 	if (p->seq_hdr_mode == V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE) {
-		if (!list_empty(&ctx->dst_queue)) {
+		int strm_size = s5p_mfc_hw_call(dev->mfc_ops,
+						get_enc_strm_size, dev);
+		if (strm_size > 0 && !list_empty(&ctx->dst_queue)) {
 			dst_mb = list_entry(ctx->dst_queue.next,
 					struct s5p_mfc_buf, list);
 			list_del(&dst_mb->list);
 			ctx->dst_queue_cnt--;
-			vb2_set_plane_payload(dst_mb->b, 0,
-				s5p_mfc_hw_call(dev->mfc_ops, get_enc_strm_size,
-						dev));
+			vb2_set_plane_payload(dst_mb->b, 0, strm_size);
 			vb2_buffer_done(dst_mb->b, VB2_BUF_STATE_DONE);
 		}
 	}
@@ -1454,6 +1469,12 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 			(1 << MFC_ENC_FRAME_INSERTION);
 		p->codec.runtime.force_frame_type = ctrl->val;
 		break;
+	case V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME:
+		p->codec.runtime.params_changed |=
+			(1 << MFC_ENC_FRAME_INSERTION);
+		p->codec.runtime.force_frame_type =
+			V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME;
+		break;
 	case V4L2_CID_MPEG_VIDEO_VBV_SIZE:
 		p->vbv_size = ctrl->val;
 		break;
@@ -1548,6 +1569,9 @@ static int s5p_mfc_enc_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDEO_H264_B_FRAME_QP:
 		p->codec.h264.rc_b_frame_qp = ctrl->val;
+		break;
+	case V4L2_CID_MPEG_VIDEO_H264_SPS_PPS_BEFORE_IDR:
+		p->codec.h264.sps_pps_before_idr = ctrl->val;
 		break;
 	case V4L2_CID_MPEG_VIDEO_MPEG4_I_FRAME_QP:
 	case V4L2_CID_MPEG_VIDEO_H263_I_FRAME_QP:
@@ -2157,6 +2181,22 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 		runtime_params->params_changed = 0;
 		/* force_frame_type needs to revert to 0 after being sent. */
 		if (runtime_params->force_frame_type != 0) {
+			/*
+			 * If force_frame_type was set to != 0 from
+			 * V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME's handler, the
+			 * value of V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE
+			 * wasn't changed. If we were to call v4l2_ctrl_s_ctrl
+			 * for V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE with
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED, it
+			 * could have been ignored, as the value could have
+			 * already been DISABLED. Explicitly set it to
+			 * V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME first,
+			 * in order for the change back to DISABLED not to be
+			 * ignored.
+			 */
+			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
+				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
+				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_I_FRAME);
 			v4l2_ctrl_s_ctrl(v4l2_ctrl_find(&ctx->ctrl_handler,
 				V4L2_CID_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE),
 				V4L2_MPEG_MFC51_VIDEO_FORCE_FRAME_TYPE_DISABLED);

@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,13 +27,14 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2010 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -341,10 +343,7 @@ static int iwl_tm_validate_rx_hdrs_mode_req(struct iwl_tm_data *data_in)
 
 static int iwl_tm_validate_get_chip_id(struct iwl_trans *trans)
 {
-	if (strcmp(trans->dev->bus->name, BUS_TYPE_IDI))
-		return -EINVAL;
 	return 0;
-
 }
 
 /**
@@ -444,6 +443,44 @@ static int iwl_tm_gnl_get_build_info(struct iwl_trans *trans,
 	return 0;
 }
 
+static int iwl_tm_gnl_get_sil_type(struct iwl_trans * trans,struct iwl_tm_data * data_out)
+{
+	struct iwl_tm_sil_type *resp;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	resp->silicon_type = CSR_HW_REV_TYPE(trans->hw_rev);
+
+	data_out->data = resp;
+	data_out->len = sizeof(*resp);
+
+	return 0;
+}
+
+static int iwl_tm_gnl_get_rfid(struct iwl_trans *trans,
+			       struct iwl_tm_data *data_out)
+{
+	struct iwl_tm_rfid *resp;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	IWL_DEBUG_INFO(trans, "HW RFID=0x08%X\n", trans->hw_rf_id);
+
+	resp->flavor = CSR_HW_RFID_FLAVOR(trans->hw_rf_id);
+	resp->dash   = CSR_HW_RFID_DASH(trans->hw_rf_id);
+	resp->step   = CSR_HW_RFID_STEP(trans->hw_rf_id);
+	resp->type   = CSR_HW_RFID_TYPE(trans->hw_rf_id);
+
+	data_out->data = resp;
+	data_out->len = sizeof(*resp);
+
+	return 0;
+}
+
 /*
  * Testmode GNL family types (This NL family
  * will eventually replace nl80211 support in
@@ -485,14 +522,7 @@ enum iwl_tm_gnl_cmd_attr_t {
 };
 
 /* TM GNL family definition */
-static struct genl_family iwl_tm_gnl_family = {
-	.id		= GENL_ID_GENERATE,
-	.hdrsize	= 0,
-	.name		= IWL_TM_GNL_FAMILY_NAME,
-	.version	= IWL_TM_GNL_VERSION_NR,
-	.maxattr	= IWL_TM_GNL_MSG_ATTR_MAX,
-};
-
+static struct genl_family iwl_tm_gnl_family;
 static __genl_const struct genl_multicast_group iwl_tm_gnl_mcgrps[] = {
 	{ .name = IWL_TM_GNL_MC_GRP_NAME, },
 };
@@ -736,6 +766,7 @@ static int iwl_tm_gnl_cmd_execute(struct iwl_tm_gnl_cmd *cmd_data)
 	case IWL_TM_USER_CMD_GET_DEVICE_STATUS:
 		ret = iwl_tm_get_device_status(dev, &cmd_data->data_in,
 					       &cmd_data->data_out);
+		common_op = true;
 		break;
 #if IS_ENABLED(CPTCFG_IWLXVT)
 	case IWL_TM_USER_CMD_SWITCH_OP_MODE:
@@ -755,6 +786,16 @@ static int iwl_tm_gnl_cmd_execute(struct iwl_tm_gnl_cmd *cmd_data)
 	case IWL_TM_USER_CMD_GET_DRIVER_BUILD_INFO:
 		ret = iwl_tm_gnl_get_build_info(dev->trans,
 						&cmd_data->data_out);
+		common_op = true;
+		break;
+
+	case IWL_TM_USER_CMD_GET_SIL_TYPE:
+		ret = iwl_tm_gnl_get_sil_type(dev->trans, &cmd_data->data_out);
+		common_op = true;
+		break;
+
+	case IWL_TM_USER_CMD_GET_RFID:
+		ret = iwl_tm_gnl_get_rfid(dev->trans, &cmd_data->data_out);
 		common_op = true;
 		break;
 	}
@@ -1073,6 +1114,20 @@ static __genl_const struct genl_ops iwl_tm_gnl_ops[] = {
 	},
 };
 
+static struct genl_family iwl_tm_gnl_family __genl_ro_after_init = {
+	.hdrsize	= 0,
+	.name		= IWL_TM_GNL_FAMILY_NAME,
+	.version	= IWL_TM_GNL_VERSION_NR,
+	.maxattr	= IWL_TM_GNL_MSG_ATTR_MAX,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
+	.module		= THIS_MODULE,
+	.ops		= iwl_tm_gnl_ops,
+	.n_ops		= ARRAY_SIZE(iwl_tm_gnl_ops),
+	.mcgrps		= iwl_tm_gnl_mcgrps,
+	.n_mcgrps	= ARRAY_SIZE(iwl_tm_gnl_mcgrps),
+#endif
+};
+
 /**
  * iwl_tm_gnl_add() - Registers a devices/op-mode in the iwl-tm-gnl list
  * @trans:	transport struct for the device to register for
@@ -1170,9 +1225,13 @@ int iwl_tm_gnl_init(void)
 	INIT_LIST_HEAD(&dev_list);
 	mutex_init(&dev_list_mtx);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
+	ret = genl_register_family(&iwl_tm_gnl_family);
+#else
 	ret = genl_register_family_with_ops_groups(&iwl_tm_gnl_family,
 						   iwl_tm_gnl_ops,
 						   iwl_tm_gnl_mcgrps);
+#endif
 	if (ret)
 		return ret;
 	ret = netlink_register_notifier(&iwl_tm_gnl_netlink_notifier);

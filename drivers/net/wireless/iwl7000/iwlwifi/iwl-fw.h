@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2008 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright(c) 2016        Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,13 +27,14 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright(c) 2016        Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +67,6 @@
 #ifndef __iwl_fw_h__
 #define __iwl_fw_h__
 #include <linux/types.h>
-#include <net/mac80211.h>
 
 #include "iwl-fw-file.h"
 #include "iwl-fw-error-dump.h"
@@ -105,8 +106,8 @@ struct iwl_ucode_capabilities {
 	u32 n_scan_channels;
 	u32 standard_phy_calibration_size;
 	u32 flags;
-	unsigned long _api[BITS_TO_LONGS(IWL_API_MAX_BITS)];
-	unsigned long _capa[BITS_TO_LONGS(IWL_CAPABILITIES_MAX_BITS)];
+	unsigned long _api[BITS_TO_LONGS(NUM_IWL_UCODE_TLV_API)];
+	unsigned long _capa[BITS_TO_LONGS(NUM_IWL_UCODE_TLV_CAPA)];
 };
 
 static inline bool
@@ -131,13 +132,57 @@ struct fw_desc {
 };
 
 struct fw_img {
-	struct fw_desc sec[IWL_UCODE_SECTION_MAX];
+	struct fw_desc *sec;
+	int num_sec;
 	bool is_dual_cpus;
+	u32 paging_mem_size;
 };
 
 struct iwl_sf_region {
 	u32 addr;
 	u32 size;
+};
+
+/*
+ * Block paging calculations
+ */
+#define PAGE_2_EXP_SIZE 12 /* 4K == 2^12 */
+#define FW_PAGING_SIZE BIT(PAGE_2_EXP_SIZE) /* page size is 4KB */
+#define PAGE_PER_GROUP_2_EXP_SIZE 3
+/* 8 pages per group */
+#define NUM_OF_PAGE_PER_GROUP BIT(PAGE_PER_GROUP_2_EXP_SIZE)
+/* don't change, support only 32KB size */
+#define PAGING_BLOCK_SIZE (NUM_OF_PAGE_PER_GROUP * FW_PAGING_SIZE)
+/* 32K == 2^15 */
+#define BLOCK_2_EXP_SIZE (PAGE_2_EXP_SIZE + PAGE_PER_GROUP_2_EXP_SIZE)
+
+/*
+ * Image paging calculations
+ */
+#define BLOCK_PER_IMAGE_2_EXP_SIZE 5
+/* 2^5 == 32 blocks per image */
+#define NUM_OF_BLOCK_PER_IMAGE BIT(BLOCK_PER_IMAGE_2_EXP_SIZE)
+/* maximum image size 1024KB */
+#define MAX_PAGING_IMAGE_SIZE (NUM_OF_BLOCK_PER_IMAGE * PAGING_BLOCK_SIZE)
+
+/* Virtual address signature */
+#define PAGING_ADDR_SIG 0xAA000000
+
+#define PAGING_CMD_IS_SECURED BIT(9)
+#define PAGING_CMD_IS_ENABLED BIT(8)
+#define PAGING_CMD_NUM_OF_PAGES_IN_LAST_GRP_POS	0
+#define PAGING_TLV_SECURE_MASK 1
+
+/**
+ * struct iwl_fw_paging
+ * @fw_paging_phys: page phy pointer
+ * @fw_paging_block: pointer to the allocated block
+ * @fw_paging_size: page size
+ */
+struct iwl_fw_paging {
+	dma_addr_t fw_paging_phys;
+	struct page *fw_paging_block;
+	u32 fw_paging_size;
 };
 
 /**
@@ -151,27 +196,13 @@ struct iwl_fw_cscheme_list {
 } __packed;
 
 /**
- * struct iwl_gscan_capabilities - gscan capabilities supported by FW
- * @max_scan_cache_size: total space allocated for scan results (in bytes).
- * @max_scan_buckets: maximum number of channel buckets.
- * @max_ap_cache_per_scan: maximum number of APs that can be stored per scan.
- * @max_rssi_sample_size: number of RSSI samples used for averaging RSSI.
- * @max_scan_reporting_threshold: max possible report threshold. in percentage.
- * @max_hotlist_aps: maximum number of entries for hotlist APs.
- * @max_significant_change_aps: maximum number of entries for significant
- *	change APs.
- * @max_bssid_history_entries: number of BSSID/RSSI entries that the device can
- *	hold.
+ * enum iwl_fw_type - iwlwifi firmware type
+ * @IWL_FW_DVM: DVM firmware
+ * @IWL_FW_MVM: MVM firmware
  */
-struct iwl_gscan_capabilities {
-	u32 max_scan_cache_size;
-	u32 max_scan_buckets;
-	u32 max_ap_cache_per_scan;
-	u32 max_rssi_sample_size;
-	u32 max_scan_reporting_threshold;
-	u32 max_hotlist_aps;
-	u32 max_significant_change_aps;
-	u32 max_bssid_history_entries;
+enum iwl_fw_type {
+	IWL_FW_DVM,
+	IWL_FW_MVM,
 };
 
 /**
@@ -188,7 +219,7 @@ struct iwl_gscan_capabilities {
  * @inst_evtlog_ptr: event log offset for runtime ucode.
  * @inst_evtlog_size: event log size for runtime ucode.
  * @inst_errlog_ptr: error log offfset for runtime ucode.
- * @mvm_fw: indicates this is MVM firmware
+ * @type: firmware type (&enum iwl_fw_type)
  * @cipher_scheme: optional external cipher scheme.
  * @human_readable: human readable version
  * @sdio_adma_addr: the default address to set for the ADMA in SDIO mode until
@@ -219,9 +250,9 @@ struct iwl_fw {
 	u8 valid_tx_ant;
 	u8 valid_rx_ant;
 
-	bool mvm_fw;
+	enum iwl_fw_type type;
 
-	struct ieee80211_cipher_scheme cs[IWL_UCODE_MAX_CS];
+	struct iwl_fw_cipher_scheme cs[IWL_UCODE_MAX_CS];
 	u8 human_readable[FW_VER_HUMAN_READABLE_SZ];
 
 	u32 sdio_adma_addr;
@@ -230,9 +261,10 @@ struct iwl_fw {
 	struct iwl_fw_dbg_conf_tlv *dbg_conf_tlv[FW_DBG_CONF_MAX];
 	size_t dbg_conf_tlv_len[FW_DBG_CONF_MAX];
 	struct iwl_fw_dbg_trigger_tlv *dbg_trigger_tlv[FW_DBG_TRIGGER_MAX];
+	struct iwl_fw_dbg_mem_seg_tlv *dbg_mem_tlv;
+	size_t n_dbg_mem_tlv;
 	size_t dbg_trigger_tlv_len[FW_DBG_TRIGGER_MAX];
 	u8 dbg_dest_reg_num;
-	struct iwl_gscan_capabilities gscan_capa;
 };
 
 static inline const char *get_fw_dbg_mode_string(int mode)
@@ -262,18 +294,13 @@ iwl_fw_dbg_conf_usniffer(const struct iwl_fw *fw, u8 id)
 	return conf_tlv->usniffer;
 }
 
-#define iwl_fw_dbg_trigger_enabled(fw, id) ({			\
-	void *__dbg_trigger = (fw)->dbg_trigger_tlv[(id)];	\
-	unlikely(__dbg_trigger);				\
-})
-
-static inline struct iwl_fw_dbg_trigger_tlv*
-iwl_fw_dbg_get_trigger(const struct iwl_fw *fw, u8 id)
+static inline const struct fw_img *
+iwl_get_ucode_image(const struct iwl_fw *fw, enum iwl_ucode_type ucode_type)
 {
-	if (WARN_ON(id >= ARRAY_SIZE(fw->dbg_trigger_tlv)))
+	if (ucode_type >= IWL_UCODE_TYPE_MAX)
 		return NULL;
 
-	return fw->dbg_trigger_tlv[id];
+	return &fw->img[ucode_type];
 }
 
 #endif  /* __iwl_fw_h__ */

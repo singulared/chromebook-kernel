@@ -25,7 +25,7 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -73,8 +73,8 @@ struct iwl_phy_db *iwl_phy_db_init(struct iwl_trans *trans);
 
 void iwl_phy_db_free(struct iwl_phy_db *phy_db);
 
-int iwl_phy_db_set_section(struct iwl_phy_db *phy_db, struct iwl_rx_packet *pkt,
-			   gfp_t alloc_ctx);
+int iwl_phy_db_set_section(struct iwl_phy_db *phy_db,
+			   struct iwl_rx_packet *pkt);
 
 
 #if IS_ENABLED(CPTCFG_IWLXVT)

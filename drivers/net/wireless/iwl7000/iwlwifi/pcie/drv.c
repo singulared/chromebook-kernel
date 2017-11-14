@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright(c) 2016-2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,7 +27,7 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -34,6 +35,7 @@
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * All rights reserved.
+ * Copyright(c) 2017 Intel Deutschland GmbH
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -67,6 +69,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/module.h>
+#include <linux/pm_runtime.h>
 #include <linux/pci.h>
 #include <linux/pci-aspm.h>
 #include <linux/acpi.h>
@@ -195,6 +198,13 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0x3165, 0x8010, iwl3165_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x3165, 0x8110, iwl3165_2ac_cfg)},
 
+/* 3168 Series */
+	{IWL_PCI_DEVICE(0x24FB, 0x2010, iwl3168_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FB, 0x2110, iwl3168_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FB, 0x2050, iwl3168_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FB, 0x2150, iwl3168_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FB, 0x0000, iwl3168_2ac_cfg)},
+
 /* 7265 Series */
 	{IWL_PCI_DEVICE(0x095A, 0x5010, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x5110, iwl7265_2ac_cfg)},
@@ -202,6 +212,7 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0x095B, 0x5310, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095B, 0x5302, iwl7265_n_cfg)},
 	{IWL_PCI_DEVICE(0x095B, 0x5210, iwl7265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x095A, 0x5C10, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x5012, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x5412, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x5410, iwl7265_2ac_cfg)},
@@ -219,10 +230,10 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0x095A, 0x900A, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9110, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9112, iwl7265_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x095A, 0x9210, iwl7265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x095B, 0x9210, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095B, 0x9200, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9510, iwl7265_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x095A, 0x9310, iwl7265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x095B, 0x9310, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9410, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x5020, iwl7265_2n_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x502A, iwl7265_2n_cfg)},
@@ -237,41 +248,129 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 	{IWL_PCI_DEVICE(0x095B, 0x520A, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9000, iwl7265_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x095A, 0x9400, iwl7265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x095A, 0x9E10, iwl7265_2ac_cfg)},
 
 /* 8000 Series */
-	{IWL_PCI_DEVICE(0x24F3, 0x0000, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0010, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x1010, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x10B0, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0130, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x1130, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0132, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x1132, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0110, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x01F0, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0012, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x1012, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x1110, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0050, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0250, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x1050, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0150, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x1150, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F4, 0x0030, iwl8260_2ac_cfg)},
-	{IWL_PCI_DEVICE(0x24F4, 0x1130, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F4, 0x1030, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0xC010, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0xC110, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0xD010, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0xC050, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0xD050, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0xD0B0, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0xB0B0, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x8010, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x8110, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x9010, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x9110, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F4, 0x8030, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F4, 0x9030, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x8130, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x9130, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x8132, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x9132, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x8050, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x8150, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x9050, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x9150, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0004, iwl8260_2n_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0044, iwl8260_2n_cfg)},
 	{IWL_PCI_DEVICE(0x24F5, 0x0010, iwl4165_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F6, 0x0030, iwl4165_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0810, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0910, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0850, iwl8260_2ac_cfg)},
 	{IWL_PCI_DEVICE(0x24F3, 0x0950, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0930, iwl8260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24F3, 0x0000, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0010, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0110, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x1110, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x1130, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0130, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x1010, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x10D0, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0050, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0150, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x9010, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x8110, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x8050, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x8010, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0810, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x9110, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x8130, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0910, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0930, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0950, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0850, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x1014, iwl8265_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x3E02, iwl8275_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x3E01, iwl8275_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x1012, iwl8275_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x24FD, 0x0012, iwl8275_2ac_cfg)},
 
 /* 9000 Series */
-	{IWL_PCI_DEVICE(0x9df0, 0x0010, iwl9000_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x271B, 0x0010, iwl9160_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2526, 0x0000, iwl9260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2526, 0x0010, iwl9260_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2526, 0x1410, iwl9270_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0A10, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0010, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0210, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0410, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0610, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0310, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0000, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0510, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x2010, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x1420, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0710, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x2A10, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x30DC, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0060, iwl9460_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0060, iwl9460_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0030, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x1030, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0xA370, 0x1030, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0034, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0038, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x2526, 0x003C, iwl9560_2ac_cfg)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x0038, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x9DF0, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0xA370, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x31DC, 0x003C, iwl9560_2ac_cfg_soc)},
+	{IWL_PCI_DEVICE(0x2526, 0x0034, iwl9560_2ac_cfg)},
+
+/* a000 Series */
+	{IWL_PCI_DEVICE(0x2720, 0x0A10, iwla000_2ac_cfg_hr_cdb)},
+	{IWL_PCI_DEVICE(0x34F0, 0x0310, iwla000_2ac_cfg_jf)},
 #endif /* CPTCFG_IWLMVM */
 
 	{0}
@@ -279,48 +378,64 @@ static const struct pci_device_id iwl_hw_card_ids[] = {
 MODULE_DEVICE_TABLE(pci, iwl_hw_card_ids);
 
 #ifdef CONFIG_ACPI
-#define SPL_METHOD		"SPLC"
-#define SPL_DOMAINTYPE_MODULE	BIT(0)
-#define SPL_DOMAINTYPE_WIFI	BIT(1)
-#define SPL_DOMAINTYPE_WIGIG	BIT(2)
-#define SPL_DOMAINTYPE_RFEM	BIT(3)
+#define ACPI_SPLC_METHOD	"SPLC"
+#define ACPI_SPLC_DOMAIN_WIFI	(0x07)
 
-static u64 splx_get_pwr_limit(struct iwl_trans *trans, union acpi_object *splx)
+static u64 splc_get_pwr_limit(struct iwl_trans *trans, union acpi_object *splc)
 {
-	union acpi_object *limits, *domain_type, *power_limit;
+	union acpi_object *data_pkg, *dflt_pwr_limit;
+	int i;
 
-	if (splx->type != ACPI_TYPE_PACKAGE ||
-	    splx->package.count != 2 ||
-	    splx->package.elements[0].type != ACPI_TYPE_INTEGER ||
-	    splx->package.elements[0].integer.value != 0) {
-		IWL_ERR(trans, "Unsupported splx structure\n");
+	/* We need at least two elements, one for the revision and one
+	 * for the data itself.  Also check that the revision is
+	 * supported (currently only revision 0).
+	*/
+	if (splc->type != ACPI_TYPE_PACKAGE ||
+	    splc->package.count < 2 ||
+	    splc->package.elements[0].type != ACPI_TYPE_INTEGER ||
+	    splc->package.elements[0].integer.value != 0) {
+		IWL_DEBUG_INFO(trans,
+			       "Unsupported structure returned by the SPLC method.  Ignoring.\n");
 		return 0;
 	}
 
-	limits = &splx->package.elements[1];
-	if (limits->type != ACPI_TYPE_PACKAGE ||
-	    limits->package.count < 2 ||
-	    limits->package.elements[0].type != ACPI_TYPE_INTEGER ||
-	    limits->package.elements[1].type != ACPI_TYPE_INTEGER) {
-		IWL_ERR(trans, "Invalid limits element\n");
+	/* loop through all the packages to find the one for WiFi */
+	for (i = 1; i < splc->package.count; i++) {
+		union acpi_object *domain;
+
+		data_pkg = &splc->package.elements[i];
+
+		/* Skip anything that is not a package with the right
+		 * amount of elements (i.e. at least 2 integers).
+		 */
+		if (data_pkg->type != ACPI_TYPE_PACKAGE ||
+		    data_pkg->package.count < 2 ||
+		    data_pkg->package.elements[0].type != ACPI_TYPE_INTEGER ||
+		    data_pkg->package.elements[1].type != ACPI_TYPE_INTEGER)
+			continue;
+
+		domain = &data_pkg->package.elements[0];
+		if (domain->integer.value == ACPI_SPLC_DOMAIN_WIFI)
+			break;
+
+		data_pkg = NULL;
+	}
+
+	if (!data_pkg) {
+		IWL_DEBUG_INFO(trans,
+			       "No element for the WiFi domain returned by the SPLC method.\n");
 		return 0;
 	}
 
-	domain_type = &limits->package.elements[0];
-	power_limit = &limits->package.elements[1];
-	if (!(domain_type->integer.value & SPL_DOMAINTYPE_WIFI)) {
-		IWL_DEBUG_INFO(trans, "WiFi power is not limited\n");
-		return 0;
-	}
-
-	return power_limit->integer.value;
+	dflt_pwr_limit = &data_pkg->package.elements[1];
+	return dflt_pwr_limit->integer.value;
 }
 
 static void set_dflt_pwr_limit(struct iwl_trans *trans, struct pci_dev *pdev)
 {
 	acpi_handle pxsx_handle;
 	acpi_handle handle;
-	struct acpi_buffer splx = {ACPI_ALLOCATE_BUFFER, NULL};
+	struct acpi_buffer splc = {ACPI_ALLOCATE_BUFFER, NULL};
 	acpi_status status;
 
 	pxsx_handle = ACPI_HANDLE(&pdev->dev);
@@ -331,23 +446,24 @@ static void set_dflt_pwr_limit(struct iwl_trans *trans, struct pci_dev *pdev)
 	}
 
 	/* Get the method's handle */
-	status = acpi_get_handle(pxsx_handle, (acpi_string)SPL_METHOD, &handle);
+	status = acpi_get_handle(pxsx_handle, (acpi_string)ACPI_SPLC_METHOD,
+				 &handle);
 	if (ACPI_FAILURE(status)) {
-		IWL_DEBUG_INFO(trans, "SPL method not found\n");
+		IWL_DEBUG_INFO(trans, "SPLC method not found\n");
 		return;
 	}
 
 	/* Call SPLC with no arguments */
-	status = acpi_evaluate_object(handle, NULL, NULL, &splx);
+	status = acpi_evaluate_object(handle, NULL, NULL, &splc);
 	if (ACPI_FAILURE(status)) {
 		IWL_ERR(trans, "SPLC invocation failed (0x%x)\n", status);
 		return;
 	}
 
-	trans->dflt_pwr_limit = splx_get_pwr_limit(trans, splx.pointer);
+	trans->dflt_pwr_limit = splc_get_pwr_limit(trans, splc.pointer);
 	IWL_DEBUG_INFO(trans, "Default power limit set to %lld\n",
 		       trans->dflt_pwr_limit);
-	kfree(splx.pointer);
+	kfree(splc.pointer);
 }
 
 #else /* CONFIG_ACPI */
@@ -362,7 +478,6 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	const struct iwl_cfg *cfg = (struct iwl_cfg *)(ent->driver_data);
 	const struct iwl_cfg *cfg_7265d __maybe_unused = NULL;
 	struct iwl_trans *iwl_trans;
-	struct iwl_trans_pcie *trans_pcie;
 	int ret;
 #ifdef CPTCFG_IWLWIFI_PLATFORM_DATA
 	struct device *dev;
@@ -392,22 +507,29 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		cfg = cfg_7265d;
 		iwl_trans->cfg = cfg_7265d;
 	}
+
+	if (iwl_trans->cfg->rf_id && cfg == &iwla000_2ac_cfg_hr_cdb) {
+		if (iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_JF)
+			cfg = &iwla000_2ac_cfg_jf;
+		else if (iwl_trans->hw_rf_id == CSR_HW_RF_ID_TYPE_HR)
+			cfg = &iwla000_2ac_cfg_hr;
+
+		iwl_trans->cfg = cfg;
+	}
 #endif
 
 	pci_set_drvdata(pdev, iwl_trans);
+	iwl_trans->drv = iwl_drv_start(iwl_trans);
 
-	trans_pcie = IWL_TRANS_GET_PCIE_TRANS(iwl_trans);
-	trans_pcie->drv = iwl_drv_start(iwl_trans, cfg);
-
-	if (IS_ERR(trans_pcie->drv)) {
-		ret = PTR_ERR(trans_pcie->drv);
+	if (IS_ERR(iwl_trans->drv)) {
+		ret = PTR_ERR(iwl_trans->drv);
 		goto out_free_trans;
 	}
 
 	set_dflt_pwr_limit(iwl_trans, pdev);
 
 	/* register transport layer debugfs here */
-	ret = iwl_trans_dbgfs_register(iwl_trans, iwl_trans->dbgfs_dir);
+	ret = iwl_trans_pcie_dbgfs_register(iwl_trans);
 	if (ret)
 		goto out_free_drv;
 
@@ -415,6 +537,9 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	dev = bus_find_device_by_name(&platform_bus_type, NULL,
 				      IWLWIFI_PLATFORM_NAME);
 	if (dev) {
+		struct iwl_trans_pcie *trans_pcie =
+			IWL_TRANS_GET_PCIE_TRANS(iwl_trans);
+
 		plat_dev = to_platform_device(dev);
 		if (plat_dev && plat_dev->dev.platform_data) {
 			IWL_DEBUG_INFO(iwl_trans,
@@ -423,10 +548,36 @@ static int iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 	}
 #endif /* CPTCFG_IWLWIFI_PLATFORM_DATA */
+
+	/* if RTPM is in use, enable it in our device */
+	if (iwl_trans->runtime_pm_mode != IWL_PLAT_PM_MODE_DISABLED) {
+		/* We explicitly set the device to active here to
+		 * clear contingent errors.
+		 */
+		pm_runtime_set_active(&pdev->dev);
+
+		pm_runtime_set_autosuspend_delay(&pdev->dev,
+					 iwlwifi_mod_params.d0i3_entry_delay);
+		pm_runtime_use_autosuspend(&pdev->dev);
+
+		/* We are not supposed to call pm_runtime_allow() by
+		 * ourselves, but let userspace enable runtime PM via
+		 * sysfs.  However, since we don't enable this from
+		 * userspace yet, we need to allow/forbid() ourselves.
+		*/
+		pm_runtime_allow(&pdev->dev);
+	}
+
+	/* The PCI device starts with a reference taken and we are
+	 * supposed to release it here.  But to simplify the
+	 * interaction with the opmode, we don't do it now, but let
+	 * the opmode release it when it's ready.
+	 */
+
 	return 0;
 
 out_free_drv:
-	iwl_drv_stop(trans_pcie->drv);
+	iwl_drv_stop(iwl_trans->drv);
 out_free_trans:
 	iwl_trans_pcie_free(iwl_trans);
 	return ret;
@@ -435,9 +586,18 @@ out_free_trans:
 static void iwl_pci_remove(struct pci_dev *pdev)
 {
 	struct iwl_trans *trans = pci_get_drvdata(pdev);
-	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 
-	iwl_drv_stop(trans_pcie->drv);
+	/* if RTPM was in use, restore it to the state before probe */
+	if (trans->runtime_pm_mode != IWL_PLAT_PM_MODE_DISABLED) {
+		/* We should not call forbid here, but we do for now.
+		 * Check the comment to pm_runtime_allow() in
+		 * iwl_pci_probe().
+		 */
+		pm_runtime_forbid(trans->dev);
+	}
+
+	iwl_drv_stop(trans->drv);
+
 	iwl_trans_pcie_free(trans);
 }
 
@@ -449,13 +609,6 @@ static int iwl_pci_suspend(struct device *device)
 	 * whether WoWLAN is enabled or not, and your code will run even if
 	 * WoWLAN is enabled - don't kill the NIC, someone may need it in Sx.
 	 */
-#ifdef CPTCFG_IWLWIFI_PCIE_SUSPEND_RESUME
-	struct pci_dev *pdev = to_pci_dev(device);
-
-	pci_save_state(pdev);
-	pci_disable_device(pdev);
-	pci_set_power_state(pdev, PCI_D3hot);
-#endif
 
 	return 0;
 }
@@ -465,17 +618,7 @@ static int iwl_pci_resume(struct device *device)
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct iwl_trans *trans = pci_get_drvdata(pdev);
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	bool hw_rfkill;
 
-#ifdef CPTCFG_IWLWIFI_PCIE_SUSPEND_RESUME
-	int r;
-
-	pci_set_power_state(pdev, PCI_D0);
-	r = pci_enable_device(pdev);
-	if (r)
-		return r;
-	pci_restore_state(pdev);
-#endif
 	/* Before you put code here, think about WoWLAN. You cannot check here
 	 * whether WoWLAN is enabled or not, and your code will run even if
 	 * WoWLAN is enabled - the NIC may be alive.
@@ -490,30 +633,189 @@ static int iwl_pci_resume(struct device *device)
 	if (!trans->op_mode)
 		return 0;
 
+	/* reconfigure the MSI-X mapping to get the correct IRQ for rfkill */
+	iwl_pcie_conf_msix_hw(trans_pcie);
+
 	/*
-	 * Enable rfkill interrupt (in order to keep track of
-	 * the rfkill status)
+	 * Enable rfkill interrupt (in order to keep track of the rfkill
+	 * status). Must be locked to avoid processing a possible rfkill
+	 * interrupt while in iwl_trans_check_hw_rf_kill().
 	 */
-	iwl_enable_rfkill_int(trans);
-
-	hw_rfkill = iwl_is_rfkill_set(trans);
-
 	mutex_lock(&trans_pcie->mutex);
-	iwl_trans_pcie_rf_kill(trans, hw_rfkill);
+	iwl_enable_rfkill_int(trans);
+	iwl_trans_check_hw_rf_kill(trans);
 	mutex_unlock(&trans_pcie->mutex);
 
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(iwl_dev_pm_ops, iwl_pci_suspend, iwl_pci_resume);
+int iwl_pci_fw_enter_d0i3(struct iwl_trans *trans)
+{
+	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+	int ret;
+
+	if (test_bit(STATUS_FW_ERROR, &trans->status))
+		return 0;
+
+	set_bit(STATUS_TRANS_GOING_IDLE, &trans->status);
+
+	/* config the fw */
+	ret = iwl_op_mode_enter_d0i3(trans->op_mode);
+	if (ret == 1) {
+		IWL_DEBUG_RPM(trans, "aborting d0i3 entrance\n");
+		clear_bit(STATUS_TRANS_GOING_IDLE, &trans->status);
+		return -EBUSY;
+	}
+	if (ret)
+		goto err;
+
+	ret = wait_event_timeout(trans_pcie->d0i3_waitq,
+				 test_bit(STATUS_TRANS_IDLE, &trans->status),
+				 msecs_to_jiffies(IWL_TRANS_IDLE_TIMEOUT));
+	if (!ret) {
+		IWL_ERR(trans, "Timeout entering D0i3\n");
+		ret = -ETIMEDOUT;
+		goto err;
+	}
+
+	clear_bit(STATUS_TRANS_GOING_IDLE, &trans->status);
+
+	return 0;
+err:
+	clear_bit(STATUS_TRANS_GOING_IDLE, &trans->status);
+	iwl_trans_fw_error(trans);
+	return ret;
+}
+
+int iwl_pci_fw_exit_d0i3(struct iwl_trans *trans)
+{
+	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+	int ret;
+
+	/* sometimes a D0i3 entry is not followed through */
+	if (!test_bit(STATUS_TRANS_IDLE, &trans->status))
+		return 0;
+
+	/* config the fw */
+	ret = iwl_op_mode_exit_d0i3(trans->op_mode);
+	if (ret)
+		goto err;
+
+	/* we clear STATUS_TRANS_IDLE only when D0I3_END command is completed */
+
+	ret = wait_event_timeout(trans_pcie->d0i3_waitq,
+				 !test_bit(STATUS_TRANS_IDLE, &trans->status),
+				 msecs_to_jiffies(IWL_TRANS_IDLE_TIMEOUT));
+	if (!ret) {
+		IWL_ERR(trans, "Timeout exiting D0i3\n");
+		ret = -ETIMEDOUT;
+		goto err;
+	}
+
+	return 0;
+err:
+	clear_bit(STATUS_TRANS_IDLE, &trans->status);
+	iwl_trans_fw_error(trans);
+	return ret;
+}
+
+#ifdef CPTCFG_IWLWIFI_PCIE_RTPM
+static int iwl_pci_runtime_suspend(struct device *device)
+{
+	struct pci_dev *pdev = to_pci_dev(device);
+	struct iwl_trans *trans = pci_get_drvdata(pdev);
+	int ret;
+
+	IWL_DEBUG_RPM(trans, "entering runtime suspend\n");
+
+	if (test_bit(STATUS_DEVICE_ENABLED, &trans->status)) {
+		ret = iwl_pci_fw_enter_d0i3(trans);
+		if (ret < 0)
+			return ret;
+	}
+
+	trans->system_pm_mode = IWL_PLAT_PM_MODE_D0I3;
+
+	iwl_trans_d3_suspend(trans, false, false);
+
+	return 0;
+}
+
+static int iwl_pci_runtime_resume(struct device *device)
+{
+	struct pci_dev *pdev = to_pci_dev(device);
+	struct iwl_trans *trans = pci_get_drvdata(pdev);
+	enum iwl_d3_status d3_status;
+
+	IWL_DEBUG_RPM(trans, "exiting runtime suspend (resume)\n");
+
+	iwl_trans_d3_resume(trans, &d3_status, false, false);
+
+	if (test_bit(STATUS_DEVICE_ENABLED, &trans->status))
+		return iwl_pci_fw_exit_d0i3(trans);
+
+	return 0;
+}
+
+static int iwl_pci_system_prepare(struct device *device)
+{
+	struct pci_dev *pdev = to_pci_dev(device);
+	struct iwl_trans *trans = pci_get_drvdata(pdev);
+
+	IWL_DEBUG_RPM(trans, "preparing for system suspend\n");
+
+	/* This is called before entering system suspend and before
+	 * the runtime resume is called.  Set the suspending flag to
+	 * prevent the wakelock from being taken.
+	 */
+	trans->suspending = true;
+
+	/* Wake the device up from runtime suspend before going to
+	 * platform suspend.  This is needed because we don't know
+	 * whether wowlan any is set and, if it's not, mac80211 will
+	 * disconnect (in which case, we can't be in D0i3).
+	 */
+	pm_runtime_resume(device);
+
+	return 0;
+}
+
+static void iwl_pci_system_complete(struct device *device)
+{
+	struct pci_dev *pdev = to_pci_dev(device);
+	struct iwl_trans *trans = pci_get_drvdata(pdev);
+
+	IWL_DEBUG_RPM(trans, "completing system suspend\n");
+
+	/* This is called as a counterpart to the prepare op.  It is
+	 * called either when suspending fails or when suspend
+	 * completed successfully.  Now there's no risk of grabbing
+	 * the wakelock anymore, so we can release the suspending
+	 * flag.
+	 */
+	trans->suspending = false;
+}
+#endif /* CPTCFG_IWLWIFI_PCIE_RTPM */
+
+static const struct dev_pm_ops iwl_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(iwl_pci_suspend,
+				iwl_pci_resume)
+#ifdef CPTCFG_IWLWIFI_PCIE_RTPM
+	SET_RUNTIME_PM_OPS(iwl_pci_runtime_suspend,
+			   iwl_pci_runtime_resume,
+			   NULL)
+	.prepare = iwl_pci_system_prepare,
+	.complete = iwl_pci_system_complete,
+#endif /* CPTCFG_IWLWIFI_PCIE_RTPM */
+};
 
 #define IWL_PM_OPS	(&iwl_dev_pm_ops)
 
-#else
+#else /* CONFIG_PM_SLEEP */
 
 #define IWL_PM_OPS	NULL
 
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
 static struct pci_driver iwl_pci_driver = {
 	.name = DRV_NAME,

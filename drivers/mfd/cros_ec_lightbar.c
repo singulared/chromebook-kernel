@@ -110,9 +110,8 @@ static int get_lightbar_version(struct cros_ec_device *ec,
 	int ret;
 
 	param.cmd = LIGHTBAR_CMD_VERSION;
+	msg.result = EC_RES_UNAVAILABLE;
 	ret = cros_ec_cmd_xfer(ec, &msg);
-	if (ret < 0)
-		return 0;
 
 	switch (msg.result) {
 	case EC_RES_INVALID_PARAM:
@@ -124,6 +123,9 @@ static int get_lightbar_version(struct cros_ec_device *ec,
 		return 1;
 
 	case EC_RES_SUCCESS:
+		if (ret < 0)
+			return 0;
+
 		/* Future devices w/lightbars should implement this command */
 		if (ver_ptr)
 			*ver_ptr = resp.version.num;

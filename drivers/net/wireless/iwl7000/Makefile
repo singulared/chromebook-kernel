@@ -11,6 +11,10 @@ ifeq ($(CONFIG_IWL7000_TESTMODE),y)
 export CPTCFG_IWLWIFI_DEVICE_TESTMODE=y
 endif
 
+ifeq ($(CONFIG_IWL7000_VENDOR_CMDS),y)
+export CPTCFG_IWLMVM_VENDOR_CMDS=y
+endif
+
 ifeq ($(CONFIG_IWL7000_DEBUGFS),y)
 export CPTCFG_IWLWIFI_DEBUGFS=y
 export CPTCFG_MAC80211_DEBUGFS=y
@@ -33,6 +37,9 @@ subdir-ccflags-y = -I$(src) -include "hdrs/iwl-chrome.h"
 subdir-ccflags-y += -I$(src)/hdrs/
 subdir-ccflags-y += $(call cc-option,-Wno-error=date-time)
 subdir-ccflags-y += $(call cc-option,-Wno-date-time)
+# otherwise ieee80211_band vs. nl80211_band warnings come up
+subdir-ccflags-y += $(call cc-option,-Wno-enum-compare)
+subdir-ccflags-y += $(call cc-option,-Wno-enum-conversion)
 
 obj-$(CONFIG_IWL7000) += mac80211/
 obj-$(CONFIG_IWL7000) += iwlwifi/

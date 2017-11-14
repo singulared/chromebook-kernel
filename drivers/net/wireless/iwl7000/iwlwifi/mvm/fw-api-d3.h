@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,13 +27,14 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
+ * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -94,10 +96,14 @@ struct iwl_d3_manager_config {
  * enum iwl_d3_proto_offloads - enabled protocol offloads
  * @IWL_D3_PROTO_OFFLOAD_ARP: ARP data is enabled
  * @IWL_D3_PROTO_OFFLOAD_NS: NS (Neighbor Solicitation) is enabled
+ * @IWL_D3_PROTO_IPV4_VALID: IPv4 data is valid
+ * @IWL_D3_PROTO_IPV6_VALID: IPv6 data is valid
  */
 enum iwl_proto_offloads {
 	IWL_D3_PROTO_OFFLOAD_ARP = BIT(0),
 	IWL_D3_PROTO_OFFLOAD_NS = BIT(1),
+	IWL_D3_PROTO_IPV4_VALID = BIT(2),
+	IWL_D3_PROTO_IPV6_VALID = BIT(3),
 };
 
 #define IWL_PROTO_OFFLOAD_NUM_IPV6_ADDRS_V1	2
@@ -241,6 +247,25 @@ enum iwl_wowlan_wakeup_filters {
 	IWL_WOWLAN_WAKEUP_BCN_FILTERING			= BIT(16),
 }; /* WOWLAN_WAKEUP_FILTER_API_E_VER_4 */
 
+enum iwl_wowlan_flags {
+	IS_11W_ASSOC		= BIT(0),
+	ENABLE_L3_FILTERING	= BIT(1),
+	ENABLE_NBNS_FILTERING	= BIT(2),
+	ENABLE_DHCP_FILTERING	= BIT(3),
+	ENABLE_STORE_BEACON	= BIT(4),
+};
+
+/**
+ * struct iwl_wowlan_config_cmd - WoWLAN configuration
+ * @wakeup_filter: filter from &enum iwl_wowlan_wakeup_filters
+ * @non_qos_seq: non-QoS sequence counter to use next
+ * @qos_seq: QoS sequence counters to use next
+ * @wowlan_ba_teardown_tids: bitmap of BA sessions to tear down
+ * @is_11n_connection: indicates HT connection
+ * @offloading_tid: TID reserved for firmware use
+ * @flags: extra flags, see &enum iwl_wowlan_flags
+ * @reserved: reserved
+ */
 struct iwl_wowlan_config_cmd {
 	__le32 wakeup_filter;
 	__le16 non_qos_seq;
@@ -248,8 +273,9 @@ struct iwl_wowlan_config_cmd {
 	u8 wowlan_ba_teardown_tids;
 	u8 is_11n_connection;
 	u8 offloading_tid;
-	u8 reserved[3];
-} __packed; /* WOWLAN_CONFIG_API_S_VER_3 */
+	u8 flags;
+	u8 reserved[2];
+} __packed; /* WOWLAN_CONFIG_API_S_VER_4 */
 
 /*
  * WOWLAN_TSC_RSC_PARAMS
@@ -339,8 +365,13 @@ enum iwl_wowlan_wakeup_reason {
 	IWL_WOWLAN_WAKEUP_BY_FOUR_WAY_HANDSHAKE			= BIT(8),
 	IWL_WOWLAN_WAKEUP_BY_REM_WAKE_LINK_LOSS			= BIT(9),
 	IWL_WOWLAN_WAKEUP_BY_REM_WAKE_SIGNATURE_TABLE		= BIT(10),
-	/* BIT(11) reserved */
+	IWL_WOWLAN_WAKEUP_BY_REM_WAKE_TCP_EXTERNAL		= BIT(11),
 	IWL_WOWLAN_WAKEUP_BY_REM_WAKE_WAKEUP_PACKET		= BIT(12),
+	IWL_WOWLAN_WAKEUP_BY_IOAC_MAGIC_PACKET			= BIT(13),
+	IWL_WOWLAN_WAKEUP_BY_D3_WAKEUP_HOST_TIMER		= BIT(14),
+	IWL_WOWLAN_WAKEUP_BY_RXFRAME_FILTERED_IN		= BIT(15),
+	IWL_WOWLAN_WAKEUP_BY_BEACON_FILTERED_IN			= BIT(16),
+
 }; /* WOWLAN_WAKE_UP_REASON_API_E_VER_2 */
 
 struct iwl_wowlan_gtk_status {
@@ -349,8 +380,23 @@ struct iwl_wowlan_gtk_status {
 	u8 decrypt_key[16];
 	u8 tkip_mic_key[8];
 	struct iwl_wowlan_rsc_tsc_params_cmd rsc;
-} __packed;
+} __packed; /* WOWLAN_GTK_MATERIAL_VER_1 */
 
+/**
+ * struct iwl_wowlan_status - WoWLAN status
+ * @gtk: GTK data
+ * @replay_ctr: GTK rekey replay counter
+ * @pattern_number: number of the matched pattern
+ * @non_qos_seq_ctr: non-QoS sequence counter to use next
+ * @qos_seq_ctr: QoS sequence counters to use next
+ * @wakeup_reasons: wakeup reasons, see &enum iwl_wowlan_wakeup_reason
+ * @num_of_gtk_rekeys: number of GTK rekeys
+ * @transmitted_ndps: number of transmitted neighbor discovery packets
+ * @received_beacons: number of received beacons
+ * @wake_packet_length: wakeup packet length
+ * @wake_packet_bufsize: wakeup packet buffer size
+ * @wake_packet: wakeup packet
+ */
 struct iwl_wowlan_status {
 	struct iwl_wowlan_gtk_status gtk;
 	__le64 replay_ctr;

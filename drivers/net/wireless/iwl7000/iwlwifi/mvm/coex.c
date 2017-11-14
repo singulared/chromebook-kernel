@@ -26,7 +26,7 @@
  * in the file called COPYING.
  *
  * Contact Information:
- *  Intel Linux Wireless <ilw@linux.intel.com>
+ *  Intel Linux Wireless <linuxwifi@intel.com>
  * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
  *
  * BSD LICENSE
@@ -142,7 +142,7 @@ static const __le64 iwl_ci_mask[][3] = {
 		cpu_to_le64(0x0)
 	},
 	{
-		cpu_to_le64(0xFFC0000000ULL),
+		cpu_to_le64(0xFE00000000ULL),
 		cpu_to_le64(0x0ULL),
 		cpu_to_le64(0x0ULL)
 	},
@@ -378,7 +378,7 @@ iwl_get_coex_type(struct iwl_mvm *mvm, const struct ieee80211_vif *vif)
 	chanctx_conf = rcu_dereference(vif->chanctx_conf);
 
 	if (!chanctx_conf ||
-	     chanctx_conf->def.chan->band != IEEE80211_BAND_2GHZ) {
+	     chanctx_conf->def.chan->band != NL80211_BAND_2GHZ) {
 		rcu_read_unlock();
 		return BT_COEX_INVALID_LUT;
 	}
@@ -411,9 +411,6 @@ int iwl_send_bt_init_conf(struct iwl_mvm *mvm)
 	struct iwl_bt_coex_cmd bt_cmd = {};
 	u32 mode;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_send_bt_init_conf_old(mvm);
-
 	lockdep_assert_held(&mvm->mutex);
 
 	if (unlikely(mvm->bt_force_ant_mode != BT_FORCE_ANT_DIS)) {
@@ -443,11 +440,8 @@ int iwl_send_bt_init_conf(struct iwl_mvm *mvm)
 	if (iwl_mvm_bt_is_plcr_supported(mvm))
 		bt_cmd.enabled_modules |= cpu_to_le32(BT_COEX_CORUN_ENABLED);
 
-	if (IWL_MVM_BT_COEX_MPLUT) {
+	if (iwl_mvm_is_mplut_supported(mvm))
 		bt_cmd.enabled_modules |= cpu_to_le32(BT_COEX_MPLUT_ENABLED);
-		bt_cmd.enabled_modules |=
-			cpu_to_le32(BT_COEX_MPLUT_BOOST_ENABLED);
-	}
 
 	bt_cmd.enabled_modules |= cpu_to_le32(BT_COEX_HIGH_BAND_RET);
 
@@ -575,7 +569,7 @@ static void iwl_mvm_bt_notif_iterator(void *_data, u8 *mac,
 
 	/* If channel context is invalid or not on 2.4GHz .. */
 	if ((!chanctx_conf ||
-	     chanctx_conf->def.chan->band != IEEE80211_BAND_2GHZ)) {
+	     chanctx_conf->def.chan->band != NL80211_BAND_2GHZ)) {
 		if (vif->type == NL80211_IFTYPE_STATION) {
 			/* ... relax constraints and disable rssi events */
 			iwl_mvm_update_smps(mvm, vif, IWL_MVM_SMPS_REQ_BT_COEX,
@@ -598,8 +592,7 @@ static void iwl_mvm_bt_notif_iterator(void *_data, u8 *mac,
 		smps_mode = IEEE80211_SMPS_AUTOMATIC;
 
 	if (mvmvif->phy_ctxt &&
-	    IWL_COEX_IS_RRC_ON(mvm->last_bt_notif.ttc_rrc_status,
-			       mvmvif->phy_ctxt->id))
+	    (mvm->last_bt_notif.rrc_status & BIT(mvmvif->phy_ctxt->id)))
 		smps_mode = IEEE80211_SMPS_AUTOMATIC;
 
 	IWL_DEBUG_COEX(data->mvm,
@@ -666,8 +659,8 @@ static void iwl_mvm_bt_notif_iterator(void *_data, u8 *mac,
 	 * don't reduce the Tx power if one of these is true:
 	 *  we are in LOOSE
 	 *  single share antenna product
-	 *  BT is active
-	 *  we are associated
+	 *  BT is inactive
+	 *  we are not associated
 	 */
 	if (iwl_get_coex_type(mvm, vif) == BT_COEX_LOOSE_LUT ||
 	    mvm->cfg->bt_shared_single_ant || !vif->bss_conf.assoc ||
@@ -778,12 +771,6 @@ void iwl_mvm_rx_bt_coex_notif(struct iwl_mvm *mvm,
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_bt_coex_profile_notif *notif = (void *)pkt->data;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa,
-			IWL_UCODE_TLV_API_BT_COEX_SPLIT)) {
-		iwl_mvm_rx_bt_coex_notif_old(mvm, rxb);
-		return;
-	}
-
 	IWL_DEBUG_COEX(mvm, "BT Coex Notification received\n");
 	IWL_DEBUG_COEX(mvm, "\tBT ci compliance %d\n", notif->bt_ci_compliance);
 	IWL_DEBUG_COEX(mvm, "\tBT primary_ch_lut %d\n",
@@ -805,12 +792,6 @@ void iwl_mvm_bt_rssi_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	int ret;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa,
-			IWL_UCODE_TLV_API_BT_COEX_SPLIT)) {
-		iwl_mvm_bt_rssi_event_old(mvm, vif, rssi_event);
-		return;
-	}
-
 	lockdep_assert_held(&mvm->mutex);
 
 	/* Ignore updates if we are in force mode */
@@ -821,7 +802,7 @@ void iwl_mvm_bt_rssi_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	 * Rssi update while not associated - can happen since the statistics
 	 * are handled asynchronously
 	 */
-	if (mvmvif->ap_sta_id == IWL_MVM_STATION_COUNT)
+	if (mvmvif->ap_sta_id == IWL_MVM_INVALID_STA)
 		return;
 
 	/* No BT - reports should be disabled */
@@ -857,10 +838,7 @@ u16 iwl_mvm_coex_agg_time_limit(struct iwl_mvm *mvm,
 	struct iwl_mvm_phy_ctxt *phy_ctxt = mvmvif->phy_ctxt;
 	enum iwl_bt_coex_lut_type lut_type;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_mvm_coex_agg_time_limit_old(mvm, sta);
-
-	if (IWL_COEX_IS_TTC_ON(mvm->last_bt_notif.ttc_rrc_status, phy_ctxt->id))
+	if (mvm->last_bt_notif.ttc_status & BIT(phy_ctxt->id))
 		return LINK_QUAL_AGG_TIME_LIMIT_DEF;
 
 	if (le32_to_cpu(mvm->last_bt_notif.bt_activity_grading) <
@@ -884,10 +862,7 @@ bool iwl_mvm_bt_coex_is_mimo_allowed(struct iwl_mvm *mvm,
 	struct iwl_mvm_phy_ctxt *phy_ctxt = mvmvif->phy_ctxt;
 	enum iwl_bt_coex_lut_type lut_type;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_mvm_bt_coex_is_mimo_allowed_old(mvm, sta);
-
-	if (IWL_COEX_IS_TTC_ON(mvm->last_bt_notif.ttc_rrc_status, phy_ctxt->id))
+	if (mvm->last_bt_notif.ttc_status & BIT(phy_ctxt->id))
 		return true;
 
 	if (le32_to_cpu(mvm->last_bt_notif.bt_activity_grading) <
@@ -914,9 +889,6 @@ bool iwl_mvm_bt_coex_is_ant_avail(struct iwl_mvm *mvm, u8 ant)
 	if (ant & mvm->cfg->non_shared_ant)
 		return true;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_mvm_bt_coex_is_shared_ant_avail_old(mvm);
-
 	return le32_to_cpu(mvm->last_bt_notif.bt_activity_grading) <
 		BT_HIGH_TRAFFIC;
 }
@@ -927,21 +899,15 @@ bool iwl_mvm_bt_coex_is_shared_ant_avail(struct iwl_mvm *mvm)
 	if (mvm->cfg->bt_shared_single_ant)
 		return true;
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_mvm_bt_coex_is_shared_ant_avail_old(mvm);
-
 	return le32_to_cpu(mvm->last_bt_notif.bt_activity_grading) < BT_HIGH_TRAFFIC;
 }
 
 bool iwl_mvm_bt_coex_is_tpc_allowed(struct iwl_mvm *mvm,
-				    enum ieee80211_band band)
+				    enum nl80211_band band)
 {
 	u32 bt_activity = le32_to_cpu(mvm->last_bt_notif.bt_activity_grading);
 
-	if (!fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_BT_COEX_SPLIT))
-		return iwl_mvm_bt_coex_is_tpc_allowed_old(mvm, band);
-
-	if (band != IEEE80211_BAND_2GHZ)
+	if (band != NL80211_BAND_2GHZ)
 		return false;
 
 	return bt_activity >= BT_LOW_TRAFFIC;
@@ -951,29 +917,35 @@ u8 iwl_mvm_bt_coex_tx_prio(struct iwl_mvm *mvm, struct ieee80211_hdr *hdr,
 			   struct ieee80211_tx_info *info, u8 ac)
 {
 	__le16 fc = hdr->frame_control;
+	bool mplut_enabled = iwl_mvm_is_mplut_supported(mvm);
 
-	if (info->band != IEEE80211_BAND_2GHZ)
+	if (info->band != NL80211_BAND_2GHZ)
 		return 0;
 
 	if (unlikely(mvm->bt_tx_prio))
 		return mvm->bt_tx_prio - 1;
 
-	/* High prio packet (wrt. BT coex) if it is EAPOL, MCAST or MGMT */
-	if (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO ||
-	     is_multicast_ether_addr(hdr->addr1) ||
-	     ieee80211_is_ctl(fc) || ieee80211_is_mgmt(fc) ||
-	     ieee80211_is_nullfunc(fc) || ieee80211_is_qos_nullfunc(fc))
+	if (likely(ieee80211_is_data(fc))) {
+		if (likely(ieee80211_is_data_qos(fc))) {
+			switch (ac) {
+			case IEEE80211_AC_BE:
+				return mplut_enabled ? 1 : 0;
+			case IEEE80211_AC_VI:
+				return mplut_enabled ? 2 : 3;
+			case IEEE80211_AC_VO:
+				return 3;
+			default:
+				return 0;
+			}
+		} else if (is_multicast_ether_addr(hdr->addr1)) {
+			return 3;
+		} else
+			return 0;
+	} else if (ieee80211_is_mgmt(fc)) {
+		return ieee80211_is_disassoc(fc) ? 0 : 3;
+	} else if (ieee80211_is_ctl(fc)) {
+		/* ignore cfend and cfendack frames as we never send those */
 		return 3;
-
-	switch (ac) {
-	case IEEE80211_AC_BE:
-		return 1;
-	case IEEE80211_AC_VO:
-		return 3;
-	case IEEE80211_AC_VI:
-		return 2;
-	default:
-		break;
 	}
 
 	return 0;
@@ -981,12 +953,6 @@ u8 iwl_mvm_bt_coex_tx_prio(struct iwl_mvm *mvm, struct ieee80211_hdr *hdr,
 
 void iwl_mvm_bt_coex_vif_change(struct iwl_mvm *mvm)
 {
-	if (!fw_has_api(&mvm->fw->ucode_capa,
-			IWL_UCODE_TLV_API_BT_COEX_SPLIT)) {
-		iwl_mvm_bt_coex_vif_change_old(mvm);
-		return;
-	}
-
 	iwl_mvm_bt_coex_notif_handle(mvm);
 }
 
@@ -994,16 +960,11 @@ void iwl_mvm_rx_ant_coupling_notif(struct iwl_mvm *mvm,
 				   struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
-	u32 ant_isolation = le32_to_cpup((void *)pkt->data);
+	struct iwl_mvm_antenna_coupling_notif *notif = (void *)pkt->data;
+	u32 ant_isolation = le32_to_cpu(notif->isolation);
 	struct iwl_bt_coex_corun_lut_update_cmd cmd = {};
 	u8 __maybe_unused lower_bound, upper_bound;
 	u8 lut;
-
-	if (!fw_has_api(&mvm->fw->ucode_capa,
-			IWL_UCODE_TLV_API_BT_COEX_SPLIT)) {
-		iwl_mvm_rx_ant_coupling_notif_old(mvm, rxb);
-		return;
-	}
 
 	if (!iwl_mvm_bt_is_plcr_supported(mvm))
 		return;
