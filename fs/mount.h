@@ -18,6 +18,13 @@ struct mnt_pcp {
 	int mnt_writers;
 };
 
+struct mountpoint {
+	struct list_head m_hash;
+	struct dentry *m_dentry;
+	struct hlist_head m_list;
+	int m_count;
+};
+
 struct mount {
 	struct list_head mnt_hash;
 	struct mount *mnt_parent;
@@ -40,6 +47,8 @@ struct mount {
 	struct list_head mnt_slave;	/* slave list entry */
 	struct mount *mnt_master;	/* slave is on master->mnt_slave_list */
 	struct mnt_namespace *mnt_ns;	/* containing namespace */
+	struct mountpoint *mnt_mp;	/* where is it mounted */
+	struct hlist_node mnt_mp_list;	/* list mounts with the same mountpoint */
 #ifdef CONFIG_FSNOTIFY
 	struct hlist_head mnt_fsnotify_marks;
 	__u32 mnt_fsnotify_mask;
@@ -71,6 +80,15 @@ static inline int is_mounted(struct vfsmount *mnt)
 
 extern struct mount *__lookup_mnt(struct vfsmount *, struct dentry *, int);
 
+extern void __detach_mounts(struct dentry *dentry);
+
+static inline void detach_mounts(struct dentry *dentry)
+{
+	if (!d_mountpoint(dentry))
+		return;
+	__detach_mounts(dentry);
+}
+
 static inline void get_mnt_ns(struct mnt_namespace *ns)
 {
 	atomic_inc(&ns->count);
@@ -86,3 +104,12 @@ struct proc_mounts {
 #define proc_mounts(p) (container_of((p), struct proc_mounts, m))
 
 extern const struct seq_operations mounts_op;
+
+extern bool __is_local_mountpoint(struct dentry *dentry);
+static inline bool is_local_mountpoint(struct dentry *dentry)
+{
+	if (!d_mountpoint(dentry))
+		return false;
+
+	return __is_local_mountpoint(dentry);
+}
