@@ -64,14 +64,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *****************************************************************************/
-#if CFG80211_VERSION > KERNEL_VERSION(3, 14, 0)
-
 #include <linux/etherdevice.h>
 #include <net/mac80211.h>
 #include <net/netlink.h>
 #include "mvm.h"
 #include "iwl-vendor-cmd.h"
-#include "fw-dbg.h"
 
 #include "iwl-io.h"
 #include "iwl-prph.h"
@@ -115,7 +112,7 @@ static int iwl_mvm_parse_vendor_data(struct nlattr **tb,
 		return -EINVAL;
 
 	return nla_parse(tb, MAX_IWL_MVM_VENDOR_ATTR, data, data_len,
-			 iwl_mvm_vendor_attr_policy);
+			 iwl_mvm_vendor_attr_policy, NULL);
 }
 
 static int iwl_mvm_set_low_latency(struct wiphy *wiphy,
@@ -644,8 +641,8 @@ static int iwl_mvm_vendor_dbg_collect(struct wiphy *wiphy,
 	trigger_desc = nla_data(tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER]);
 	len = nla_len(tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER]);
 
-	iwl_mvm_fw_dbg_collect(mvm, FW_DBG_TRIGGER_USER_EXTENDED, trigger_desc,
-			       len, NULL);
+	iwl_fw_dbg_collect(&mvm->fwrt, FW_DBG_TRIGGER_USER_EXTENDED,
+			   trigger_desc, len, NULL);
 
 	return 0;
 }
@@ -1173,4 +1170,3 @@ void iwl_mvm_vendor_lqm_notif(struct iwl_mvm *mvm,
 		mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
 		iwl_mvm_lqm_notif_iterator, report);
 }
-#endif

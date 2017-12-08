@@ -137,7 +137,7 @@ void iwl_xvt_get_nic_error_log_v1(struct iwl_xvt *xvt,
 	u32 base;
 	/* TODO: support CDB */
 	base = xvt->error_event_table[0];
-	if (xvt->cur_ucode == IWL_UCODE_INIT) {
+	if (xvt->fwrt.cur_fw_img == IWL_UCODE_INIT) {
 		if (!base)
 			base = xvt->fw->init_errlog_ptr;
 	} else {
@@ -194,7 +194,7 @@ void iwl_xvt_get_nic_error_log_v2(struct iwl_xvt *xvt,
 	u32 base;
 	/* TODO: support CDB */
 	base = xvt->error_event_table[0];
-	if (xvt->cur_ucode == IWL_UCODE_INIT) {
+	if (xvt->fwrt.cur_fw_img == IWL_UCODE_INIT) {
 		if (!base)
 			base = xvt->fw->init_errlog_ptr;
 	} else {
@@ -257,8 +257,8 @@ void iwl_xvt_get_umac_error_log(struct iwl_xvt *xvt,
 		IWL_ERR(xvt,
 			"Not valid error log pointer 0x%08X for %s uCode\n",
 			base,
-			(xvt->cur_ucode == IWL_UCODE_INIT)
-					? "Init" : "RT");
+			(xvt->fwrt.cur_fw_img == IWL_UCODE_INIT)
+			? "Init" : "RT");
 		return;
 	}
 

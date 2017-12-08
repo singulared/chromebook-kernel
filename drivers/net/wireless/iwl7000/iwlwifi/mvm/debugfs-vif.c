@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@
  *
  *****************************************************************************/
 #include "mvm.h"
-#include "fw-api-tof.h"
+#include "fw/api/tof.h"
 #include "debugfs.h"
 
 static void iwl_dbgfs_update_pm(struct iwl_mvm *mvm,
@@ -261,10 +261,7 @@ static ssize_t iwl_dbgfs_mac_params_read(struct file *file,
 	case NL80211_IFTYPE_P2P_DEVICE:
 		pos += scnprintf(buf+pos, bufsz-pos, "type: p2p dev\n");
 		break;
-#if CFG80211_VERSION >= KERNEL_VERSION(4,9,0)
 	case NL80211_IFTYPE_NAN:
-		/* keep code in case of fall-through (spatch generated) */
-#endif
 		pos += scnprintf(buf+pos, bufsz-pos, "type: NAN\n");
 		break;
 	default:
@@ -1216,7 +1213,7 @@ static ssize_t iwl_dbgfs_tof_algo_type_read(struct file *file,
 	char buf[10];
 	int ret;
 
-	ret = snprintf(buf, sizeof(buf), "%d\n", mvm->tof_data.tof_algo_type);
+	ret = scnprintf(buf, sizeof(buf), "%d\n", mvm->tof_data.tof_algo_type);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 }
@@ -1257,7 +1254,7 @@ static ssize_t iwl_dbgfs_tof_toa_offset_read(struct file *file,
 	char buf[10];
 	int ret;
 
-	ret = snprintf(buf, sizeof(buf), "%u\n", mvm->tof_data.toa_offset);
+	ret = scnprintf(buf, sizeof(buf), "%u\n", mvm->tof_data.toa_offset);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 }
@@ -1320,11 +1317,11 @@ static ssize_t iwl_dbgfs_tof_responder_config_read(
 	char buf[128];
 	int ret;
 
-	ret = snprintf(buf,
-		       sizeof(buf),
-		       "responder_cfg_flags=0x%x\ncmd_valid_fields=0x%x\n",
-		       mvm->tof_data.responder_cfg.responder_cfg_flags,
-		       mvm->tof_data.responder_cfg.cmd_valid_fields);
+	ret = scnprintf(buf,
+			sizeof(buf),
+			"responder_cfg_flags=0x%x\ncmd_valid_fields=0x%x\n",
+			mvm->tof_data.responder_cfg.responder_cfg_flags,
+			mvm->tof_data.responder_cfg.cmd_valid_fields);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 }
@@ -1366,8 +1363,8 @@ static ssize_t iwl_dbgfs_tof_initiator_config_read(struct file *file,
 	char buf[32];
 	int ret;
 
-	ret = snprintf(buf, sizeof(buf), "initiator_cfg_flags=0x%x\n",
-		       mvm->tof_data.range_req.initiator_flags);
+	ret = scnprintf(buf, sizeof(buf), "initiator_cfg_flags=0x%x\n",
+			mvm->tof_data.range_req.initiator_flags);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 }
@@ -1443,11 +1440,11 @@ static ssize_t iwl_dbgfs_low_latency_read(struct file *file,
 	char buf[30] = {};
 	int len;
 
-	len = snprintf(buf, sizeof(buf) - 1,
-		       "traffic=%d\ndbgfs=%d\nvcmd=%d\n",
-		       mvmvif->low_latency_traffic,
-		       mvmvif->low_latency_dbgfs,
-		       mvmvif->low_latency_vcmd);
+	len = scnprintf(buf, sizeof(buf) - 1,
+			"traffic=%d\ndbgfs=%d\nvcmd=%d\n",
+			mvmvif->low_latency_traffic,
+			mvmvif->low_latency_dbgfs,
+			mvmvif->low_latency_vcmd);
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
 
@@ -1524,10 +1521,12 @@ static ssize_t iwl_dbgfs_rx_phyinfo_read(struct file *file,
 	struct ieee80211_vif *vif = file->private_data;
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	char buf[8];
+	int len;
 
-	snprintf(buf, sizeof(buf), "0x%04x\n", mvmvif->mvm->dbgfs_rx_phyinfo);
+	len = scnprintf(buf, sizeof(buf), "0x%04x\n",
+			mvmvif->mvm->dbgfs_rx_phyinfo);
 
-	return simple_read_from_buffer(user_buf, count, ppos, buf, sizeof(buf));
+	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
 
 static void iwl_dbgfs_quota_check(void *data, u8 *mac,
@@ -1578,7 +1577,7 @@ static ssize_t iwl_dbgfs_quota_min_read(struct file *file,
 	char buf[10];
 	int len;
 
-	len = snprintf(buf, sizeof(buf), "%d\n", mvmvif->dbgfs_quota_min);
+	len = scnprintf(buf, sizeof(buf), "%d\n", mvmvif->dbgfs_quota_min);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
@@ -1752,7 +1751,7 @@ void iwl_mvm_vif_dbgfs_register(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 
 	if (fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_TOF_SUPPORT) &&
 	    !vif->p2p && (vif->type != NL80211_IFTYPE_P2P_DEVICE) &&
-	    (!ieee80211_viftype_nan(vif->type))) {
+	    (vif->type != NL80211_IFTYPE_NAN)) {
 		if (IWL_MVM_TOF_IS_RESPONDER && vif->type == NL80211_IFTYPE_AP)
 			MVM_DEBUGFS_ADD_FILE_VIF(tof_responder_params,
 						 mvmvif->dbgfs_dir,

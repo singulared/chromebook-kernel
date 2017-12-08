@@ -59,7 +59,7 @@
 #include <linux/etherdevice.h>
 
 #include "mvm.h"
-#include "fw-api-nan.h"
+#include "fw/api/nan.h"
 
 #define NAN_WARMUP_TIMEOUT_USEC  (120000000ULL)
 #define NAN_CHANNEL_24           (6)
@@ -142,10 +142,10 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	/* 2GHz is mandatory and nl80211 should make sure it is set.
 	 * Warn and add 2GHz if this happens anyway.
 	 */
-	if (WARN_ON(ieee80211_nan_bands(conf) && !(ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ))))
+	if (WARN_ON(conf->bands && !(conf->bands & BIT(NL80211_BAND_2GHZ))))
 		return -EINVAL;
 
-	ieee80211_nan_set_band(conf, NL80211_BAND_2GHZ);
+	conf->bands |= BIT(NL80211_BAND_2GHZ);
 	cmd = kzalloc(iwl_mvm_nan_cfg_cmd_len(hw), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
@@ -164,7 +164,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	umac_cfg->sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
 	umac_cfg->master_pref = conf->master_pref;
 
-	if (ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) {
+	if (conf->bands & BIT(NL80211_BAND_2GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_2GHZ,
 					NAN_CHANNEL_24)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_24);
@@ -173,12 +173,10 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		}
 
 		tb_cfg->chan24 = NAN_CHANNEL_24;
-
-		/* available on each DW in on 2.4GHZ */
-		cdw |= 1;
+		cdw |= conf->cdw_2g;
 	}
 
-	if (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)) {
+	if (conf->bands & BIT(NL80211_BAND_5GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_5GHZ,
 					NAN_CHANNEL_52)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_52);
@@ -187,17 +185,15 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		}
 
 		tb_cfg->chan52 = NAN_CHANNEL_52;
-
-		/* available on each dw on 5GHZ */
-		cdw |= 1 << 3;
+		cdw |= conf->cdw_5g << 3;
 	}
 
 	tb_cfg->warmup_timer = cpu_to_le32(NAN_WARMUP_TIMEOUT_USEC);
 	tb_cfg->op_bands = 3;
 	nan2_cfg->cdw = cpu_to_le16(cdw);
 
-	if ((ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) &&
-	    (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)))
+	if ((conf->bands & BIT(NL80211_BAND_2GHZ)) &&
+	    (conf->bands & BIT(NL80211_BAND_5GHZ)))
 		umac_cfg->dual_band = cpu_to_le32(1);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_CONFIG_CMD,
@@ -250,13 +246,13 @@ iwl_fw_nan_func_type(enum nl80211_nan_function_type type)
 {
 	switch (type) {
 	case NL80211_NAN_FUNC_PUBLISH:
-		return NAN_DE_FUNC_PUBLISH;
+		return IWL_NAN_DE_FUNC_PUBLISH;
 	case NL80211_NAN_FUNC_SUBSCRIBE:
-		return NAN_DE_FUNC_SUBSCRIBE;
+		return IWL_NAN_DE_FUNC_SUBSCRIBE;
 	case NL80211_NAN_FUNC_FOLLOW_UP:
-		return NAN_DE_FUNC_FOLLOW_UP;
+		return IWL_NAN_DE_FUNC_FOLLOW_UP;
 	default:
-		return NAN_DE_FUNC_NOT_VALID;
+		return IWL_NAN_DE_FUNC_NOT_VALID;
 	}
 }
 
@@ -384,21 +380,21 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	 * able to unset this flag for solicited publish to disable "Replied"
 	 * events.
 	 */
-	flags |= NAN_DE_FUNC_FLAG_RAISE_EVENTS;
+	flags |= IWL_NAN_DE_FUNC_FLAG_RAISE_EVENTS;
 	if (nan_func->subscribe_active ||
 	    nan_func->publish_type == NL80211_NAN_UNSOLICITED_PUBLISH)
-		flags |= NAN_DE_FUNC_FLAG_UNSOLICITED_OR_ACTIVE;
+		flags |= IWL_NAN_DE_FUNC_FLAG_UNSOLICITED_OR_ACTIVE;
 
 	if (nan_func->close_range)
-		flags |= NAN_DE_FUNC_FLAG_CLOSE_RANGE;
+		flags |= IWL_NAN_DE_FUNC_FLAG_CLOSE_RANGE;
 
 	if (nan_func->type == NL80211_NAN_FUNC_FOLLOW_UP ||
 	    (nan_func->type == NL80211_NAN_FUNC_PUBLISH &&
 	     !nan_func->publish_bcast))
-		flags |= NAN_DE_FUNC_FLAG_UNICAST;
+		flags |= IWL_NAN_DE_FUNC_FLAG_UNICAST;
 
 	if (nan_func->publish_type == NL80211_NAN_SOLICITED_PUBLISH)
-		flags |= NAN_DE_FUNC_FLAG_SOLICITED;
+		flags |= IWL_NAN_DE_FUNC_FLAG_SOLICITED;
 
 	cmn->flags = cpu_to_le16(flags);
 	cmn->ttl = cpu_to_le32(nan_func->ttl);
@@ -466,10 +462,6 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	}
 
 	pkt = hcmd.resp_pkt;
-	if (WARN_ON(!pkt)) {
-		ret = -EIO;
-		goto out_free_resp;
-	}
 
 	if (WARN_ON(iwl_rx_packet_payload_len(pkt) != sizeof(*resp))) {
 		ret = -EIO;
@@ -482,13 +474,13 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 			   "Add NAN func response status: %d, instance_id: %d\n",
 			   resp->status, resp->instance_id);
 
-	if (resp->status == NAN_DE_FUNC_STATUS_INSUFFICIENT_ENTRIES ||
-	    resp->status == NAN_DE_FUNC_STATUS_INSUFFICIENT_MEMORY) {
+	if (resp->status == IWL_NAN_DE_FUNC_STATUS_INSUFFICIENT_ENTRIES ||
+	    resp->status == IWL_NAN_DE_FUNC_STATUS_INSUFFICIENT_MEMORY) {
 		ret = -ENOBUFS;
 		goto out_free_resp;
 	}
 
-	if (resp->status != NAN_DE_FUNC_STATUS_SUCCESSFUL) {
+	if (resp->status != IWL_NAN_DE_FUNC_STATUS_SUCCESSFUL) {
 		ret = -EIO;
 		goto out_free_resp;
 	}
@@ -548,11 +540,11 @@ void iwl_mvm_del_nan_func(struct ieee80211_hw *hw,
 static u8 iwl_cfg_nan_func_type(u8 fw_type)
 {
 	switch (fw_type) {
-	case NAN_DE_FUNC_PUBLISH:
+	case IWL_NAN_DE_FUNC_PUBLISH:
 		return NL80211_NAN_FUNC_PUBLISH;
-	case NAN_DE_FUNC_SUBSCRIBE:
+	case IWL_NAN_DE_FUNC_SUBSCRIBE:
 		return NL80211_NAN_FUNC_SUBSCRIBE;
-	case NAN_DE_FUNC_FOLLOW_UP:
+	case IWL_NAN_DE_FUNC_FOLLOW_UP:
 		return NL80211_NAN_FUNC_FOLLOW_UP;
 	default:
 		return NL80211_NAN_FUNC_MAX_TYPE + 1;
@@ -620,13 +612,13 @@ void iwl_mvm_nan_de_term_notif(struct iwl_mvm *mvm,
 	}
 
 	switch (ev->reason) {
-	case NAN_DE_TERM_TTL_REACHED:
+	case IWL_NAN_DE_TERM_TTL_REACHED:
 		nl_reason = NL80211_NAN_FUNC_TERM_REASON_TTL_EXPIRED;
 		break;
-	case NAN_DE_TERM_USER_REQUEST:
+	case IWL_NAN_DE_TERM_USER_REQUEST:
 		nl_reason = NL80211_NAN_FUNC_TERM_REASON_USER_REQUEST;
 		break;
-	case NAN_DE_TERM_FAILURE:
+	case IWL_NAN_DE_TERM_FAILURE:
 		nl_reason = NL80211_NAN_FUNC_TERM_REASON_ERROR;
 		break;
 	default:
@@ -661,7 +653,7 @@ int iwl_mvm_nan_config_nan_faw_cmd(struct iwl_mvm *mvm,
 	cmd.faw_ci.ctrl_pos = iwl_mvm_get_ctrl_pos(chandef);
 	ieee80211_chandef_to_operating_class(chandef, &cmd.op_class);
 	cmd.slots = slots;
-	cmd.type = NAN_POST_NAN_ATTR_FURTHER_NAN;
+	cmd.type = IWL_NAN_POST_NAN_ATTR_FURTHER_NAN;
 	cmd.id_n_color = cpu_to_le32(FW_CMD_ID_AND_COLOR(mvmvif->id,
 							 mvmvif->color));
 

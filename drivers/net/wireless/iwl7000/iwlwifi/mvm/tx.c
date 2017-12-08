@@ -74,7 +74,6 @@
 #include "iwl-eeprom-parse.h"
 #include "mvm.h"
 #include "sta.h"
-#include "fw-dbg.h"
 
 static void
 iwl_mvm_bar_check_trigger(struct iwl_mvm *mvm, const u8 *addr,
@@ -89,15 +88,15 @@ iwl_mvm_bar_check_trigger(struct iwl_mvm *mvm, const u8 *addr,
 	trig = iwl_fw_dbg_get_trigger(mvm->fw, FW_DBG_TRIGGER_BA);
 	ba_trig = (void *)trig->data;
 
-	if (!iwl_fw_dbg_trigger_check_stop(mvm, NULL, trig))
+	if (!iwl_fw_dbg_trigger_check_stop(&mvm->fwrt, NULL, trig))
 		return;
 
 	if (!(le16_to_cpu(ba_trig->tx_bar) & BIT(tid)))
 		return;
 
-	iwl_mvm_fw_dbg_collect_trig(mvm, trig,
-				    "BAR sent to %pM, tid %d, ssn %d",
-				    addr, tid, ssn);
+	iwl_fw_dbg_collect_trig(&mvm->fwrt, trig,
+				"BAR sent to %pM, tid %d, ssn %d",
+				addr, tid, ssn);
 }
 
 #define OPT_HDR(type, skb, off) \
@@ -480,7 +479,10 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 	if (unlikely(!dev_cmd))
 		return NULL;
 
-	memset(dev_cmd, 0, sizeof(*dev_cmd));
+	/* Make sure we zero enough of dev_cmd */
+	BUILD_BUG_ON(sizeof(struct iwl_tx_cmd_gen2) > sizeof(*tx_cmd));
+
+	memset(dev_cmd, 0, sizeof(dev_cmd->hdr) + sizeof(*tx_cmd));
 	dev_cmd->hdr.cmd = TX_CMD;
 
 	if (iwl_mvm_has_new_tx_api(mvm)) {
@@ -554,8 +556,9 @@ static void iwl_mvm_skb_prepare_status(struct sk_buff *skb,
 static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 				      struct ieee80211_tx_info *info, __le16 fc)
 {
-	if (!iwl_mvm_is_dqa_supported(mvm))
-		return info->hw_queue;
+	struct iwl_mvm_vif *mvmvif;
+
+	mvmvif = iwl_mvm_vif_from_mac80211(info->control.vif);
 
 	switch (info->control.vif->type) {
 	case NL80211_IFTYPE_AP:
@@ -575,7 +578,7 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 		     ieee80211_is_deauth(fc) || ieee80211_is_disassoc(fc)))
 			return mvm->probe_queue;
 		if (info->hw_queue == info->control.vif->cab_queue)
-			return info->hw_queue;
+			return mvmvif->cab_queue;
 
 		WARN_ONCE(info->control.vif->type != NL80211_IFTYPE_ADHOC,
 			  "fc=0x%02x", le16_to_cpu(fc));
@@ -584,7 +587,7 @@ static int iwl_mvm_get_ctrl_vif_queue(struct iwl_mvm *mvm,
 		if (ieee80211_is_mgmt(fc))
 			return mvm->p2p_dev_queue;
 		if (info->hw_queue == info->control.vif->cab_queue)
-			return info->hw_queue;
+			return mvmvif->cab_queue;
 
 		WARN_ON_ONCE(1);
 		return mvm->p2p_dev_queue;
@@ -647,15 +650,14 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 							   hdr->frame_control);
 			if (queue < 0)
 				return -1;
-
-			if (queue == info.control.vif->cab_queue)
-				queue = mvmvif->cab_queue;
 		} else if (info.control.vif->type == NL80211_IFTYPE_STATION &&
 			   is_multicast_ether_addr(hdr->addr1)) {
 			u8 ap_sta_id = ACCESS_ONCE(mvmvif->ap_sta_id);
 
 			if (ap_sta_id != IWL_MVM_INVALID_STA)
 				sta_id = ap_sta_id;
+		} else if (info.control.vif->type == NL80211_IFTYPE_MONITOR) {
+			queue = mvm->aux_queue;
 		}
 	}
 
@@ -672,17 +674,6 @@ int iwl_mvm_tx_skb_non_sta(struct iwl_mvm *mvm, struct sk_buff *skb)
 		iwl_trans_free_tx_cmd(mvm->trans, dev_cmd);
 		return -1;
 	}
-
-	/*
-	 * Increase the pending frames counter, so that later when a reply comes
-	 * in and the counter is decreased - we don't start getting negative
-	 * values.
-	 * Note that we don't need to make sure it isn't agg'd, since we're
-	 * TXing non-sta
-	 * For DQA mode - we shouldn't increase it though
-	 */
-	if (!iwl_mvm_is_dqa_supported(mvm))
-		atomic_inc(&mvm->pending_frames[sta_id]);
 
 	return 0;
 }
@@ -751,7 +742,7 @@ static int iwl_mvm_tx_tso(struct iwl_mvm *mvm, struct sk_buff *skb,
 	max_amsdu_len = sta->max_amsdu_len;
 
 	/* the Tx FIFO to which this A-MSDU will be routed */
-	txf = iwl_mvm_ac_to_tx_fifo[tid_to_mac80211_ac[tid]];
+	txf = iwl_mvm_mac_ac_to_tx_fifo(mvm, tid_to_mac80211_ac[tid]);
 
 	/*
 	 * Don't send an AMSDU that will be longer than the TXF.
@@ -760,7 +751,8 @@ static int iwl_mvm_tx_tso(struct iwl_mvm *mvm, struct sk_buff *skb,
 	 * fifo to be able to send bursts.
 	 */
 	max_amsdu_len = min_t(unsigned int, max_amsdu_len,
-			      mvm->smem_cfg.lmac[0].txfifo_size[txf] - 256);
+			      mvm->fwrt.smem_cfg.lmac[0].txfifo_size[txf] -
+			      256);
 
 	if (unlikely(dbg_max_amsdu_len))
 		max_amsdu_len = min_t(unsigned int, max_amsdu_len,
@@ -1021,22 +1013,13 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 		}
 	}
 
-	if (iwl_mvm_is_dqa_supported(mvm) || is_ampdu)
-		txq_id = mvmsta->tid_data[tid].txq_id;
-
-	if (sta->tdls && !iwl_mvm_is_dqa_supported(mvm)) {
-		/* default to TID 0 for non-QoS packets */
-		u8 tdls_tid = tid == IWL_MAX_TID_COUNT ? 0 : tid;
-
-		txq_id = mvmsta->hw_queue[tid_to_mac80211_ac[tdls_tid]];
-	}
+	txq_id = mvmsta->tid_data[tid].txq_id;
 
 	WARN_ON_ONCE(info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM);
 
 	/* Check if TXQ needs to be allocated or re-activated */
 	if (unlikely(txq_id == IWL_MVM_INVALID_QUEUE ||
-		     !mvmsta->tid_data[tid].is_tid_active) &&
-	    iwl_mvm_is_dqa_supported(mvm)) {
+		     !mvmsta->tid_data[tid].is_tid_active)) {
 		/* If TXQ needs to be allocated... */
 		if (txq_id == IWL_MVM_INVALID_QUEUE) {
 			iwl_mvm_tx_add_stream(mvm, mvmsta, tid, skb);
@@ -1063,7 +1046,7 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 				    txq_id);
 	}
 
-	if (iwl_mvm_is_dqa_supported(mvm) && !iwl_mvm_has_new_tx_api(mvm)) {
+	if (!iwl_mvm_has_new_tx_api(mvm)) {
 		/* Keep track of the time of the last frame for this RA/TID */
 		mvm->queue_info[txq_id].last_frame_time[tid] = jiffies;
 
@@ -1096,10 +1079,6 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 		mvmsta->tid_data[tid].seq_number = seq_number + 0x10;
 
 	spin_unlock(&mvmsta->lock);
-
-	/* Increase pending frames count if this isn't AMPDU or DQA queue */
-	if (!iwl_mvm_is_dqa_supported(mvm) && !is_ampdu)
-		atomic_inc(&mvm->pending_frames[mvmsta->sta_id]);
 
 #ifdef CPTCFG_IWLMVM_TCM
 	iwl_mvm_tx_pkt_queued(mvm, mvmsta,
@@ -1169,13 +1148,13 @@ static void iwl_mvm_check_ratid_empty(struct iwl_mvm *mvm,
 	struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
 	struct iwl_mvm_tid_data *tid_data = &mvmsta->tid_data[tid];
 	struct ieee80211_vif *vif = mvmsta->vif;
+	u16 normalized_ssn;
 
 	lockdep_assert_held(&mvmsta->lock);
 
 	if ((tid_data->state == IWL_AGG_ON ||
-	     tid_data->state == IWL_EMPTYING_HW_QUEUE_DELBA ||
-	     iwl_mvm_is_dqa_supported(mvm)) &&
-	    iwl_mvm_tid_queued(tid_data) == 0) {
+	     tid_data->state == IWL_EMPTYING_HW_QUEUE_DELBA) &&
+	    iwl_mvm_tid_queued(mvm, tid_data) == 0) {
 		/*
 		 * Now that this aggregation or DQA queue is empty tell
 		 * mac80211 so it knows we no longer have frames buffered for
@@ -1184,7 +1163,15 @@ static void iwl_mvm_check_ratid_empty(struct iwl_mvm *mvm,
 		ieee80211_sta_set_buffered(sta, tid, false);
 	}
 
-	if (tid_data->ssn != tid_data->next_reclaimed)
+	/*
+	 * In A000 HW, the next_reclaimed index is only 8 bit, so we'll need
+	 * to align the wrap around of ssn so we compare relevant values.
+	 */
+	normalized_ssn = tid_data->ssn;
+	if (mvm->trans->cfg->gen2)
+		normalized_ssn &= 0xff;
+
+	if (normalized_ssn != tid_data->next_reclaimed)
 		return;
 
 	switch (tid_data->state) {
@@ -1200,13 +1187,6 @@ static void iwl_mvm_check_ratid_empty(struct iwl_mvm *mvm,
 		IWL_DEBUG_TX_QUEUES(mvm,
 				    "Can continue DELBA flow ssn = next_recl = %d\n",
 				    tid_data->next_reclaimed);
-		if (!iwl_mvm_is_dqa_supported(mvm)) {
-			u8 mac80211_ac = tid_to_mac80211_ac[tid];
-
-			iwl_mvm_disable_txq(mvm, tid_data->txq_id,
-					    vif->hw_queue[mac80211_ac], tid,
-					    CMD_ASYNC);
-		}
 		tid_data->state = IWL_AGG_OFF;
 		ieee80211_stop_tx_ba_cb_irqsafe(vif, sta->addr, tid);
 		break;
@@ -1318,7 +1298,7 @@ static void iwl_mvm_tx_status_check_trigger(struct iwl_mvm *mvm,
 	trig = iwl_fw_dbg_get_trigger(mvm->fw, FW_DBG_TRIGGER_TX_STATUS);
 	status_trig = (void *)trig->data;
 
-	if (!iwl_fw_dbg_trigger_check_stop(mvm, NULL, trig))
+	if (!iwl_fw_dbg_trigger_check_stop(&mvm->fwrt, NULL, trig))
 		return;
 
 	for (i = 0; i < ARRAY_SIZE(status_trig->statuses); i++) {
@@ -1329,9 +1309,9 @@ static void iwl_mvm_tx_status_check_trigger(struct iwl_mvm *mvm,
 		if (status_trig->statuses[i].status != (status & TX_STATUS_MSK))
 			continue;
 
-		iwl_mvm_fw_dbg_collect_trig(mvm, trig,
-					    "Tx status %d was received",
-					    status & TX_STATUS_MSK);
+		iwl_fw_dbg_collect_trig(&mvm->fwrt, trig,
+					"Tx status %d was received",
+					status & TX_STATUS_MSK);
 		break;
 	}
 }
@@ -1362,6 +1342,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 	struct ieee80211_sta *sta;
 	u16 sequence = le16_to_cpu(pkt->hdr.sequence);
 	int txq_id = SEQ_TO_QUEUE(sequence);
+	/* struct iwl_mvm_tx_resp_v3 is almost the same */
 	struct iwl_mvm_tx_resp *tx_resp = (void *)pkt->data;
 	int sta_id = IWL_MVM_TX_RES_GET_RA(tx_resp->ra_tid);
 	int tid = IWL_MVM_TX_RES_GET_TID(tx_resp->ra_tid);
@@ -1379,7 +1360,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 	__skb_queue_head_init(&skbs);
 
 	if (iwl_mvm_has_new_tx_api(mvm))
-		txq_id = le16_to_cpu(tx_resp->v6.tx_queue);
+		txq_id = le16_to_cpu(tx_resp->tx_queue);
 
 	seq_ctl = le16_to_cpu(tx_resp->seq_ctl);
 
@@ -1408,10 +1389,10 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 			flushed = true;
 			break;
 		case TX_STATUS_FAIL_DEST_PS:
-			/* In DQA, the FW should have stopped the queue and not
+			/* the FW should have stopped the queue and not
 			 * return this status
 			 */
-			WARN_ON(iwl_mvm_is_dqa_supported(mvm));
+			WARN_ON(1);
 			info->flags |= IEEE80211_TX_STAT_TX_FILTERED;
 			break;
 		default:
@@ -1473,26 +1454,21 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 		ieee80211_tx_status(mvm->hw, skb);
 	}
 
-	if (iwl_mvm_is_dqa_supported(mvm) || txq_id >= mvm->first_agg_queue) {
-		/* If this is an aggregation queue, we use the ssn since:
-		 * ssn = wifi seq_num % 256.
-		 * The seq_ctl is the sequence control of the packet to which
-		 * this Tx response relates. But if there is a hole in the
-		 * bitmap of the BA we received, this Tx response may allow to
-		 * reclaim the hole and all the subsequent packets that were
-		 * already acked. In that case, seq_ctl != ssn, and the next
-		 * packet to be reclaimed will be ssn and not seq_ctl. In that
-		 * case, several packets will be reclaimed even if
-		 * frame_count = 1.
-		 *
-		 * The ssn is the index (% 256) of the latest packet that has
-		 * treated (acked / dropped) + 1.
-		 */
-		next_reclaimed = ssn;
-	} else {
-		/* The next packet to be reclaimed is the one after this one */
-		next_reclaimed = IEEE80211_SEQ_TO_SN(seq_ctl + 0x10);
-	}
+	/* This is an aggregation queue or might become one, so we use
+	 * the ssn since: ssn = wifi seq_num % 256.
+	 * The seq_ctl is the sequence control of the packet to which
+	 * this Tx response relates. But if there is a hole in the
+	 * bitmap of the BA we received, this Tx response may allow to
+	 * reclaim the hole and all the subsequent packets that were
+	 * already acked. In that case, seq_ctl != ssn, and the next
+	 * packet to be reclaimed will be ssn and not seq_ctl. In that
+	 * case, several packets will be reclaimed even if
+	 * frame_count = 1.
+	 *
+	 * The ssn is the index (% 256) of the latest packet that has
+	 * treated (acked / dropped) + 1.
+	 */
+	next_reclaimed = ssn;
 
 	IWL_DEBUG_TX_REPLY(mvm,
 			   "TXQ %d status %s (0x%08x)\n",
@@ -1544,7 +1520,7 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 			if (mvmsta->sleep_tx_count) {
 				mvmsta->sleep_tx_count--;
 				if (mvmsta->sleep_tx_count &&
-				    !iwl_mvm_tid_queued(tid_data)) {
+				    !iwl_mvm_tid_queued(mvm, tid_data)) {
 					/*
 					 * The number of frames in the queue
 					 * dropped to 0 even if we sent less
@@ -1580,49 +1556,6 @@ static void iwl_mvm_rx_tx_cmd_single(struct iwl_mvm *mvm,
 		mvmsta = NULL;
 	}
 
-	/*
-	 * If the txq is not an AMPDU queue, there is no chance we freed
-	 * several skbs. Check that out...
-	 */
-	if (iwl_mvm_is_dqa_supported(mvm) || txq_id >= mvm->first_agg_queue)
-		goto out;
-
-	/* We can't free more than one frame at once on a shared queue */
-	WARN_ON(skb_freed > 1);
-
-	/* If we have still frames for this STA nothing to do here */
-	if (!atomic_sub_and_test(skb_freed, &mvm->pending_frames[sta_id]))
-		goto out;
-
-	if (mvmsta && mvmsta->vif->type == NL80211_IFTYPE_AP) {
-
-		/*
-		 * If there are no pending frames for this STA and
-		 * the tx to this station is not disabled, notify
-		 * mac80211 that this station can now wake up in its
-		 * STA table.
-		 * If mvmsta is not NULL, sta is valid.
-		 */
-
-		spin_lock_bh(&mvmsta->lock);
-
-		if (!mvmsta->disable_tx)
-			ieee80211_sta_block_awake(mvm->hw, sta, false);
-
-		spin_unlock_bh(&mvmsta->lock);
-	}
-
-	if (PTR_ERR(sta) == -EBUSY || PTR_ERR(sta) == -ENOENT) {
-		/*
-		 * We are draining and this was the last packet - pre_rcu_remove
-		 * has been called already. We might be after the
-		 * synchronize_net already.
-		 * Don't rely on iwl_mvm_rm_sta to see the empty Tx queues.
-		 */
-		set_bit(sta_id, mvm->sta_drained);
-		schedule_work(&mvm->sta_drained_wk);
-	}
-
 out:
 	rcu_read_unlock();
 }
@@ -1637,7 +1570,7 @@ static const char *iwl_get_agg_tx_status(u16 status)
 	AGG_TX_STATE_(BT_PRIO);
 	AGG_TX_STATE_(FEW_BYTES);
 	AGG_TX_STATE_(ABORT);
-	AGG_TX_STATE_(LAST_SENT_TTL);
+	AGG_TX_STATE_(TX_ON_AIR_DROP);
 	AGG_TX_STATE_(LAST_SENT_TRY_CNT);
 	AGG_TX_STATE_(LAST_SENT_BT_KILL);
 	AGG_TX_STATE_(SCD_QUERY);
@@ -1686,9 +1619,8 @@ static void iwl_mvm_rx_tx_cmd_agg(struct iwl_mvm *mvm,
 	struct iwl_mvm_sta *mvmsta;
 	int queue = SEQ_TO_QUEUE(sequence);
 
-	if (WARN_ON_ONCE(queue < mvm->first_agg_queue &&
-			 (!iwl_mvm_is_dqa_supported(mvm) ||
-			  (queue != IWL_MVM_DQA_BSS_CLIENT_QUEUE))))
+	if (WARN_ON_ONCE(queue < IWL_MVM_DQA_MIN_DATA_QUEUE &&
+			 (queue != IWL_MVM_DQA_BSS_CLIENT_QUEUE)))
 		return;
 
 	if (WARN_ON_ONCE(tid == IWL_TID_NON_QOS))
@@ -1866,6 +1798,8 @@ void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 	if (iwl_mvm_has_new_tx_api(mvm)) {
 		struct iwl_mvm_compressed_ba_notif *ba_res =
 			(void *)pkt->data;
+		u8 lq_color = TX_RES_RATE_TABLE_COL_GET(ba_res->tlc_rate_info);
+		int i;
 
 		sta_id = ba_res->sta_id;
 		ba_info.status.ampdu_ack_len = (u8)le16_to_cpu(ba_res->done);
@@ -1873,27 +1807,22 @@ void iwl_mvm_rx_ba_notif(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 		ba_info.status.tx_time =
 			(u16)le32_to_cpu(ba_res->wireless_time);
 		ba_info.status.status_driver_data[0] =
-			(void *)(uintptr_t)ba_res->reduced_txp;
+			RS_DRV_DATA_PACK(lq_color, ba_res->reduced_txp);
 
 		if (!le16_to_cpu(ba_res->tfd_cnt))
 			goto out;
 
-		/*
-		 * TODO:
-		 * When supporting multi TID aggregations - we need to move
-		 * next_reclaimed to be per TXQ and not per TID or handle it
-		 * in a different way.
-		 * This will go together with SN and AddBA offload and cannot
-		 * be handled properly for now.
-		 */
-		WARN_ON(le16_to_cpu(ba_res->ra_tid_cnt) != 1);
-		tid = ba_res->ra_tid[0].tid;
-		if (tid == IWL_MGMT_TID)
-			tid = IWL_MAX_TID_COUNT;
-		iwl_mvm_tx_reclaim(mvm, sta_id, tid,
-				   (int)(le16_to_cpu(ba_res->tfd[0].q_num)),
-				   le16_to_cpu(ba_res->tfd[0].tfd_index),
-				   &ba_info, le32_to_cpu(ba_res->tx_rate));
+		/* Free per TID */
+		for (i = 0; i < le16_to_cpu(ba_res->tfd_cnt); i++) {
+			struct iwl_mvm_compressed_ba_tfd *ba_tfd =
+				&ba_res->tfd[i];
+
+			iwl_mvm_tx_reclaim(mvm, sta_id, ba_tfd->tid,
+					   (int)(le16_to_cpu(ba_tfd->q_num)),
+					   le16_to_cpu(ba_tfd->tfd_index),
+					   &ba_info,
+					   le32_to_cpu(ba_res->tx_rate));
+		}
 
 #ifdef CPTCFG_IWLMVM_TCM
 		rcu_read_lock();
@@ -1967,10 +1896,12 @@ out:
 int iwl_mvm_flush_tx_path(struct iwl_mvm *mvm, u32 tfd_msk, u32 flags)
 {
 	int ret;
-	struct iwl_tx_path_flush_cmd flush_cmd = {
+	struct iwl_tx_path_flush_cmd_v1 flush_cmd = {
 		.queues_ctl = cpu_to_le32(tfd_msk),
 		.flush_ctl = cpu_to_le16(DUMP_TX_FIFO_FLUSH),
 	};
+
+	WARN_ON(iwl_mvm_has_new_tx_api(mvm));
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, TXPATH_FLUSH, flags,
 				   sizeof(flush_cmd), &flush_cmd);
@@ -1979,19 +1910,41 @@ int iwl_mvm_flush_tx_path(struct iwl_mvm *mvm, u32 tfd_msk, u32 flags)
 	return ret;
 }
 
-int iwl_mvm_flush_sta(struct iwl_mvm *mvm, void *sta, bool int_sta, u32 flags)
+int iwl_mvm_flush_sta_tids(struct iwl_mvm *mvm, u32 sta_id,
+			   u16 tids, u32 flags)
 {
-	u32 mask;
+	int ret;
+	struct iwl_tx_path_flush_cmd flush_cmd = {
+		.sta_id = cpu_to_le32(sta_id),
+		.tid_mask = cpu_to_le16(tids),
+	};
 
-	if (int_sta) {
-		struct iwl_mvm_int_sta *int_sta = sta;
+	WARN_ON(!iwl_mvm_has_new_tx_api(mvm));
 
-		mask = int_sta->tfd_queue_msk;
-	} else {
-		struct iwl_mvm_sta *mvm_sta = sta;
+	ret = iwl_mvm_send_cmd_pdu(mvm, TXPATH_FLUSH, flags,
+				   sizeof(flush_cmd), &flush_cmd);
+	if (ret)
+		IWL_ERR(mvm, "Failed to send flush command (%d)\n", ret);
+	return ret;
+}
 
-		mask = mvm_sta->tfd_queue_msk;
+int iwl_mvm_flush_sta(struct iwl_mvm *mvm, void *sta, bool internal, u32 flags)
+{
+	struct iwl_mvm_int_sta *int_sta = sta;
+	struct iwl_mvm_sta *mvm_sta = sta;
+
+	if (iwl_mvm_has_new_tx_api(mvm)) {
+		if (internal)
+			return iwl_mvm_flush_sta_tids(mvm, int_sta->sta_id,
+						      BIT(IWL_MGMT_TID), flags);
+
+		return iwl_mvm_flush_sta_tids(mvm, mvm_sta->sta_id,
+					      0xFF, flags);
 	}
 
-	return iwl_mvm_flush_tx_path(mvm, mask, flags);
+	if (internal)
+		return iwl_mvm_flush_tx_path(mvm, int_sta->tfd_queue_msk,
+					     flags);
+
+	return iwl_mvm_flush_tx_path(mvm, mvm_sta->tfd_queue_msk, flags);
 }

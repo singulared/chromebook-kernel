@@ -73,7 +73,6 @@
  */
 #ifndef DBG_CFG_REINCLUDE
 #include <linux/types.h>
-#include <linux/debugfs.h>
 
 struct iwl_dbg_cfg_bin {
 	const void *data;
@@ -139,7 +138,6 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u32, MVM_BT_COEX_MPLUT_REG0)
 	IWL_DBG_CFG(u32, MVM_BT_COEX_MPLUT_REG1)
 	IWL_DBG_CFG(bool, MVM_BT_COEX_SYNC2SCO)
-	IWL_DBG_CFG(bool, MVM_BT_COEX_CORUNNING)
 	IWL_DBG_CFG(bool, MVM_BT_COEX_MPLUT)
 	IWL_DBG_CFG(bool, MVM_BT_COEX_TTC)
 	IWL_DBG_CFG(bool, MVM_BT_COEX_RRC)
@@ -149,8 +147,9 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(bool, MVM_P2P_LOWLATENCY_PS_ENABLE)
 	IWL_DBG_CFG(bool, MVM_SW_TX_CSUM_OFFLOAD)
 	IWL_DBG_CFG(bool, MVM_HW_CSUM_DISABLE)
-	IWL_DBG_CFG(bool, MVM_COLLECT_FW_ERR_DUMP)
 	IWL_DBG_CFG(bool, MVM_PARSE_NVM)
+	IWL_DBG_CFG(bool, MVM_ADWELL_ENABLE)
+	IWL_DBG_CFG(u16, MVM_ADWELL_MAX_BUDGET)
 #ifdef CPTCFG_IWLMVM_TCM
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_MEDIUM_THRESH)
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_HIGH_THRESH)
@@ -192,7 +191,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u16, MVM_RS_TPC_SR_FORCE_INCREASE)
 	IWL_DBG_CFG(u16, MVM_RS_TPC_SR_NO_INCREASE)
 	IWL_DBG_CFG(u8, MVM_RS_TPC_TX_POWER_STEP)
-	IWL_DBG_CFG(u8, MVM_ENABLE_DQA)
+	IWL_DBG_CFG(bool, MVM_ENABLE_EBS)
 	IWL_MVM_MOD_PARAM(int, power_scheme)
 	IWL_MVM_MOD_PARAM(bool, init_dbg)
 	IWL_MVM_MOD_PARAM(bool, tfd_q_hang_detect)
@@ -262,16 +261,17 @@ struct iwl_dbg_cfg {
 	IWL_MOD_PARAM(bool, d0i3_disable)
 	IWL_MOD_PARAM(bool, lar_disable)
 	IWL_MOD_PARAM(bool, fw_monitor)
-	IWL_MOD_PARAM(bool, restart_fw)
+	IWL_MOD_PARAM(bool, fw_restart)
 	IWL_MOD_PARAM(bool, power_save)
 	IWL_MOD_PARAM(bool, bt_coex_active)
-	IWL_MOD_PARAM(int, ant_coupling)
+	IWL_MOD_PARAM(int, antenna_coupling)
 	IWL_MOD_PARAM(int, power_level)
 	IWL_MOD_PARAM(int, led_mode)
 	IWL_MOD_PARAM(int, amsdu_size)
-	IWL_MOD_PARAM(int, sw_crypto)
+	IWL_MOD_PARAM(int, swcrypto)
 	IWL_MOD_PARAM(uint, disable_11n)
-	IWL_MOD_PARAM(uint, d0i3_entry_delay)
+	IWL_MOD_PARAM(uint, d0i3_timeout)
+	IWL_DBG_CFG_BIN(he_ppe_thres)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */

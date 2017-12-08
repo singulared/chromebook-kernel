@@ -1,6 +1,6 @@
 /*
 * Portions of this file
-* Copyright(c) 2016 Intel Deutschland GmbH
+* Copyright(c) 2016-2017 Intel Deutschland GmbH
 */
 
 #if !defined(__MAC80211_DRIVER_TRACE) || defined(TRACE_HEADER_MULTI_READ)
@@ -11,7 +11,7 @@
 #include "ieee80211_i.h"
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM iwl7000_mac80211
+#define TRACE_SYSTEM mac80211
 
 #define MAXNAME		32
 #define LOCAL_ENTRY	__array(char, wiphy_name, 32)
@@ -92,16 +92,19 @@
 				__field(u16, ssn)					\
 				__field(u8, buf_size)					\
 				__field(bool, amsdu)					\
-				__field(u16, timeout)
+				__field(u16, timeout)					\
+				__field(u16, action)
 #define AMPDU_ACTION_ASSIGN	STA_NAMED_ASSIGN(params->sta);				\
 				__entry->tid = params->tid;				\
 				__entry->ssn = params->ssn;				\
 				__entry->buf_size = params->buf_size;			\
 				__entry->amsdu = params->amsdu;				\
-				__entry->timeout = params->timeout;
-#define AMPDU_ACTION_PR_FMT	STA_PR_FMT " tid %d, ssn %d, buf_size %u, amsdu %d, timeout %d"
+				__entry->timeout = params->timeout;			\
+				__entry->action = params->action;
+#define AMPDU_ACTION_PR_FMT	STA_PR_FMT " tid %d, ssn %d, buf_size %u, amsdu %d, timeout %d action %d"
 #define AMPDU_ACTION_PR_ARG	STA_PR_ARG, __entry->tid, __entry->ssn,			\
-				__entry->buf_size, __entry->amsdu, __entry->timeout
+				__entry->buf_size, __entry->amsdu, __entry->timeout,	\
+				__entry->action
 
 /*
  * Tracing for driver callbacks.
@@ -1737,6 +1740,8 @@ TRACE_EVENT(drv_start_nan,
 		VIF_ENTRY
 		__field(u8, master_pref)
 		__field(u8, bands)
+		__field(u8, cdw_2g)
+		__field(u8, cdw_5g)
 	),
 
 	TP_fast_assign(
@@ -1744,13 +1749,16 @@ TRACE_EVENT(drv_start_nan,
 		VIF_ASSIGN;
 		__entry->master_pref = conf->master_pref;
 		__entry->bands = conf->bands;
+		__entry->cdw_2g = conf->cdw_2g;
+		__entry->cdw_5g = conf->cdw_5g;
 	),
 
 	TP_printk(
 		LOCAL_PR_FMT  VIF_PR_FMT
-		", master preference: %u, bands: 0x%0x",
+		", master preference: %u, bands: 0x%0x, cdw_2g: %u, cdw_5g: %u",
 		LOCAL_PR_ARG, VIF_PR_ARG, __entry->master_pref,
-		__entry->bands
+		__entry->bands,
+		__entry->cdw_2g, __entry->cdw_5g
 	)
 );
 
@@ -1788,6 +1796,8 @@ TRACE_EVENT(drv_nan_change_conf,
 		VIF_ENTRY
 		__field(u8, master_pref)
 		__field(u8, bands)
+		__field(u8, cdw_2g)
+		__field(u8, cdw_5g)
 		__field(u32, changes)
 	),
 
@@ -1796,14 +1806,18 @@ TRACE_EVENT(drv_nan_change_conf,
 		VIF_ASSIGN;
 		__entry->master_pref = conf->master_pref;
 		__entry->bands = conf->bands;
+		__entry->cdw_2g = conf->cdw_2g;
+		__entry->cdw_5g = conf->cdw_5g;
 		__entry->changes = changes;
 	),
 
 	TP_printk(
 		LOCAL_PR_FMT  VIF_PR_FMT
-		", master preference: %u, bands: 0x%0x, changes: 0x%x",
+		", master preference: %u, bands: 0x%0x, cdw_2g: %u, cdw_5g: %u, "
+		"changes: 0x%x",
 		LOCAL_PR_ARG, VIF_PR_ARG, __entry->master_pref,
-		__entry->bands, __entry->changes
+		__entry->bands, __entry->cdw_2g, __entry->cdw_5g,
+		__entry->changes
 	)
 );
 

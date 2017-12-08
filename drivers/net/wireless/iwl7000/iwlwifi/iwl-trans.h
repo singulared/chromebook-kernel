@@ -74,12 +74,13 @@
 
 #include "iwl-debug.h"
 #include "iwl-config.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-op-mode.h"
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #include "iwl-dbg-cfg.h"
 #endif
-#include "iwl-fw-api.h"
+#include "fw/api/cmdhdr.h"
+#include "fw/api/txq.h"
 
 /**
  * DOC: Transport layer - what is it ?
@@ -921,18 +922,6 @@ static inline int iwl_trans_d3_resume(struct iwl_trans *trans,
 	return trans->ops->d3_resume(trans, status, test, reset);
 }
 
-static inline void iwl_trans_ref(struct iwl_trans *trans)
-{
-	if (trans->ops->ref)
-		trans->ops->ref(trans);
-}
-
-static inline void iwl_trans_unref(struct iwl_trans *trans)
-{
-	if (trans->ops->unref)
-		trans->ops->unref(trans);
-}
-
 static inline int iwl_trans_suspend(struct iwl_trans *trans)
 {
 	if (!trans->ops->suspend)
@@ -965,13 +954,7 @@ static inline void iwl_trans_dump_regs(struct iwl_trans *trans)
 static inline struct iwl_device_cmd *
 iwl_trans_alloc_tx_cmd(struct iwl_trans *trans)
 {
-	struct iwl_device_cmd *dev_cmd_ptr =
-		kmem_cache_alloc(trans->dev_cmd_pool, GFP_ATOMIC);
-
-	if (unlikely(dev_cmd_ptr == NULL))
-		return NULL;
-
-	return dev_cmd_ptr;
+	return kmem_cache_alloc(trans->dev_cmd_pool, GFP_ATOMIC);
 }
 
 int iwl_trans_send_cmd(struct iwl_trans *trans, struct iwl_host_cmd *cmd);
@@ -1258,6 +1241,8 @@ struct iwl_trans *iwl_trans_alloc(unsigned int priv_size,
 				  const struct iwl_cfg *cfg,
 				  const struct iwl_trans_ops *ops);
 void iwl_trans_free(struct iwl_trans *trans);
+void iwl_trans_ref(struct iwl_trans *trans);
+void iwl_trans_unref(struct iwl_trans *trans);
 
 /*****************************************************
 * driver (transport) register/unregister functions

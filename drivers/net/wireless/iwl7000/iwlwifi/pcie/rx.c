@@ -852,14 +852,14 @@ static void iwl_pcie_rx_mq_hw_init(struct iwl_trans *trans)
 	 * Set RX DMA chunk size to 64B for IOSF and 128B for PCIe
 	 * Default queue is 0
 	 */
-	iwl_write_prph_no_grab(trans, RFH_GEN_CFG, RFH_GEN_CFG_RFH_DMA_SNOOP |
-			       (DEFAULT_RXQ_NUM <<
-				RFH_GEN_CFG_DEFAULT_RXQ_NUM_POS) |
+	iwl_write_prph_no_grab(trans, RFH_GEN_CFG,
+			       RFH_GEN_CFG_RFH_DMA_SNOOP |
+			       RFH_GEN_CFG_VAL(DEFAULT_RXQ_NUM, 0) |
 			       RFH_GEN_CFG_SERVICE_DMA_SNOOP |
-			       (trans->cfg->integrated ?
-				RFH_GEN_CFG_RB_CHUNK_SIZE_64 :
-				RFH_GEN_CFG_RB_CHUNK_SIZE_128) <<
-			       RFH_GEN_CFG_RB_CHUNK_SIZE_POS);
+			       RFH_GEN_CFG_VAL(RB_CHUNK_SIZE,
+					       trans->cfg->integrated ?
+					       RFH_GEN_CFG_RB_CHUNK_SIZE_64 :
+					       RFH_GEN_CFG_RB_CHUNK_SIZE_128));
 	/* Enable the relevant rx queues */
 	iwl_write_prph_no_grab(trans, RFH_RXF_RXQ_ACTIVE, enabled);
 
@@ -1168,7 +1168,7 @@ static void iwl_pcie_rx_handle_rb(struct iwl_trans *trans,
 
 		sequence = le16_to_cpu(pkt->hdr.sequence);
 		index = SEQ_TO_INDEX(sequence);
-		cmd_index = get_cmd_index(txq, index);
+		cmd_index = iwl_pcie_get_cmd_index(txq, index);
 
 		if (rxq->id == 0)
 			iwl_op_mode_rx(trans->op_mode, &rxq->napi,
@@ -1516,7 +1516,7 @@ static u32 iwl_pcie_int_cause_ict(struct iwl_trans *trans)
 	return inta;
 }
 
-static void iwl_pcie_handle_rfkill_irq(struct iwl_trans *trans)
+void iwl_pcie_handle_rfkill_irq(struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	struct isr_statistics *isr_stats = &trans_pcie->isr_stats;

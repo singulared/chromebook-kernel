@@ -62,6 +62,28 @@ void rate_control_rate_init(struct sta_info *sta)
 	set_sta_flag(sta, WLAN_STA_RATE_CONTROL);
 }
 
+void rate_control_tx_status(struct ieee80211_local *local,
+			    struct ieee80211_supported_band *sband,
+			    struct ieee80211_tx_status *st)
+{
+	struct rate_control_ref *ref = local->rate_ctrl;
+	struct sta_info *sta = container_of(st->sta, struct sta_info, sta);
+	void *priv_sta = sta->rate_ctrl_priv;
+
+	if (!ref || !test_sta_flag(sta, WLAN_STA_RATE_CONTROL))
+		return;
+
+	spin_lock_bh(&sta->rate_ctrl_lock);
+	if (ref->ops->tx_status_ext)
+		ref->ops->tx_status_ext(ref->priv, sband, priv_sta, st);
+	else if (st->skb)
+		ref->ops->tx_status(ref->priv, sband, st->sta, priv_sta, st->skb);
+	else
+		WARN_ON_ONCE(1);
+
+	spin_unlock_bh(&sta->rate_ctrl_lock);
+}
+
 void rate_control_rate_update(struct ieee80211_local *local,
 				    struct ieee80211_supported_band *sband,
 				    struct sta_info *sta, u32 changed)
@@ -174,9 +196,11 @@ ieee80211_rate_control_ops_get(const char *name)
 		/* try default if specific alg requested but not found */
 		ops = ieee80211_try_rate_control_ops_get(ieee80211_default_rc_algo);
 
-	/* try built-in one if specific alg requested but not found */
-	if (!ops && strlen(CPTCFG_MAC80211_RC_DEFAULT))
+	/* Note: check for > 0 is intentional to avoid clang warning */
+	if (!ops && (strlen(CPTCFG_MAC80211_RC_DEFAULT) > 0))
+		/* try built-in one if specific alg requested but not found */
 		ops = ieee80211_try_rate_control_ops_get(CPTCFG_MAC80211_RC_DEFAULT);
+
 	kernel_param_unlock(THIS_MODULE);
 
 	return ops;
@@ -209,7 +233,6 @@ static struct rate_control_ref *rate_control_alloc(const char *name,
 	ref = kmalloc(sizeof(struct rate_control_ref), GFP_KERNEL);
 	if (!ref)
 		return NULL;
-	ref->local = local;
 	ref->ops = ieee80211_rate_control_ops_get(name);
 	if (!ref->ops)
 		goto free;
@@ -230,13 +253,14 @@ free:
 	return NULL;
 }
 
-static void rate_control_free(struct rate_control_ref *ctrl_ref)
+static void rate_control_free(struct ieee80211_local *local,
+			      struct rate_control_ref *ctrl_ref)
 {
 	ctrl_ref->ops->free(ctrl_ref->priv);
 
 #ifdef CPTCFG_MAC80211_DEBUGFS
-	debugfs_remove_recursive(ctrl_ref->local->debugfs.rcdir);
-	ctrl_ref->local->debugfs.rcdir = NULL;
+	debugfs_remove_recursive(local->debugfs.rcdir);
+	local->debugfs.rcdir = NULL;
 #endif
 
 	kfree(ctrl_ref);
@@ -902,7 +926,9 @@ int rate_control_set_rates(struct ieee80211_hw *hw,
 	struct ieee80211_sta_rates *old;
 	struct ieee80211_supported_band *sband;
 
-	sband = hw->wiphy->bands[ieee80211_get_sdata_band(sta->sdata)];
+	sband = ieee80211_get_sband(sta->sdata);
+	if (!sband)
+		return -EINVAL;
 	rate_control_apply_mask_ratetbl(sta, sband, rates);
 	/*
 	 * mac80211 guarantees that this function will not be called
@@ -916,6 +942,8 @@ int rate_control_set_rates(struct ieee80211_hw *hw,
 		kfree_rcu(old, rcu_head);
 
 	drv_sta_rate_tbl_update(hw_to_local(hw), sta->sdata, pubsta);
+
+	ieee80211_sta_set_expected_throughput(pubsta, sta_get_expected_throughput(sta));
 
 	return 0;
 }
@@ -963,6 +991,5 @@ void rate_control_deinitialize(struct ieee80211_local *local)
 		return;
 
 	local->rate_ctrl = NULL;
-	rate_control_free(ref);
+	rate_control_free(local, ref);
 }
-

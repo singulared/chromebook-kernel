@@ -96,7 +96,6 @@
 #define XVT_MAX_TX_COUNT (ULLONG_MAX)
 #define XVT_LMAC_0_STA_ID (0) /* must be aligned with station id added in USC */
 #define XVT_LMAC_1_STA_ID (3) /* must be aligned with station id added in USC */
-#define TX_QUEUE_CFG_TID (6)
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb)
@@ -109,12 +108,12 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 		       pkt->hdr.group_id, pkt->hdr.cmd);
 
 	switch (WIDE_ID(pkt->hdr.group_id, pkt->hdr.cmd)) {
-	case GET_SET_PHY_DB_CMD:
+	case WIDE_ID(LONG_GROUP, GET_SET_PHY_DB_CMD):
 		iwl_xvt_user_send_notif(xvt, IWL_TM_USER_CMD_NOTIF_PHY_DB,
 					data, size, GFP_ATOMIC);
 		break;
 	case DTS_MEASUREMENT_NOTIFICATION:
-	case DTS_MEASUREMENT_NOTIF_WITH_GRP:
+	case WIDE_ID(PHY_OPS_GROUP, DTS_MEASUREMENT_NOTIF_WIDE):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_DTS_MEASUREMENTS,
 					data, size, GFP_ATOMIC);
@@ -149,12 +148,12 @@ void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 	case DEBUG_LOG_MSG:
 		iwl_dnt_dispatch_collect_ucode_message(xvt->trans, rxb);
 		break;
-	case LOCATION_MCSI_NOTIFICATION_WITH_GRP:
+	case WIDE_ID(TOF_GROUP, TOF_MCSI_DEBUG_NOTIF):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_LOC_MCSI,
 					data, size, GFP_ATOMIC);
 		break;
-	case LOCATION_RANGE_RESPONSE_NOTIFICATION_WITH_GRP:
+	case WIDE_ID(TOF_GROUP, TOF_RANGE_RESPONSE_NOTIF):
 		iwl_xvt_user_send_notif(xvt,
 					IWL_TM_USER_CMD_NOTIF_LOC_RANGE,
 					data, size, GFP_ATOMIC);
@@ -219,10 +218,6 @@ static int iwl_xvt_send_hcmd(struct iwl_xvt *xvt,
 
 	/* Retrieve response packet */
 	pkt = host_cmd.resp_pkt;
-	if (!pkt) {
-		IWL_ERR(xvt->trans, "HCMD received a null response packet\n");
-		return -ENOMSG;
-	}
 	reply_len = iwl_rx_packet_len(pkt);
 
 	/* Set response data */
@@ -345,10 +340,6 @@ static int iwl_xvt_read_sv_drop(struct iwl_xvt *xvt)
 
 	/* Retrieve response packet */
 	pkt = host_cmd.resp_pkt;
-	if (!pkt) {
-		IWL_ERR(xvt->trans, "HCMD received a null response packet\n");
-		return -ENOMSG;
-	}
 
 	/* Get response data */
 	debug_res = (struct xvt_debug_res *)pkt->data;
@@ -379,7 +370,7 @@ static int iwl_xvt_get_dev_info(struct iwl_xvt *xvt,
 		read_sv_drop = dev_info_req->read_sv ? true : false;
 	}
 
-	if (xvt->cur_ucode == IWL_UCODE_REGULAR && read_sv_drop) {
+	if (xvt->fwrt.cur_fw_img == IWL_UCODE_REGULAR && read_sv_drop) {
 		sv_step = iwl_xvt_read_sv_drop(xvt);
 		if (sv_step < 0)
 			return sv_step;
@@ -789,13 +780,12 @@ static void iwl_xvt_stop_op_mode(struct iwl_xvt *xvt)
 		return;
 
 	if (xvt->fw_running) {
-		iwl_trans_txq_disable(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE,
-				      true);
+		iwl_xvt_txq_disable(xvt);
 		xvt->fw_running = false;
 	}
 	iwl_trans_stop_device(xvt->trans);
 
-	iwl_xvt_free_fw_paging(xvt);
+	iwl_free_fw_paging(&xvt->fwrt);
 
 	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
 }
@@ -852,7 +842,7 @@ static int iwl_xvt_continue_init(struct iwl_xvt *xvt)
 
 error:
 	xvt->state = IWL_XVT_STATE_UNINITIALIZED;
-	iwl_trans_txq_disable(xvt->trans, IWL_XVT_DEFAULT_TX_QUEUE, true);
+	iwl_xvt_txq_disable(xvt);
 	iwl_trans_stop_device(xvt->trans);
 
 cont_init_end:
@@ -900,7 +890,7 @@ static int iwl_xvt_get_phy_db(struct iwl_xvt *xvt,
 
 static struct iwl_device_cmd *
 iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
-			       u32 rate_flags)
+			       u32 rate_flags, u32 flags)
 {
 	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
 	struct iwl_tx_cmd_gen2 *tx_cmd;
@@ -920,7 +910,7 @@ iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
 	tx_cmd->offload_assist |= (ieee80211_hdrlen(hdr->frame_control) % 4) ?
 				   cpu_to_le16(TX_CMD_OFFLD_PAD) : 0;
 
-	tx_cmd->flags |= cpu_to_le32(TX_CMD_FLAGS_CMD_RATE);
+	tx_cmd->flags = cpu_to_le32(flags | IWL_TX_FLAGS_CMD_RATE);
 
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
 
@@ -940,7 +930,7 @@ iwl_xvt_set_mod_tx_params_gen2(struct iwl_xvt *xvt, struct sk_buff *skb,
  */
 static struct iwl_device_cmd *
 iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
-			  u8 sta_id, u32 rate_flags)
+			  u8 sta_id, u32 rate_flags, u32 flags)
 {
 	struct iwl_device_cmd *dev_cmd, **cb_dev_cmd = (void *)skb->cb;
 	struct iwl_tx_cmd *tx_cmd;
@@ -949,7 +939,7 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 	if (unlikely(!dev_cmd))
 		return NULL;
 
-	memset(dev_cmd, 0, sizeof(*dev_cmd));
+	memset(dev_cmd, 0, sizeof(dev_cmd->hdr) + sizeof(*tx_cmd));
 	dev_cmd->hdr.cmd = TX_CMD;
 	tx_cmd = (struct iwl_tx_cmd *)dev_cmd->payload;
 
@@ -958,7 +948,7 @@ iwl_xvt_set_mod_tx_params(struct iwl_xvt *xvt, struct sk_buff *skb,
 
 	tx_cmd->sta_id = sta_id;
 	tx_cmd->rate_n_flags = cpu_to_le32(rate_flags);
-	tx_cmd->tx_flags = TX_CMD_FLG_ACK_MSK;
+	tx_cmd->tx_flags = cpu_to_le32(flags);
 
 	/* the skb should already hold the data */
 	memcpy(tx_cmd->hdr, skb->data, sizeof(struct ieee80211_hdr));
@@ -980,6 +970,7 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	struct sk_buff *skb;
 	struct iwl_device_cmd *dev_cmd;
 	int time_remain, err = 0;
+	u32 flags = 0;
 
 	if (xvt->fw_error) {
 		IWL_ERR(xvt, "FW Error while sending Tx\n");
@@ -994,15 +985,19 @@ static int iwl_xvt_send_packet(struct iwl_xvt *xvt,
 	}
 	memcpy(skb_put(skb, tx_req->len), tx_req->data, tx_req->len);
 
+	flags = tx_req->no_ack ? 0 : TX_CMD_FLG_ACK;
+
 	if (iwl_xvt_is_unified_fw(xvt))
 		dev_cmd = iwl_xvt_set_mod_tx_params_gen2(xvt,
 							 skb,
-							 tx_req->rate_flags);
+							 tx_req->rate_flags,
+							 flags);
 	else
 		dev_cmd = iwl_xvt_set_mod_tx_params(xvt,
 						    skb,
 						    tx_req->sta_id,
-						    tx_req->rate_flags);
+						    tx_req->rate_flags,
+						    flags);
 	if (!dev_cmd) {
 		kfree_skb(skb);
 		*status = XVT_TX_DRIVER_ABORTED;
@@ -1105,6 +1100,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 	done_notif = kmalloc(sizeof(*done_notif), GFP_KERNEL);
 	if (!done_notif) {
 		xvt_tx->tx_task_operating = false;
+		kfree(data);
 		return -ENOMEM;
 	}
 	done_notif->num_of_packets = xvt_tx->tx_counter;
@@ -1120,6 +1116,7 @@ static int iwl_xvt_modulated_tx_handler(void *data)
 	}
 
 	xvt_tx->tx_task_operating = false;
+	kfree(data);
 	do_exit(err);
 }
 
@@ -1136,35 +1133,6 @@ static int iwl_xvt_modulated_tx_infinite_stop(struct iwl_xvt *xvt,
 	}
 
 	return err;
-}
-
-static int iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
-{
-	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
-
-	xvt->tx_meta_data[lmac_id].queue = -1;
-
-	return 0;
-}
-
-static int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
-				     u8 lmac_id) {
-	int ret;
-	struct iwl_tx_queue_cfg_cmd cmd = {
-			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
-			.sta_id = sta_id,
-			.tid = TX_QUEUE_CFG_TID };
-
-	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
-	/* ret is positive when func returns the allocated the queue number */
-	if (ret > 0) {
-		xvt->tx_meta_data[lmac_id].queue = ret;
-		ret = 0;
-	} else {
-		IWL_ERR(xvt, "failed to allocate queue\n");
-	}
-
-	return ret;
 }
 
 static inline int map_sta_to_lmac(struct iwl_xvt *xvt, u8 sta_id)
@@ -1195,48 +1163,11 @@ static int iwl_xvt_tx_queue_cfg(struct iwl_xvt *xvt,
 	case TX_QUEUE_CFG_ADD:
 		return iwl_xvt_allocate_tx_queue(xvt, sta_id, lmac_id);
 	case TX_QUEUE_CFG_REMOVE:
-		return iwl_xvt_free_tx_queue(xvt, lmac_id);
+		iwl_xvt_free_tx_queue(xvt, lmac_id);
+		break;
 	default:
 		IWL_ERR(xvt, "failed in tx config - wrong operation\n");
 		return -EINVAL;
-	}
-}
-
-static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
-				     struct iwl_tm_data *data_in)
-{
-	static struct iwl_xvt_tx_mod_task_data task_data;
-	u32 size = sizeof(struct iwl_tm_mod_tx_request);
-	struct tx_meta_data *xvt_tx;
-	u8 sta_id;
-	int lmac_id;
-
-	/*
-	* no need to check whether tx already operating on lmac, since check
-	* is already done in the USC
-	*/
-	task_data.xvt = xvt;
-	memcpy(&task_data.tx_req, data_in->data, size);
-
-	sta_id = task_data.tx_req.sta_id;
-	lmac_id = map_sta_to_lmac(xvt, sta_id);
-	if (lmac_id < 0)
-		return lmac_id;
-
-	task_data.lmac_id = lmac_id;
-	xvt_tx = &xvt->tx_meta_data[lmac_id];
-
-	/* check if tx queue is allocated. if not - return */
-	if (xvt_tx->queue < 0) {
-		IWL_ERR(xvt, "failed in tx - queue is not allocated\n");
-		return -EIO;
-	}
-
-	xvt_tx->tx_mod_thread = kthread_run(iwl_xvt_modulated_tx_handler,
-					   &task_data, "tx mod infinite");
-	if (!xvt_tx->tx_mod_thread) {
-		xvt_tx->tx_task_operating = false;
-		return -ENOMEM;
 	}
 
 	return 0;
@@ -1245,18 +1176,46 @@ static int iwl_xvt_modulated_tx_gen2(struct iwl_xvt *xvt,
 static int iwl_xvt_modulated_tx(struct iwl_xvt *xvt,
 				struct iwl_tm_data *data_in)
 {
-	static struct iwl_xvt_tx_mod_task_data task_data;
-	u32 size = sizeof(struct iwl_tm_mod_tx_request);
+	u32 pkt_length = ((struct iwl_tm_mod_tx_request *)data_in->data)->len;
+	u32 req_length = sizeof(struct iwl_tm_mod_tx_request) + pkt_length;
+	u32 task_data_length =
+		sizeof(struct iwl_xvt_tx_mod_task_data) + pkt_length;
 	struct tx_meta_data *xvt_tx = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+	u8 sta_id;
+	int lmac_id;
+	struct iwl_xvt_tx_mod_task_data *task_data =
+		kzalloc(task_data_length, GFP_KERNEL);
+	if (!task_data)
+		return -ENOMEM;
 
-	task_data.xvt = xvt;
-	memcpy(&task_data.tx_req, data_in->data, size);
+	/*
+	* no need to check whether tx already operating on lmac, since check
+	* is already done in the USC
+	*/
+	task_data->xvt = xvt;
+	memcpy(&task_data->tx_req, data_in->data, req_length);
 
-	xvt_tx->tx_mod_thread =
-		kthread_run(iwl_xvt_modulated_tx_handler,
-			    &task_data, "tx mod infinite");
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		sta_id = task_data->tx_req.sta_id;
+		lmac_id = map_sta_to_lmac(xvt, sta_id);
+		if (lmac_id < 0)
+			return lmac_id;
+
+		task_data->lmac_id = lmac_id;
+		xvt_tx = &xvt->tx_meta_data[lmac_id];
+
+		/* check if tx queue is allocated. if not - return */
+		if (xvt_tx->queue < 0) {
+			IWL_ERR(xvt, "failed in tx - queue is not allocated\n");
+			return -EIO;
+		}
+	}
+
+	xvt_tx->tx_mod_thread = kthread_run(iwl_xvt_modulated_tx_handler,
+					   task_data, "tx mod infinite");
 	if (!xvt_tx->tx_mod_thread) {
 		xvt_tx->tx_task_operating = false;
+		kfree(task_data);
 		return -ENOMEM;
 	}
 
@@ -1445,13 +1404,11 @@ static int iwl_xvt_get_mac_addr_info(struct iwl_xvt *xvt,
 	__u8 temp_mac_addr[ETH_ALEN];
 	const u8 *hw_addr;
 
-	mac_addr_info = kmalloc(sizeof(*mac_addr_info), GFP_KERNEL);
+	mac_addr_info = kzalloc(sizeof(*mac_addr_info), GFP_KERNEL);
 	if (!mac_addr_info)
 		return -ENOMEM;
 
-	memset(mac_addr_info, 0, sizeof(*mac_addr_info));
-
-	if (!xvt->cfg->ext_nvm) {
+	if (xvt->cfg->nvm_type != IWL_NVM_EXT) {
 		memcpy(mac_addr_info->mac_addr, xvt->nvm_hw_addr,
 		       sizeof(mac_addr_info->mac_addr));
 	} else {
@@ -1558,10 +1515,7 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 		break;
 
 	case IWL_XVT_CMD_MOD_TX:
-		if (iwl_xvt_is_unified_fw(xvt))
-			ret = iwl_xvt_modulated_tx_gen2(xvt, data_in);
-		else
-			ret = iwl_xvt_modulated_tx(xvt, data_in);
+		ret = iwl_xvt_modulated_tx(xvt, data_in);
 		break;
 
 	case IWL_XVT_CMD_RX_HDRS_MODE:

@@ -36,6 +36,8 @@ int ieee80211_parse_ch_switch_ie(struct ieee80211_sub_if_data *sdata,
 	const struct ieee80211_wide_bw_chansw_ie *wide_bw_chansw_ie;
 	int secondary_channel_offset = -1;
 
+	memset(csa_ie, 0, sizeof(*csa_ie));
+
 	sec_chan_offs = elems->sec_chan_offs;
 	wide_bw_chansw_ie = elems->wide_bw_chansw_ie;
 
@@ -76,6 +78,11 @@ int ieee80211_parse_ch_switch_ie(struct ieee80211_sub_if_data *sdata,
 		csa_ie->mode = elems->mesh_chansw_params_ie->mesh_flags;
 		csa_ie->pre_value = le16_to_cpu(
 				elems->mesh_chansw_params_ie->mesh_pre_value);
+
+		if (elems->mesh_chansw_params_ie->mesh_flags &
+				WLAN_EID_CHAN_SWITCH_PARAM_REASON)
+			csa_ie->reason_code = le16_to_cpu(
+				elems->mesh_chansw_params_ie->mesh_reason);
 	}
 
 	new_freq = ieee80211_channel_to_frequency(new_chan_no, new_band);
@@ -132,9 +139,9 @@ int ieee80211_parse_ch_switch_ie(struct ieee80211_sub_if_data *sdata,
 		struct ieee80211_vht_operation vht_oper = {
 			.chan_width =
 				wide_bw_chansw_ie->new_channel_width,
-			.center_freq_seg1_idx =
+			.center_freq_seg0_idx =
 				wide_bw_chansw_ie->new_center_freq_seg0,
-			.center_freq_seg2_idx =
+			.center_freq_seg1_idx =
 				wide_bw_chansw_ie->new_center_freq_seg1,
 			/* .basic_mcs_set doesn't matter */
 		};
