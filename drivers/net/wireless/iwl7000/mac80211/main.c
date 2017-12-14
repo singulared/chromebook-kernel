@@ -3,6 +3,7 @@
  * Copyright 2005-2006, Devicescape Software, Inc.
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
+ * Copyright (C) 2017     Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -600,9 +601,7 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 	local->hw.uapsd_max_sp_len = IEEE80211_DEFAULT_MAX_SP_LEN;
 	local->user_power_level = IEEE80211_UNSET_POWER_LEVEL;
 	wiphy->ht_capa_mod_mask = &mac80211_ht_capa_mod_mask;
-#if CFG80211_VERSION >= KERNEL_VERSION(3,10,0)
 	wiphy->vht_capa_mod_mask = &mac80211_vht_capa_mod_mask;
-#endif
 
 	local->ext_capa[7] = WLAN_EXT_CAPA8_OPMODE_NOTIF;
 
@@ -612,6 +611,7 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 		ARRAY_SIZE(local->ext_capa);
 
 	INIT_LIST_HEAD(&local->interfaces);
+	INIT_LIST_HEAD(&local->mon_list);
 
 	__hw_addr_init(&local->mc_list);
 
@@ -826,7 +826,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	int result, i;
 	enum nl80211_band band;
 	int channels, max_bitrates;
-	bool supp_ht, supp_vht;
+	bool supp_ht, supp_vht, supp_he;
 	netdev_features_t feature_whitelist;
 	struct cfg80211_chan_def dflt_chandef = {};
 
@@ -845,9 +845,15 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		    !local->ops->set_frag_threshold))
 		return -EINVAL;
 
-	if (WARN_ON(ieee80211_has_nan_iftype(local->hw.wiphy->interface_modes) &&
+	if (WARN_ON(local->hw.wiphy->interface_modes &
+			BIT(NL80211_IFTYPE_NAN) &&
 		    (!local->ops->start_nan || !local->ops->stop_nan)))
 		return -EINVAL;
+
+#ifdef CONFIG_PM
+	if (hw->wiphy->wowlan && (!local->ops->suspend || !local->ops->resume))
+		return -EINVAL;
+#endif
 
 	if (!local->use_chanctx) {
 		for (i = 0; i < local->hw.wiphy->n_iface_combinations; i++) {
@@ -867,7 +873,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		if (local->hw.wiphy->interface_modes & BIT(NL80211_IFTYPE_WDS))
 			return -EINVAL;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
 		/* DFS is not supported with multi-channel combinations yet */
 		for (i = 0; i < local->hw.wiphy->n_iface_combinations; i++) {
 			const struct ieee80211_iface_combination *comb;
@@ -878,7 +883,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			    comb->num_different_channels > 1)
 				return -EINVAL;
 		}
-#endif
 	}
 
 	/* Only HW csum features are currently compatible with mac80211 */
@@ -902,6 +906,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	max_bitrates = 0;
 	supp_ht = false;
 	supp_vht = false;
+	supp_he = false;
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
 		struct ieee80211_supported_band *sband;
 
@@ -927,6 +932,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			max_bitrates = sband->n_bitrates;
 		supp_ht = supp_ht || sband->ht_cap.ht_supported;
 		supp_vht = supp_vht || sband->vht_cap.vht_supported;
+
+		if (!supp_he)
+			supp_he = !!ieee80211_get_he_sta_cap(sband);
 
 		if (!sband->ht_cap.ht_supported)
 			continue;
@@ -1013,6 +1021,18 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		local->scan_ies_len +=
 			2 + sizeof(struct ieee80211_vht_cap);
 
+	/* HE cap element is variable in size - set len to allow max size */
+	/*
+	 * TODO: 1 is added at the end of the calculation to accommodate for
+	 *	the temporary placing of the HE capabilities IE under EXT.
+	 *	Remove it once it is placed in the final place.
+	 */
+	if (supp_he)
+		local->scan_ies_len +=
+			2 + sizeof(struct ieee80211_he_cap_elem) +
+			sizeof(struct ieee80211_he_mcs_nss_supp) +
+			IEEE80211_HE_PPE_THRES_MAX_LEN + 1;
+
 	if (!local->ops->hw_scan) {
 		/* For hw_scan, driver needs to set these up. */
 		local->hw.wiphy->max_scan_ssids = 4;
@@ -1047,9 +1067,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (ieee80211_hw_check(&local->hw, CHANCTX_STA_CSA))
 		local->ext_capa[0] |= WLAN_EXT_CAPA1_EXT_CHANNEL_SWITCHING;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(3,16,0)
 	local->hw.wiphy->max_num_csa_counters = IEEE80211_MAX_CSA_COUNTERS_NUM;
-#endif
 
 	result = wiphy_register(local->hw.wiphy);
 	if (result < 0)
@@ -1141,10 +1159,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (result)
 		goto fail_ifa6;
 #endif
-
-#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
-	intel_regulatory_register(local);
-#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 	return 0;
 
@@ -1254,10 +1268,6 @@ void ieee80211_free_hw(struct ieee80211_hw *hw)
 	ieee80211_free_led_names(local);
 
 	kfree(local->uapsd_black_list);
-
-#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
-	intel_regulatory_deregister(local);
-#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 	wiphy_free(local->hw.wiphy);
 }

@@ -10,6 +10,7 @@ mac80211-y := \
 	scan.o offchannel.o \
 	ht.o agg-tx.o agg-rx.o \
 	vht.o \
+	he.o \
 	ibss.o \
 	iface.o \
 	rate.o \
@@ -31,7 +32,6 @@ mac80211-y := \
 	chan.o \
 	trace.o mlme.o \
 	tdls.o \
-	reg.o cfg-utils.o backports.o \
 	ocb.o
 
 mac80211-$(CPTCFG_MAC80211_LEDS) += led.o

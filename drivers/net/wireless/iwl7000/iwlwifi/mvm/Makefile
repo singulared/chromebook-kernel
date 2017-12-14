@@ -4,7 +4,7 @@ iwlmvm-y += utils.o rx.o rxmq.o tx.o binding.o quota.o sta.o sf.o
 iwlmvm-y += scan.o time-event.o rs.o
 iwlmvm-y += power.o coex.o
 iwlmvm-y += tt.o offloading.o tdls.o
-iwlmvm-y += tof.o fw-dbg.o nan.o
+iwlmvm-y += tof.o nan.o
 iwlmvm-$(CPTCFG_IWLWIFI_DEBUGFS) += debugfs.o debugfs-vif.o
 iwlmvm-$(CPTCFG_IWLWIFI_LEDS) += led.o
 iwlmvm-$(CONFIG_PM) += d3.o
@@ -14,3 +14,4 @@ ccflags-y += -I$(src)/../
 # non-upstream things
 iwlmvm-$(CPTCFG_IWLMVM_VENDOR_CMDS) += vendor-cmd.o
 iwlmvm-$(CPTCFG_IWLWIFI_DEVICE_TESTMODE) += testmode.o
+iwlmvm-$(CPTCFG_IWLMVM_AX_SOFTAP_TESTMODE) += ax-softap-testmode.o

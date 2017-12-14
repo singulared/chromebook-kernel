@@ -68,7 +68,7 @@
 #include "iwl-drv.h"
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-config.h"
 #include "iwl-phy-db.h"
 #include "iwl-csr.h"
@@ -76,11 +76,15 @@
 #include "user-infc.h"
 #include "iwl-dnt-cfg.h"
 #include "iwl-dnt-dispatch.h"
+#include "iwl-io.h"
+#include "iwl-prph.h"
 
 #define DRV_DESCRIPTION	"Intel(R) xVT driver for Linux"
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_COPYRIGHT " " DRV_AUTHOR);
 MODULE_LICENSE("GPL");
+
+#define TX_QUEUE_CFG_TID (6)
 
 static const struct iwl_op_mode_ops iwl_xvt_ops;
 
@@ -104,7 +108,7 @@ module_exit(iwl_xvt_exit);
  * A warning will be triggered on violation.
  */
 static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
-	HCMD_NAME(XVT_ALIVE),
+	HCMD_NAME(MVM_ALIVE),
 	HCMD_NAME(INIT_COMPLETE_NOTIF),
 	HCMD_NAME(TX_CMD),
 	HCMD_NAME(SCD_QUEUE_CFG),
@@ -126,8 +130,15 @@ static const struct iwl_hcmd_names iwl_xvt_cmd_names[] = {
 /* Please keep this array *SORTED* by hex value.
  * Access is done through binary search.
  */
+static const struct iwl_hcmd_names iwl_xvt_long_cmd_names[] = {
+	HCMD_NAME(GET_SET_PHY_DB_CMD),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search.
+ */
 static const struct iwl_hcmd_names iwl_xvt_phy_names[] = {
-	HCMD_NAME(DTS_MEASUREMENT_NOTIF),
+	HCMD_NAME(DTS_MEASUREMENT_NOTIF_WIDE),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -149,8 +160,8 @@ static const struct iwl_hcmd_names iwl_xvt_regulatory_and_nvm_names[] = {
  */
 static const struct iwl_hcmd_names iwl_xvt_tof_names[] = {
 	HCMD_NAME(LOCATION_GROUP_NOTIFICATION),
-	HCMD_NAME(LOCATION_MCSI_NOTIFICATION),
-	HCMD_NAME(LOCATION_RANGE_RESPONSE_NOTIFICATION),
+	HCMD_NAME(TOF_MCSI_DEBUG_NOTIF),
+	HCMD_NAME(TOF_RANGE_RESPONSE_NOTIF),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -162,11 +173,11 @@ static const struct iwl_hcmd_names iwl_xvt_system_names[] = {
 
 static const struct iwl_hcmd_arr iwl_xvt_cmd_groups[] = {
 	[LEGACY_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
-	[LONG_GROUP] = HCMD_ARR(iwl_xvt_cmd_names),
+	[LONG_GROUP] = HCMD_ARR(iwl_xvt_long_cmd_names),
 	[SYSTEM_GROUP] = HCMD_ARR(iwl_xvt_system_names),
 	[PHY_OPS_GROUP] = HCMD_ARR(iwl_xvt_phy_names),
 	[DATA_PATH_GROUP] = HCMD_ARR(iwl_xvt_data_path_names),
-	[CMD_GROUP_LOCATION] = HCMD_ARR(iwl_xvt_tof_names),
+	[TOF_GROUP] = HCMD_ARR(iwl_xvt_tof_names),
 	[REGULATORY_AND_NVM_GROUP] = HCMD_ARR(iwl_xvt_regulatory_and_nvm_names),
 };
 
@@ -196,6 +207,8 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	xvt->trans = trans;
 	xvt->dev = trans->dev;
 
+	iwl_fw_runtime_init(&xvt->fwrt, trans, fw, NULL, NULL);
+
 	mutex_init(&xvt->mutex);
 	spin_lock_init(&xvt->notif_lock);
 
@@ -208,13 +221,9 @@ static struct iwl_op_mode *iwl_xvt_start(struct iwl_trans *trans,
 	trans_cfg.n_no_reclaim_cmds = ARRAY_SIZE(no_reclaim_cmds);
 	trans_cfg.command_groups = iwl_xvt_cmd_groups;
 	trans_cfg.command_groups_size = ARRAY_SIZE(iwl_xvt_cmd_groups);
-	if (iwl_xvt_is_dqa_supported(xvt)) {
-		trans_cfg.cmd_queue = IWL_XVT_DQA_CMD_QUEUE;
-		IWL_DEBUG_INFO(xvt, "dqa supported\n");
-	} else {
-		trans_cfg.cmd_queue = IWL_XVT_CMD_QUEUE;
-	}
-	trans_cfg.cmd_fifo = IWL_XVT_CMD_FIFO;
+	trans_cfg.cmd_queue = IWL_MVM_DQA_CMD_QUEUE;
+	IWL_DEBUG_INFO(xvt, "dqa supported\n");
+	trans_cfg.cmd_fifo = IWL_MVM_TX_FIFO_CMD;
 	trans_cfg.bc_table_dword = true;
 	trans_cfg.scd_set_active = true;
 	trans->wide_cmd_header = true;
@@ -283,9 +292,7 @@ static void iwl_xvt_stop(struct iwl_op_mode *op_mode)
 
 	if (xvt->state != IWL_XVT_STATE_UNINITIALIZED) {
 		if (xvt->fw_running) {
-			iwl_trans_txq_disable(xvt->trans,
-					      IWL_XVT_DEFAULT_TX_QUEUE,
-					      true);
+			iwl_xvt_txq_disable(xvt);
 			xvt->fw_running = false;
 		}
 		iwl_trans_stop_device(xvt->trans);
@@ -300,7 +307,8 @@ static void iwl_xvt_stop(struct iwl_op_mode *op_mode)
 static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 				      struct iwl_rx_packet *pkt)
 {
-	struct iwl_xvt_tx_resp *tx_resp = (void *)pkt->data;
+	/* struct iwl_mvm_tx_resp_v3 is almost the same */
+	struct iwl_mvm_tx_resp *tx_resp = (void *)pkt->data;
 	int txq_id = SEQ_TO_QUEUE(le16_to_cpu(pkt->hdr.sequence));
 	u16 ssn = iwl_xvt_get_scd_ssn(xvt, tx_resp);
 	struct sk_buff_head skbs;
@@ -311,12 +319,12 @@ static void iwl_xvt_rx_tx_cmd_handler(struct iwl_xvt *xvt,
 	__skb_queue_head_init(&skbs);
 
 	if (iwl_xvt_is_unified_fw(xvt)) {
-		txq_id = le16_to_cpu(tx_resp->v6.tx_queue);
+		txq_id = le16_to_cpu(tx_resp->tx_queue);
 
 		if (txq_id == xvt->tx_meta_data[XVT_LMAC_0_ID].queue) {
 			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
 		} else if (txq_id == xvt->tx_meta_data[XVT_LMAC_1_ID].queue) {
-			tx_data = &xvt->tx_meta_data[XVT_LMAC_0_ID];
+			tx_data = &xvt->tx_meta_data[XVT_LMAC_1_ID];
 		} else {
 			IWL_ERR(xvt, "got TX_CMD from unidentified queque\n");
 			return;
@@ -360,18 +368,63 @@ static void iwl_xvt_rx_dispatch(struct iwl_op_mode *op_mode,
 static void iwl_xvt_nic_config(struct iwl_op_mode *op_mode)
 {
 	struct iwl_xvt *xvt = IWL_OP_MODE_GET_XVT(op_mode);
+	u8 radio_cfg_type, radio_cfg_step, radio_cfg_dash;
+	u32 reg_val = 0;
+
+	radio_cfg_type = (xvt->fw->phy_config & FW_PHY_CFG_RADIO_TYPE) >>
+			 FW_PHY_CFG_RADIO_TYPE_POS;
+	radio_cfg_step = (xvt->fw->phy_config & FW_PHY_CFG_RADIO_STEP) >>
+			 FW_PHY_CFG_RADIO_STEP_POS;
+	radio_cfg_dash = (xvt->fw->phy_config & FW_PHY_CFG_RADIO_DASH) >>
+			 FW_PHY_CFG_RADIO_DASH_POS;
+
+	/* SKU control */
+	reg_val |= CSR_HW_REV_STEP(xvt->trans->hw_rev) <<
+				CSR_HW_IF_CONFIG_REG_POS_MAC_STEP;
+	reg_val |= CSR_HW_REV_DASH(xvt->trans->hw_rev) <<
+				CSR_HW_IF_CONFIG_REG_POS_MAC_DASH;
+
+	/* radio configuration */
+	reg_val |= radio_cfg_type << CSR_HW_IF_CONFIG_REG_POS_PHY_TYPE;
+	reg_val |= radio_cfg_step << CSR_HW_IF_CONFIG_REG_POS_PHY_STEP;
+	reg_val |= radio_cfg_dash << CSR_HW_IF_CONFIG_REG_POS_PHY_DASH;
+
+	WARN_ON((radio_cfg_type << CSR_HW_IF_CONFIG_REG_POS_PHY_TYPE) &
+		 ~CSR_HW_IF_CONFIG_REG_MSK_PHY_TYPE);
+
 	/*
-	 * TODO: Define NIC configuration flow
-	 *
-	 * Handle is required for operational flow,
-	 * so in order to avoid problems, at the
-	 * meanwhile this callback is implemented
-	 * as a stub.
+	 * TODO: Bits 7-8 of CSR in 8000 HW family and higher set the ADC
+	 * sampling, and shouldn't be set to any non-zero value.
+	 * The same is supposed to be true of the other HW, but unsetting
+	 * them (such as the 7260) causes automatic tests to fail on seemingly
+	 * unrelated errors. Need to further investigate this, but for now
+	 * we'll separate cases.
 	 */
-	iwl_trans_set_bits_mask(xvt->trans,
-				CSR_HW_IF_CONFIG_REG,
+	if (xvt->trans->cfg->device_family < IWL_DEVICE_FAMILY_8000)
+		reg_val |= CSR_HW_IF_CONFIG_REG_BIT_RADIO_SI;
+
+	iwl_trans_set_bits_mask(xvt->trans, CSR_HW_IF_CONFIG_REG,
+				CSR_HW_IF_CONFIG_REG_MSK_MAC_DASH |
+				CSR_HW_IF_CONFIG_REG_MSK_MAC_STEP |
+				CSR_HW_IF_CONFIG_REG_MSK_PHY_TYPE |
+				CSR_HW_IF_CONFIG_REG_MSK_PHY_STEP |
+				CSR_HW_IF_CONFIG_REG_MSK_PHY_DASH |
+				CSR_HW_IF_CONFIG_REG_BIT_RADIO_SI |
 				CSR_HW_IF_CONFIG_REG_BIT_MAC_SI,
-				CSR_HW_IF_CONFIG_REG_BIT_MAC_SI);
+				reg_val);
+
+	IWL_DEBUG_INFO(xvt, "Radio type=0x%x-0x%x-0x%x\n", radio_cfg_type,
+		       radio_cfg_step, radio_cfg_dash);
+
+	/*
+	 * W/A : NIC is stuck in a reset state after Early PCIe power off
+	 * (PCIe power is lost before PERST# is asserted), causing ME FW
+	 * to lose ownership and not being able to obtain it back.
+	 */
+	if (!xvt->trans->cfg->apmg_not_supported)
+		iwl_set_bits_mask_prph(xvt->trans, APMG_PS_CTRL_REG,
+				       APMG_PS_CTRL_EARLY_PWR_OFF_RESET_DIS,
+				       ~APMG_PS_CTRL_EARLY_PWR_OFF_RESET_DIS);
 }
 
 static void iwl_xvt_nic_error(struct iwl_op_mode *op_mode)
@@ -495,3 +548,46 @@ static const struct iwl_op_mode_ops iwl_xvt_ops = {
 		.valid_hw_addr = iwl_xvt_valid_hw_addr,
 	},
 };
+
+void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id)
+{
+	if (xvt->tx_meta_data[lmac_id].queue == -1)
+		return;
+
+	iwl_trans_txq_free(xvt->trans, xvt->tx_meta_data[lmac_id].queue);
+
+	xvt->tx_meta_data[lmac_id].queue = -1;
+}
+
+int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+			      u8 lmac_id)
+{
+	int ret;
+	struct iwl_tx_queue_cfg_cmd cmd = {
+			.flags = cpu_to_le16(TX_QUEUE_CFG_ENABLE_QUEUE),
+			.sta_id = sta_id,
+			.tid = TX_QUEUE_CFG_TID };
+
+	ret = iwl_trans_txq_alloc(xvt->trans, (void *)&cmd, SCD_QUEUE_CFG, 0);
+	/* ret is positive when func returns the allocated the queue number */
+	if (ret > 0) {
+		xvt->tx_meta_data[lmac_id].queue = ret;
+		ret = 0;
+	} else {
+		IWL_ERR(xvt, "failed to allocate queue\n");
+	}
+
+	return ret;
+}
+
+void iwl_xvt_txq_disable(struct iwl_xvt *xvt)
+{
+	if (iwl_xvt_is_unified_fw(xvt)) {
+		iwl_xvt_free_tx_queue(xvt, XVT_LMAC_0_ID);
+		iwl_xvt_free_tx_queue(xvt, XVT_LMAC_1_ID);
+	} else {
+		iwl_trans_txq_disable(xvt->trans,
+				      IWL_XVT_DEFAULT_TX_QUEUE,
+				      true);
+	}
+}
