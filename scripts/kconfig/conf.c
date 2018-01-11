@@ -18,7 +18,6 @@
 
 static void conf(struct menu *menu);
 static void check_conf(struct menu *menu);
-static void xfgets(char *str, int size, FILE *in);
 
 enum input_mode {
 	oldaskconfig,
@@ -77,6 +76,13 @@ static void check_stdin(void)
 		printf(_("Run 'make oldconfig' to update configuration.\n\n"));
 		exit(1);
 	}
+}
+
+/* Helper function to facilitate fgets() by Jean Sacren. */
+static void xfgets(char *str, int size, FILE *in)
+{
+	if (!fgets(str, size, in))
+		fprintf(stderr, "\nError in reading or end of file.\n");
 }
 
 static int conf_askvalue(struct symbol *sym, const char *def)
@@ -689,13 +695,4 @@ int main(int ac, char **av)
 		}
 	}
 	return 0;
-}
-
-/*
- * Helper function to facilitate fgets() by Jean Sacren.
- */
-void xfgets(char *str, int size, FILE *in)
-{
-	if (fgets(str, size, in) == NULL)
-		fprintf(stderr, "\nError in reading or end of file.\n");
 }
