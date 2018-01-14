@@ -333,8 +333,14 @@ static void setup_pcid(struct cpuinfo_x86 *c)
 			/*
 			 * Regardless of whether PCID is enumerated, the
 			 * SDM says that it can't be enabled in 32-bit mode.
+			 *
+			 * Do NOT use set_in_cr4(X86_CR4_PCIDE) here:
+			 * that adds X86_CR4_PCIDE to mmu_cr4_features and
+			 * trampoline_cr4_features, which then prevents the
+			 * secondary processors from booting.
 			 */
-			set_in_cr4(X86_CR4_PCIDE);
+			write_cr4(read_cr4() | X86_CR4_PCIDE);
+
 			/*
 			 * INVPCID has two "groups" of types:
 			 * 1/2: Invalidate an individual address
