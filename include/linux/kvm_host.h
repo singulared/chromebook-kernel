@@ -22,6 +22,8 @@
 #include <linux/rcupdate.h>
 #include <linux/ratelimit.h>
 #include <linux/err.h>
+#include <linux/irqflags.h>
+#include <linux/context_tracking.h>
 #include <asm/signal.h>
 
 #include <linux/kvm.h>
