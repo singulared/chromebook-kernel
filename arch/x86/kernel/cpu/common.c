@@ -87,7 +87,7 @@ static const struct cpu_dev __cpuinitconst default_cpu = {
 
 static const struct cpu_dev *this_cpu __cpuinitdata = &default_cpu;
 
-DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
+DEFINE_PER_CPU_PAGE_ALIGNED_USER_MAPPED(struct gdt_page, gdt_page) = { .gdt = {
 #ifdef CONFIG_X86_64
 	/*
 	 * We need valid kernel segments for data and code in long mode too
@@ -324,6 +324,49 @@ static __always_inline void setup_smap(struct cpuinfo_x86 *c)
 
 	if (cpu_has(c, X86_FEATURE_SMAP))
 		set_in_cr4(X86_CR4_SMAP);
+}
+
+static void setup_pcid(struct cpuinfo_x86 *c)
+{
+	if (cpu_has(c, X86_FEATURE_PCID)) {
+		if (cpu_has(c, X86_FEATURE_PGE) && IS_ENABLED(CONFIG_X86_64)) {
+			/*
+			 * Regardless of whether PCID is enumerated, the
+			 * SDM says that it can't be enabled in 32-bit mode.
+			 *
+			 * Do NOT use set_in_cr4(X86_CR4_PCIDE) here:
+			 * that adds X86_CR4_PCIDE to mmu_cr4_features and
+			 * trampoline_cr4_features, which then prevents the
+			 * secondary processors from booting.
+			 */
+			write_cr4(read_cr4() | X86_CR4_PCIDE);
+
+			/*
+			 * INVPCID has two "groups" of types:
+			 * 1/2: Invalidate an individual address
+			 * 3/4: Invalidate all contexts
+			 *
+			 * 1/2 take a PCID, but 3/4 do not.  So, 3/4
+			 * ignore the PCID argument in the descriptor.
+			 * But, we have to be careful not to call 1/2
+			 * with an actual non-zero PCID in them before
+			 * we do the above cr4_set_bits().
+			 */
+			if (cpu_has(c, X86_FEATURE_INVPCID))
+				set_cpu_cap(c, X86_FEATURE_INVPCID_SINGLE);
+		} else {
+			/*
+			 * flush_tlb_all(), as currently implemented, won't
+			 * work if PCID is on but PGE is not.  Since that
+			 * combination doesn't exist on real hardware, there's
+			 * no reason to try to fully support it, but it's
+			 * polite to avoid corrupting data if we're on
+			 * an improperly configured VM.
+			 */
+			clear_cpu_cap(c, X86_FEATURE_PCID);
+		}
+	}
+	kaiser_setup_pcid();
 }
 
 /*
@@ -912,6 +955,9 @@ static void __cpuinit identify_cpu(struct cpuinfo_x86 *c)
 	setup_smep(c);
 	setup_smap(c);
 
+	/* Set up PCID */
+	setup_pcid(c);
+
 	/*
 	 * The vendor-specific functions might have changed features.
 	 * Now we do "generic changes."
@@ -998,11 +1044,6 @@ void __cpuinit identify_secondary_cpu(struct cpuinfo_x86 *c)
 	BUG_ON(c == &boot_cpu_data);
 	identify_cpu(c);
 #ifdef CONFIG_X86_32
-	/*
-	 * Regardless of whether PCID is enumerated, the SDM says
-	 * that it can't be enabled in 32-bit mode.
-	 */
-	clear_cpu_cap(c, X86_FEATURE_PCID);
 	enable_sep_cpu();
 #endif
 	mtrr_ap_init();
@@ -1124,7 +1165,7 @@ DEFINE_PER_CPU(struct task_struct *, current_task) ____cacheline_aligned =
 	&init_task;
 EXPORT_PER_CPU_SYMBOL(current_task);
 
-DEFINE_PER_CPU(unsigned long, kernel_stack) =
+DEFINE_PER_CPU_USER_MAPPED(unsigned long, kernel_stack) =
 	(unsigned long)&init_thread_union - KERNEL_STACK_OFFSET + THREAD_SIZE;
 EXPORT_PER_CPU_SYMBOL(kernel_stack);
 
@@ -1146,7 +1187,7 @@ static const unsigned int exception_stack_sizes[N_EXCEPTION_STACKS] = {
 	  [DEBUG_STACK - 1]			= DEBUG_STKSZ
 };
 
-static DEFINE_PER_CPU_PAGE_ALIGNED(char, exception_stacks
+DEFINE_PER_CPU_PAGE_ALIGNED_USER_MAPPED(char, exception_stacks
 	[(N_EXCEPTION_STACKS - 1) * EXCEPTION_STKSZ + DEBUG_STKSZ]);
 
 /* May not be marked __init: used by software suspend */
