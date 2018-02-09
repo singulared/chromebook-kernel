@@ -40,27 +40,21 @@
 struct drm_vgem_gem_object {
 	struct drm_gem_object base;
 	struct page **pages;
-	bool use_dma_buf;
+	struct sg_table *sgt;
 };
 
 /* vgem_drv.c */
 extern void vgem_gem_put_pages(struct drm_vgem_gem_object *obj);
 extern int vgem_gem_get_pages(struct drm_vgem_gem_object *obj);
-
-/* vgem_dma_buf.c */
-extern int vgem_prime_to_fd(struct drm_device *dev,
-			    struct drm_file *file_priv,
-			    uint32_t handle, int *prime_fd);
-
-extern int vgem_prime_to_handle(struct drm_device *dev,
-				struct drm_file *file_priv,
-				int prime_fd, uint32_t *handle);
-
-extern struct dma_buf *vgem_gem_prime_export(struct drm_device *dev,
-					     struct drm_gem_object *obj,
-					     int flags);
-
-extern struct drm_gem_object *vgem_gem_prime_import(struct drm_device *dev,
-						    struct dma_buf *dma_buf);
-
+extern struct sg_table *vgem_gem_prime_get_sg_table(
+			struct drm_gem_object *gobj);
+extern int vgem_gem_prime_pin(struct drm_gem_object *gobj);
+extern void *vgem_gem_prime_vmap(struct drm_gem_object *gobj);
+extern void vgem_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
+extern int vgem_gem_prime_mmap(struct drm_gem_object *gobj,
+			       struct vm_area_struct *vma);
+struct drm_gem_object *
+vgem_gem_prime_import_sg_table(struct drm_device *dev,
+			       size_t size,
+			       struct sg_table *sg);
 #endif

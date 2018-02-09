@@ -1,4 +1,3 @@
-#if CFG80211_VERSION >= KERNEL_VERSION(3,19,0)
 /*
  * OCB mode implementation
  *
@@ -247,4 +246,3 @@ int ieee80211_ocb_leave(struct ieee80211_sub_if_data *sdata)
 
 	return 0;
 }
-#endif /* CFG80211_VERSION >= KERNEL_VERSION(3,19,0) */

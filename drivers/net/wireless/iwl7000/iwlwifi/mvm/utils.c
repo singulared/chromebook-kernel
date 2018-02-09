@@ -70,9 +70,8 @@
 #include "iwl-io.h"
 #include "iwl-prph.h"
 #include "iwl-csr.h"
-#include "fw-dbg.h"
 #include "mvm.h"
-#include "fw-api-rs.h"
+#include "fw/api/rs.h"
 #ifdef CPTCFG_IWLMVM_TCM
 #include "iwl-vendor-cmd.h"
 #endif
@@ -172,11 +171,6 @@ int iwl_mvm_send_cmd_status(struct iwl_mvm *mvm, struct iwl_host_cmd *cmd,
 	}
 
 	pkt = cmd->resp_pkt;
-	/* Can happen if RFKILL is asserted */
-	if (!pkt) {
-		ret = 0;
-		goto out_free_resp;
-	}
 
 	resp_len = iwl_rx_packet_payload_len(pkt);
 	if (WARN_ON_ONCE(resp_len != sizeof(*resp))) {
@@ -472,8 +466,8 @@ static void iwl_mvm_dump_umac_error_log(struct iwl_mvm *mvm)
 		IWL_ERR(mvm,
 			"Not valid error log pointer 0x%08X for %s uCode\n",
 			base,
-			(mvm->cur_ucode == IWL_UCODE_INIT)
-					? "Init" : "RT");
+			(mvm->fwrt.cur_fw_img == IWL_UCODE_INIT)
+			? "Init" : "RT");
 		return;
 	}
 
@@ -508,7 +502,7 @@ static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 	struct iwl_error_event_table table;
 	u32 val;
 
-	if (mvm->cur_ucode == IWL_UCODE_INIT) {
+	if (mvm->fwrt.cur_fw_img == IWL_UCODE_INIT) {
 		if (!base)
 			base = mvm->fw->init_errlog_ptr;
 	} else {
@@ -520,8 +514,8 @@ static void iwl_mvm_dump_lmac_error_log(struct iwl_mvm *mvm, u32 base)
 		IWL_ERR(mvm,
 			"Not valid error log pointer 0x%08X for %s uCode\n",
 			base,
-			(mvm->cur_ucode == IWL_UCODE_INIT)
-					? "Init" : "RT");
+			(mvm->fwrt.cur_fw_img == IWL_UCODE_INIT)
+			? "Init" : "RT");
 		return;
 	}
 
@@ -1227,14 +1221,15 @@ void iwl_mvm_connection_loss(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 
 	trig = iwl_fw_dbg_get_trigger(mvm->fw, FW_DBG_TRIGGER_MLME);
 	trig_mlme = (void *)trig->data;
-	if (!iwl_fw_dbg_trigger_check_stop(mvm, vif, trig))
+	if (!iwl_fw_dbg_trigger_check_stop(&mvm->fwrt,
+					   ieee80211_vif_to_wdev(vif), trig))
 		goto out;
 
 	if (trig_mlme->stop_connection_loss &&
 	    --trig_mlme->stop_connection_loss)
 		goto out;
 
-	iwl_mvm_fw_dbg_collect_trig(mvm, trig, "%s", errmsg);
+	iwl_fw_dbg_collect_trig(&mvm->fwrt, trig, "%s", errmsg);
 
 out:
 	ieee80211_connection_loss(vif);
@@ -1260,7 +1255,7 @@ static void iwl_mvm_remove_inactive_tids(struct iwl_mvm *mvm,
 	/* Go over all non-active TIDs, incl. IWL_MAX_TID_COUNT (for mgmt) */
 	for_each_set_bit(tid, &tid_bitmap, IWL_MAX_TID_COUNT + 1) {
 		/* If some TFDs are still queued - don't mark TID as inactive */
-		if (iwl_mvm_tid_queued(&mvmsta->tid_data[tid]))
+		if (iwl_mvm_tid_queued(mvm, &mvmsta->tid_data[tid]))
 			tid_bitmap &= ~BIT(tid);
 
 		/* Don't mark as inactive any TID that has an active BA */
@@ -1595,7 +1590,8 @@ static void iwl_mvm_tcm_iterator(void *_data, u8 *mac,
 }
 
 static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
-					    unsigned long ts)
+					    unsigned long ts,
+					    bool handle_uapsd)
 {
 	unsigned int elapsed = jiffies_to_msecs(ts - mvm->tcm.ts);
 	unsigned int uapsd_elapsed =
@@ -1607,9 +1603,6 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 	bool low_latency = false;
 	enum iwl_mvm_vendor_load load, band_load;
 	bool handle_ll = time_after(ts, mvm->tcm.ll_ts + MVM_LL_PERIOD);
-	bool handle_uapsd =
-		time_after(ts, mvm->tcm.uapsd_nonagg_ts +
-			       msecs_to_jiffies(IWL_MVM_UAPSD_NONAGG_PERIOD));
 
 	if (handle_ll)
 		mvm->tcm.ll_ts = ts;
@@ -1705,6 +1698,9 @@ static unsigned long iwl_mvm_calc_tcm_stats(struct iwl_mvm *mvm,
 void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 {
 	unsigned long ts = jiffies;
+	bool handle_uapsd =
+		time_after(ts, mvm->tcm.uapsd_nonagg_ts +
+			       msecs_to_jiffies(IWL_MVM_UAPSD_NONAGG_PERIOD));
 
 	spin_lock(&mvm->tcm.lock);
 	if (mvm->tcm.paused || !time_after(ts, mvm->tcm.ts + MVM_TCM_PERIOD)) {
@@ -1713,9 +1709,10 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 	}
 	spin_unlock(&mvm->tcm.lock);
 
-	if (iwl_mvm_has_new_rx_api(mvm)) {
+	if (handle_uapsd && iwl_mvm_has_new_rx_api(mvm)) {
 		mutex_lock(&mvm->mutex);
-		iwl_mvm_request_statistics(mvm, true);
+		if (iwl_mvm_request_statistics(mvm, true))
+			handle_uapsd = false;
 		mutex_unlock(&mvm->mutex);
 	}
 
@@ -1723,7 +1720,8 @@ void iwl_mvm_recalc_tcm(struct iwl_mvm *mvm)
 	/* re-check if somebody else won the recheck race */
 	if (!mvm->tcm.paused && time_after(ts, mvm->tcm.ts + MVM_TCM_PERIOD)) {
 		/* calculate statistics */
-		unsigned long work_delay = iwl_mvm_calc_tcm_stats(mvm, ts);
+		unsigned long work_delay = iwl_mvm_calc_tcm_stats(mvm, ts,
+								  handle_uapsd);
 
 		/* the memset needs to be visible before the timestamp */
 		smp_mb();

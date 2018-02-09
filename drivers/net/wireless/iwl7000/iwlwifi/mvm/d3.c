@@ -7,7 +7,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016   Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -34,7 +34,7 @@
  *
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
- * Copyright(c) 2016   Intel Deutschland GmbH
+ * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -83,7 +83,7 @@ void iwl_mvm_set_rekey_data(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
-	if (iwlwifi_mod_params.sw_crypto)
+	if (iwlwifi_mod_params.swcrypto)
 		return;
 
 	mutex_lock(&mvm->mutex);
@@ -902,11 +902,7 @@ iwl_mvm_get_wowlan_config(struct iwl_mvm *mvm,
 		wowlan_config_cmd->wakeup_filter |=
 			cpu_to_le32(IWL_WOWLAN_WAKEUP_RF_KILL_DEASSERT);
 
-#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
 	if (wowlan->tcp) {
-#else
-	if (0) {
-#endif
 		/*
 		 * Set the "link change" (really "link lost") flag as well
 		 * since that implies losing the TCP connection.
@@ -1058,7 +1054,7 @@ iwl_mvm_wowlan_config(struct iwl_mvm *mvm,
 			return ret;
 	}
 
-	if (!iwlwifi_mod_params.sw_crypto) {
+	if (!iwlwifi_mod_params.swcrypto) {
 		/*
 		 * This needs to be unlocked due to lock ordering
 		 * constraints. Since we're in the suspend path
@@ -1086,12 +1082,7 @@ iwl_mvm_wowlan_config(struct iwl_mvm *mvm,
 	if (ret)
 		return ret;
 
-	ret = iwl_mvm_send_remote_wake_cfg(mvm, vif,
-#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
-					   wowlan->tcp);
-#else
-					   NULL);
-#endif
+	ret = iwl_mvm_send_remote_wake_cfg(mvm, vif, wowlan->tcp);
 	return ret;
 }
 
@@ -1289,8 +1280,8 @@ static int __iwl_mvm_suspend(struct ieee80211_hw *hw,
 
 		if (!unified_image) {
 			iwl_mvm_ref(mvm, IWL_MVM_REF_UCODE_DOWN);
-			if (mvm->restart_fw > 0) {
-				mvm->restart_fw--;
+			if (mvm->fw_restart > 0) {
+				mvm->fw_restart--;
 				ieee80211_restart_hw(mvm->hw);
 			}
 		}
@@ -1415,7 +1406,6 @@ static void iwl_mvm_report_wakeup_reasons(struct iwl_mvm *mvm,
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_FOUR_WAY_HANDSHAKE)
 		wakeup.four_way_handshake = true;
 
-#if CFG80211_VERSION >= KERNEL_VERSION(3,9,0)
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_REM_WAKE_LINK_LOSS)
 		wakeup.tcp_connlost = true;
 
@@ -1424,7 +1414,6 @@ static void iwl_mvm_report_wakeup_reasons(struct iwl_mvm *mvm,
 
 	if (reasons & IWL_WOWLAN_WAKEUP_BY_REM_WAKE_WAKEUP_PACKET)
 		wakeup.tcp_match = true;
-#endif
 
 	if (status->wake_packet_bufsize) {
 		int pktsize = status->wake_packet_bufsize;
@@ -1809,12 +1798,6 @@ iwl_mvm_get_wakeup_status(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 		return ERR_PTR(ret);
 	}
 
-	/* RF-kill already asserted again... */
-	if (!cmd.resp_pkt) {
-		fw_status = ERR_PTR(-ERFKILL);
-		goto out_free_resp;
-	}
-
 	status_size = sizeof(*fw_status);
 
 	len = iwl_rx_packet_payload_len(cmd.resp_pkt);
@@ -1937,12 +1920,6 @@ iwl_mvm_netdetect_query_results(struct iwl_mvm *mvm,
 	if (ret) {
 		IWL_ERR(mvm, "failed to query matched profiles (%d)\n", ret);
 		return ret;
-	}
-
-	/* RF-kill already asserted again... */
-	if (!cmd.resp_pkt) {
-		ret = -ERFKILL;
-		goto out_free_resp;
 	}
 
 	len = iwl_rx_packet_payload_len(cmd.resp_pkt);
@@ -2101,9 +2078,8 @@ static int __iwl_mvm_resume(struct iwl_mvm *mvm, bool test)
 	bool keep = false;
 	bool unified_image = fw_has_capa(&mvm->fw->ucode_capa,
 					 IWL_UCODE_TLV_CAPA_CNSLDTD_D3_D0_IMG);
-
-	u32 flags = CMD_ASYNC | CMD_HIGH_PRIO | CMD_SEND_IN_IDLE |
-				    CMD_WAKE_UP_TRANS;
+	bool d0i3_first = fw_has_capa(&mvm->fw->ucode_capa,
+				      IWL_UCODE_TLV_CAPA_D0I3_END_FIRST);
 
 	mutex_lock(&mvm->mutex);
 
@@ -2123,6 +2099,15 @@ static int __iwl_mvm_resume(struct iwl_mvm *mvm, bool test)
 
 	/* query SRAM first in case we want event logging */
 	iwl_mvm_read_d3_sram(mvm);
+
+	if (d0i3_first) {
+		ret = iwl_mvm_send_cmd_pdu(mvm, D0I3_END_CMD, 0, 0, NULL);
+		if (ret < 0) {
+			IWL_ERR(mvm, "Failed to send D0I3_END_CMD first (%d)\n",
+				ret);
+			goto err;
+		}
+	}
 
 	/*
 	 * Query the current location and source from the D3 firmware so we
@@ -2169,9 +2154,14 @@ out_iterate:
 			iwl_mvm_d3_disconnect_iter, keep ? vif : NULL);
 
 out:
+	/* no need to reset the device in unified images, if successful */
 	if (unified_image && !ret) {
-		ret = iwl_mvm_send_cmd_pdu(mvm, D0I3_END_CMD, flags, 0, NULL);
-		if (!ret) /* D3 ended successfully - no need to reset device */
+		/* nothing else to do if we already sent D0I3_END_CMD */
+		if (d0i3_first)
+			return 0;
+
+		ret = iwl_mvm_send_cmd_pdu(mvm, D0I3_END_CMD, 0, 0, NULL);
+		if (!ret)
 			return 0;
 	}
 

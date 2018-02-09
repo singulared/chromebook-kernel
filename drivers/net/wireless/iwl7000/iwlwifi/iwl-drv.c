@@ -76,7 +76,7 @@
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
 #include "iwl-agn-hw.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-tm-gnl.h"
 #include "iwl-config.h"
 #include "iwl-modparams.h"
@@ -687,8 +687,8 @@ static int iwl_set_default_calib(struct iwl_drv *drv, const u8 *data)
 	return 0;
 }
 
-static int iwl_set_ucode_api_flags(struct iwl_drv *drv, const u8 *data,
-				   struct iwl_ucode_capabilities *capa)
+static void iwl_set_ucode_api_flags(struct iwl_drv *drv, const u8 *data,
+				    struct iwl_ucode_capabilities *capa)
 {
 	const struct iwl_ucode_api *ucode_api = (void *)data;
 	u32 api_index = le32_to_cpu(ucode_api->api_index);
@@ -696,23 +696,20 @@ static int iwl_set_ucode_api_flags(struct iwl_drv *drv, const u8 *data,
 	int i;
 
 	if (api_index >= DIV_ROUND_UP(NUM_IWL_UCODE_TLV_API, 32)) {
-		IWL_ERR(drv,
-			"api flags index %d larger than supported by driver\n",
-			api_index);
-		/* don't return an error so we can load FW that has more bits */
-		return 0;
+		IWL_WARN(drv,
+			 "api flags index %d larger than supported by driver\n",
+			 api_index);
+		return;
 	}
 
 	for (i = 0; i < 32; i++) {
 		if (api_flags & BIT(i))
 			__set_bit(i + 32 * api_index, capa->_api);
 	}
-
-	return 0;
 }
 
-static int iwl_set_ucode_capabilities(struct iwl_drv *drv, const u8 *data,
-				      struct iwl_ucode_capabilities *capa)
+static void iwl_set_ucode_capabilities(struct iwl_drv *drv, const u8 *data,
+				       struct iwl_ucode_capabilities *capa)
 {
 	const struct iwl_ucode_capa *ucode_capa = (void *)data;
 	u32 api_index = le32_to_cpu(ucode_capa->api_index);
@@ -720,19 +717,16 @@ static int iwl_set_ucode_capabilities(struct iwl_drv *drv, const u8 *data,
 	int i;
 
 	if (api_index >= DIV_ROUND_UP(NUM_IWL_UCODE_TLV_CAPA, 32)) {
-		IWL_ERR(drv,
-			"capa flags index %d larger than supported by driver\n",
-			api_index);
-		/* don't return an error so we can load FW that has more bits */
-		return 0;
+		IWL_WARN(drv,
+			 "capa flags index %d larger than supported by driver\n",
+			 api_index);
+		return;
 	}
 
 	for (i = 0; i < 32; i++) {
 		if (api_flags & BIT(i))
 			__set_bit(i + 32 * api_index, capa->_capa);
 	}
-
-	return 0;
 }
 
 static int iwl_parse_v1_v2_firmware(struct iwl_drv *drv,
@@ -988,14 +982,12 @@ fw_dbg_conf:
 		case IWL_UCODE_TLV_API_CHANGES_SET:
 			if (tlv_len != sizeof(struct iwl_ucode_api))
 				goto invalid_tlv_len;
-			if (iwl_set_ucode_api_flags(drv, tlv_data, capa))
-				goto tlv_error;
+			iwl_set_ucode_api_flags(drv, tlv_data, capa);
 			break;
 		case IWL_UCODE_TLV_ENABLED_CAPABILITIES:
 			if (tlv_len != sizeof(struct iwl_ucode_capa))
 				goto invalid_tlv_len;
-			if (iwl_set_ucode_capabilities(drv, tlv_data, capa))
-				goto tlv_error;
+			iwl_set_ucode_capabilities(drv, tlv_data, capa);
 			break;
 		case IWL_UCODE_TLV_INIT_EVTLOG_PTR:
 			if (tlv_len != sizeof(u32))
@@ -1908,12 +1900,13 @@ void iwl_drv_stop(struct iwl_drv *drv)
 
 /* shared module parameters */
 struct iwl_mod_params iwlwifi_mod_params = {
-	.restart_fw = true,
+	.fw_restart = true,
 	.bt_coex_active = true,
 	.power_level = IWL_POWER_INDEX_1,
 	.d0i3_disable = IS_ENABLED(CPTCFG_IWLWIFI_D0I3_DEFAULT_DISABLE),
-	.d0i3_entry_delay = 1000,
+	.d0i3_timeout = 1000,
 	.uapsd_disable = IWL_DISABLE_UAPSD_BSS | IWL_DISABLE_UAPSD_P2P_CLIENT,
+	.disable_11ax = true,
 	/* the rest are 0 by default */
 };
 IWL_EXPORT_SYMBOL(iwlwifi_mod_params);
@@ -2065,7 +2058,7 @@ module_param_named(xvt_default_mode, iwlwifi_mod_params.xvt_default_mode,
 MODULE_PARM_DESC(xvt_default_mode, "xVT is the default operation mode (default: false)");
 #endif
 
-module_param_named(swcrypto, iwlwifi_mod_params.sw_crypto, int, S_IRUGO);
+module_param_named(swcrypto, iwlwifi_mod_params.swcrypto, int, S_IRUGO);
 MODULE_PARM_DESC(swcrypto, "using crypto in software (default 0 [hardware])");
 module_param_named(11n_disable, iwlwifi_mod_params.disable_11n, uint, S_IRUGO);
 MODULE_PARM_DESC(11n_disable,
@@ -2074,10 +2067,10 @@ module_param_named(amsdu_size, iwlwifi_mod_params.amsdu_size,
 		   int, S_IRUGO);
 MODULE_PARM_DESC(amsdu_size,
 		 "amsdu size 0: 12K for multi Rx queue devices, 4K for other devices 1:4K 2:8K 3:12K (default 0)");
-module_param_named(fw_restart, iwlwifi_mod_params.restart_fw, bool, S_IRUGO);
+module_param_named(fw_restart, iwlwifi_mod_params.fw_restart, bool, S_IRUGO);
 MODULE_PARM_DESC(fw_restart, "restart firmware in case of error (default true)");
 
-module_param_named(antenna_coupling, iwlwifi_mod_params.ant_coupling,
+module_param_named(antenna_coupling, iwlwifi_mod_params.antenna_coupling,
 		   int, S_IRUGO);
 MODULE_PARM_DESC(antenna_coupling,
 		 "specify antenna coupling in dB (default: 0 dB)");
@@ -2140,13 +2133,17 @@ module_param_named(fw_monitor, iwlwifi_mod_params.fw_monitor, bool, S_IRUGO);
 MODULE_PARM_DESC(fw_monitor,
 		 "firmware monitor - to debug FW (default: false - needs lots of memory)");
 
-module_param_named(d0i3_timeout, iwlwifi_mod_params.d0i3_entry_delay,
+module_param_named(d0i3_timeout, iwlwifi_mod_params.d0i3_timeout,
 		   uint, S_IRUGO);
 MODULE_PARM_DESC(d0i3_timeout, "Timeout to D0i3 entry when idle (ms)");
 
 module_param_named(disable_11ac, iwlwifi_mod_params.disable_11ac, bool,
 		   S_IRUGO);
 MODULE_PARM_DESC(disable_11ac, "Disable VHT capabilities (default: false)");
+
+module_param_named(disable_11ax, iwlwifi_mod_params.disable_11ax, bool,
+		   S_IRUGO);
+MODULE_PARM_DESC(disable_11ax, "Disable HE capabilities (default: true)");
 
 module_param_named(disable_msix, iwlwifi_mod_params.disable_msix, bool,
 		   S_IRUGO);

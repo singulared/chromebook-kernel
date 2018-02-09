@@ -493,16 +493,13 @@ static int s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 	if (ctx->img_width == 0 || ctx->img_height == 0) {
 		ctx->state = MFCINST_ERROR;
 	} else {
-		if (ctx->state == MFCINST_RES_CHANGE_END) {
-			static const struct v4l2_event ev_src_ch = {
-				.type = V4L2_EVENT_SOURCE_CHANGE,
-				.u.src_change.changes =
-					V4L2_EVENT_SRC_CH_RESOLUTION,
-			};
+		static const struct v4l2_event ev_src_ch = {
+			.type = V4L2_EVENT_SOURCE_CHANGE,
+			.u.src_change.changes = V4L2_EVENT_SRC_CH_RESOLUTION,
+		};
 
-			ctx->capture_state = QUEUE_FREE;
-			v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
-		}
+		ctx->capture_state = QUEUE_FREE;
+		v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
 		ctx->state = MFCINST_HEAD_PARSED;
 	}
 
@@ -817,13 +814,6 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 
 	mfc_debug_enter();
 	pix_mp = &f->fmt.pix_mp;
-	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
-	    (ctx->state < MFCINST_HEAD_PARSED || ctx->state >=
-						MFCINST_RES_CHANGE_INIT)) {
-		/* If the MFC is parsing the header,
-		 * so wait until it is finished */
-		s5p_mfc_wait_for_done_ctx(ctx);
-	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 	    ctx->state >= MFCINST_HEAD_PARSED &&
 	    ctx->state < MFCINST_ERROR) {

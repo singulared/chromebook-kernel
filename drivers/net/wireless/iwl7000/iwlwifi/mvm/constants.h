@@ -100,7 +100,6 @@
 #define IWL_MVM_BT_COEX_EN_RED_TXP_THRESH	62
 #define IWL_MVM_BT_COEX_DIS_RED_TXP_THRESH	65
 #define IWL_MVM_BT_COEX_SYNC2SCO		1
-#define IWL_MVM_BT_COEX_CORUNNING		0
 #define IWL_MVM_BT_COEX_MPLUT			1
 #define IWL_MVM_BT_COEX_RRC			1
 #define IWL_MVM_BT_COEX_TTC			1
@@ -114,9 +113,10 @@
 #define IWL_MVM_RS_80_20_FAR_RANGE_TWEAK	1
 #define IWL_MVM_TOF_IS_RESPONDER		0
 #define IWL_MVM_SW_TX_CSUM_OFFLOAD		0
-#define IWL_MVM_HW_CSUM_DISABLE			0
+#define IWL_MVM_HW_CSUM_DISABLE			1
 #define IWL_MVM_PARSE_NVM			0
-#define IWL_MVM_COLLECT_FW_ERR_DUMP		1
+#define IWL_MVM_ADWELL_ENABLE			1
+#define IWL_MVM_ADWELL_MAX_BUDGET		0
 #ifdef CPTCFG_IWLMVM_TCM
 #define IWL_MVM_TCM_LOAD_MEDIUM_THRESH		10 /* percentage */
 #define IWL_MVM_TCM_LOAD_HIGH_THRESH		50 /* percentage */
@@ -154,7 +154,7 @@
 #define IWL_MVM_RS_TPC_SR_FORCE_INCREASE	75	/* percent */
 #define IWL_MVM_RS_TPC_SR_NO_INCREASE		85	/* percent */
 #define IWL_MVM_RS_TPC_TX_POWER_STEP		3
-#define IWL_MVM_ENABLE_DQA			1
+#define IWL_MVM_ENABLE_EBS			1
 #else /* CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES */
 #define IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT	(mvm->trans->dbg_cfg.MVM_DEFAULT_PS_TX_DATA_TIMEOUT)
 #define IWL_MVM_DEFAULT_PS_RX_DATA_TIMEOUT	(mvm->trans->dbg_cfg.MVM_DEFAULT_PS_RX_DATA_TIMEOUT)
@@ -179,7 +179,6 @@
 #define IWL_MVM_BT_COEX_EN_RED_TXP_THRESH	(mvm->trans->dbg_cfg.MVM_BT_COEX_EN_RED_TXP_THRESH)
 #define IWL_MVM_BT_COEX_DIS_RED_TXP_THRESH	(mvm->trans->dbg_cfg.MVM_BT_COEX_DIS_RED_TXP_THRESH)
 #define IWL_MVM_BT_COEX_SYNC2SCO		(mvm->trans->dbg_cfg.MVM_BT_COEX_SYNC2SCO)
-#define IWL_MVM_BT_COEX_CORUNNING		(mvm->trans->dbg_cfg.MVM_BT_COEX_CORUNNING)
 #define IWL_MVM_BT_COEX_MPLUT			(mvm->trans->dbg_cfg.MVM_BT_COEX_MPLUT)
 #define IWL_MVM_BT_COEX_RRC			(mvm->trans->dbg_cfg.MVM_BT_COEX_RRC)
 #define IWL_MVM_BT_COEX_TTC			(mvm->trans->dbg_cfg.MVM_BT_COEX_TTC)
@@ -192,7 +191,8 @@
 #define IWL_MVM_SW_TX_CSUM_OFFLOAD		(mvm->trans->dbg_cfg.MVM_SW_TX_CSUM_OFFLOAD)
 #define IWL_MVM_HW_CSUM_DISABLE			(mvm->trans->dbg_cfg.MVM_HW_CSUM_DISABLE)
 #define IWL_MVM_PARSE_NVM			(mvm->trans->dbg_cfg.MVM_PARSE_NVM)
-#define IWL_MVM_COLLECT_FW_ERR_DUMP		(mvm->trans->dbg_cfg.MVM_COLLECT_FW_ERR_DUMP)
+#define IWL_MVM_ADWELL_ENABLE			(mvm->trans->dbg_cfg.MVM_ADWELL_ENABLE)
+#define IWL_MVM_ADWELL_MAX_BUDGET		(mvm->trans->dbg_cfg.MVM_ADWELL_MAX_BUDGET)
 #ifdef CPTCFG_IWLMVM_TCM
 #define IWL_MVM_TCM_LOAD_MEDIUM_THRESH		(mvm->trans->dbg_cfg.MVM_TCM_LOAD_MEDIUM_THRESH)
 #define IWL_MVM_TCM_LOAD_HIGH_THRESH		(mvm->trans->dbg_cfg.MVM_TCM_LOAD_HIGH_THRESH)
@@ -233,7 +233,7 @@
 #define IWL_MVM_RS_TPC_SR_FORCE_INCREASE	(mvm->trans->dbg_cfg.MVM_RS_TPC_SR_FORCE_INCREASE)
 #define IWL_MVM_RS_TPC_SR_NO_INCREASE		(mvm->trans->dbg_cfg.MVM_RS_TPC_SR_NO_INCREASE)
 #define IWL_MVM_RS_TPC_TX_POWER_STEP		(mvm->trans->dbg_cfg.MVM_RS_TPC_TX_POWER_STEP)
-#define IWL_MVM_ENABLE_DQA			(mvm->trans->dbg_cfg.MVM_ENABLE_DQA)
+#define IWL_MVM_ENABLE_EBS			(mvm->trans->dbg_cfg.MVM_ENABLE_EBS)
 
 #endif /* CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES */
 

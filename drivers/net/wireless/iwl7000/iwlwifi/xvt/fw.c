@@ -64,7 +64,7 @@
  *****************************************************************************/
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-csr.h"
 
 #include "xvt.h"
@@ -80,7 +80,7 @@ struct iwl_xvt_alive_data {
 static int iwl_xvt_send_dqa_cmd(struct iwl_xvt *xvt)
 {
 	struct iwl_dqa_enable_cmd dqa_cmd = {
-		.cmd_queue = cpu_to_le32(IWL_XVT_DQA_CMD_QUEUE),
+		.cmd_queue = cpu_to_le32(IWL_MVM_DQA_CMD_QUEUE),
 	};
 	u32 cmd_id = iwl_cmd_id(DQA_ENABLE_CMD, DATA_PATH_GROUP, 0);
 	int ret;
@@ -94,270 +94,6 @@ static int iwl_xvt_send_dqa_cmd(struct iwl_xvt *xvt)
 	return ret;
 }
 
-void iwl_xvt_free_fw_paging(struct iwl_xvt *xvt)
-{
-	int i;
-
-	if (!xvt->fw_paging_db[0].fw_paging_block)
-		return;
-
-	for (i = 0; i < NUM_OF_FW_PAGING_BLOCKS; i++) {
-		if (!xvt->fw_paging_db[i].fw_paging_block) {
-			IWL_DEBUG_FW(xvt,
-				     "Paging: block %d already freed, continue to next page\n",
-				     i);
-
-			continue;
-		}
-
-		__free_pages(xvt->fw_paging_db[i].fw_paging_block,
-			     get_order(xvt->fw_paging_db[i].fw_paging_size));
-	}
-
-	memset(xvt->fw_paging_db, 0, sizeof(xvt->fw_paging_db));
-}
-
-static int iwl_xvt_fill_paging_mem(struct iwl_xvt *xvt,
-				   const struct fw_img *image)
-{
-	int sec_idx, idx;
-	u32 offset = 0;
-
-	/*
-	 * find where is the paging image start point:
-	 * if CPU2 exist and it's in paging format, then the image looks like:
-	 * CPU1 sections (2 or more)
-	 * CPU1_CPU2_SEPARATOR_SECTION delimiter - separate between CPU1 to CPU2
-	 * CPU2 sections (not paged)
-	 * PAGING_SEPARATOR_SECTION delimiter - separate between CPU2
-	 * non paged to CPU2 paging sec
-	 * CPU2 paging CSS
-	 * CPU2 paging image (including instruction and data)
-	 */
-	for (sec_idx = 0; sec_idx < image->num_sec; sec_idx++) {
-		if (image->sec[sec_idx].offset == PAGING_SEPARATOR_SECTION) {
-			sec_idx++;
-			break;
-		}
-	}
-
-	/*
-	 * If paging is enabled there should be at least 2 more sections left
-	 * (one for CSS and one for Paging data)
-	 */
-	if (sec_idx >= image->num_sec - 1) {
-		IWL_ERR(xvt, "Paging: Missing CSS and/or paging sections\n");
-		iwl_xvt_free_fw_paging(xvt);
-		return -EINVAL;
-	}
-
-	/* copy the CSS block to the dram */
-	IWL_DEBUG_FW(xvt, "Paging: load paging CSS to FW, sec = %d\n",
-		     sec_idx);
-
-	memcpy(page_address(xvt->fw_paging_db[0].fw_paging_block),
-	       image->sec[sec_idx].data,
-	       xvt->fw_paging_db[0].fw_paging_size);
-	dma_sync_single_for_device(xvt->trans->dev,
-				   xvt->fw_paging_db[0].fw_paging_phys,
-				   xvt->fw_paging_db[0].fw_paging_size,
-				   DMA_BIDIRECTIONAL);
-
-	IWL_DEBUG_FW(xvt,
-		     "Paging: copied %d CSS bytes to first block\n",
-		     xvt->fw_paging_db[0].fw_paging_size);
-
-	sec_idx++;
-
-	/*
-	 * copy the paging blocks to the dram
-	 * loop index start from 1 since that CSS block already copied to dram
-	 * and CSS index is 0.
-	 * loop stop at num_of_paging_blk since that last block is not full.
-	 */
-	for (idx = 1; idx < xvt->num_of_paging_blk; idx++) {
-		struct iwl_fw_paging *block = &xvt->fw_paging_db[idx];
-
-		memcpy(page_address(block->fw_paging_block),
-		       image->sec[sec_idx].data + offset,
-		       block->fw_paging_size);
-		dma_sync_single_for_device(xvt->trans->dev,
-					   block->fw_paging_phys,
-					   block->fw_paging_size,
-					   DMA_BIDIRECTIONAL);
-
-		IWL_DEBUG_FW(xvt,
-			     "Paging: copied %d paging bytes to block %d\n",
-			     xvt->fw_paging_db[idx].fw_paging_size,
-			     idx);
-
-		offset += xvt->fw_paging_db[idx].fw_paging_size;
-	}
-
-	/* copy the last paging block */
-	if (xvt->num_of_pages_in_last_blk > 0) {
-		struct iwl_fw_paging *block = &xvt->fw_paging_db[idx];
-
-		memcpy(page_address(block->fw_paging_block),
-		       image->sec[sec_idx].data + offset,
-		       FW_PAGING_SIZE * xvt->num_of_pages_in_last_blk);
-		dma_sync_single_for_device(xvt->trans->dev,
-					   block->fw_paging_phys,
-					   block->fw_paging_size,
-					   DMA_BIDIRECTIONAL);
-
-		IWL_DEBUG_FW(xvt,
-			     "Paging: copied %d pages in the last block %d\n",
-			     xvt->num_of_pages_in_last_blk, idx);
-	}
-
-	return 0;
-}
-
-static int iwl_xvt_alloc_fw_paging_mem(struct iwl_xvt *xvt,
-				       const struct fw_img *image)
-{
-	struct page *block;
-	dma_addr_t phys = 0;
-	int blk_idx = 0;
-	int order, num_of_pages;
-	int dma_enabled;
-
-	if (xvt->fw_paging_db[0].fw_paging_block)
-		return 0;
-
-	dma_enabled = is_device_dma_capable(xvt->trans->dev);
-
-	/* ensure BLOCK_2_EXP_SIZE is power of 2 of PAGING_BLOCK_SIZE */
-	BUILD_BUG_ON(BIT(BLOCK_2_EXP_SIZE) != PAGING_BLOCK_SIZE);
-
-	num_of_pages = image->paging_mem_size / FW_PAGING_SIZE;
-	xvt->num_of_paging_blk = ((num_of_pages - 1) /
-				    NUM_OF_PAGE_PER_GROUP) + 1;
-
-	xvt->num_of_pages_in_last_blk =
-		num_of_pages -
-		NUM_OF_PAGE_PER_GROUP * (xvt->num_of_paging_blk - 1);
-
-	IWL_DEBUG_FW(xvt,
-		     "Paging: allocating mem for %d paging blocks, each block holds 8 pages, last block holds %d pages\n",
-		     xvt->num_of_paging_blk,
-		     xvt->num_of_pages_in_last_blk);
-
-	/* allocate block of 4Kbytes for paging CSS */
-	order = get_order(FW_PAGING_SIZE);
-	block = alloc_pages(GFP_KERNEL, order);
-	if (!block) {
-		/* free all the previous pages since we failed */
-		iwl_xvt_free_fw_paging(xvt);
-		return -ENOMEM;
-	}
-
-	xvt->fw_paging_db[blk_idx].fw_paging_block = block;
-	xvt->fw_paging_db[blk_idx].fw_paging_size = FW_PAGING_SIZE;
-
-	if (dma_enabled) {
-		phys = dma_map_page(xvt->trans->dev, block, 0,
-				    PAGE_SIZE << order, DMA_BIDIRECTIONAL);
-		if (dma_mapping_error(xvt->trans->dev, phys)) {
-			/*
-			 * free the previous pages and the current one since
-			 * we failed to map_page.
-			 */
-			iwl_xvt_free_fw_paging(xvt);
-			return -ENOMEM;
-		}
-		xvt->fw_paging_db[blk_idx].fw_paging_phys = phys;
-	} else {
-		/* Currently not Supported */
-	}
-
-	IWL_DEBUG_FW(xvt,
-		     "Paging: allocated 4K(CSS) bytes (order %d) for firmware paging.\n",
-		     order);
-
-	/*
-	 * allocate blocks in dram.
-	 * since that CSS allocated in fw_paging_db[0] loop start from index 1
-	 */
-	for (blk_idx = 1; blk_idx < xvt->num_of_paging_blk + 1; blk_idx++) {
-		/* allocate block of PAGING_BLOCK_SIZE (32K) */
-		order = get_order(PAGING_BLOCK_SIZE);
-		block = alloc_pages(GFP_KERNEL, order);
-		if (!block) {
-			/* free all the previous pages since we failed */
-			iwl_xvt_free_fw_paging(xvt);
-			return -ENOMEM;
-		}
-
-		xvt->fw_paging_db[blk_idx].fw_paging_block = block;
-		xvt->fw_paging_db[blk_idx].fw_paging_size = PAGING_BLOCK_SIZE;
-
-		if (dma_enabled) {
-			phys = dma_map_page(xvt->trans->dev, block, 0,
-					    PAGE_SIZE << order,
-					    DMA_BIDIRECTIONAL);
-			if (dma_mapping_error(xvt->trans->dev, phys)) {
-				/*
-				 * free the previous pages and the current one
-				 * since we failed to map_page.
-				 */
-				iwl_xvt_free_fw_paging(xvt);
-				return -ENOMEM;
-			}
-			xvt->fw_paging_db[blk_idx].fw_paging_phys = phys;
-		} else {
-			/* Currently not Supported */
-		}
-
-		IWL_DEBUG_FW(xvt,
-			     "Paging: allocated 32K bytes (order %d) for firmware paging.\n",
-			     order);
-	}
-
-	return 0;
-}
-
-static int iwl_xvt_save_fw_paging(struct iwl_xvt *xvt,
-				  const struct fw_img *fw)
-{
-	int ret;
-
-	ret = iwl_xvt_alloc_fw_paging_mem(xvt, fw);
-	if (ret)
-		return ret;
-
-	return iwl_xvt_fill_paging_mem(xvt, fw);
-}
-
-/* send paging cmd to FW in case CPU2 has paging image */
-static int iwl_xvt_send_paging_cmd(struct iwl_xvt *xvt, const struct fw_img *fw)
-{
-	int blk_idx;
-	__le32 dev_phy_addr;
-	struct iwl_fw_paging_cmd fw_paging_cmd = {
-		.flags =
-			cpu_to_le32(PAGING_CMD_IS_SECURED |
-				    PAGING_CMD_IS_ENABLED |
-				    (xvt->num_of_pages_in_last_blk <<
-				    PAGING_CMD_NUM_OF_PAGES_IN_LAST_GRP_POS)),
-		.block_size = cpu_to_le32(BLOCK_2_EXP_SIZE),
-		.block_num = cpu_to_le32(xvt->num_of_paging_blk),
-	};
-
-	/* loop for for all paging blocks + CSS block */
-	for (blk_idx = 0; blk_idx < xvt->num_of_paging_blk + 1; blk_idx++) {
-		dev_phy_addr =
-			cpu_to_le32(xvt->fw_paging_db[blk_idx].fw_paging_phys >>
-				    PAGE_2_EXP_SIZE);
-		fw_paging_cmd.device_phy_addr[blk_idx] = dev_phy_addr;
-	}
-
-	return iwl_xvt_send_cmd_pdu(xvt, iwl_cmd_id(FW_PAGING_BLOCK_CMD,
-						    IWL_ALWAYS_LONG_GROUP, 0),
-				    0, sizeof(fw_paging_cmd), &fw_paging_cmd);
-}
-
 static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 			 struct iwl_rx_packet *pkt,
 			 void *data)
@@ -366,8 +102,8 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 		container_of(notif_wait, struct iwl_xvt, notif_wait);
 	struct iwl_xvt_alive_data *alive_data = data;
 	struct xvt_alive_resp_ver2 *palive2;
-	struct xvt_alive_resp_ver3 *palive3;
-	struct xvt_alive_resp_ver4 *palive4;
+	struct mvm_alive_resp_v3 *palive3;
+	struct mvm_alive_resp *palive4;
 	struct iwl_lmac_alive *lmac1, *lmac2;
 	struct iwl_umac_alive *umac;
 	u32 rx_packet_payload_size = iwl_rx_packet_payload_len(pkt);
@@ -404,7 +140,7 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 			     palive2->umac_major, palive2->umac_minor);
 	} else {
 		if (rx_packet_payload_size == sizeof(*palive3)) {
-		palive3 = (void *)pkt->data;
+			palive3 = (void *)pkt->data;
 			status = le16_to_cpu(palive3->status);
 			flags = le16_to_cpu(palive3->flags);
 			lmac1 = &palive3->lmac_data;
@@ -459,8 +195,8 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	struct iwl_xvt_alive_data alive_data;
 	const struct fw_img *fw;
 	int ret;
-	enum iwl_ucode_type old_type = xvt->cur_ucode;
-	static const u16 alive_cmd[] = { XVT_ALIVE };
+	enum iwl_ucode_type old_type = xvt->fwrt.cur_fw_img;
+	static const u16 alive_cmd[] = { MVM_ALIVE };
 	struct iwl_scd_txq_cfg_cmd cmd = {
 				.scd_queue = IWL_XVT_DEFAULT_TX_QUEUE,
 				.action = SCD_CFG_ENABLE_QUEUE,
@@ -472,7 +208,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 				.tid = IWL_MAX_TID_COUNT,
 			};
 
-	xvt->cur_ucode = ucode_type;
+	iwl_fw_set_current_image(&xvt->fwrt, ucode_type);
 	fw = iwl_get_ucode_image(xvt->fw, ucode_type);
 
 	if (!fw)
@@ -486,7 +222,7 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 				     ucode_type == IWL_UCODE_INIT,
 				     xvt->sw_stack_cfg.fw_dbg_flags);
 	if (ret) {
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		iwl_remove_notification(&xvt->notif_wait, &alive_wait);
 		return ret;
 	}
@@ -498,13 +234,13 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 	ret = iwl_wait_notification(&xvt->notif_wait, &alive_wait,
 				    XVT_UCODE_ALIVE_TIMEOUT);
 	if (ret) {
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		return ret;
 	}
 
 	if (!alive_data.valid) {
 		IWL_ERR(xvt, "Loaded ucode is not valid!\n");
-		xvt->cur_ucode = old_type;
+		iwl_fw_set_current_image(&xvt->fwrt, old_type);
 		return -EIO;
 	}
 
@@ -519,43 +255,14 @@ static int iwl_xvt_load_ucode_wait_alive(struct iwl_xvt *xvt,
 
 	iwl_trans_fw_alive(xvt->trans, alive_data.scd_base_addr);
 
-	/*
-	 * configure and operate fw paging mechanism.
-	 * driver configures the paging flow only once, CPU2 paging image
-	 * included in the IWL_UCODE_INIT image.
-	 * In unified image paging mechanism is done out of the xvt op
-	 */
-	if (fw->paging_mem_size && !iwl_xvt_is_unified_fw(xvt)) {
-		/*
-		 * When dma is not enabled, the driver needs to copy / write
-		 * the downloaded / uploaded page to / from the smem.
-		 * This gets the location of the place were the pages are
-		 * stored.
-		 */
-		if (!is_device_dma_capable(xvt->trans->dev))
-			return -1; /* not supported yet */
-
-		ret = iwl_xvt_save_fw_paging(xvt, fw);
-		if (ret) {
-			IWL_ERR(xvt, "failed to save the FW paging image\n");
-			return ret;
-		}
-
-		ret = iwl_xvt_send_paging_cmd(xvt, fw);
-		if (ret) {
-			IWL_ERR(xvt, "failed to send the paging cmd\n");
-			iwl_xvt_free_fw_paging(xvt);
-			return ret;
-		}
-	}
+	ret = iwl_init_paging(&xvt->fwrt, ucode_type);
+	if (ret)
+		return ret;
 
 	if (ucode_type == IWL_UCODE_REGULAR) {
-		/* Enable DQA-mode if required */
-		if (iwl_xvt_is_dqa_supported(xvt)) {
-			ret = iwl_xvt_send_dqa_cmd(xvt);
-			if (ret)
-				return ret;
-		}
+		ret = iwl_xvt_send_dqa_cmd(xvt);
+		if (ret)
+			return ret;
 	}
 	/*
 	 * Starting from A000 tx queue allocation must be done after add
@@ -608,10 +315,8 @@ int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type, bool cont_run)
 	if (xvt->state != IWL_XVT_STATE_UNINITIALIZED) {
 		if (xvt->fw_running) {
 			xvt->fw_running = false;
-			if (xvt->cur_ucode == IWL_UCODE_REGULAR)
-				iwl_trans_txq_disable(xvt->trans,
-						      IWL_XVT_DEFAULT_TX_QUEUE,
-						      true);
+			if (xvt->fwrt.cur_fw_img == IWL_UCODE_REGULAR)
+				iwl_xvt_txq_disable(xvt);
 		}
 		_iwl_trans_stop_device(xvt->trans, !cont_run);
 	}

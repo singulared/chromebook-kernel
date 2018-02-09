@@ -657,11 +657,7 @@ int iwl_tm_gnl_send_msg(struct iwl_trans *trans, u32 cmd, bool check_notify,
 
 	if (nlportid)
 		return genlmsg_unicast(&init_net, skb, nlportid);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,13,0)
-	return genlmsg_multicast(skb, 0, iwl_tm_gnl_mcgrps[0].id, flags);
-#else
 	return genlmsg_multicast(&iwl_tm_gnl_family, skb, 0, 0, flags);
-#endif
 }
 IWL_EXPORT_SYMBOL(iwl_tm_gnl_send_msg);
 
@@ -988,7 +984,7 @@ static int iwl_tm_gnl_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		 */
 		ret = nlmsg_parse(cb->nlh, GENL_HDRLEN, attrs,
 				  IWL_TM_GNL_MSG_ATTR_MAX - 1,
-				  iwl_tm_gnl_msg_policy);
+				  iwl_tm_gnl_msg_policy, NULL);
 		if (ret)
 			return ret;
 

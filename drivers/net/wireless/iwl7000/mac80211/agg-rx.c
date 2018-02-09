@@ -357,14 +357,14 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	spin_lock_init(&tid_agg_rx->reorder_lock);
 
 	/* rx timer */
-	tid_agg_rx->session_timer.function = sta_rx_agg_session_timer_expired;
-	tid_agg_rx->session_timer.data = (unsigned long)&sta->timer_to_tid[tid];
-	init_timer_deferrable(&tid_agg_rx->session_timer);
+	setup_deferrable_timer(&tid_agg_rx->session_timer,
+			       sta_rx_agg_session_timer_expired,
+			       (unsigned long)&sta->timer_to_tid[tid]);
 
 	/* rx reorder timer */
-	tid_agg_rx->reorder_timer.function = sta_rx_agg_reorder_timer_expired;
-	tid_agg_rx->reorder_timer.data = (unsigned long)&sta->timer_to_tid[tid];
-	init_timer(&tid_agg_rx->reorder_timer);
+	setup_timer(&tid_agg_rx->reorder_timer,
+		    sta_rx_agg_reorder_timer_expired,
+		    (unsigned long)&sta->timer_to_tid[tid]);
 
 	/* prepare reordering buffer */
 	tid_agg_rx->reorder_buf =
@@ -449,50 +449,8 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 					buf_size, true, false);
 }
 
-void ieee80211_start_rx_ba_session_offl(struct ieee80211_vif *vif,
-					const u8 *addr, u16 tid)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_rx_agg *rx_agg;
-	struct sk_buff *skb = dev_alloc_skb(0);
-
-	if (unlikely(!skb))
-		return;
-
-	rx_agg = (struct ieee80211_rx_agg *) &skb->cb;
-	memcpy(&rx_agg->addr, addr, ETH_ALEN);
-	rx_agg->tid = tid;
-
-	skb->pkt_type = IEEE80211_SDATA_QUEUE_RX_AGG_START;
-	skb_queue_tail(&sdata->skb_queue, skb);
-	ieee80211_queue_work(&local->hw, &sdata->work);
-}
-EXPORT_SYMBOL(ieee80211_start_rx_ba_session_offl);
-
-void ieee80211_stop_rx_ba_session_offl(struct ieee80211_vif *vif,
-				       const u8 *addr, u16 tid)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_rx_agg *rx_agg;
-	struct sk_buff *skb = dev_alloc_skb(0);
-
-	if (unlikely(!skb))
-		return;
-
-	rx_agg = (struct ieee80211_rx_agg *) &skb->cb;
-	memcpy(&rx_agg->addr, addr, ETH_ALEN);
-	rx_agg->tid = tid;
-
-	skb->pkt_type = IEEE80211_SDATA_QUEUE_RX_AGG_STOP;
-	skb_queue_tail(&sdata->skb_queue, skb);
-	ieee80211_queue_work(&local->hw, &sdata->work);
-}
-EXPORT_SYMBOL(ieee80211_stop_rx_ba_session_offl);
-
-void ieee80211_rx_ba_timer_expired(struct ieee80211_vif *vif,
-				   const u8 *addr, unsigned int bit)
+void ieee80211_manage_rx_ba_offl(struct ieee80211_vif *vif,
+				 const u8 *addr, unsigned int tid)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct ieee80211_local *local = sdata->local;
@@ -503,7 +461,26 @@ void ieee80211_rx_ba_timer_expired(struct ieee80211_vif *vif,
 	if (!sta)
 		goto unlock;
 
-	set_bit(bit, sta->ampdu_mlme.tid_rx_timer_expired);
+	set_bit(tid, sta->ampdu_mlme.tid_rx_manage_offl);
+	ieee80211_queue_work(&local->hw, &sta->ampdu_mlme.work);
+ unlock:
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(ieee80211_manage_rx_ba_offl);
+
+void ieee80211_rx_ba_timer_expired(struct ieee80211_vif *vif,
+				   const u8 *addr, unsigned int tid)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+	struct ieee80211_local *local = sdata->local;
+	struct sta_info *sta;
+
+	rcu_read_lock();
+	sta = sta_info_get_bss(sdata, addr);
+	if (!sta)
+		goto unlock;
+
+	set_bit(tid, sta->ampdu_mlme.tid_rx_timer_expired);
 	ieee80211_queue_work(&local->hw, &sta->ampdu_mlme.work);
 
  unlock:

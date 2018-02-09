@@ -6,19 +6,20 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/cpu.h>
+#include <linux/debugfs.h>
 
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
 #include <asm/cache.h>
 #include <asm/apic.h>
 #include <asm/uv/uv.h>
-#include <linux/debugfs.h>
+#include <asm/kaiser.h>
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate)
 			= { &init_mm, 0, };
 
 /*
- *	Smarter SMP flushing macros.
+ *	TLB flushing, formerly SMP-only
  *		c/o Linus Torvalds.
  *
  *	These mean you can really definitely utterly forget about
@@ -37,6 +38,38 @@ struct flush_tlb_info {
 	unsigned long flush_end;
 };
 
+static void load_new_mm_cr3(pgd_t *pgdir)
+{
+	unsigned long new_mm_cr3 = __pa(pgdir);
+
+#ifdef CONFIG_KAISER
+	if (this_cpu_has(X86_FEATURE_PCID)) {
+		/*
+		 * We reuse the same PCID for different tasks, so we must
+		 * flush all the entries for the PCID out when we change tasks.
+		 * Flush KERN below, flush USER when returning to userspace in
+		 * kaiser's SWITCH_USER_CR3 (_SWITCH_TO_USER_CR3) macro.
+		 *
+		 * invpcid_flush_single_context(X86_CR3_PCID_ASID_USER) could
+		 * do it here, but can only be used if X86_FEATURE_INVPCID is
+		 * available - and many machines support pcid without invpcid.
+		 *
+		 * The line below is a no-op: X86_CR3_PCID_KERN_FLUSH is now 0;
+		 * but keep that line in there in case something changes.
+		 */
+		new_mm_cr3 |= X86_CR3_PCID_KERN_FLUSH;
+		kaiser_flush_tlb_on_return_to_user();
+	}
+#endif /* CONFIG_KAISER */
+
+	/*
+	 * Caution: many callers of this function expect
+	 * that load_new_mm_cr3() is serializing and orders TLB
+	 * fills with respect to the mm_cpumask writes.
+	 */
+	write_cr3(new_mm_cr3);
+}
+
 /*
  * We cannot call mmdrop() because we are in interrupt context,
  * instead update mm->cpu_vm_mask.
@@ -48,10 +81,56 @@ void leave_mm(int cpu)
 		BUG();
 	if (cpumask_test_cpu(cpu, mm_cpumask(active_mm))) {
 		cpumask_clear_cpu(cpu, mm_cpumask(active_mm));
-		load_cr3(swapper_pg_dir);
+		load_new_mm_cr3(swapper_pg_dir);
 	}
 }
 EXPORT_SYMBOL_GPL(leave_mm);
+
+void switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	       struct task_struct *tsk)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	switch_mm_irqs_off(prev, next, tsk);
+	local_irq_restore(flags);
+}
+
+void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
+			struct task_struct *tsk)
+{
+	unsigned cpu = smp_processor_id();
+
+	if (likely(prev != next)) {
+		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);
+		this_cpu_write(cpu_tlbstate.active_mm, next);
+		cpumask_set_cpu(cpu, mm_cpumask(next));
+
+		/* Re-load page tables */
+		load_new_mm_cr3(next->pgd);
+
+		/* stop flush ipis for the previous mm */
+		cpumask_clear_cpu(cpu, mm_cpumask(prev));
+
+		/*
+		 * load the LDT, if the LDT is different:
+		 */
+		if (unlikely(prev->context.ldt != next->context.ldt))
+			load_LDT_nolock(&next->context);
+	} else {
+		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);
+		BUG_ON(this_cpu_read(cpu_tlbstate.active_mm) != next);
+
+		if (!cpumask_test_and_set_cpu(cpu, mm_cpumask(next))) {
+			/* We were in lazy tlb mode and leave_mm disabled
+			 * tlb flush IPI delivery. We must reload CR3
+			 * to make sure to use no freed page tables.
+			 */
+			load_new_mm_cr3(next->pgd);
+			load_LDT_nolock(&next->context);
+		}
+	}
+}
 
 /*
  * The flush IPI assumes that a thread switch happens in this order:
@@ -126,6 +205,7 @@ void native_flush_tlb_others(const struct cpumask *cpumask,
 				 unsigned long end)
 {
 	struct flush_tlb_info info;
+
 	info.flush_mm = mm;
 	info.flush_start = start;
 	info.flush_end = end;
@@ -141,18 +221,6 @@ void native_flush_tlb_others(const struct cpumask *cpumask,
 		return;
 	}
 	smp_call_function_many(cpumask, flush_tlb_func, &info, 1);
-}
-
-void flush_tlb_current_task(void)
-{
-	struct mm_struct *mm = current->mm;
-
-	preempt_disable();
-
-	local_flush_tlb();
-	if (cpumask_any_but(mm_cpumask(mm), smp_processor_id()) < nr_cpu_ids)
-		flush_tlb_others(mm_cpumask(mm), mm, 0UL, TLB_FLUSH_ALL);
-	preempt_enable();
 }
 
 /*
@@ -232,25 +300,6 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 flush_all:
 	if (cpumask_any_but(mm_cpumask(mm), smp_processor_id()) < nr_cpu_ids)
 		flush_tlb_others(mm_cpumask(mm), mm, 0UL, TLB_FLUSH_ALL);
-	preempt_enable();
-}
-
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long start)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	preempt_disable();
-
-	if (current->active_mm == mm) {
-		if (current->mm)
-			__flush_tlb_one(start);
-		else
-			leave_mm(smp_processor_id());
-	}
-
-	if (cpumask_any_but(mm_cpumask(mm), smp_processor_id()) < nr_cpu_ids)
-		flush_tlb_others(mm_cpumask(mm), mm, start, 0UL);
-
 	preempt_enable();
 }
 

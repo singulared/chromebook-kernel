@@ -63,7 +63,7 @@
 #ifndef __tof_h__
 #define __tof_h__
 
-#include "fw-api-tof.h"
+#include "fw/api/tof.h"
 
 #ifdef CPTCFG_IWLMVM_TOF_TSF_WA
 #include <linux/rhashtable.h>

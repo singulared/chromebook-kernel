@@ -70,11 +70,12 @@
 #include "iwl-drv.h"
 #include "iwl-trans.h"
 #include "iwl-op-mode.h"
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-config.h"
 #include "fw-api.h"
-#include "iwl-notif-wait.h"
+#include "fw/notif-wait.h"
 #include "constants.h"
+#include "fw/runtime.h"
 
 enum iwl_xvt_state {
 	IWL_XVT_STATE_UNINITIALIZED = 0,
@@ -287,7 +288,6 @@ struct iwl_xvt {
 
 	struct iwl_notif_wait_data notif_wait;
 
-	enum iwl_ucode_type cur_ucode;
 	u32 error_event_table[2];
 	bool fw_running;
 	struct iwl_sf_region sf_space;
@@ -305,10 +305,7 @@ struct iwl_xvt {
 	u8 *dma_cpu_addr;
 	dma_addr_t dma_addr;
 
-	/* Paging section */
-	struct iwl_fw_paging fw_paging_db[NUM_OF_FW_PAGING_BLOCKS];
-	u16 num_of_paging_blk;
-	u16 num_of_pages_in_last_blk;
+	struct iwl_fw_runtime fwrt;
 
 	bool is_nvm_mac_override;
 	u8 nvm_hw_addr[ETH_ALEN];
@@ -352,18 +349,8 @@ int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
 /* FW */
 int iwl_xvt_run_fw(struct iwl_xvt *xvt, u32 ucode_type,  bool cont_run);
 
-void iwl_xvt_free_fw_paging(struct iwl_xvt *xvt);
-
 /* NVM */
 int iwl_xvt_nvm_init(struct iwl_xvt *xvt);
-
-static inline bool iwl_xvt_is_dqa_supported(struct iwl_xvt *xvt)
-{
-	/* Make sure DQA isn't allowed in driver until feature is complete */
-	return fw_has_capa(&xvt->fw->ucode_capa,
-			   IWL_UCODE_TLV_CAPA_DQA_SUPPORT) &&
-	       IWL_XVT_ENABLE_DQA;
-}
 
 /* Based on mvm function: iwl_mvm_has_new_tx_api */
 static inline bool iwl_xvt_is_unified_fw(struct iwl_xvt *xvt)
@@ -388,19 +375,26 @@ static inline bool iwl_xvt_is_cdb_supported(struct iwl_xvt *xvt)
 }
 
 static inline struct agg_tx_status*
-iwl_xvt_get_agg_status(struct iwl_xvt *xvt, struct iwl_xvt_tx_resp *tx_resp)
+iwl_xvt_get_agg_status(struct iwl_xvt *xvt, struct iwl_mvm_tx_resp *tx_resp)
 {
 	if (iwl_xvt_is_unified_fw(xvt))
-		return &tx_resp->v6.status;
+		return &((struct iwl_mvm_tx_resp *)tx_resp)->status;
 	else
-		return &tx_resp->v3.status;
+		return ((struct iwl_mvm_tx_resp_v3 *)tx_resp)->status;
 }
 
 static inline u32 iwl_xvt_get_scd_ssn(struct iwl_xvt *xvt,
-				      struct iwl_xvt_tx_resp *tx_resp)
+				      struct iwl_mvm_tx_resp *tx_resp)
 {
 	return le32_to_cpup((__le32 *)iwl_xvt_get_agg_status(xvt, tx_resp) +
 			    tx_resp->frame_count) & 0xfff;
 }
+
+void iwl_xvt_free_tx_queue(struct iwl_xvt *xvt, u8 lmac_id);
+
+int iwl_xvt_allocate_tx_queue(struct iwl_xvt *xvt, u8 sta_id,
+			      u8 lmac_id);
+
+void iwl_xvt_txq_disable(struct iwl_xvt *xvt);
 
 #endif
