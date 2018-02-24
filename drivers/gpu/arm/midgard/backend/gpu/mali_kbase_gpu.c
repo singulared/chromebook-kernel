@@ -1,26 +1,30 @@
 /*
  *
- * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 /*
  * Register-based HW access backend APIs
  */
 #include <mali_kbase.h>
-#include <mali_kbase_hwaccess_jm.h>
 #include <mali_kbase_hwaccess_backend.h>
 #include <backend/gpu/mali_kbase_irq_internal.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
@@ -35,6 +39,10 @@ int kbase_backend_early_init(struct kbase_device *kbdev)
 	if (err)
 		return err;
 
+	err = kbase_pm_runtime_init(kbdev);
+	if (err)
+		goto fail_runtime_pm;
+
 	/* Ensure we can access the GPU registers */
 	kbase_pm_register_access_enable(kbdev);
 
@@ -44,19 +52,21 @@ int kbase_backend_early_init(struct kbase_device *kbdev)
 	/* We're done accessing the GPU registers for now. */
 	kbase_pm_register_access_disable(kbdev);
 
-	err = kbase_hwaccess_pm_init(kbdev);
-	if (err)
-		goto fail_pm;
-
 	err = kbase_install_interrupts(kbdev);
 	if (err)
 		goto fail_interrupts;
 
+	err = kbase_hwaccess_pm_init(kbdev);
+	if (err)
+		goto fail_pm;
+
 	return 0;
 
-fail_interrupts:
-	kbase_hwaccess_pm_term(kbdev);
 fail_pm:
+	kbase_release_interrupts(kbdev);
+fail_interrupts:
+	kbase_pm_runtime_term(kbdev);
+fail_runtime_pm:
 	kbasep_platform_device_term(kbdev);
 
 	return err;
@@ -64,8 +74,9 @@ fail_pm:
 
 void kbase_backend_early_term(struct kbase_device *kbdev)
 {
-	kbase_release_interrupts(kbdev);
 	kbase_hwaccess_pm_term(kbdev);
+	kbase_release_interrupts(kbdev);
+	kbase_pm_runtime_term(kbdev);
 	kbasep_platform_device_term(kbdev);
 }
 

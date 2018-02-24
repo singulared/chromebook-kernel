@@ -7,13 +7,18 @@
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -105,6 +110,8 @@ static const struct file_operations kbasep_trace_timeline_debugfs_fops = {
 	.release = seq_release,
 };
 
+#ifdef CONFIG_DEBUG_FS
+
 void kbasep_trace_timeline_debugfs_init(struct kbase_device *kbdev)
 {
 	debugfs_create_file("mali_timeline_defs",
@@ -112,10 +119,12 @@ void kbasep_trace_timeline_debugfs_init(struct kbase_device *kbdev)
 			&kbasep_trace_timeline_debugfs_fops);
 }
 
+#endif /* CONFIG_DEBUG_FS */
+
 void kbase_timeline_job_slot_submit(struct kbase_device *kbdev, struct kbase_context *kctx,
 		struct kbase_jd_atom *katom, int js)
 {
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	if (kbdev->timeline.slot_atoms_submitted[js] > 0) {
 		KBASE_TIMELINE_JOB_START_NEXT(kctx, js, 1);
@@ -134,7 +143,7 @@ void kbase_timeline_job_slot_done(struct kbase_device *kbdev, struct kbase_conte
 		struct kbase_jd_atom *katom, int js,
 		kbasep_js_atom_done_code done_code)
 {
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	if (done_code & KBASE_JS_ATOM_DONE_EVICTED_FROM_NEXT) {
 		KBASE_TIMELINE_JOB_START_NEXT(kctx, js, 0);
@@ -213,7 +222,7 @@ void kbase_timeline_pm_handle_event(struct kbase_device *kbdev, enum kbase_timel
 
 void kbase_timeline_pm_l2_transition_start(struct kbase_device *kbdev)
 {
-	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 	/* Simply log the start of the transition */
 	kbdev->timeline.l2_transitioning = true;
 	KBASE_TIMELINE_POWERING_L2(kbdev);
@@ -221,7 +230,7 @@ void kbase_timeline_pm_l2_transition_start(struct kbase_device *kbdev)
 
 void kbase_timeline_pm_l2_transition_done(struct kbase_device *kbdev)
 {
-	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 	/* Simply log the end of the transition */
 	if (kbdev->timeline.l2_transitioning) {
 		kbdev->timeline.l2_transitioning = false;

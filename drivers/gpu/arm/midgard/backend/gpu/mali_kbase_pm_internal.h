@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -168,6 +173,16 @@ void kbase_pm_enable_interrupts(struct kbase_device *kbdev);
 void kbase_pm_disable_interrupts(struct kbase_device *kbdev);
 
 /**
+ * kbase_pm_disable_interrupts_nolock - Version of kbase_pm_disable_interrupts()
+ *                                      that does not take the hwaccess_lock
+ *
+ * Caller must hold the hwaccess_lock.
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+void kbase_pm_disable_interrupts_nolock(struct kbase_device *kbdev);
+
+/**
  * kbase_pm_init_hw - Initialize the hardware.
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
  * @flags: Flags specifying the type of PM init
@@ -278,14 +293,12 @@ void kbase_pm_update_cores_state(struct kbase_device *kbdev);
 void kbase_pm_cancel_deferred_poweroff(struct kbase_device *kbdev);
 
 /**
- * kbasep_pm_read_present_cores - Read the bitmasks of present cores.
- *
- * This information is cached to avoid having to perform register reads whenever
- * the information is required.
+ * kbasep_pm_init_core_use_bitmaps - Initialise data tracking the required
+ *                                   and used cores.
  *
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
  */
-void kbasep_pm_read_present_cores(struct kbase_device *kbdev);
+void kbasep_pm_init_core_use_bitmaps(struct kbase_device *kbdev);
 
 /**
  * kbasep_pm_metrics_init - Initialize the metrics gathering framework.
@@ -373,22 +386,58 @@ void kbase_pm_request_gpu_cycle_counter_l2_is_on(struct kbase_device *kbdev);
  * kbase_pm_release_gpu_cycle_counter - Mark that the GPU cycle counter is no
  *                                      longer in use
  *
- * If the caller is the
- * last caller then the GPU cycle counters will be disabled. A request must have
- * been made before a call to this.
+ * If the caller is the last caller then the GPU cycle counters will be
+ * disabled. A request must have been made before a call to this.
+ *
+ * Caller must not hold the hwaccess_lock, as it will be taken in this function.
+ * If the caller is already holding this lock then
+ * kbase_pm_release_gpu_cycle_counter_nolock() must be used instead.
  *
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
  */
 void kbase_pm_release_gpu_cycle_counter(struct kbase_device *kbdev);
 
 /**
+ * kbase_pm_release_gpu_cycle_counter_nolock - Version of kbase_pm_release_gpu_cycle_counter()
+ *                                             that does not take hwaccess_lock
+ *
+ * Caller must hold the hwaccess_lock.
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+void kbase_pm_release_gpu_cycle_counter_nolock(struct kbase_device *kbdev);
+
+/**
+ * kbase_pm_wait_for_poweroff_complete - Wait for the poweroff workqueue to
+ *                                       complete
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+void kbase_pm_wait_for_poweroff_complete(struct kbase_device *kbdev);
+
+/**
+ * kbase_pm_runtime_init - Initialize runtime-pm for Mali GPU platform device
+ *
+ * Setup the power management callbacks and initialize/enable the runtime-pm
+ * for the Mali GPU platform device, using the callback function. This must be
+ * called before the kbase_pm_register_access_enable() function.
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+int kbase_pm_runtime_init(struct kbase_device *kbdev);
+
+/**
+ * kbase_pm_runtime_term - Disable runtime-pm for Mali GPU platform device
+ *
+ * @kbdev: The kbase device structure for the device (must be a valid pointer)
+ */
+void kbase_pm_runtime_term(struct kbase_device *kbdev);
+
+/**
  * kbase_pm_register_access_enable - Enable access to GPU registers
  *
  * Enables access to the GPU registers before power management has powered up
  * the GPU with kbase_pm_powerup().
- *
- * Access to registers should be done using kbase_os_reg_read()/write() at this
- * stage, not kbase_reg_read()/write().
  *
  * This results in the power management callbacks provided in the driver
  * configuration to get called to turn on power and/or clocks to the GPU. See
@@ -454,18 +503,14 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
  *              pointer)
  * @is_suspend: true if power off due to suspend,
  *              false otherwise
- * Return:
- *         true      if power was turned off, else
- *         false     if power can not be turned off due to pending page/bus
- *                   fault workers. Caller must flush MMU workqueues and retry
  */
-bool kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
+void kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
 
-#ifdef CONFIG_PM_DEVFREQ
+#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
 void kbase_pm_get_dvfs_utilisation(struct kbase_device *kbdev,
 		unsigned long *total, unsigned long *busy);
 void kbase_pm_reset_dvfs_utilisation(struct kbase_device *kbdev);
-#endif
+#endif /* defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS) */
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
 
@@ -496,7 +541,7 @@ void kbase_pm_power_changed(struct kbase_device *kbdev);
  * @kbdev: The kbase device structure for the device (must be a valid pointer)
  * @now:   Pointer to the timestamp of the change, or NULL to use current time
  *
- * Caller must hold runpool_irq.lock
+ * Caller must hold hwaccess_lock
  */
 void kbase_pm_metrics_update(struct kbase_device *kbdev,
 				ktime_t *now);

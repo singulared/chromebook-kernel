@@ -1,26 +1,30 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
 
 
 
-
-
-#include "mali_kbase_mmu_mode.h"
-
 #include "mali_kbase.h"
 #include "mali_midg_regmap.h"
+#include "mali_kbase_defs.h"
 
 #define ENTRY_TYPE_MASK     3ULL
 #define ENTRY_IS_ATE        1ULL
@@ -91,11 +95,7 @@ static void mmu_get_as_setup(struct kbase_context *kctx,
 		AS_TRANSTAB_LPAE_ADRMODE_TABLE |
 		AS_TRANSTAB_LPAE_READ_INNER;
 
-#ifdef CONFIG_MALI_GPU_MMU_AARCH64
-	setup->transcfg = AS_TRANSCFG_ADRMODE_LEGACY;
-#else
 	setup->transcfg = 0;
-#endif
 }
 
 static void mmu_update(struct kbase_context *kctx)
@@ -117,10 +117,6 @@ static void mmu_disable_as(struct kbase_device *kbdev, int as_nr)
 
 	current_setup->transtab = AS_TRANSTAB_LPAE_ADRMODE_UNMAPPED;
 
-#ifdef CONFIG_MALI_GPU_MMU_AARCH64
-	current_setup->transcfg = AS_TRANSCFG_ADRMODE_LEGACY;
-#endif
-
 	/* Apply the address space setting */
 	kbase_mmu_hw_configure(kbdev, as, NULL);
 }
@@ -133,12 +129,12 @@ static phys_addr_t pte_to_phy_addr(u64 entry)
 	return entry & ~0xFFF;
 }
 
-static int ate_is_valid(u64 ate)
+static int ate_is_valid(u64 ate, unsigned int level)
 {
 	return ((ate & ENTRY_TYPE_MASK) == ENTRY_IS_ATE);
 }
 
-static int pte_is_valid(u64 pte)
+static int pte_is_valid(u64 pte, unsigned int level)
 {
 	return ((pte & ENTRY_TYPE_MASK) == ENTRY_IS_PTE);
 }
@@ -171,11 +167,13 @@ static u64 get_mmu_flags(unsigned long flags)
 	return mmu_flags;
 }
 
-static void entry_set_ate(u64 *entry, phys_addr_t phy, unsigned long flags)
+static void entry_set_ate(u64 *entry,
+		struct tagged_addr phy,
+		unsigned long flags,
+		unsigned int level)
 {
-	page_table_entry_set(entry, (phy & ~0xFFF) |
-		get_mmu_flags(flags) |
-		ENTRY_IS_ATE);
+	page_table_entry_set(entry, as_phys_addr_t(phy) | get_mmu_flags(flags) |
+			     ENTRY_IS_ATE);
 }
 
 static void entry_set_pte(u64 *entry, phys_addr_t phy)

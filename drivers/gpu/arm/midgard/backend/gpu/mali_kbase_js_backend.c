@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 /*
@@ -24,14 +29,6 @@
 #include <mali_kbase_hwaccess_jm.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
 #include <backend/gpu/mali_kbase_js_internal.h>
-
-/*
- * Define for when dumping is enabled.
- * This should not be based on the instrumentation level as whether dumping is
- * enabled for a particular level is down to the integrator. However this is
- * being used for now as otherwise the cinstr headers would be needed.
- */
-#define CINSTR_DUMPING_ENABLED (2 == MALI_INSTRUMENTATION_LEVEL)
 
 /*
  * Hold the runpool_mutex for this
@@ -104,7 +101,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 	js_devdata = &kbdev->js_data;
 
 	/* Loop through the slots */
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	for (s = 0; s < kbdev->gpu_props.num_job_slots; s++) {
 		struct kbase_jd_atom *atom = NULL;
 
@@ -117,9 +114,9 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			/* The current version of the model doesn't support
 			 * Soft-Stop */
 			if (!kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_5736)) {
-				u32 ticks = atom->sched_info.cfs.ticks++;
+				u32 ticks = atom->ticks++;
 
-#if !CINSTR_DUMPING_ENABLED
+#ifndef CONFIG_MALI_JOB_DUMP
 				u32 soft_stop_ticks, hard_stop_ticks,
 								gpu_reset_ticks;
 				if (atom->core_req & BASE_JD_REQ_ONLY_COMPUTE) {
@@ -137,6 +134,16 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					gpu_reset_ticks =
 						js_devdata->gpu_reset_ticks_ss;
 				}
+
+				/* If timeouts have been changed then ensure
+				 * that atom tick count is not greater than the
+				 * new soft_stop timeout. This ensures that
+				 * atoms do not miss any of the timeouts due to
+				 * races between this worker and the thread
+				 * changing the timeouts. */
+				if (backend->timeouts_updated &&
+						ticks > soft_stop_ticks)
+					ticks = atom->ticks = soft_stop_ticks;
 
 				/* Job is Soft-Stoppable */
 				if (ticks == soft_stop_ticks) {
@@ -157,8 +164,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 * However, if it's about to be
 					 * increased then the new context can't
 					 * run any jobs until they take the
-					 * runpool_irq lock, so it's OK to
-					 * observe the older value.
+					 * hwaccess_lock, so it's OK to observe
+					 * the older value.
 					 *
 					 * Similarly, if it's about to be
 					 * decreased, the last job from another
@@ -199,8 +206,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#else				/* !CINSTR_DUMPING_ENABLED */
-				/* NOTE: During CINSTR_DUMPING_ENABLED, we use
+#else				/* !CONFIG_MALI_JOB_DUMP */
+				/* NOTE: During CONFIG_MALI_JOB_DUMP, we use
 				 * the alternate timeouts, which makes the hard-
 				 * stop and GPU reset timeout much longer. We
 				 * also ensure that we don't soft-stop at all.
@@ -209,7 +216,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least
 					 * js_devdata->soft_stop_ticks. We do
 					 * not soft-stop during
-					 * CINSTR_DUMPING_ENABLED, however.
+					 * CONFIG_MALI_JOB_DUMP, however.
 					 */
 					dev_dbg(kbdev->dev, "Soft-stop");
 				} else if (ticks ==
@@ -238,7 +245,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#endif				/* !CINSTR_DUMPING_ENABLED */
+#endif				/* !CONFIG_MALI_JOB_DUMP */
 			}
 		}
 	}
@@ -257,7 +264,9 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			HR_TIMER_DELAY_NSEC(js_devdata->scheduling_period_ns),
 			HRTIMER_MODE_REL);
 
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+	backend->timeouts_updated = false;
+
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	return HRTIMER_NORESTART;
 }
@@ -272,9 +281,9 @@ void kbase_backend_ctx_count_changed(struct kbase_device *kbdev)
 
 	if (!timer_callback_should_run(kbdev)) {
 		/* Take spinlock to force synchronisation with timer */
-		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 		backend->timer_running = false;
-		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 		/* From now on, return value of timer_callback_should_run() will
 		 * also cause the timer to not requeue itself. Its return value
 		 * cannot change, because it depends on variables updated with
@@ -285,9 +294,9 @@ void kbase_backend_ctx_count_changed(struct kbase_device *kbdev)
 
 	if (timer_callback_should_run(kbdev) && !backend->timer_running) {
 		/* Take spinlock to force synchronisation with timer */
-		spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 		backend->timer_running = true;
-		spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 		hrtimer_start(&backend->scheduling_timer,
 			HR_TIMER_DELAY_NSEC(js_devdata->scheduling_period_ns),
 							HRTIMER_MODE_REL);
@@ -333,5 +342,12 @@ void kbase_backend_timer_resume(struct kbase_device *kbdev)
 	backend->suspend_timer = false;
 
 	kbase_backend_ctx_count_changed(kbdev);
+}
+
+void kbase_backend_timeouts_changed(struct kbase_device *kbdev)
+{
+	struct kbase_backend_data *backend = &kbdev->hwaccess.backend;
+
+	backend->timeouts_updated = true;
 }
 

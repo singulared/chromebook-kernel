@@ -66,7 +66,7 @@ TRACE_EVENT(mali_dvfs_set_clock,
 
 #undef TRACE_INCLUDE_PATH
 #undef linux
-#define TRACE_INCLUDE_PATH MALI_KBASE_THIRDPARTY_PATH
+#define TRACE_INCLUDE_PATH platform/chromebook
 #undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE mali_linux_dvfs_trace
 
