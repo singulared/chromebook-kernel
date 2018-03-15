@@ -565,17 +565,6 @@ copy_failed:
 		{
 			struct kbase_uk_gpuprops *setup = args;
 
-			printk(KERN_ERR "%s sizeofs:\n", __func__);
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops) = %zd\n", sizeof(*setup));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.header) = %zd\n", sizeof(setup->header));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.core_props) = %zd\n", sizeof(setup->props.core_props));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.l2_props) = %zd\n", sizeof(setup->props.l2_props));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.tiler_props) = %zd\n", sizeof(setup->props.tiler_props));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.thread_props) = %zd\n", sizeof(setup->props.thread_props));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.raw_props) = %zd\n", sizeof(setup->props.raw_props));
-			printk(KERN_ERR "sizeof(kbase_uk_gpuprops.props.coherency_info) = %zd\n", sizeof(setup->props.coherency_info));
-
-
 			if (sizeof(*setup) != args_size)
 				goto bad_size;
 
