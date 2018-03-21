@@ -28,4 +28,4 @@ and cmdline file should contain something like:
 
     make -j2 uImage dtbs modules
 
-And you may use `arch/arm/boot/uImage` with [nv-uboot](http://www.chromium.org/chromium-os/u-boot-porting-guide/using-nv-u-boot-on-the-samsung-arm-chromebook).
+And you may use `arch/arm/boot/uImage` with [nv-uboot](http://www.chromium.org/chromium-os/firmware-porting-guide/using-nv-u-boot-on-the-samsung-arm-chromebook).
