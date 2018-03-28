@@ -30,6 +30,29 @@
 struct kbase_vinstr_context;
 struct kbase_vinstr_client;
 
+struct kbase_uk_hwcnt_setup {
+	/* IN */
+	u64 dump_buffer;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 unused_1; /* keep for backwards compatibility */
+	u32 mmu_l2_bm;
+	u32 padding;
+	/* OUT */
+};
+
+struct kbase_uk_hwcnt_reader_setup {
+	/* IN */
+	u32 buffer_count;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 mmu_l2_bm;
+
+	/* OUT */
+	s32 fd;
+};
 /*****************************************************************************/
 
 /**

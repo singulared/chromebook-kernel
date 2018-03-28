@@ -32,27 +32,6 @@ extern "C" {
 #define KBASE_IOCTL_TYPE 0x80
 
 /*
- * 10.1:
- * - Do mmap in kernel for SAME_VA memory allocations rather then
- *   calling back into the kernel as a 2nd stage of the allocation request.
- *
- * 10.2:
- * - Add KBASE_FUNC_MEM_JIT_INIT which allows clients to request a custom VA
- *   region for use with JIT (ignored on 32-bit platforms)
- *
- * 10.3:
- * - base_jd_core_req typedef-ed to u32 (instead of to u16)
- * - two flags added: BASE_JD_REQ_SKIP_CACHE_STAT / _END
- *
- * 10.4:
- * - Removed KBASE_FUNC_EXT_BUFFER_LOCK used only in internal tests
- *
- * 10.5:
- * - Reverted to performing mmap in user space so that tools like valgrind work.
- *
- * 10.6:
- * - Add flags input variable to KBASE_FUNC_TLSTREAM_ACQUIRE
- *
  * 11.1:
  * - Add BASE_MEM_TILER_ALIGN_TOP under base_mem_alloc_flags
  * 11.2:
@@ -288,6 +267,7 @@ struct kbase_ioctl_disjoint_query {
  * struct kbase_ioctl_get_ddk_version - Query the kernel version
  * @version_buffer: Buffer to receive the kernel version string
  * @size: Size of the buffer
+ * @padding: Padding
  *
  * The ioctl will return the number of bytes written into version_buffer
  * (which includes a NULL byte) or a negative error code
@@ -295,6 +275,7 @@ struct kbase_ioctl_disjoint_query {
 struct kbase_ioctl_get_ddk_version {
 	__u64 version_buffer;
 	__u32 size;
+	__u32 padding;
 };
 
 #define KBASE_IOCTL_GET_DDK_VERSION \
@@ -514,10 +495,12 @@ struct kbase_ioctl_fence_validate {
  * struct kbase_ioctl_get_profiling_controls - Get the profiling controls
  * @count: The size of @buffer in u32 words
  * @buffer: The buffer to receive the profiling controls
+ * @padding: Padding
  */
 struct kbase_ioctl_get_profiling_controls {
 	__u64 buffer;
 	__u32 count;
+	__u32 padding;
 };
 
 #define KBASE_IOCTL_GET_PROFILING_CONTROLS \
@@ -791,6 +774,9 @@ struct kbase_ioctl_tlstream_stats {
 #define KBASE_GPUPROP_COHERENCY_GROUP_13		77
 #define KBASE_GPUPROP_COHERENCY_GROUP_14		78
 #define KBASE_GPUPROP_COHERENCY_GROUP_15		79
+
+#define KBASE_GPUPROP_TEXTURE_FEATURES_3		80
+#define KBASE_GPUPROP_RAW_TEXTURE_FEATURES_3		81
 
 #ifdef __cpluscplus
 }

@@ -49,6 +49,7 @@
 #include <mali_kbase_mem_linux.h>
 #include <mali_kbase_config_defaults.h>
 #include <mali_kbase_tlstream.h>
+#include <mali_kbase_ioctl.h>
 
 static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_struct *vma);
 
