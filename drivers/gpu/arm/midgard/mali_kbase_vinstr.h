@@ -1,24 +1,28 @@
 /*
  *
- * (C) COPYRIGHT 2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 #ifndef _KBASE_VINSTR_H_
 #define _KBASE_VINSTR_H_
 
-#include <mali_kbase.h>
 #include <mali_kbase_hwcnt_reader.h>
 
 /*****************************************************************************/
@@ -26,6 +30,29 @@
 struct kbase_vinstr_context;
 struct kbase_vinstr_client;
 
+struct kbase_uk_hwcnt_setup {
+	/* IN */
+	u64 dump_buffer;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 unused_1; /* keep for backwards compatibility */
+	u32 mmu_l2_bm;
+	u32 padding;
+	/* OUT */
+};
+
+struct kbase_uk_hwcnt_reader_setup {
+	/* IN */
+	u32 buffer_count;
+	u32 jm_bm;
+	u32 shader_bm;
+	u32 tiler_bm;
+	u32 mmu_l2_bm;
+
+	/* OUT */
+	s32 fd;
+};
 /*****************************************************************************/
 
 /**
@@ -103,18 +130,39 @@ int kbase_vinstr_hwc_dump(
 int kbase_vinstr_hwc_clear(struct kbase_vinstr_client *cli);
 
 /**
- * kbase_vinstr_hwc_suspend - suspends hardware counter collection for
- *                            a given kbase context
+ * kbase_vinstr_try_suspend - try suspending operation of a given vinstr context
  * @vinstr_ctx: vinstr context
+ *
+ * Return: 0 on success, or negative if state change is in progress
+ *
+ * Warning: This API call is non-generic. It is meant to be used only by
+ *          job scheduler state machine.
+ *
+ * Function initiates vinstr switch to suspended state. Once it was called
+ * vinstr enters suspending state. If function return non-zero value, it
+ * indicates that state switch is not complete and function must be called
+ * again. On state switch vinstr will trigger job scheduler state machine
+ * cycle.
  */
-void kbase_vinstr_hwc_suspend(struct kbase_vinstr_context *vinstr_ctx);
+int kbase_vinstr_try_suspend(struct kbase_vinstr_context *vinstr_ctx);
 
 /**
- * kbase_vinstr_hwc_resume - resumes hardware counter collection for
- *                            a given kbase context
+ * kbase_vinstr_suspend - suspends operation of a given vinstr context
  * @vinstr_ctx: vinstr context
+ *
+ * Function initiates vinstr switch to suspended state. Then it blocks until
+ * operation is completed.
  */
-void kbase_vinstr_hwc_resume(struct kbase_vinstr_context *vinstr_ctx);
+void kbase_vinstr_suspend(struct kbase_vinstr_context *vinstr_ctx);
+
+/**
+ * kbase_vinstr_resume - resumes operation of a given vinstr context
+ * @vinstr_ctx: vinstr context
+ *
+ * Function can be called only if it was preceded by a successful call
+ * to kbase_vinstr_suspend.
+ */
+void kbase_vinstr_resume(struct kbase_vinstr_context *vinstr_ctx);
 
 /**
  * kbase_vinstr_dump_size - Return required size of dump buffer
@@ -126,7 +174,7 @@ size_t kbase_vinstr_dump_size(struct kbase_device *kbdev);
 
 /**
  * kbase_vinstr_detach_client - Detach a client from the vinstr core
- * @cli: Pointer to vinstr client
+ * @cli: pointer to vinstr client
  */
 void kbase_vinstr_detach_client(struct kbase_vinstr_client *cli);
 

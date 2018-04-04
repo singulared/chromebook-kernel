@@ -125,3 +125,4 @@ extern int invalidate_inodes(struct super_block *, bool);
  * dcache.c
  */
 extern struct dentry *__d_alloc(struct super_block *, const struct qstr *);
+extern int d_set_mounted(struct dentry *dentry);

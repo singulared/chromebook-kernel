@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 #include <linux/bitops.h>
 
@@ -21,8 +26,8 @@
 #include <mali_kbase_mem.h>
 #include <mali_kbase_mmu_hw.h>
 #include <mali_kbase_tlstream.h>
-#include <backend/gpu/mali_kbase_mmu_hw_direct.h>
 #include <backend/gpu/mali_kbase_device_internal.h>
+#include <mali_kbase_as_fault_debugfs.h>
 
 static inline u64 lock_region(struct kbase_device *kbdev, u64 pfn,
 		u32 num_pages)
@@ -97,6 +102,30 @@ static int write_cmd(struct kbase_device *kbdev, int as_nr, u32 cmd,
 	return status;
 }
 
+static void validate_protected_page_fault(struct kbase_device *kbdev,
+		struct kbase_context *kctx)
+{
+	/* GPUs which support (native) protected mode shall not report page
+	 * fault addresses unless it has protected debug mode and protected
+	 * debug mode is turned on */
+	u32 protected_debug_mode = 0;
+
+	if (!kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PROTECTED_MODE))
+		return;
+
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PROTECTED_DEBUG_MODE)) {
+		protected_debug_mode = kbase_reg_read(kbdev,
+				GPU_CONTROL_REG(GPU_STATUS),
+				kctx) & GPU_DBGEN;
+	}
+
+	if (!protected_debug_mode) {
+		/* fault_addr should never be reported in protected mode.
+		 * However, we just continue by printing an error message */
+		dev_err(kbdev->dev, "Fault address reported in protected mode\n");
+	}
+}
+
 void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 {
 	const int num_as = 16;
@@ -141,6 +170,7 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 		 */
 		kctx = kbasep_js_runpool_lookup_ctx(kbdev, as_no);
 
+
 		/* find faulting address */
 		as->fault_addr = kbase_reg_read(kbdev,
 						MMU_AS_REG(as_no,
@@ -151,6 +181,18 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 						MMU_AS_REG(as_no,
 							AS_FAULTADDRESS_LO),
 						kctx);
+
+		/* Mark the fault protected or not */
+		as->protected_mode = kbdev->protected_mode;
+
+		if (kbdev->protected_mode && as->fault_addr)
+		{
+			/* check if address reporting is allowed */
+			validate_protected_page_fault(kbdev, kctx);
+		}
+
+		/* report the fault to debugfs */
+		kbase_as_fault_debugfs_new(kbdev, as_no);
 
 		/* record the fault status */
 		as->fault_status = kbase_reg_read(kbdev,
@@ -163,15 +205,15 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 				KBASE_MMU_FAULT_TYPE_BUS :
 				KBASE_MMU_FAULT_TYPE_PAGE;
 
-#ifdef CONFIG_MALI_GPU_MMU_AARCH64
-		as->fault_extra_addr = kbase_reg_read(kbdev,
-				MMU_AS_REG(as_no, AS_FAULTEXTRA_HI),
-				kctx);
-		as->fault_extra_addr <<= 32;
-		as->fault_extra_addr |= kbase_reg_read(kbdev,
-				MMU_AS_REG(as_no, AS_FAULTEXTRA_LO),
-				kctx);
-#endif /* CONFIG_MALI_GPU_MMU_AARCH64 */
+		if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_AARCH64_MMU)) {
+			as->fault_extra_addr = kbase_reg_read(kbdev,
+					MMU_AS_REG(as_no, AS_FAULTEXTRA_HI),
+					kctx);
+			as->fault_extra_addr <<= 32;
+			as->fault_extra_addr |= kbase_reg_read(kbdev,
+					MMU_AS_REG(as_no, AS_FAULTEXTRA_LO),
+					kctx);
+		}
 
 		if (kbase_as_has_bus_fault(as)) {
 			/* Mark bus fault as handled.
@@ -192,10 +234,9 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 		}
 
 		/* Process the interrupt for this address space */
-		spin_lock_irqsave(&kbdev->js_data.runpool_irq.lock, flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 		kbase_mmu_interrupt_process(kbdev, kctx, as);
-		spin_unlock_irqrestore(&kbdev->js_data.runpool_irq.lock,
-				flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 	}
 
 	/* reenable interrupts */
@@ -212,34 +253,32 @@ void kbase_mmu_hw_configure(struct kbase_device *kbdev, struct kbase_as *as,
 	struct kbase_mmu_setup *current_setup = &as->current_setup;
 	u32 transcfg = 0;
 
-#ifdef CONFIG_MALI_GPU_MMU_AARCH64
-	transcfg = current_setup->transcfg & 0xFFFFFFFFUL;
+	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_AARCH64_MMU)) {
+		transcfg = current_setup->transcfg & 0xFFFFFFFFUL;
 
-	/* Set flag AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK */
-	/* Clear PTW_MEMATTR bits */
-	transcfg &= ~AS_TRANSCFG_PTW_MEMATTR_MASK;
-	/* Enable correct PTW_MEMATTR bits */
-	transcfg |= AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK;
+		/* Set flag AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK */
+		/* Clear PTW_MEMATTR bits */
+		transcfg &= ~AS_TRANSCFG_PTW_MEMATTR_MASK;
+		/* Enable correct PTW_MEMATTR bits */
+		transcfg |= AS_TRANSCFG_PTW_MEMATTR_WRITE_BACK;
 
-	if (kbdev->system_coherency == COHERENCY_ACE) {
-		/* Set flag AS_TRANSCFG_PTW_SH_OS (outer shareable) */
-		/* Clear PTW_SH bits */
-		transcfg = (transcfg & ~AS_TRANSCFG_PTW_SH_MASK);
-		/* Enable correct PTW_SH bits */
-		transcfg = (transcfg | AS_TRANSCFG_PTW_SH_OS);
+		if (kbdev->system_coherency == COHERENCY_ACE) {
+			/* Set flag AS_TRANSCFG_PTW_SH_OS (outer shareable) */
+			/* Clear PTW_SH bits */
+			transcfg = (transcfg & ~AS_TRANSCFG_PTW_SH_MASK);
+			/* Enable correct PTW_SH bits */
+			transcfg = (transcfg | AS_TRANSCFG_PTW_SH_OS);
+		}
+
+		kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_LO),
+				transcfg, kctx);
+		kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_HI),
+				(current_setup->transcfg >> 32) & 0xFFFFFFFFUL,
+				kctx);
+	} else {
+		if (kbdev->system_coherency == COHERENCY_ACE)
+			current_setup->transtab |= AS_TRANSTAB_LPAE_SHARE_OUTER;
 	}
-
-	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_LO),
-			transcfg, kctx);
-	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSCFG_HI),
-			(current_setup->transcfg >> 32) & 0xFFFFFFFFUL, kctx);
-
-#else /* CONFIG_MALI_GPU_MMU_AARCH64 */
-
-	if (kbdev->system_coherency == COHERENCY_ACE)
-		current_setup->transtab |= AS_TRANSTAB_LPAE_SHARE_OUTER;
-
-#endif /* CONFIG_MALI_GPU_MMU_AARCH64 */
 
 	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_TRANSTAB_LO),
 			current_setup->transtab & 0xFFFFFFFFUL, kctx);
@@ -251,7 +290,7 @@ void kbase_mmu_hw_configure(struct kbase_device *kbdev, struct kbase_as *as,
 	kbase_reg_write(kbdev, MMU_AS_REG(as->number, AS_MEMATTR_HI),
 			(current_setup->memattr >> 32) & 0xFFFFFFFFUL, kctx);
 
-	kbase_tlstream_tl_attrib_as_config(as,
+	KBASE_TLSTREAM_TL_ATTRIB_AS_CONFIG(as,
 			current_setup->transtab,
 			current_setup->memattr,
 			transcfg);
@@ -264,6 +303,8 @@ int kbase_mmu_hw_do_operation(struct kbase_device *kbdev, struct kbase_as *as,
 		unsigned int handling_irq)
 {
 	int ret;
+
+	lockdep_assert_held(&kbdev->mmu_hw_mutex);
 
 	if (op == AS_COMMAND_UNLOCK) {
 		/* Unlock doesn't require a lock first */

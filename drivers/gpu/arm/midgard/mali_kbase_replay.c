@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 /**
  * @file mali_kbase_replay.c
@@ -654,7 +659,7 @@ static void kbasep_replay_create_atom(struct kbase_context *kctx,
 				      base_jd_prio prio)
 {
 	atom->nr_extres = 0;
-	atom->extres_list.value = NULL;
+	atom->extres_list = 0;
 	atom->device_nr = 0;
 	atom->prio = prio;
 	atom->atom_number = atom_nr;
@@ -756,7 +761,7 @@ static int kbasep_replay_parse_payload(struct kbase_context *kctx,
 					      struct base_jd_atom_v2 *t_atom,
 					      struct base_jd_atom_v2 *f_atom)
 {
-	base_jd_replay_payload *payload;
+	base_jd_replay_payload *payload = NULL;
 	u64 next;
 	u64 prev_jc = 0;
 	u16 hw_job_id_offset = 0;
@@ -767,7 +772,6 @@ static int kbasep_replay_parse_payload(struct kbase_context *kctx,
 			replay_atom->jc, sizeof(payload));
 
 	payload = kbase_vmap(kctx, replay_atom->jc, sizeof(*payload), &map);
-
 	if (!payload) {
 		dev_err(kctx->kbdev->dev, "kbasep_replay_parse_payload: failed to map payload into kernel space\n");
 		return -EINVAL;
@@ -794,20 +798,17 @@ static int kbasep_replay_parse_payload(struct kbase_context *kctx,
 						   payload->fragment_core_req);
 	payload_dump(kctx, payload);
 #endif
-
 	t_atom->core_req = payload->tiler_core_req | BASEP_JD_REQ_EVENT_NEVER;
 	f_atom->core_req = payload->fragment_core_req | BASEP_JD_REQ_EVENT_NEVER;
 
 	/* Sanity check core requirements*/
-	if (unlikely((t_atom->core_req & BASEP_JD_REQ_ATOM_TYPE &
-			       ~BASE_JD_REQ_COHERENT_GROUP) != BASE_JD_REQ_T ||
-	    (f_atom->core_req & BASEP_JD_REQ_ATOM_TYPE &
-			      ~BASE_JD_REQ_COHERENT_GROUP & ~BASE_JD_REQ_FS_AFBC) != BASE_JD_REQ_FS ||
+	if ((t_atom->core_req & BASE_JD_REQ_ATOM_TYPE) != BASE_JD_REQ_T ||
+	    (f_atom->core_req & BASE_JD_REQ_ATOM_TYPE) != BASE_JD_REQ_FS ||
 	     t_atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES ||
-	     f_atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES)) {
+	     f_atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES) {
 
-		int t_atom_type = t_atom->core_req & BASEP_JD_REQ_ATOM_TYPE & ~BASE_JD_REQ_COHERENT_GROUP;
-		int f_atom_type = f_atom->core_req & BASEP_JD_REQ_ATOM_TYPE & ~BASE_JD_REQ_COHERENT_GROUP & ~BASE_JD_REQ_FS_AFBC;
+		int t_atom_type = t_atom->core_req & BASE_JD_REQ_ATOM_TYPE & ~BASE_JD_REQ_COHERENT_GROUP;
+		int f_atom_type = f_atom->core_req & BASE_JD_REQ_ATOM_TYPE & ~BASE_JD_REQ_COHERENT_GROUP & ~BASE_JD_REQ_FS_AFBC;
 		int t_has_ex_res = t_atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES;
 		int f_has_ex_res = f_atom->core_req & BASE_JD_REQ_EXTERNAL_RESOURCES;
 
@@ -1086,7 +1087,6 @@ static bool kbase_replay_fault_check(struct kbase_jd_atom *katom)
 bool kbase_replay_process(struct kbase_jd_atom *katom)
 {
 	struct kbase_context *kctx = katom->kctx;
-	struct kbase_jd_context *jctx = &kctx->jctx;
 	struct kbase_device *kbdev = kctx->kbdev;
 
 	/* Don't replay this atom if these issues are not present in the
@@ -1110,7 +1110,7 @@ bool kbase_replay_process(struct kbase_jd_atom *katom)
 		return false;
 	}
 
-	if (jctx->sched_info.ctx.is_dying) {
+	if (kbase_ctx_flag(kctx, KCTX_DYING)) {
 		dev_dbg(kbdev->dev, "Not replaying; context is dying\n");
 
 		if (katom->retry_count)

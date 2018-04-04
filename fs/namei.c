@@ -509,56 +509,75 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 {
 	struct fs_struct *fs = current->fs;
 	struct dentry *parent = nd->path.dentry;
-	int want_root = 0;
 
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
-	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
-		want_root = 1;
-		spin_lock(&fs->lock);
-		if (nd->root.mnt != fs->root.mnt ||
-				nd->root.dentry != fs->root.dentry)
-			goto err_root;
-	}
-	spin_lock(&parent->d_lock);
+
+	/*
+	 * Get a reference to the parent first: we're
+	 * going to make "path_put(nd->path)" valid in
+	 * non-RCU context for "terminate_walk()".
+	 *
+	 * If this doesn't work, return immediately with
+	 * RCU walking still active (and then we will do
+	 * the RCU walk cleanup in terminate_walk()).
+	 */
+	if (!lockref_get_not_dead(&parent->d_lockref))
+		return -ECHILD;
+
+	/*
+	 * After the mntget(), we terminate_walk() will do
+	 * the right thing for non-RCU mode, and all our
+	 * subsequent exit cases should unlock_rcu_walk()
+	 * before returning.
+	 */
+	mntget(nd->path.mnt);
+	nd->flags &= ~LOOKUP_RCU;
+
+	/*
+	 * For a negative lookup, the lookup sequence point is the parents
+	 * sequence point, and it only needs to revalidate the parent dentry.
+	 *
+	 * For a positive lookup, we need to move both the parent and the
+	 * dentry from the RCU domain to be properly refcounted. And the
+	 * sequence number in the dentry validates *both* dentry counters,
+	 * since we checked the sequence number of the parent after we got
+	 * the child sequence number. So we know the parent must still
+	 * be valid if the child sequence number is still valid.
+	 */
 	if (!dentry) {
-		if (!__d_rcu_to_refcount(parent, nd->seq))
-			goto err_parent;
+		if (read_seqcount_retry(&parent->d_seq, nd->seq))
+			goto out;
 		BUG_ON(nd->inode != parent->d_inode);
 	} else {
-		if (dentry->d_parent != parent)
-			goto err_parent;
-		spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
-		if (!__d_rcu_to_refcount(dentry, nd->seq))
-			goto err_child;
-		/*
-		 * If the sequence check on the child dentry passed, then
-		 * the child has not been removed from its parent. This
-		 * means the parent dentry must be valid and able to take
-		 * a reference at this point.
-		 */
-		BUG_ON(!IS_ROOT(dentry) && dentry->d_parent != parent);
-		BUG_ON(!parent->d_count);
-		parent->d_count++;
-		spin_unlock(&dentry->d_lock);
+		if (!lockref_get_not_dead(&dentry->d_lockref))
+			goto out;
+		if (read_seqcount_retry(&dentry->d_seq, nd->seq))
+			goto drop_dentry;
 	}
-	spin_unlock(&parent->d_lock);
-	if (want_root) {
+
+	/*
+	 * Sequence counts matched. Now make sure that the root is
+	 * still valid and get it if required.
+	 */
+	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
+		spin_lock(&fs->lock);
+		if (nd->root.mnt != fs->root.mnt || nd->root.dentry != fs->root.dentry)
+			goto unlock_and_drop_dentry;
 		path_get(&nd->root);
 		spin_unlock(&fs->lock);
 	}
-	mntget(nd->path.mnt);
 
 	unlock_rcu_walk();
-	nd->flags &= ~LOOKUP_RCU;
 	return 0;
 
-err_child:
-	spin_unlock(&dentry->d_lock);
-err_parent:
-	spin_unlock(&parent->d_lock);
-err_root:
-	if (want_root)
-		spin_unlock(&fs->lock);
+unlock_and_drop_dentry:
+	spin_unlock(&fs->lock);
+drop_dentry:
+	unlock_rcu_walk();
+	dput(dentry);
+	return -ECHILD;
+out:
+	unlock_rcu_walk();
 	return -ECHILD;
 }
 
@@ -586,14 +605,16 @@ static int complete_walk(struct nameidata *nd)
 		nd->flags &= ~LOOKUP_RCU;
 		if (!(nd->flags & LOOKUP_ROOT))
 			nd->root.mnt = NULL;
-		spin_lock(&dentry->d_lock);
-		if (unlikely(!__d_rcu_to_refcount(dentry, nd->seq))) {
-			spin_unlock(&dentry->d_lock);
+
+		if (unlikely(!lockref_get_not_dead(&dentry->d_lockref))) {
 			unlock_rcu_walk();
 			return -ECHILD;
 		}
-		BUG_ON(nd->inode != dentry->d_inode);
-		spin_unlock(&dentry->d_lock);
+		if (read_seqcount_retry(&dentry->d_seq, nd->seq)) {
+			unlock_rcu_walk();
+			dput(dentry);
+			return -ECHILD;
+		}
 		mntget(nd->path.mnt);
 		unlock_rcu_walk();
 	}
@@ -601,14 +622,10 @@ static int complete_walk(struct nameidata *nd)
 	if (likely(!(nd->flags & LOOKUP_JUMPED)))
 		return 0;
 
-	if (likely(!(dentry->d_flags & DCACHE_OP_REVALIDATE)))
+	if (likely(!(dentry->d_flags & DCACHE_OP_WEAK_REVALIDATE)))
 		return 0;
 
-	if (likely(!(dentry->d_sb->s_type->fs_flags & FS_REVAL_DOT)))
-		return 0;
-
-	/* Note: we do not d_invalidate() */
-	status = d_revalidate(dentry, nd->flags);
+	status = dentry->d_op->d_weak_revalidate(dentry, nd->flags);
 	if (status > 0)
 		return 0;
 
@@ -1357,7 +1374,7 @@ static int lookup_fast(struct nameidata *nd, struct qstr *name,
 	 */
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
-		dentry = __d_lookup_rcu(parent, name, &seq, nd->inode);
+		dentry = __d_lookup_rcu(parent, name, &seq);
 		if (!dentry)
 			goto unlazy;
 
@@ -1794,8 +1811,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
-				err = parent->d_op->d_hash(parent, nd->inode,
-							   &this);
+				err = parent->d_op->d_hash(parent, &this);
 				if (err < 0)
 					break;
 			}
@@ -2131,7 +2147,7 @@ struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 	 * to use its own hash..
 	 */
 	if (base->d_flags & DCACHE_OP_HASH) {
-		int err = base->d_op->d_hash(base, base->d_inode, &this);
+		int err = base->d_op->d_hash(base, &this);
 		if (err < 0)
 			return ERR_PTR(err);
 	}
@@ -3290,7 +3306,7 @@ void dentry_unhash(struct dentry *dentry)
 {
 	shrink_dcache_parent(dentry);
 	spin_lock(&dentry->d_lock);
-	if (dentry->d_count == 1)
+	if (dentry->d_lockref.count == 1)
 		__d_drop(dentry);
 	spin_unlock(&dentry->d_lock);
 }
@@ -3309,7 +3325,7 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 	mutex_lock(&dentry->d_inode->i_mutex);
 
 	error = -EBUSY;
-	if (d_mountpoint(dentry))
+	if (is_local_mountpoint(dentry))
 		goto out;
 
 	error = security_inode_rmdir(dir, dentry);
@@ -3323,6 +3339,7 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	dentry->d_inode->i_flags |= S_DEAD;
 	dont_mount(dentry);
+	detach_mounts(dentry);
 
 out:
 	mutex_unlock(&dentry->d_inode->i_mutex);
@@ -3405,14 +3422,16 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 		return -EPERM;
 
 	mutex_lock(&dentry->d_inode->i_mutex);
-	if (d_mountpoint(dentry))
+	if (is_local_mountpoint(dentry))
 		error = -EBUSY;
 	else {
 		error = security_inode_unlink(dir, dentry);
 		if (!error) {
 			error = dir->i_op->unlink(dir, dentry);
-			if (!error)
+			if (!error) {
 				dont_mount(dentry);
+				detach_mounts(dentry);
+			}
 		}
 	}
 	mutex_unlock(&dentry->d_inode->i_mutex);
@@ -3731,7 +3750,7 @@ static int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 		mutex_lock(&target->i_mutex);
 
 	error = -EBUSY;
-	if (d_mountpoint(old_dentry) || d_mountpoint(new_dentry))
+	if (is_local_mountpoint(old_dentry) || is_local_mountpoint(new_dentry))
 		goto out;
 
 	error = -EMLINK;
@@ -3748,6 +3767,7 @@ static int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 	if (target) {
 		target->i_flags |= S_DEAD;
 		dont_mount(new_dentry);
+		detach_mounts(new_dentry);
 	}
 out:
 	if (target)

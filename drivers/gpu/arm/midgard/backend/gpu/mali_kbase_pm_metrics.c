@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -155,7 +160,7 @@ static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev,
 	kbdev->pm.backend.metrics.time_period_start = now;
 }
 
-#if defined(CONFIG_PM_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
 /* Caller needs to hold kbdev->pm.backend.metrics.lock before calling this
  * function.
  */
@@ -362,14 +367,15 @@ static void kbase_pm_metrics_active_calc(struct kbase_device *kbdev)
 				int device_nr = (katom->core_req &
 					BASE_JD_REQ_SPECIFIC_COHERENT_GROUP)
 						? katom->device_nr : 0;
-				WARN_ON(device_nr >= 2);
-				kbdev->pm.backend.metrics.active_cl_ctx[
-						device_nr] = 1;
+				if (!WARN_ON(device_nr >= 2))
+					kbdev->pm.backend.metrics.
+						active_cl_ctx[device_nr] = 1;
 			} else {
 				/* Slot 2 should not be running non-compute
 				 * atoms */
-				WARN_ON(js >= 2);
-				kbdev->pm.backend.metrics.active_gl_ctx[js] = 1;
+				if (!WARN_ON(js >= 2))
+					kbdev->pm.backend.metrics.
+						active_gl_ctx[js] = 1;
 			}
 			kbdev->pm.backend.metrics.gpu_active = true;
 		}
@@ -382,7 +388,7 @@ void kbase_pm_metrics_update(struct kbase_device *kbdev, ktime_t *timestamp)
 	unsigned long flags;
 	ktime_t now;
 
-	lockdep_assert_held(&kbdev->js_data.runpool_irq.lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	spin_lock_irqsave(&kbdev->pm.backend.metrics.lock, flags);
 

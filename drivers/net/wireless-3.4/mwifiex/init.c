@@ -449,7 +449,7 @@ void mwifiex_stop_net_dev_queue(struct net_device *netdev,
  *  This function releases the lock variables and frees the locks and
  *  associated locks.
  */
-static void mwifiex_free_lock_list(struct mwifiex_adapter *adapter)
+void mwifiex_free_lock_list(struct mwifiex_adapter *adapter)
 {
 	struct mwifiex_private *priv;
 	s32 i, j;
@@ -494,22 +494,6 @@ mwifiex_adapter_cleanup(struct mwifiex_adapter *adapter)
 	mwifiex_cancel_all_pending_cmd(adapter);
 	wake_up_interruptible(&adapter->cmd_wait_q.wait);
 	wake_up_interruptible(&adapter->hs_activate_wait_q);
-
-	/* Free lock variables */
-	mwifiex_free_lock_list(adapter);
-
-	/* Free command buffer */
-	dev_dbg(adapter->dev, "info: free cmd buffer\n");
-	mwifiex_free_cmd_buffer(adapter);
-
-	del_timer(&adapter->cmd_timer);
-
-	dev_dbg(adapter->dev, "info: free scan table\n");
-
-	adapter->if_ops.cleanup_if(adapter);
-
-	if (adapter->sleep_cfm)
-		dev_kfree_skb_any(adapter->sleep_cfm);
 }
 
 /*
@@ -716,7 +700,7 @@ mwifiex_shutdown_drv(struct mwifiex_adapter *adapter)
 	/* cancel current command */
 	if (adapter->curr_cmd) {
 		dev_warn(adapter->dev, "curr_cmd is still in processing\n");
-		del_timer(&adapter->cmd_timer);
+		del_timer_sync(&adapter->cmd_timer);
 		mwifiex_recycle_cmd_node(adapter, adapter->curr_cmd);
 		adapter->curr_cmd = NULL;
 	}
