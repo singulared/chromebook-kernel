@@ -149,9 +149,9 @@ void iwl_pcie_free_dma_ptr(struct iwl_trans *trans, struct iwl_dma_ptr *ptr)
 	memset(ptr, 0, sizeof(*ptr));
 }
 
-static void iwl_pcie_txq_stuck_timer(unsigned long data)
+static void iwl_pcie_txq_stuck_timer(struct timer_list *t)
 {
-	struct iwl_txq *txq = (void *)data;
+	struct iwl_txq *txq = from_timer(txq, t, stuck_timer);
 	struct iwl_trans_pcie *trans_pcie = txq->trans_pcie;
 	struct iwl_trans *trans = iwl_trans_pcie_get_trans(trans_pcie);
 
@@ -375,12 +375,12 @@ static void iwl_pcie_tfd_unmap(struct iwl_trans *trans,
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	int i, num_tbs;
-	void *tfd = iwl_pcie_get_tfd(trans_pcie, txq, index);
+	void *tfd = iwl_pcie_get_tfd(trans, txq, index);
 
 	/* Sanity check on number of chunks */
 	num_tbs = iwl_pcie_tfd_get_num_tbs(trans, tfd);
 
-	if (num_tbs >= trans_pcie->max_tbs) {
+	if (num_tbs > trans_pcie->max_tbs) {
 		IWL_ERR(trans, "Too many chunks: %i\n", num_tbs);
 		/* @todo issue fatal error, it is quite serious situation */
 		return;
@@ -497,8 +497,10 @@ int iwl_pcie_txq_alloc(struct iwl_trans *trans, struct iwl_txq *txq,
 	if (WARN_ON(txq->entries || txq->tfds))
 		return -EINVAL;
 
-	setup_timer(&txq->stuck_timer, iwl_pcie_txq_stuck_timer,
-		    (unsigned long)txq);
+	if (trans->cfg->use_tfh)
+		tfd_sz = trans_pcie->tfd_size * slots_num;
+
+	timer_setup(&txq->stuck_timer, iwl_pcie_txq_stuck_timer, 0);
 	txq->trans_pcie = trans_pcie;
 
 	txq->n_window = slots_num;
@@ -1150,7 +1152,7 @@ void iwl_trans_pcie_reclaim(struct iwl_trans *trans, int txq_id, int ssn,
 			 * In that case, iwl_queue_space will be small again
 			 * and we won't wake mac80211's queue.
 			 */
-			iwl_trans_pcie_tx(trans, skb, dev_cmd_ptr, txq_id);
+			iwl_trans_tx(trans, skb, dev_cmd_ptr, txq_id);
 		}
 		spin_lock_bh(&txq->lock);
 
@@ -2002,7 +2004,7 @@ static int iwl_fill_data_tbs(struct iwl_trans *trans, struct sk_buff *skb,
 	}
 
 	trace_iwlwifi_dev_tx(trans->dev, skb,
-			     iwl_pcie_get_tfd(trans_pcie, txq, txq->write_ptr),
+			     iwl_pcie_get_tfd(trans, txq, txq->write_ptr),
 			     trans_pcie->tfd_size,
 			     &dev_cmd->hdr, IWL_FIRST_TB_SIZE + tb1_len,
 			     hdr_len);
@@ -2076,7 +2078,7 @@ static int iwl_fill_data_tbs_amsdu(struct iwl_trans *trans, struct sk_buff *skb,
 		IEEE80211_CCMP_HDR_LEN : 0;
 
 	trace_iwlwifi_dev_tx(trans->dev, skb,
-			     iwl_pcie_get_tfd(trans_pcie, txq, txq->write_ptr),
+			     iwl_pcie_get_tfd(trans, txq, txq->write_ptr),
 			     trans_pcie->tfd_size,
 			     &dev_cmd->hdr, IWL_FIRST_TB_SIZE + tb1_len, 0);
 
@@ -2163,8 +2165,7 @@ static int iwl_fill_data_tbs_amsdu(struct iwl_trans *trans, struct sk_buff *skb,
 							htons(ETH_P_IPV6),
 						    data_left);
 
-			memcpy(skb_put(csum_skb, tcp_hdrlen(skb)),
-			       tcph, tcp_hdrlen(skb));
+			skb_put_data(csum_skb, tcph, tcp_hdrlen(skb));
 			skb_reset_transport_header(csum_skb);
 			csum_skb->csum_start =
 				(unsigned char *)tcp_hdr(csum_skb) -
@@ -2198,7 +2199,7 @@ static int iwl_fill_data_tbs_amsdu(struct iwl_trans *trans, struct sk_buff *skb,
 			dma_addr_t tb_phys;
 
 			if (trans_pcie->sw_csum_tx)
-				memcpy(skb_put(csum_skb, size), tso.data, size);
+				skb_put_data(csum_skb, tso.data, size);
 
 			tb_phys = dma_map_single(trans->dev, tso.data,
 						 size, DMA_TO_DEVICE);
@@ -2410,7 +2411,7 @@ int iwl_trans_pcie_tx(struct iwl_trans *trans, struct sk_buff *skb,
 	memcpy(&txq->first_tb_bufs[txq->write_ptr], &dev_cmd->hdr,
 	       IWL_FIRST_TB_SIZE);
 
-	tfd = iwl_pcie_get_tfd(trans_pcie, txq, txq->write_ptr);
+	tfd = iwl_pcie_get_tfd(trans, txq, txq->write_ptr);
 	/* Set up entry for this TFD in Tx byte-count array */
 	iwl_pcie_txq_update_byte_cnt_tbl(trans, txq, le16_to_cpu(tx_cmd->len),
 					 iwl_pcie_tfd_get_num_tbs(trans, tfd));
