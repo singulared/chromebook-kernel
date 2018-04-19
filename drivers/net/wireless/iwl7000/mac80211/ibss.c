@@ -691,7 +691,6 @@ static void ieee80211_ibss_disconnect(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_local *local = sdata->local;
 	struct cfg80211_bss *cbss;
 	struct beacon_data *presp;
-	struct sta_info *sta;
 
 	if (!is_zero_ether_addr(ifibss->bssid)) {
 		cbss = cfg80211_get_bss(local->hw.wiphy, ifibss->chandef.chan,
@@ -709,18 +708,6 @@ static void ieee80211_ibss_disconnect(struct ieee80211_sub_if_data *sdata)
 	ifibss->state = IEEE80211_IBSS_MLME_SEARCH;
 
 	sta_info_flush(sdata);
-
-	spin_lock_bh(&ifibss->incomplete_lock);
-	while (!list_empty(&ifibss->incomplete_stations)) {
-		sta = list_first_entry(&ifibss->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
-		spin_unlock_bh(&ifibss->incomplete_lock);
-
-		sta_info_free(local, sta);
-		spin_lock_bh(&ifibss->incomplete_lock);
-	}
-	spin_unlock_bh(&ifibss->incomplete_lock);
 
 	netif_carrier_off(sdata->dev);
 
@@ -1204,11 +1191,7 @@ void ieee80211_ibss_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 	struct ieee80211_local *local = sdata->local;
-	struct sta_info *sta;
 	struct ieee80211_chanctx_conf *chanctx_conf;
-	struct ieee80211_supported_band *sband;
-	enum nl80211_bss_scan_width scan_width;
-	int band;
 
 	/*
 	 * XXX: Consider removing the least recently used entry and
@@ -1232,23 +1215,12 @@ void ieee80211_ibss_rx_no_sta(struct ieee80211_sub_if_data *sdata,
 		rcu_read_unlock();
 		return;
 	}
-	band = chanctx_conf->def.chan->band;
-	scan_width = cfg80211_chandef_to_scan_width(&chanctx_conf->def);
+
+	ieee80211_send_probe_req(sdata, sdata->vif.addr, addr,
+				 sdata->u.ibss.ssid, sdata->u.ibss.ssid_len,
+				 NULL, 0, (u32)-1, true, 0,
+				 chanctx_conf->def.chan, false);
 	rcu_read_unlock();
-
-	sta = sta_info_alloc(sdata, addr, GFP_ATOMIC);
-	if (!sta)
-		return;
-
-	/* make sure mandatory rates are always added */
-	sband = local->hw.wiphy->bands[band];
-	sta->sta.supp_rates[band] = supp_rates |
-			ieee80211_mandatory_rates(sband, scan_width);
-
-	spin_lock(&ifibss->incomplete_lock);
-	list_add(&sta->list, &ifibss->incomplete_stations);
-	spin_unlock(&ifibss->incomplete_lock);
-	ieee80211_queue_work(&local->hw, &sdata->work);
 }
 
 static void ieee80211_ibss_sta_expire(struct ieee80211_sub_if_data *sdata)
@@ -1569,7 +1541,7 @@ static void ieee80211_rx_mgmt_probe_req(struct ieee80211_sub_if_data *sdata,
 		return;
 
 	skb_reserve(skb, local->tx_headroom);
-	memcpy(skb_put(skb, presp->head_len), presp->head, presp->head_len);
+	skb_put_data(skb, presp->head, presp->head_len);
 
 	memcpy(((struct ieee80211_mgmt *) skb->data)->da, mgmt->sa, ETH_ALEN);
 	ibss_dbg(sdata, "Sending ProbeResp to %pM\n", mgmt->sa);
@@ -1670,7 +1642,6 @@ void ieee80211_ibss_rx_queued_mgmt(struct ieee80211_sub_if_data *sdata,
 void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
-	struct sta_info *sta;
 
 	sdata_lock(sdata);
 
@@ -1681,19 +1652,6 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 	 */
 	if (!ifibss->ssid_len)
 		goto out;
-
-	spin_lock_bh(&ifibss->incomplete_lock);
-	while (!list_empty(&ifibss->incomplete_stations)) {
-		sta = list_first_entry(&ifibss->incomplete_stations,
-				       struct sta_info, list);
-		list_del(&sta->list);
-		spin_unlock_bh(&ifibss->incomplete_lock);
-
-		ieee80211_ibss_finish_sta(sta);
-		rcu_read_unlock();
-		spin_lock_bh(&ifibss->incomplete_lock);
-	}
-	spin_unlock_bh(&ifibss->incomplete_lock);
 
 	switch (ifibss->state) {
 	case IEEE80211_IBSS_MLME_SEARCH:
@@ -1711,10 +1669,10 @@ void ieee80211_ibss_work(struct ieee80211_sub_if_data *sdata)
 	sdata_unlock(sdata);
 }
 
-static void ieee80211_ibss_timer(unsigned long data)
+static void ieee80211_ibss_timer(struct timer_list *t)
 {
 	struct ieee80211_sub_if_data *sdata =
-		(struct ieee80211_sub_if_data *) data;
+		from_timer(sdata, t, u.ibss.timer);
 
 	ieee80211_queue_work(&sdata->local->hw, &sdata->work);
 }
@@ -1723,10 +1681,7 @@ void ieee80211_ibss_setup_sdata(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
-	setup_timer(&ifibss->timer, ieee80211_ibss_timer,
-		    (unsigned long) sdata);
-	INIT_LIST_HEAD(&ifibss->incomplete_stations);
-	spin_lock_init(&ifibss->incomplete_lock);
+	timer_setup(&ifibss->timer, ieee80211_ibss_timer, 0);
 	INIT_WORK(&ifibss->csa_connection_drop_work,
 		  ieee80211_csa_connection_drop_work);
 }
@@ -1766,7 +1721,7 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 		return ret;
 
 	if (ret > 0) {
-		if (!params->userspace_handles_dfs)
+		if (!cfg80211_ibss_userspace_handles_dfs(params))
 			return -EINVAL;
 		radar_detect_width = BIT(params->chandef.width);
 	}
@@ -1789,7 +1744,7 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 
 	sdata->u.ibss.privacy = params->privacy;
 	sdata->u.ibss.control_port = params->control_port;
-	sdata->u.ibss.userspace_handles_dfs = params->userspace_handles_dfs;
+	sdata->u.ibss.userspace_handles_dfs = cfg80211_ibss_userspace_handles_dfs(params);
 	sdata->u.ibss.basic_rates = params->basic_rates;
 	sdata->u.ibss.last_scan_completed = jiffies;
 
@@ -1821,10 +1776,12 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 	memcpy(sdata->u.ibss.ssid, params->ssid, params->ssid_len);
 	sdata->u.ibss.ssid_len = params->ssid_len;
 
+#if CFG80211_VERSION >= KERNEL_VERSION(3,12,0)
 	memcpy(&sdata->u.ibss.ht_capa, &params->ht_capa,
 	       sizeof(sdata->u.ibss.ht_capa));
 	memcpy(&sdata->u.ibss.ht_capa_mask, &params->ht_capa_mask,
 	       sizeof(sdata->u.ibss.ht_capa_mask));
+#endif
 
 	/*
 	 * 802.11n-2009 9.13.3.1: In an IBSS, the HT Protection field is
