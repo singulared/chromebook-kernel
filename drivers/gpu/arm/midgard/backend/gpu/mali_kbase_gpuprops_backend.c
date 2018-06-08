@@ -7,13 +7,18 @@
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -81,6 +86,11 @@ void kbase_backend_gpuprops_get(struct kbase_device *kbdev,
 				GPU_CONTROL_REG(L2_PRESENT_LO), NULL);
 	regdump->l2_present_hi = kbase_reg_read(kbdev,
 				GPU_CONTROL_REG(L2_PRESENT_HI), NULL);
+
+	regdump->stack_present_lo = kbase_reg_read(kbdev,
+				GPU_CONTROL_REG(STACK_PRESENT_LO), NULL);
+	regdump->stack_present_hi = kbase_reg_read(kbdev,
+				GPU_CONTROL_REG(STACK_PRESENT_HI), NULL);
 }
 
 void kbase_backend_gpuprops_get_features(struct kbase_device *kbdev,

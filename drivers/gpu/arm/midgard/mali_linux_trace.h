@@ -7,13 +7,18 @@
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 #if !defined(_TRACE_MALI_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_MALI_H
@@ -177,24 +182,6 @@ TRACE_EVENT(mali_total_alloc_pages_change,
 		__entry->event_id = event_id;
 	),
 	TP_printk("event=%lld", __entry->event_id)
-);
-
-/**
- * mali_sw_counter - not currently used
- * @event_id: counter id
- */
-TRACE_EVENT(mali_sw_counter,
-	TP_PROTO(unsigned int event_id, signed long long value),
-	TP_ARGS(event_id, value),
-	TP_STRUCT__entry(
-		__field(int, event_id)
-		__field(long long, value)
-	),
-	TP_fast_assign(
-		__entry->event_id = event_id;
-		__entry->value = value;
-	),
-	TP_printk("event %d = %lld", __entry->event_id, __entry->value)
 );
 
 #endif				/*  _TRACE_MALI_H */

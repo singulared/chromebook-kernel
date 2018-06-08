@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2011-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -26,7 +31,7 @@
 #define _KBASE_JS_H_
 
 #include "mali_kbase_js_defs.h"
-#include "mali_kbase_js_policy.h"
+#include "mali_kbase_context.h"
 #include "mali_kbase_defs.h"
 #include "mali_kbase_debug.h"
 
@@ -46,8 +51,7 @@
  * @addtogroup kbase_js Job Scheduler Internal APIs
  * @{
  *
- * These APIs are Internal to KBase and are available for use by the
- * @ref kbase_js_policy "Job Scheduler Policy APIs"
+ * These APIs are Internal to KBase.
  */
 
 /**
@@ -151,8 +155,7 @@ void kbasep_js_kctx_term(struct kbase_context *kctx);
  *
  * The following locking conditions are made on the caller:
  * - it must \em not hold kbasep_js_kctx_info::ctx::jsctx_mutex.
- * - it must \em not hold kbasep_js_device_data::runpool_irq::lock (as this will be
- * obtained internally)
+ * - it must \em not hold hwaccess_lock (as this will be obtained internally)
  * - it must \em not hold kbasep_js_device_data::runpool_mutex (as this will be
  * obtained internally)
  * - it must \em not hold kbasep_jd_device_data::queue_mutex (again, it's used internally).
@@ -182,9 +185,7 @@ bool kbasep_js_add_job(struct kbase_context *kctx, struct kbase_jd_atom *atom);
  * It is a programming error to call this when:
  * - \a atom is not a job belonging to kctx.
  * - \a atom has already been removed from the Job Scheduler.
- * - \a atom is still in the runpool:
- *  - it has not been removed with kbasep_js_policy_dequeue_job()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job_irq()
+ * - \a atom is still in the runpool
  *
  * Do not use this for removing jobs being killed by kbase_jd_cancel() - use
  * kbasep_js_remove_cancelled_job() instead.
@@ -208,13 +209,11 @@ void kbasep_js_remove_job(struct kbase_device *kbdev, struct kbase_context *kctx
  * - \a atom has already been removed from the Job Scheduler.
  * - \a atom is still in the runpool:
  *  - it is not being killed with kbasep_jd_cancel()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job()
- *  - or, it has not been removed with kbasep_js_policy_dequeue_job_irq()
  *
  * The following locking conditions are made on the caller:
  * - it must hold kbasep_js_kctx_info::ctx::jsctx_mutex.
- * - it must \em not hold the kbasep_js_device_data::runpool_irq::lock, (as this will be
- * obtained internally)
+ * - it must \em not hold the hwaccess_lock, (as this will be obtained
+ *   internally)
  * - it must \em not hold kbasep_js_device_data::runpool_mutex (as this could be
  * obtained internally)
  *
@@ -233,8 +232,8 @@ bool kbasep_js_remove_cancelled_job(struct kbase_device *kbdev,
  * @note This function can safely be called from IRQ context.
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpool_irq::lock, because
- * it will be used internally.
+ * - it must \em not hold mmu_hw_mutex and hwaccess_lock, because they will be
+ *   used internally.
  *
  * @return value != false if the retain succeeded, and the context will not be scheduled out.
  * @return false if the retain failed (because the context is being/has been scheduled out).
@@ -248,7 +247,7 @@ bool kbasep_js_runpool_retain_ctx(struct kbase_device *kbdev, struct kbase_conte
  * @note This function can safely be called from IRQ context.
  *
  * The following locks must be held by the caller:
- * - kbasep_js_device_data::runpool_irq::lock
+ * - mmu_hw_mutex, hwaccess_lock
  *
  * @return value != false if the retain succeeded, and the context will not be scheduled out.
  * @return false if the retain failed (because the context is being/has been scheduled out).
@@ -266,36 +265,14 @@ bool kbasep_js_runpool_retain_ctx_nolock(struct kbase_device *kbdev, struct kbas
  * @note This function can safely be called from IRQ context.
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpoool_irq::lock, because
- * it will be used internally. If the runpool_irq::lock is already held, then
- * the caller should use kbasep_js_runpool_lookup_ctx_nolock() instead.
+ * - it must \em not hold the hwaccess_lock, because it will be used internally.
+ *   If the hwaccess_lock is already held, then the caller should use
+ *   kbasep_js_runpool_lookup_ctx_nolock() instead.
  *
  * @return a valid struct kbase_context on success, which has been refcounted as being busy.
  * @return NULL on failure, indicating that no context was found in \a as_nr
  */
 struct kbase_context *kbasep_js_runpool_lookup_ctx(struct kbase_device *kbdev, int as_nr);
-
-/**
- * kbasep_js_runpool_lookup_ctx_nolock - Lookup a context in the Run Pool based
- *         upon its current address space and ensure that is stays scheduled in.
- * @kbdev: Device pointer
- * @as_nr: Address space to lookup
- *
- * The context is refcounted as being busy to prevent it from scheduling
- * out. It must be released with kbasep_js_runpool_release_ctx() when it is no
- * longer required to stay scheduled in.
- *
- * Note: This function can safely be called from IRQ context.
- *
- * The following locking conditions are made on the caller:
- * - it must the kbasep_js_device_data::runpoool_irq::lock.
- *
- * Return: a valid struct kbase_context on success, which has been refcounted as
- *         being busy.
- *         NULL on failure, indicating that no context was found in \a as_nr
- */
-struct kbase_context *kbasep_js_runpool_lookup_ctx_nolock(
-		struct kbase_device *kbdev, int as_nr);
 
 /**
  * @brief Handling the requeuing/killing of a context that was evicted from the
@@ -362,12 +339,12 @@ void kbasep_js_runpool_requeue_or_kill_ctx(struct kbase_device *kbdev, struct kb
  * scheduled, or that already has a zero refcount.
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpool_irq::lock, because
- * it will be used internally.
+ * - it must \em not hold the hwaccess_lock, because it will be used internally.
  * - it must \em not hold kbasep_js_kctx_info::ctx::jsctx_mutex.
  * - it must \em not hold kbasep_js_device_data::runpool_mutex (as this will be
  * obtained internally)
- * - it must \em not hold the kbase_device::as[n].transaction_mutex (as this will be obtained internally)
+ * - it must \em not hold the kbase_device::mmu_hw_mutex (as this will be
+ * obtained internally)
  * - it must \em not hold kbasep_jd_device_data::queue_mutex (as this will be
  * obtained internally)
  *
@@ -411,11 +388,11 @@ void kbasep_js_runpool_release_ctx_nolock(struct kbase_device *kbdev,
  * kbasep_js_release_privileged_ctx is called).
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpool_irq::lock, because
- * it will be used internally.
+ * - it must \em not hold the hwaccess_lock, because it will be used internally.
  * - it must \em not hold kbasep_js_device_data::runpool_mutex (as this will be
  * obtained internally)
- * - it must \em not hold the kbase_device::as[n].transaction_mutex (as this will be obtained internally)
+ * - it must \em not hold the kbase_device::mmu_hw_mutex (as this will be
+ * obtained internally)
  * - it must \em not hold kbasep_jd_device_data::queue_mutex (again, it's used internally).
  * - it must \em not hold kbasep_js_kctx_info::ctx::jsctx_mutex, because it will
  * be used internally.
@@ -429,12 +406,12 @@ void kbasep_js_schedule_privileged_ctx(struct kbase_device *kbdev, struct kbase_
  * See kbasep_js_runpool_release_ctx for potential side effects.
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpool_irq::lock, because
- * it will be used internally.
+ * - it must \em not hold the hwaccess_lock, because it will be used internally.
  * - it must \em not hold kbasep_js_kctx_info::ctx::jsctx_mutex.
  * - it must \em not hold kbasep_js_device_data::runpool_mutex (as this will be
  * obtained internally)
- * - it must \em not hold the kbase_device::as[n].transaction_mutex (as this will be obtained internally)
+ * - it must \em not hold the kbase_device::mmu_hw_mutex (as this will be
+ * obtained internally)
  *
  */
 void kbasep_js_release_privileged_ctx(struct kbase_device *kbdev, struct kbase_context *kctx);
@@ -444,7 +421,7 @@ void kbasep_js_release_privileged_ctx(struct kbase_device *kbdev, struct kbase_c
  *
  * The following locks may be used:
  * - kbasep_js_device_data::runpool_mutex
- * - kbasep_js_device_data::runpool_irq::lock
+ * - hwaccess_lock
  */
 void kbase_js_try_run_jobs(struct kbase_device *kbdev);
 
@@ -465,9 +442,8 @@ void kbase_js_try_run_jobs(struct kbase_device *kbdev);
  *
  * The emptying mechanism may take some time to complete, since it can wait for
  * jobs to complete naturally instead of forcing them to end quickly. However,
- * this is bounded by the Job Scheduling Policy's Job Timeouts. Hence, this
- * function is guaranteed to complete in a finite time whenever the Job
- * Scheduling Policy implements Job Timeouts (such as those done by CFS).
+ * this is bounded by the Job Scheduler's Job Timeouts. Hence, this
+ * function is guaranteed to complete in a finite time.
  */
 void kbasep_js_suspend(struct kbase_device *kbdev);
 
@@ -564,8 +540,10 @@ bool kbase_js_complete_atom_wq(struct kbase_context *kctx,
  *
  * @param[in] katom         Pointer to the atom to complete
  * @param[in] end_timestamp The time that the atom completed (may be NULL)
+ *
+ * Return: Atom that has now been unblocked and can now be run, or NULL if none
  */
-void kbase_js_complete_atom(struct kbase_jd_atom *katom,
+struct kbase_jd_atom *kbase_js_complete_atom(struct kbase_jd_atom *katom,
 		ktime_t *end_timestamp);
 
 /**
@@ -608,6 +586,16 @@ void kbase_js_zap_context(struct kbase_context *kctx);
 bool kbase_js_is_atom_valid(struct kbase_device *kbdev,
 				struct kbase_jd_atom *katom);
 
+/**
+ * kbase_js_set_timeouts - update all JS timeouts with user specified data
+ * @kbdev: Device pointer
+ *
+ * Timeouts are specified through the 'js_timeouts' sysfs file. If a timeout is
+ * set to a positive number then that becomes the new value used, if a timeout
+ * is negative then the default is set.
+ */
+void kbase_js_set_timeouts(struct kbase_device *kbdev);
+
 /*
  * Helpers follow
  */
@@ -620,7 +608,7 @@ bool kbase_js_is_atom_valid(struct kbase_device *kbdev,
  *
  * As with any bool, never test the return value with true.
  *
- * The caller must hold kbasep_js_device_data::runpool_irq::lock.
+ * The caller must hold hwaccess_lock.
  */
 static inline bool kbasep_js_is_submit_allowed(struct kbasep_js_device_data *js_devdata, struct kbase_context *kctx)
 {
@@ -628,7 +616,7 @@ static inline bool kbasep_js_is_submit_allowed(struct kbasep_js_device_data *js_
 
 	/* Ensure context really is scheduled in */
 	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
-	KBASE_DEBUG_ASSERT(kctx->jctx.sched_info.ctx.is_scheduled);
+	KBASE_DEBUG_ASSERT(kbase_ctx_flag(kctx, KCTX_SCHEDULED));
 
 	test_bit = (u16) (1u << kctx->as_nr);
 
@@ -641,7 +629,7 @@ static inline bool kbasep_js_is_submit_allowed(struct kbasep_js_device_data *js_
  * The purpose of this abstraction is to hide the underlying data size, and wrap up
  * the long repeated line of code.
  *
- * The caller must hold kbasep_js_device_data::runpool_irq::lock.
+ * The caller must hold hwaccess_lock.
  */
 static inline void kbasep_js_set_submit_allowed(struct kbasep_js_device_data *js_devdata, struct kbase_context *kctx)
 {
@@ -649,7 +637,7 @@ static inline void kbasep_js_set_submit_allowed(struct kbasep_js_device_data *js
 
 	/* Ensure context really is scheduled in */
 	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
-	KBASE_DEBUG_ASSERT(kctx->jctx.sched_info.ctx.is_scheduled);
+	KBASE_DEBUG_ASSERT(kbase_ctx_flag(kctx, KCTX_SCHEDULED));
 
 	set_bit = (u16) (1u << kctx->as_nr);
 
@@ -664,7 +652,7 @@ static inline void kbasep_js_set_submit_allowed(struct kbasep_js_device_data *js
  * The purpose of this abstraction is to hide the underlying data size, and wrap up
  * the long repeated line of code.
  *
- * The caller must hold kbasep_js_device_data::runpool_irq::lock.
+ * The caller must hold hwaccess_lock.
  */
 static inline void kbasep_js_clear_submit_allowed(struct kbasep_js_device_data *js_devdata, struct kbase_context *kctx)
 {
@@ -673,7 +661,7 @@ static inline void kbasep_js_clear_submit_allowed(struct kbasep_js_device_data *
 
 	/* Ensure context really is scheduled in */
 	KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
-	KBASE_DEBUG_ASSERT(kctx->jctx.sched_info.ctx.is_scheduled);
+	KBASE_DEBUG_ASSERT(kbase_ctx_flag(kctx, KCTX_SCHEDULED));
 
 	clear_bit = (u16) (1u << kctx->as_nr);
 	clear_mask = ~clear_bit;
@@ -681,37 +669,6 @@ static inline void kbasep_js_clear_submit_allowed(struct kbasep_js_device_data *
 	dev_dbg(kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed &= clear_mask;
-}
-
-/**
- * @brief Manage the 'retry_submit_on_slot' part of a kbase_jd_atom
- */
-static inline void kbasep_js_clear_job_retry_submit(struct kbase_jd_atom *atom)
-{
-	atom->retry_submit_on_slot = KBASEP_JS_RETRY_SUBMIT_SLOT_INVALID;
-}
-
-/**
- * Mark a slot as requiring resubmission by carrying that information on a
- * completing atom.
- *
- * @note This can ASSERT in debug builds if the submit slot has been set to
- * something other than the current value for @a js. This is because you might
- * be unintentionally stopping more jobs being submitted on the old submit
- * slot, and that might cause a scheduling-hang.
- *
- * @note If you can guarantee that the atoms for the original slot will be
- * submitted on some other slot, then call kbasep_js_clear_job_retry_submit()
- * first to silence the ASSERT.
- */
-static inline void kbasep_js_set_job_retry_submit_slot(struct kbase_jd_atom *atom, int js)
-{
-	KBASE_DEBUG_ASSERT(0 <= js && js <= BASE_JM_MAX_NR_SLOTS);
-	KBASE_DEBUG_ASSERT((atom->retry_submit_on_slot ==
-					KBASEP_JS_RETRY_SUBMIT_SLOT_INVALID)
-				|| (atom->retry_submit_on_slot == js));
-
-	atom->retry_submit_on_slot = js;
 }
 
 /**
@@ -723,7 +680,6 @@ static inline void kbasep_js_atom_retained_state_init_invalid(struct kbasep_js_a
 {
 	retained_state->event_code = BASE_JD_EVENT_NOT_STARTED;
 	retained_state->core_req = KBASEP_JS_ATOM_RETAINED_STATE_CORE_REQ_INVALID;
-	retained_state->retry_submit_on_slot = KBASEP_JS_RETRY_SUBMIT_SLOT_INVALID;
 }
 
 /**
@@ -734,7 +690,6 @@ static inline void kbasep_js_atom_retained_state_copy(struct kbasep_js_atom_reta
 {
 	retained_state->event_code = katom->event_code;
 	retained_state->core_req = katom->core_req;
-	retained_state->retry_submit_on_slot = katom->retry_submit_on_slot;
 	retained_state->sched_priority = katom->sched_priority;
 	retained_state->device_nr = katom->device_nr;
 }
@@ -770,147 +725,33 @@ static inline bool kbasep_js_atom_retained_state_is_valid(const struct kbasep_js
 	return (bool) (katom_retained_state->core_req != KBASEP_JS_ATOM_RETAINED_STATE_CORE_REQ_INVALID);
 }
 
-static inline bool kbasep_js_get_atom_retry_submit_slot(const struct kbasep_js_atom_retained_state *katom_retained_state, int *res)
-{
-	int js = katom_retained_state->retry_submit_on_slot;
-
-	*res = js;
-	return (bool) (js >= 0);
-}
-
-#if KBASE_DEBUG_DISABLE_ASSERTS == 0
-/**
- * Debug Check the refcount of a context. Only use within ASSERTs
- *
- * Obtains kbasep_js_device_data::runpool_irq::lock
- *
- * @return negative value if the context is not scheduled in
- * @return current refcount of the context if it is scheduled in. The refcount
- * is not guarenteed to be kept constant.
- */
-static inline int kbasep_js_debug_check_ctx_refcount(struct kbase_device *kbdev, struct kbase_context *kctx)
-{
-	unsigned long flags;
-	struct kbasep_js_device_data *js_devdata;
-	int result = -1;
-	int as_nr;
-
-	KBASE_DEBUG_ASSERT(kbdev != NULL);
-	KBASE_DEBUG_ASSERT(kctx != NULL);
-	js_devdata = &kbdev->js_data;
-
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
-	as_nr = kctx->as_nr;
-	if (as_nr != KBASEP_AS_NR_INVALID)
-		result = js_devdata->runpool_irq.per_as_data[as_nr].as_busy_refcount;
-
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
-
-	return result;
-}
-#endif				/* KBASE_DEBUG_DISABLE_ASSERTS == 0 */
-
 /**
  * @brief Variant of kbasep_js_runpool_lookup_ctx() that can be used when the
- * context is guarenteed to be already previously retained.
+ * context is guaranteed to be already previously retained.
  *
  * It is a programming error to supply the \a as_nr of a context that has not
  * been previously retained/has a busy refcount of zero. The only exception is
  * when there is no ctx in \a as_nr (NULL returned).
  *
  * The following locking conditions are made on the caller:
- * - it must \em not hold the kbasep_js_device_data::runpoool_irq::lock, because
- * it will be used internally.
+ * - it must \em not hold the hwaccess_lock, because it will be used internally.
  *
- * @return a valid struct kbase_context on success, with a refcount that is guarenteed
+ * @return a valid struct kbase_context on success, with a refcount that is guaranteed
  * to be non-zero and unmodified by this function.
  * @return NULL on failure, indicating that no context was found in \a as_nr
  */
 static inline struct kbase_context *kbasep_js_runpool_lookup_ctx_noretain(struct kbase_device *kbdev, int as_nr)
 {
-	unsigned long flags;
-	struct kbasep_js_device_data *js_devdata;
 	struct kbase_context *found_kctx;
-	struct kbasep_js_per_as_data *js_per_as_data;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	KBASE_DEBUG_ASSERT(0 <= as_nr && as_nr < BASE_MAX_NR_AS);
-	js_devdata = &kbdev->js_data;
-	js_per_as_data = &js_devdata->runpool_irq.per_as_data[as_nr];
 
-	spin_lock_irqsave(&js_devdata->runpool_irq.lock, flags);
-
-	found_kctx = js_per_as_data->kctx;
-	KBASE_DEBUG_ASSERT(found_kctx == NULL || js_per_as_data->as_busy_refcount > 0);
-
-	spin_unlock_irqrestore(&js_devdata->runpool_irq.lock, flags);
+	found_kctx = kbdev->as_to_kctx[as_nr];
+	KBASE_DEBUG_ASSERT(found_kctx == NULL ||
+			atomic_read(&found_kctx->refcount) > 0);
 
 	return found_kctx;
-}
-
-/**
- * This will provide a conversion from time (us) to ticks of the gpu clock
- * based on the minimum available gpu frequency.
- * This is usually good to compute best/worst case (where the use of current
- * frequency is not valid due to DVFS).
- * e.g.: when you need the number of cycles to guarantee you won't wait for
- * longer than 'us' time (you might have a shorter wait).
- */
-static inline u32 kbasep_js_convert_us_to_gpu_ticks_min_freq(struct kbase_device *kbdev, u32 us)
-{
-	u32 gpu_freq = kbdev->gpu_props.props.core_props.gpu_freq_khz_min;
-
-	KBASE_DEBUG_ASSERT(0 != gpu_freq);
-	return us * (gpu_freq / 1000);
-}
-
-/**
- * This will provide a conversion from time (us) to ticks of the gpu clock
- * based on the maximum available gpu frequency.
- * This is usually good to compute best/worst case (where the use of current
- * frequency is not valid due to DVFS).
- * e.g.: When you need the number of cycles to guarantee you'll wait at least
- * 'us' amount of time (but you might wait longer).
- */
-static inline u32 kbasep_js_convert_us_to_gpu_ticks_max_freq(struct kbase_device *kbdev, u32 us)
-{
-	u32 gpu_freq = kbdev->gpu_props.props.core_props.gpu_freq_khz_max;
-
-	KBASE_DEBUG_ASSERT(0 != gpu_freq);
-	return us * (u32) (gpu_freq / 1000);
-}
-
-/**
- * This will provide a conversion from ticks of the gpu clock to time (us)
- * based on the minimum available gpu frequency.
- * This is usually good to compute best/worst case (where the use of current
- * frequency is not valid due to DVFS).
- * e.g.: When you need to know the worst-case wait that 'ticks' cycles will
- * take (you guarantee that you won't wait any longer than this, but it may
- * be shorter).
- */
-static inline u32 kbasep_js_convert_gpu_ticks_to_us_min_freq(struct kbase_device *kbdev, u32 ticks)
-{
-	u32 gpu_freq = kbdev->gpu_props.props.core_props.gpu_freq_khz_min;
-
-	KBASE_DEBUG_ASSERT(0 != gpu_freq);
-	return ticks / gpu_freq * 1000;
-}
-
-/**
- * This will provide a conversion from ticks of the gpu clock to time (us)
- * based on the maximum available gpu frequency.
- * This is usually good to compute best/worst case (where the use of current
- * frequency is not valid due to DVFS).
- * e.g.: When you need to know the best-case wait for 'tick' cycles (you
- * guarantee to be waiting for at least this long, but it may be longer).
- */
-static inline u32 kbasep_js_convert_gpu_ticks_to_us_max_freq(struct kbase_device *kbdev, u32 ticks)
-{
-	u32 gpu_freq = kbdev->gpu_props.props.core_props.gpu_freq_khz_max;
-
-	KBASE_DEBUG_ASSERT(0 != gpu_freq);
-	return ticks / gpu_freq * 1000;
 }
 
 /*
@@ -938,7 +779,7 @@ static inline void kbase_js_runpool_inc_context_count(
 	KBASE_DEBUG_ASSERT(js_devdata->nr_all_contexts_running < S8_MAX);
 	++(js_devdata->nr_all_contexts_running);
 
-	if ((js_kctx_info->ctx.flags & KBASE_CTX_FLAG_SUBMIT_DISABLED) == 0) {
+	if (!kbase_ctx_flag(kctx, KCTX_SUBMIT_DISABLED)) {
 		/* Track contexts that can submit jobs */
 		KBASE_DEBUG_ASSERT(js_devdata->nr_user_contexts_running <
 									S8_MAX);
@@ -971,7 +812,7 @@ static inline void kbase_js_runpool_dec_context_count(
 	--(js_devdata->nr_all_contexts_running);
 	KBASE_DEBUG_ASSERT(js_devdata->nr_all_contexts_running >= 0);
 
-	if ((js_kctx_info->ctx.flags & KBASE_CTX_FLAG_SUBMIT_DISABLED) == 0) {
+	if (!kbase_ctx_flag(kctx, KCTX_SUBMIT_DISABLED)) {
 		/* Track contexts that can submit jobs */
 		--(js_devdata->nr_user_contexts_running);
 		KBASE_DEBUG_ASSERT(js_devdata->nr_user_contexts_running >= 0);

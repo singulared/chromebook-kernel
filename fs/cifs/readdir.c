@@ -83,7 +83,7 @@ cifs_prime_dcache(struct dentry *parent, struct qstr *name,
 	cFYI(1, "%s: for %s", __func__, name->name);
 
 	if (parent->d_op && parent->d_op->d_hash)
-		parent->d_op->d_hash(parent, parent->d_inode, name);
+		parent->d_op->d_hash(parent, name);
 	else
 		name->hash = full_name_hash(name->name, name->len);
 

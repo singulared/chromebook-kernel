@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 /*
@@ -65,17 +70,6 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
  */
 struct kbase_jd_atom *kbase_gpu_inspect(struct kbase_device *kbdev, int js,
 					int idx);
-
-/**
- * kbase_gpu_slot_update - Update state based on slot ringbuffers
- *
- * @kbdev:  Device pointer
- *
- * Inspect the jobs in the slot ringbuffers and update state.
- *
- * This will cause jobs to be submitted to hardware if they are unblocked
- */
-void kbase_gpu_slot_update(struct kbase_device *kbdev);
 
 /**
  * kbase_gpu_dump_slots - Print the contents of the slot ringbuffers

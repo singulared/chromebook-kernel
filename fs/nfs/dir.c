@@ -1136,6 +1136,45 @@ out_error:
 }
 
 /*
+ * A weaker form of d_revalidate for revalidating just the dentry->d_inode
+ * when we don't really care about the dentry name. This is called when a
+ * pathwalk ends on a dentry that was not found via a normal lookup in the
+ * parent dir (e.g.: ".", "..", procfs symlinks or mountpoint traversals).
+ *
+ * In this situation, we just want to verify that the inode itself is OK
+ * since the dentry might have changed on the server.
+ */
+static int nfs_weak_revalidate(struct dentry *dentry, unsigned int flags)
+{
+	int error;
+	struct inode *inode = dentry->d_inode;
+
+	/*
+	 * I believe we can only get a negative dentry here in the case of a
+	 * procfs-style symlink. Just assume it's correct for now, but we may
+	 * eventually need to do something more here.
+	 */
+	if (!inode) {
+		dfprintk(LOOKUPCACHE, "%s: %s/%s has negative inode\n",
+				__func__, dentry->d_parent->d_name.name,
+				dentry->d_name.name);
+		return 1;
+	}
+
+	if (is_bad_inode(inode)) {
+		dfprintk(LOOKUPCACHE, "%s: %s/%s has dud inode\n",
+				__func__, dentry->d_parent->d_name.name,
+				dentry->d_name.name);
+		return 0;
+	}
+
+	error = nfs_revalidate_inode(NFS_SERVER(inode), inode);
+	dfprintk(LOOKUPCACHE, "NFS: %s: inode %lu is %s\n",
+			__func__, inode->i_ino, error ? "invalid" : "valid");
+	return !error;
+}
+
+/*
  * This is called from dput() when d_count is going to 0.
  */
 static int nfs_dentry_delete(const struct dentry *dentry)
@@ -1202,6 +1241,7 @@ static void nfs_d_release(struct dentry *dentry)
 
 const struct dentry_operations nfs_dentry_operations = {
 	.d_revalidate	= nfs_lookup_revalidate,
+	.d_weak_revalidate	= nfs_weak_revalidate,
 	.d_delete	= nfs_dentry_delete,
 	.d_iput		= nfs_dentry_iput,
 	.d_automount	= nfs_d_automount,
@@ -1679,7 +1719,7 @@ int nfs_unlink(struct inode *dir, struct dentry *dentry)
 		dir->i_ino, dentry->d_name.name);
 
 	spin_lock(&dentry->d_lock);
-	if (dentry->d_count > 1) {
+	if (d_count(dentry) > 1) {
 		spin_unlock(&dentry->d_lock);
 		/* Start asynchronous writeout of the inode */
 		write_inode_now(dentry->d_inode, 0);
@@ -1828,7 +1868,7 @@ int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	dfprintk(VFS, "NFS: rename(%s/%s -> %s/%s, ct=%d)\n",
 		 old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
 		 new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
-		 new_dentry->d_count);
+		 d_count(new_dentry));
 
 	/*
 	 * For non-directories, check whether the target is busy and if so,
@@ -1846,7 +1886,7 @@ int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			rehash = new_dentry;
 		}
 
-		if (new_dentry->d_count > 2) {
+		if (d_count(new_dentry) > 2) {
 			int err;
 
 			/* copy the target dentry's name */

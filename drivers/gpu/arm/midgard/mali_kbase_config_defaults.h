@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2013-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2013-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 /**
  * @file mali_kbase_config_defaults.h
@@ -27,54 +32,6 @@
 
 /* Include mandatory definitions per platform */
 #include <mali_kbase_config_platform.h>
-
-/**
- * Irq throttle. It is the minimum desired time in between two
- * consecutive gpu interrupts (given in 'us'). The irq throttle
- * gpu register will be configured after this, taking into
- * account the configured max frequency.
- *
- * Attached value: number in micro seconds
- */
-#define DEFAULT_IRQ_THROTTLE_TIME_US 20
-
-/**
- *  Default Job Scheduler initial runtime of a context for the CFS Policy,
- *  in time-slices.
- *
- * This value is relative to that of the least-run context, and defines
- * where in the CFS queue a new context is added. A value of 1 means 'after
- * the least-run context has used its timeslice'. Therefore, when all
- * contexts consistently use the same amount of time, a value of 1 models a
- * FIFO. A value of 0 would model a LIFO.
- *
- * The value is represented in "numbers of time slices". Multiply this
- * value by that defined in @ref DEFAULT_JS_CTX_TIMESLICE_NS to get
- * the time value for this in nanoseconds.
- */
-#define DEFAULT_JS_CFS_CTX_RUNTIME_INIT_SLICES 1
-
-/**
- * Default Job Scheduler minimum runtime value of a context for CFS, in
- * time_slices relative to that of the least-run context.
- *
- * This is a measure of how much preferrential treatment is given to a
- * context that is not run very often.
- *
- * Specficially, this value defines how many timeslices such a context is
- * (initially) allowed to use at once. Such contexts (e.g. 'interactive'
- * processes) will appear near the front of the CFS queue, and can initially
- * use more time than contexts that run continuously (e.g. 'batch'
- * processes).
- *
- * This limit \b prevents a "stored-up timeslices" DoS attack, where a ctx
- * not run for a long time attacks the system by using a very large initial
- * number of timeslices when it finally does run.
- *
- * @note A value of zero allows not-run-often contexts to get scheduled in
- * quickly, but to only use a single timeslice when they get scheduled in.
- */
-#define DEFAULT_JS_CFS_CTX_RUNTIME_MIN_SLICES 2
 
 /**
 * Boolean indicating whether the driver is configured to be secure at
@@ -122,6 +79,35 @@ enum {
 	KBASE_AID_4  = 0x1
 };
 
+enum {
+	/**
+	 * Use unrestricted Address ID width on the AXI bus.
+	 * Restricting ID width will reduce performance & bus load due to GPU.
+	 */
+	KBASE_3BIT_AID_32 = 0x0,
+
+	/* Restrict GPU to 7/8 of maximum Address ID count. */
+	KBASE_3BIT_AID_28 = 0x1,
+
+	/* Restrict GPU to 3/4 of maximum Address ID count. */
+	KBASE_3BIT_AID_24 = 0x2,
+
+	/* Restrict GPU to 5/8 of maximum Address ID count. */
+	KBASE_3BIT_AID_20 = 0x3,
+
+	/* Restrict GPU to 1/2 of maximum Address ID count.  */
+	KBASE_3BIT_AID_16 = 0x4,
+
+	/* Restrict GPU to 3/8 of maximum Address ID count. */
+	KBASE_3BIT_AID_12 = 0x5,
+
+	/* Restrict GPU to 1/4 of maximum Address ID count. */
+	KBASE_3BIT_AID_8  = 0x6,
+
+	/* Restrict GPU to 1/8 of maximum Address ID count. */
+	KBASE_3BIT_AID_4  = 0x7
+};
+
 /**
  * Default setting for read Address ID limiting on AXI bus.
  *
@@ -147,6 +133,22 @@ enum {
  * may limit to a lower value.
  */
 #define DEFAULT_AWID_LIMIT KBASE_AID_32
+
+/**
+ * Default setting for read Address ID limiting on AXI bus.
+ *
+ * Default value: KBASE_3BIT_AID_32 (no limit). Note hardware implementation
+ * may limit to a lower value.
+ */
+#define DEFAULT_3BIT_ARID_LIMIT KBASE_3BIT_AID_32
+
+/**
+ * Default setting for write Address ID limiting on AXI.
+ *
+ * Default value: KBASE_3BIT_AID_32 (no limit). Note hardware implementation
+ * may limit to a lower value.
+ */
+#define DEFAULT_3BIT_AWID_LIMIT KBASE_3BIT_AID_32
 
 /**
  * Default UMP device mapping. A UMP_DEVICE_<device>_SHIFT value which
@@ -215,10 +217,10 @@ enum {
 #define DEFAULT_JS_HARD_STOP_TICKS_DUMPING   (15000) /* 1500s */
 
 /*
- * Default timeout for software event jobs, after which these jobs will be
- * cancelled.
+ * Default timeout for some software jobs, after which the software event wait
+ * jobs will be cancelled.
  */
-#define DEFAULT_JS_SOFT_EVENT_TIMEOUT ((u32)3000) /* 3s */
+#define DEFAULT_JS_SOFT_JOB_TIMEOUT (3000) /* 3s */
 
 /*
  * Default minimum number of scheduling ticks before the GPU is reset to clear a
@@ -255,6 +257,28 @@ enum {
  * often used by the OS.
  */
 #define DEFAULT_JS_CTX_TIMESLICE_NS (50000000) /* 50ms */
+
+/*
+ * Perform GPU power down using only platform specific code, skipping DDK power
+ * management.
+ *
+ * If this is non-zero then kbase will avoid powering down shader cores, the
+ * tiler, and the L2 cache, instead just powering down the entire GPU through
+ * platform specific code. This may be required for certain platform
+ * integrations.
+ *
+ * Note that as this prevents kbase from powering down shader cores, this limits
+ * the available power policies to coarse_demand and always_on.
+ */
+#define PLATFORM_POWER_DOWN_ONLY (0)
+
+/*
+ * Maximum frequency (in kHz) that the GPU can be clocked. For some platforms
+ * this isn't available, so we simply define a dummy value here. If devfreq
+ * is enabled the value will be read from there, otherwise this should be
+ * overridden by defining GPU_FREQ_KHZ_MAX in the platform file.
+ */
+#define DEFAULT_GPU_FREQ_KHZ_MAX (5000)
 
 #endif /* _KBASE_CONFIG_DEFAULTS_H_ */
 

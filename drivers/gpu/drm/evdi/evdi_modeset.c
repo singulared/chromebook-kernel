@@ -19,10 +19,6 @@
 #include "evdi_drv.h"
 #include "evdi_cursor.h"
 
-#define EVDI_CURSOR_W 64
-#define EVDI_CURSOR_H 64
-#define EVDI_CURSOR_BUF (EVDI_CURSOR_W * EVDI_CURSOR_H)
-
 struct evdi_flip_queue {
 	struct mutex lock;
 	struct workqueue_struct *wq;
@@ -217,44 +213,58 @@ static int evdi_crtc_cursor_set(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct evdi_device *evdi = dev->dev_private;
-	int ret;
+	struct drm_gem_object *obj = NULL;
+	struct evdi_gem_object *eobj = NULL;
+	/*
+	 * evdi_crtc_cursor_set is callback function using
+	 * deprecated cursor entry point.
+	 * There is no info about underlaying pixel format.
+	 * Hence we are assuming that it is in ARGB 32bpp format.
+	 * This format it the only one supported in cursor composition
+	 * function.
+	 * This format is also enforced during framebuffer creation.
+	 *
+	 * Proper format will be available when driver start support
+	 * universal planes for cursor.
+	 */
+	uint32_t format = DRM_FORMAT_ARGB8888;
+	uint32_t stride = 4 * width;
 
 	EVDI_CHECKPT();
-	mutex_lock(&dev->struct_mutex);
-	ret = evdi_cursor_set(crtc, file, handle, width, height, evdi->cursor);
-	mutex_unlock(&dev->struct_mutex);
-	EVDI_VERBOSE("evdi_crtc_cursor_set unlock\n");
-	if (ret) {
-		DRM_ERROR("Failed to set evdi cursor\n");
-		return ret;
+	if (handle) {
+		mutex_lock(&dev->struct_mutex);
+		obj = drm_gem_object_lookup(crtc->dev, file, handle);
+		if (obj)
+			eobj = to_evdi_bo(obj);
+		else
+			EVDI_ERROR("Failed to lookup gem object.\n");
+		mutex_unlock(&dev->struct_mutex);
 	}
 
-	/*
-	 * For now we don't care whether the application wanted the mouse set,
-	 * or not.
-	 */
-	return evdi_crtc_page_flip(crtc, NULL, NULL, 0);
+	evdi_cursor_set(evdi->cursor,
+			eobj, width, height, 0, 0,
+			format, stride);
+	drm_gem_object_unreference_unlocked(obj);
+
+	if (evdi_enable_cursor_blending)
+		return evdi_crtc_page_flip(crtc, NULL, NULL, 0);
+	else
+		evdi_painter_send_cursor_set(evdi->painter, evdi->cursor);
+	return 0;
 }
 
 static int evdi_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
 {
 	struct drm_device *dev = crtc->dev;
 	struct evdi_device *evdi = dev->dev_private;
-	int ret = 0;
 
-	mutex_lock(&dev->struct_mutex);
-	if (!evdi_cursor_enabled(evdi->cursor))
-		goto error;
-	ret = evdi_cursor_move(crtc, x, y, evdi->cursor);
-	if (ret) {
-		DRM_ERROR("Failed to move evdi cursor\n");
-		goto error;
-	}
-	mutex_unlock(&dev->struct_mutex);
-	return evdi_crtc_page_flip(crtc, NULL, NULL, 0);
-error:
-	mutex_unlock(&dev->struct_mutex);
-	return ret;
+	evdi_cursor_move(evdi->cursor, x, y);
+
+	if (evdi_enable_cursor_blending)
+		return evdi_crtc_page_flip(crtc, NULL, NULL, 0);
+	else
+		evdi_painter_send_cursor_move(evdi->painter, evdi->cursor);
+	return 0;
 }
 
 static void evdi_crtc_prepare(__always_unused struct drm_crtc *crtc)
