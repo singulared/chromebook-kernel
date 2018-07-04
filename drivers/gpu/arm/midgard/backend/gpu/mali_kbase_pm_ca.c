@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2013-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2013-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 /*
  * Base kernel core availability APIs
@@ -25,6 +30,9 @@
 
 static const struct kbase_pm_ca_policy *const policy_list[] = {
 	&kbase_pm_ca_fixed_policy_ops,
+#ifdef CONFIG_MALI_DEVFREQ
+	&kbase_pm_ca_devfreq_policy_ops,
+#endif
 #if !MALI_CUSTOMER_RELEASE
 	&kbase_pm_ca_random_policy_ops
 #endif
@@ -95,10 +103,10 @@ void kbase_pm_ca_set_policy(struct kbase_device *kbdev,
 	mutex_lock(&kbdev->pm.lock);
 
 	/* Remove the policy to prevent IRQ handlers from working on it */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	old_policy = kbdev->pm.backend.ca_current_policy;
 	kbdev->pm.backend.ca_current_policy = NULL;
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	if (old_policy->term)
 		old_policy->term(kbdev);
@@ -106,7 +114,7 @@ void kbase_pm_ca_set_policy(struct kbase_device *kbdev,
 	if (new_policy->init)
 		new_policy->init(kbdev);
 
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	kbdev->pm.backend.ca_current_policy = new_policy;
 
 	/* If any core power state changes were previously attempted, but
@@ -118,7 +126,7 @@ void kbase_pm_ca_set_policy(struct kbase_device *kbdev,
 					kbdev->shader_ready_bitmap,
 					kbdev->shader_transitioning_bitmap);
 
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 	mutex_unlock(&kbdev->pm.lock);
 
@@ -131,7 +139,7 @@ KBASE_EXPORT_TEST_API(kbase_pm_ca_set_policy);
 
 u64 kbase_pm_ca_get_core_mask(struct kbase_device *kbdev)
 {
-	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	/* All cores must be enabled when instrumentation is in use */
 	if (kbdev->pm.backend.instr_enabled)
@@ -151,7 +159,7 @@ KBASE_EXPORT_TEST_API(kbase_pm_ca_get_core_mask);
 void kbase_pm_ca_update_core_status(struct kbase_device *kbdev, u64 cores_ready,
 							u64 cores_transitioning)
 {
-	lockdep_assert_held(&kbdev->pm.power_change_lock);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 
 	if (kbdev->pm.backend.ca_current_policy != NULL)
 		kbdev->pm.backend.ca_current_policy->update_core_status(kbdev,
@@ -163,20 +171,17 @@ void kbase_pm_ca_instr_enable(struct kbase_device *kbdev)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	kbdev->pm.backend.instr_enabled = true;
 
 	kbase_pm_update_cores_state_nolock(kbdev);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 }
 
 void kbase_pm_ca_instr_disable(struct kbase_device *kbdev)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, flags);
+	lockdep_assert_held(&kbdev->hwaccess_lock);
 	kbdev->pm.backend.instr_enabled = false;
 
 	kbase_pm_update_cores_state_nolock(kbdev);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, flags);
 }

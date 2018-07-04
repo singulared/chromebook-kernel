@@ -31,78 +31,70 @@
 
 #define VGEM_FD_PERMS 0600
 
-static struct sg_table *vgem_gem_map_dma_buf(struct dma_buf_attachment *attach,
-					     enum dma_data_direction dir)
+struct sg_table *vgem_gem_prime_get_sg_table(struct drm_gem_object *gobj)
 {
-	struct drm_vgem_gem_object *obj = attach->dmabuf->priv;
-	struct sg_table *sg;
+	struct drm_vgem_gem_object *obj = to_vgem_bo(gobj);
+	BUG_ON(obj->pages == NULL);
+
+	return drm_prime_pages_to_sg(obj->pages, obj->base.size / PAGE_SIZE);
+}
+
+int vgem_gem_prime_pin(struct drm_gem_object *gobj)
+{
+	struct drm_vgem_gem_object *obj = to_vgem_bo(gobj);
+	return vgem_gem_get_pages(obj);
+}
+
+void *vgem_gem_prime_vmap(struct drm_gem_object *gobj)
+{
+	struct drm_vgem_gem_object *obj = to_vgem_bo(gobj);
+	BUG_ON(obj->pages == NULL);
+
+	return vmap(obj->pages, obj->base.size / PAGE_SIZE, 0, PAGE_KERNEL);
+}
+
+void vgem_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
+{
+	vunmap(vaddr);
+}
+
+int vgem_gem_prime_mmap(struct drm_gem_object *gobj,
+			struct vm_area_struct *vma)
+{
+	struct drm_device *dev = gobj->dev;
+	struct drm_vgem_gem_object *obj = to_vgem_bo(gobj);
 	int ret;
+
+	mutex_lock(&dev->struct_mutex);
 
 	ret = vgem_gem_get_pages(obj);
 	if (ret)
-		return ERR_PTR(ret);
+		goto out_unlock;
 
-	/* VGEM assumes cache coherent access. Normally we might have to flush
-	 * caches here */
-
-	BUG_ON(obj->pages == NULL);
-
-	sg = drm_prime_pages_to_sg(obj->pages, obj->base.size / PAGE_SIZE);
-	if (!sg) {
-		vgem_gem_put_pages(obj);
-		return NULL;
+	if (!gobj->dev->driver->gem_vm_ops) {
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
-	return sg;
+	vma->vm_flags |= VM_IO | VM_MIXEDMAP | VM_DONTEXPAND | VM_DONTDUMP;
+	vma->vm_ops = gobj->dev->driver->gem_vm_ops;
+	vma->vm_private_data = obj;
+	vma->vm_page_prot =
+		pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
+
+	mutex_unlock(&dev->struct_mutex);
+	drm_gem_vm_open(vma);
+	return 0;
+
+out_unlock:
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
 }
 
-static void vgem_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
-			    struct sg_table *sg,
-			    enum dma_data_direction data_direction)
-{
-	sg_free_table(sg);
-	kfree(sg);
-}
-
-static void *vgem_kmap_atomic_dma_buf(struct dma_buf *dma_buf,
-				      unsigned long page_num)
-{
-	return NULL;
-}
-
-static void *vgem_kmap_dma_buf(struct dma_buf *dma_buf,
-			       unsigned long page_num)
-{
-	return NULL;
-}
-
-static int vgem_mmap_dma_buf(struct dma_buf *dma_buf,
-			     struct vm_area_struct *vma)
-{
-	return -EINVAL;
-}
-
-static struct dma_buf_ops vgem_dmabuf_ops = {
-	.map_dma_buf	= vgem_gem_map_dma_buf,
-	.unmap_dma_buf	= vgem_gem_unmap_dma_buf,
-	.release	= drm_gem_dmabuf_release,
-	.kmap_atomic	= vgem_kmap_atomic_dma_buf,
-	.kmap		= vgem_kmap_dma_buf,
-	.mmap		= vgem_mmap_dma_buf,
-};
-
-struct dma_buf *vgem_gem_prime_export(struct drm_device *dev,
-				      struct drm_gem_object *obj,
-				      int flags)
-{
-	return dma_buf_export(to_vgem_bo(obj), &vgem_dmabuf_ops,
-			      obj->size,
-			      VGEM_FD_PERMS,
-			      NULL);
-}
-
-struct drm_gem_object *vgem_gem_prime_import(struct drm_device *dev,
-					     struct dma_buf *dma_buf)
+struct drm_gem_object *
+vgem_gem_prime_import_sg_table(struct drm_device *dev,
+			       size_t size,
+			       struct sg_table *sg)
 {
 	struct drm_vgem_gem_object *obj = NULL;
 	int ret;
@@ -113,16 +105,11 @@ struct drm_gem_object *vgem_gem_prime_import(struct drm_device *dev,
 		goto fail;
 	}
 
-	ret = drm_gem_object_init(dev, &obj->base, dma_buf->size);
+	ret = drm_gem_object_init(dev, &obj->base, size);
 	if (ret) {
 		ret = -ENOMEM;
 		goto fail_free;
 	}
-
-	get_dma_buf(dma_buf);
-
-	obj->base.dma_buf = dma_buf;
-	obj->use_dma_buf = true;
 
 	return &obj->base;
 

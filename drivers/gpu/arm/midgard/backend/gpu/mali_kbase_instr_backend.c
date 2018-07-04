@@ -7,13 +7,18 @@
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -22,8 +27,8 @@
  */
 
 #include <mali_kbase.h>
-#include <mali_kbase_config_defaults.h>
 #include <mali_midg_regmap.h>
+#include <mali_kbase_hwaccess_instr.h>
 #include <backend/gpu/mali_kbase_device_internal.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
 #include <backend/gpu/mali_kbase_instr_internal.h>
@@ -41,23 +46,15 @@ static void kbasep_instr_hwcnt_cacheclean(struct kbase_device *kbdev)
 	u32 irq_mask;
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	/* Wait for any reset to complete */
-	while (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING) {
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		wait_event(kbdev->hwcnt.backend.cache_clean_wait,
-				kbdev->hwcnt.backend.state !=
-						KBASE_INSTR_STATE_RESETTING);
-		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	}
 	KBASE_DEBUG_ASSERT(kbdev->hwcnt.backend.state ==
 					KBASE_INSTR_STATE_REQUEST_CLEAN);
 
 	/* Enable interrupt */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, pm_flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, pm_flags);
 	irq_mask = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), NULL);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK),
 				irq_mask | CLEAN_CACHES_COMPLETED, NULL);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, pm_flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, pm_flags);
 
 	/* clean&invalidate the caches so we're sure the mmu tables for the dump
 	 * buffer is valid */
@@ -75,18 +72,13 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 {
 	unsigned long flags, pm_flags;
 	int err = -EINVAL;
-	struct kbasep_js_device_data *js_devdata;
 	u32 irq_mask;
 	int ret;
 	u64 shader_cores_needed;
 	u32 prfcnt_config;
 
-	KBASE_DEBUG_ASSERT(NULL == kbdev->hwcnt.suspended_kctx);
-
 	shader_cores_needed = kbase_pm_get_present_cores(kbdev,
 							KBASE_PM_CORE_SHADER);
-
-	js_devdata = &kbdev->js_data;
 
 	/* alignment failure */
 	if ((setup->dump_buffer == 0ULL) || (setup->dump_buffer & (2048 - 1)))
@@ -102,14 +94,6 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 
-	if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING) {
-		/* GPU is being reset */
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		wait_event(kbdev->hwcnt.backend.wait,
-					kbdev->hwcnt.backend.triggered != 0);
-		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	}
-
 	if (kbdev->hwcnt.backend.state != KBASE_INSTR_STATE_DISABLED) {
 		/* Instrumentation is already enabled */
 		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
@@ -117,20 +101,16 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 	}
 
 	/* Enable interrupt */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, pm_flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, pm_flags);
 	irq_mask = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), NULL);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), irq_mask |
 						PRFCNT_SAMPLE_COMPLETED, NULL);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, pm_flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, pm_flags);
 
 	/* In use, this context is the owner */
 	kbdev->hwcnt.kctx = kctx;
 	/* Remember the dump address so we can reprogram it later */
 	kbdev->hwcnt.addr = setup->dump_buffer;
-	/* Remember all the settings for suspend/resume */
-	if (&kbdev->hwcnt.suspended_state != setup)
-		memcpy(&kbdev->hwcnt.suspended_state, setup,
-					sizeof(kbdev->hwcnt.suspended_state));
 
 	/* Request the clean */
 	kbdev->hwcnt.backend.state = KBASE_INSTR_STATE_REQUEST_CLEAN;
@@ -199,14 +179,6 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 
-	if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING) {
-		/* GPU is being reset */
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		wait_event(kbdev->hwcnt.backend.wait,
-					kbdev->hwcnt.backend.triggered != 0);
-		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	}
-
 	kbdev->hwcnt.backend.state = KBASE_INSTR_STATE_IDLE;
 	kbdev->hwcnt.backend.triggered = 1;
 	wake_up(&kbdev->hwcnt.backend.wait);
@@ -218,7 +190,9 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev,
 	dev_dbg(kbdev->dev, "HW counters dumping set-up for context %p", kctx);
 	return err;
  out_unrequest_cores:
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	kbase_pm_unrequest_cores(kbdev, true, shader_cores_needed);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
  out_err:
 	return err;
 }
@@ -259,11 +233,10 @@ int kbase_instr_hwcnt_disable_internal(struct kbase_context *kctx)
 	kbdev->hwcnt.backend.triggered = 0;
 
 	/* Disable interrupt */
-	spin_lock_irqsave(&kbdev->pm.power_change_lock, pm_flags);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, pm_flags);
 	irq_mask = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK), NULL);
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK),
 				irq_mask & ~PRFCNT_SAMPLE_COMPLETED, NULL);
-	spin_unlock_irqrestore(&kbdev->pm.power_change_lock, pm_flags);
 
 	/* Disable the counters */
 	kbase_reg_write(kbdev, GPU_CONTROL_REG(PRFCNT_CONFIG), 0, kctx);
@@ -276,9 +249,10 @@ int kbase_instr_hwcnt_disable_internal(struct kbase_context *kctx)
 	kbase_pm_unrequest_cores(kbdev, true,
 		kbase_pm_get_present_cores(kbdev, KBASE_PM_CORE_SHADER));
 
-	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-
 	kbase_pm_release_l2_caches(kbdev);
+
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, pm_flags);
+	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 
 	dev_dbg(kbdev->dev, "HW counters dumping disabled for context %p",
 									kctx);
@@ -373,15 +347,11 @@ void kbasep_cache_clean_worker(struct work_struct *data)
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 	/* Wait for our condition, and any reset to complete */
-	while (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING ||
-			kbdev->hwcnt.backend.state ==
-						KBASE_INSTR_STATE_CLEANING) {
+	while (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_CLEANING) {
 		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 		wait_event(kbdev->hwcnt.backend.cache_clean_wait,
-				(kbdev->hwcnt.backend.state !=
-						KBASE_INSTR_STATE_RESETTING &&
 				kbdev->hwcnt.backend.state !=
-						KBASE_INSTR_STATE_CLEANING));
+						KBASE_INSTR_STATE_CLEANING);
 		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 	}
 	KBASE_DEBUG_ASSERT(kbdev->hwcnt.backend.state ==
@@ -414,9 +384,6 @@ void kbase_instr_hwcnt_sample_done(struct kbase_device *kbdev)
 					&kbdev->hwcnt.backend.cache_clean_work);
 		KBASE_DEBUG_ASSERT(ret);
 	}
-	/* NOTE: In the state KBASE_INSTR_STATE_RESETTING, We're in a reset,
-	 * and the instrumentation state hasn't been restored yet -
-	 * kbasep_reset_timeout_worker() will do the rest of the work */
 
 	spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 }
@@ -431,12 +398,12 @@ void kbase_clean_caches_done(struct kbase_device *kbdev)
 
 		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
 		/* Disable interrupt */
-		spin_lock_irqsave(&kbdev->pm.power_change_lock, pm_flags);
+		spin_lock_irqsave(&kbdev->hwaccess_lock, pm_flags);
 		irq_mask = kbase_reg_read(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK),
 									NULL);
 		kbase_reg_write(kbdev, GPU_CONTROL_REG(GPU_IRQ_MASK),
 				irq_mask & ~CLEAN_CACHES_COMPLETED, NULL);
-		spin_unlock_irqrestore(&kbdev->pm.power_change_lock, pm_flags);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, pm_flags);
 
 		/* Wakeup... */
 		if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_CLEANING) {
@@ -444,10 +411,6 @@ void kbase_clean_caches_done(struct kbase_device *kbdev)
 			kbdev->hwcnt.backend.state = KBASE_INSTR_STATE_CLEANED;
 			wake_up(&kbdev->hwcnt.backend.cache_clean_wait);
 		}
-		/* NOTE: In the state KBASE_INSTR_STATE_RESETTING, We're in a
-		 * reset, and the instrumentation state hasn't been restored yet
-		 * - kbasep_reset_timeout_worker() will do the rest of the work
-		 */
 
 		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
 	}
@@ -464,14 +427,6 @@ int kbase_instr_hwcnt_wait_for_dump(struct kbase_context *kctx)
 					kbdev->hwcnt.backend.triggered != 0);
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-
-	if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING) {
-		/* GPU is being reset */
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		wait_event(kbdev->hwcnt.backend.wait,
-					kbdev->hwcnt.backend.triggered != 0);
-		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	}
 
 	if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_FAULT) {
 		err = -EINVAL;
@@ -495,14 +450,6 @@ int kbase_instr_hwcnt_clear(struct kbase_context *kctx)
 	struct kbase_device *kbdev = kctx->kbdev;
 
 	spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-
-	if (kbdev->hwcnt.backend.state == KBASE_INSTR_STATE_RESETTING) {
-		/* GPU is being reset */
-		spin_unlock_irqrestore(&kbdev->hwcnt.lock, flags);
-		wait_event(kbdev->hwcnt.backend.wait,
-					kbdev->hwcnt.backend.triggered != 0);
-		spin_lock_irqsave(&kbdev->hwcnt.lock, flags);
-	}
 
 	/* Check it's the context previously set up and we're not already
 	 * dumping */

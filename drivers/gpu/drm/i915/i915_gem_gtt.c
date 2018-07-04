@@ -530,10 +530,24 @@ void i915_gem_init_global_gtt(struct drm_device *dev,
 			      unsigned long mappable_end,
 			      unsigned long end)
 {
+	unsigned long mm_size;
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
-	/* Substract the guard page ... */
-	drm_mm_init(&dev_priv->mm.gtt_space, start, end - start - PAGE_SIZE);
+	if (start == 0) {
+		/* For reasons unknown Sandybridge GT1 (at least) will
+		 * eventually hang when it encounters a ring wraparound
+		 * at offset 0.  Let's make start the ring offset never
+		 * starts are zero.
+		 *
+		 * Subtract the 2 guard pages ... */
+		start = PAGE_SIZE;
+		mm_size = end - start - 2 * PAGE_SIZE;
+	} else {
+		/* Subtract the guard page ... */
+		mm_size = end - start - PAGE_SIZE;
+	}
+
+	drm_mm_init(&dev_priv->mm.gtt_space, start, mm_size);
 	if (!HAS_LLC(dev))
 		dev_priv->mm.gtt_space.color_adjust = i915_gtt_color_adjust;
 

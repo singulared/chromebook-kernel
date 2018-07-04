@@ -14,6 +14,7 @@
 #include <linux/smp.h>
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
+#include <linux/kaiser.h>
 
 #include <asm/ldt.h>
 #include <asm/desc.h>
@@ -32,6 +33,7 @@ static int alloc_ldt(mm_context_t *pc, int mincount, int reload)
 {
 	void *oldldt, *newldt;
 	int oldsize;
+	int ret;
 
 	if (mincount <= pc->size)
 		return 0;
@@ -51,6 +53,16 @@ static int alloc_ldt(mm_context_t *pc, int mincount, int reload)
 	oldldt = pc->ldt;
 	memset(newldt + oldsize * LDT_ENTRY_SIZE, 0,
 	       (mincount - oldsize) * LDT_ENTRY_SIZE);
+
+	ret = kaiser_add_mapping((unsigned long)newldt,
+				 mincount * LDT_ENTRY_SIZE, __PAGE_KERNEL);
+	if (ret) {
+		if (mincount * LDT_ENTRY_SIZE > PAGE_SIZE)
+			vfree(newldt);
+		else
+			put_page(virt_to_page(newldt));
+		return ret;
+	}
 
 	paravirt_alloc_ldt(newldt, mincount);
 
@@ -76,6 +88,8 @@ static int alloc_ldt(mm_context_t *pc, int mincount, int reload)
 #endif
 	}
 	if (oldsize) {
+		kaiser_remove_mapping((unsigned long)oldldt,
+				      oldsize * LDT_ENTRY_SIZE);
 		paravirt_free_ldt(oldldt, oldsize);
 		if (oldsize * LDT_ENTRY_SIZE > PAGE_SIZE)
 			vfree(oldldt);
@@ -131,6 +145,8 @@ void destroy_context(struct mm_struct *mm)
 		if (mm == current->active_mm)
 			clear_LDT();
 #endif
+		kaiser_remove_mapping((unsigned long)mm->context.ldt,
+				      mm->context.size * LDT_ENTRY_SIZE);
 		paravirt_free_ldt(mm->context.ldt, mm->context.size);
 		if (mm->context.size * LDT_ENTRY_SIZE > PAGE_SIZE)
 			vfree(mm->context.ldt);
@@ -229,16 +245,10 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 		}
 	}
 
-	/*
-	 * On x86-64 we do not support 16-bit segments due to
-	 * IRET leaking the high bits of the kernel stack address.
-	 */
-#ifdef CONFIG_X86_64
-	if (!ldt_info.seg_32bit) {
+	if (!IS_ENABLED(CONFIG_X86_16BIT) && !ldt_info.seg_32bit) {
 		error = -EINVAL;
 		goto out_unlock;
 	}
-#endif
 
 	fill_ldt(&ldt, &ldt_info);
 	if (oldmode)

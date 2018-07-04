@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2015-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 #ifndef _KBASE_GPU_ID_H_
 #define _KBASE_GPU_ID_H_
 
@@ -58,6 +63,9 @@
 #define GPU_ID2_ARCH_MINOR                (0xF << GPU_ID2_ARCH_MINOR_SHIFT)
 #define GPU_ID2_ARCH_MAJOR                (0xF << GPU_ID2_ARCH_MAJOR_SHIFT)
 #define GPU_ID2_PRODUCT_MODEL  (GPU_ID2_ARCH_MAJOR | GPU_ID2_PRODUCT_MAJOR)
+#define GPU_ID2_VERSION        (GPU_ID2_VERSION_MAJOR | \
+								GPU_ID2_VERSION_MINOR | \
+								GPU_ID2_VERSION_STATUS)
 
 /* Helper macro to create a partial GPU_ID (new format) that defines
    a product ignoring its version. */
@@ -95,7 +103,15 @@
 		(((product_id) << GPU_ID2_PRODUCT_MAJOR_SHIFT) & \
 		    GPU_ID2_PRODUCT_MODEL)
 
-#define GPU_ID2_PRODUCT_TMIX              GPU_ID2_MODEL_MAKE(6, 0)
+#define GPU_ID2_PRODUCT_TMIX              GPU_ID2_MODEL_MAKE(6u, 0)
+#define GPU_ID2_PRODUCT_THEX              GPU_ID2_MODEL_MAKE(6u, 1)
+#define GPU_ID2_PRODUCT_TSIX              GPU_ID2_MODEL_MAKE(7u, 0)
+#define GPU_ID2_PRODUCT_TDVX              GPU_ID2_MODEL_MAKE(7u, 3)
+#define GPU_ID2_PRODUCT_TNOX              GPU_ID2_MODEL_MAKE(7u, 1)
+#define GPU_ID2_PRODUCT_TGOX              GPU_ID2_MODEL_MAKE(7u, 2)
+#define GPU_ID2_PRODUCT_TKAX              GPU_ID2_MODEL_MAKE(8u, 0)
+#define GPU_ID2_PRODUCT_TTRX              GPU_ID2_MODEL_MAKE(8u, 1)
+#define GPU_ID2_PRODUCT_TBOX              GPU_ID2_MODEL_MAKE(8u, 2)
 
 /* Values for GPU_ID_VERSION_STATUS field for PRODUCT_ID GPU_ID_PI_T60X */
 #define GPU_ID_S_15DEV0                   0x1
