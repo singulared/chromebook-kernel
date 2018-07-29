@@ -307,9 +307,6 @@ void iwl_pcie_apm_config(struct iwl_trans *trans)
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	u16 lctl;
 	u16 cap;
-	int l1ss_cap_ptr;
-	u32 l1ss_ctl1 = 0x5a5a5a5a; /* debug value */
-	struct pci_dev *pdev = trans_pcie->pci_dev;
 
 	/*
 	 * HW bug W/A for instability in PCIe bus L0S->L1 transition.
@@ -319,30 +316,18 @@ void iwl_pcie_apm_config(struct iwl_trans *trans)
 	 * If not (unlikely), enable L0S, so there is at least some
 	 *    power savings, even without L1.
 	 */
-	pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &lctl);
+	pcie_capability_read_word(trans_pcie->pci_dev, PCI_EXP_LNKCTL, &lctl);
 	if (lctl & PCI_EXP_LNKCTL_ASPM_L1)
 		iwl_set_bit(trans, CSR_GIO_REG, CSR_GIO_REG_VAL_L0S_ENABLED);
 	else
 		iwl_clear_bit(trans, CSR_GIO_REG, CSR_GIO_REG_VAL_L0S_ENABLED);
 	trans->pm_support = !(lctl & PCI_EXP_LNKCTL_ASPM_L0S);
 
-	pcie_capability_read_word(pdev, PCI_EXP_DEVCTL2, &cap);
+	pcie_capability_read_word(trans_pcie->pci_dev, PCI_EXP_DEVCTL2, &cap);
 	trans->ltr_enabled = cap & PCI_EXP_DEVCTL2_LTR_EN;
-	dev_info(trans->dev, "L1 %sabled - LTR %sabled\n",
-		 (lctl & PCI_EXP_LNKCTL_ASPM_L1) ? "En" : "Dis",
-		 trans->ltr_enabled ? "En" : "Dis");
-
-	l1ss_cap_ptr = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_L1SS);
-	if (!l1ss_cap_ptr) {
-		dev_info(trans->dev, "L1 substates: Not supported?\n");
-		return;
-	}
-	pci_read_config_dword(pdev, l1ss_cap_ptr + PCI_L1SS_CTL1, &l1ss_ctl1);
-	if (!(l1ss_ctl1 & PCI_L1SS_CTL1_L1SS_MASK))
-		dev_info(trans->dev, "L1 substates: Disabled\n");
-	else
-		dev_info(trans->dev, "L1 substates: Enabled (L1SS_CTL1=%X)\n",
-			 l1ss_ctl1);
+	IWL_DEBUG_POWER(trans, "L1 %sabled - LTR %sabled\n",
+			(lctl & PCI_EXP_LNKCTL_ASPM_L1) ? "En" : "Dis",
+			trans->ltr_enabled ? "En" : "Dis");
 }
 
 /*
@@ -1655,14 +1640,13 @@ static void iwl_pcie_set_interrupt_capa(struct pci_dev *pdev,
 					struct iwl_trans *trans)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
-	int max_irqs, num_irqs, i, ret, nr_online_cpus;
+	int max_irqs, num_irqs, i, ret;
 	u16 pci_cmd;
 
 	if (!trans->cfg->mq_rx_supported || iwlwifi_mod_params.disable_msix)
 		goto enable_msi;
 
-	nr_online_cpus = num_online_cpus();
-	max_irqs = min_t(u32, nr_online_cpus + 2, IWL_MAX_RX_HW_QUEUES);
+	max_irqs = min_t(u32, num_online_cpus() + 2, IWL_MAX_RX_HW_QUEUES);
 	for (i = 0; i < max_irqs; i++)
 		trans_pcie->msix_entries[i].entry = i;
 
@@ -1688,16 +1672,17 @@ static void iwl_pcie_set_interrupt_capa(struct pci_dev *pdev,
 	 * Two interrupts less: non rx causes shared with FBQ and RSS.
 	 * More than two interrupts: we will use fewer RSS queues.
 	 */
-	if (num_irqs <= nr_online_cpus) {
+	if (num_irqs <= max_irqs - 2) {
 		trans_pcie->trans->num_rx_queues = num_irqs + 1;
 		trans_pcie->shared_vec_mask = IWL_SHARED_IRQ_NON_RX |
 			IWL_SHARED_IRQ_FIRST_RSS;
-	} else if (num_irqs == nr_online_cpus + 1) {
+	} else if (num_irqs == max_irqs - 1) {
 		trans_pcie->trans->num_rx_queues = num_irqs;
 		trans_pcie->shared_vec_mask = IWL_SHARED_IRQ_NON_RX;
 	} else {
 		trans_pcie->trans->num_rx_queues = num_irqs - 1;
 	}
+	WARN_ON(trans_pcie->trans->num_rx_queues > IWL_MAX_RX_HW_QUEUES);
 
 	trans_pcie->alloc_vecs = num_irqs;
 	trans_pcie->msix_enabled = true;
@@ -3380,6 +3365,7 @@ struct iwl_trans *iwl_trans_pcie_alloc(struct pci_dev *pdev,
 		ret = -EIO;
 		goto out_no_pci;
 	}
+
 	/*
 	 * In the 8000 HW family the format of the 4 bytes of CSR_HW_REV have
 	 * changed, and now the revision step also includes bit 0-1 (no more
