@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2013-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2013-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -130,7 +130,7 @@ static int debug_mem_show(struct seq_file *m, void *v)
 	if (!(map->flags & KBASE_REG_CPU_CACHED))
 		prot = pgprot_writecombine(prot);
 
-	page = phys_to_page(as_phys_addr_t(map->alloc->pages[data->offset]));
+	page = as_page(map->alloc->pages[data->offset]);
 	mapping = vmap(&page, 1, VM_MAP, prot);
 	if (!mapping)
 		goto out;
@@ -218,12 +218,6 @@ static int debug_mem_open(struct inode *i, struct file *file)
 	kbase_gpu_vm_lock(kctx);
 
 	ret = debug_mem_zone_open(&kctx->reg_rbtree_same, mem_data);
-	if (0 != ret) {
-		kbase_gpu_vm_unlock(kctx);
-		goto out;
-	}
-
-	ret = debug_mem_zone_open(&kctx->reg_rbtree_exec, mem_data);
 	if (0 != ret) {
 		kbase_gpu_vm_unlock(kctx);
 		goto out;

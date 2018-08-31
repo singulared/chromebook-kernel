@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2015-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2015-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -38,16 +38,6 @@
 
 #define NOT_DIRTY false
 #define NOT_RECLAIMED false
-
-static inline void kbase_mem_pool_lock(struct kbase_mem_pool *pool)
-{
-	spin_lock(&pool->pool_lock);
-}
-
-static inline void kbase_mem_pool_unlock(struct kbase_mem_pool *pool)
-{
-	spin_unlock(&pool->pool_lock);
-}
 
 static size_t kbase_mem_pool_capacity(struct kbase_mem_pool *pool)
 {
@@ -177,12 +167,6 @@ struct page *kbase_mem_alloc_page(struct kbase_mem_pool *pool)
 	gfp = GFP_HIGHUSER | __GFP_ZERO;
 #endif
 
-	if (current->flags & PF_KTHREAD) {
-		/* Don't trigger OOM killer from kernel threads, e.g. when
-		 * growing memory on GPU page fault */
-		gfp |= __GFP_NORETRY;
-	}
-
 	/* don't warn on higer order failures */
 	if (pool->order)
 		gfp |= __GFP_NOWARN;
@@ -255,12 +239,33 @@ int kbase_mem_pool_grow(struct kbase_mem_pool *pool,
 	struct page *p;
 	size_t i;
 
+	kbase_mem_pool_lock(pool);
+
+	pool->dont_reclaim = true;
 	for (i = 0; i < nr_to_grow; i++) {
-		p = kbase_mem_alloc_page(pool);
-		if (!p)
+		if (pool->dying) {
+			pool->dont_reclaim = false;
+			kbase_mem_pool_shrink_locked(pool, nr_to_grow);
+			kbase_mem_pool_unlock(pool);
+
 			return -ENOMEM;
-		kbase_mem_pool_add(pool, p);
+		}
+		kbase_mem_pool_unlock(pool);
+
+		p = kbase_mem_alloc_page(pool);
+		if (!p) {
+			kbase_mem_pool_lock(pool);
+			pool->dont_reclaim = false;
+			kbase_mem_pool_unlock(pool);
+
+			return -ENOMEM;
+		}
+
+		kbase_mem_pool_lock(pool);
+		kbase_mem_pool_add_locked(pool, p);
 	}
+	pool->dont_reclaim = false;
+	kbase_mem_pool_unlock(pool);
 
 	return 0;
 }
@@ -312,10 +317,19 @@ static unsigned long kbase_mem_pool_reclaim_count_objects(struct shrinker *s,
 		struct shrink_control *sc)
 {
 	struct kbase_mem_pool *pool;
+	size_t pool_size;
 
 	pool = container_of(s, struct kbase_mem_pool, reclaim);
-	pool_dbg(pool, "reclaim count: %zu\n", kbase_mem_pool_size(pool));
-	return kbase_mem_pool_size(pool);
+
+	kbase_mem_pool_lock(pool);
+	if (pool->dont_reclaim && !pool->dying) {
+		kbase_mem_pool_unlock(pool);
+		return 0;
+	}
+	pool_size = kbase_mem_pool_size(pool);
+	kbase_mem_pool_unlock(pool);
+
+	return pool_size;
 }
 
 static unsigned long kbase_mem_pool_reclaim_scan_objects(struct shrinker *s,
@@ -326,9 +340,17 @@ static unsigned long kbase_mem_pool_reclaim_scan_objects(struct shrinker *s,
 
 	pool = container_of(s, struct kbase_mem_pool, reclaim);
 
+	kbase_mem_pool_lock(pool);
+	if (pool->dont_reclaim && !pool->dying) {
+		kbase_mem_pool_unlock(pool);
+		return 0;
+	}
+
 	pool_dbg(pool, "reclaim scan %ld:\n", sc->nr_to_scan);
 
-	freed = kbase_mem_pool_shrink(pool, sc->nr_to_scan);
+	freed = kbase_mem_pool_shrink_locked(pool, sc->nr_to_scan);
+
+	kbase_mem_pool_unlock(pool);
 
 	pool_dbg(pool, "reclaim freed %ld pages\n", freed);
 
@@ -357,6 +379,7 @@ int kbase_mem_pool_init(struct kbase_mem_pool *pool,
 	pool->order = order;
 	pool->kbdev = kbdev;
 	pool->next_pool = next_pool;
+	pool->dying = false;
 
 	spin_lock_init(&pool->pool_lock);
 	INIT_LIST_HEAD(&pool->page_list);
@@ -381,12 +404,20 @@ int kbase_mem_pool_init(struct kbase_mem_pool *pool,
 	return 0;
 }
 
+void kbase_mem_pool_mark_dying(struct kbase_mem_pool *pool)
+{
+	kbase_mem_pool_lock(pool);
+	pool->dying = true;
+	kbase_mem_pool_unlock(pool);
+}
+
 void kbase_mem_pool_term(struct kbase_mem_pool *pool)
 {
 	struct kbase_mem_pool *next_pool = pool->next_pool;
-	struct page *p;
+	struct page *p, *tmp;
 	size_t nr_to_spill = 0;
 	LIST_HEAD(spill_list);
+	LIST_HEAD(free_list);
 	int i;
 
 	pool_dbg(pool, "terminate()\n");
@@ -404,7 +435,6 @@ void kbase_mem_pool_term(struct kbase_mem_pool *pool)
 		/* Zero pages first without holding the next_pool lock */
 		for (i = 0; i < nr_to_spill; i++) {
 			p = kbase_mem_pool_remove_locked(pool);
-			kbase_mem_pool_zero_page(pool, p);
 			list_add(&p->lru, &spill_list);
 		}
 	}
@@ -412,16 +442,24 @@ void kbase_mem_pool_term(struct kbase_mem_pool *pool)
 	while (!kbase_mem_pool_is_empty(pool)) {
 		/* Free remaining pages to kernel */
 		p = kbase_mem_pool_remove_locked(pool);
-		kbase_mem_pool_free_page(pool, p);
+		list_add(&p->lru, &free_list);
 	}
 
 	kbase_mem_pool_unlock(pool);
 
 	if (next_pool && nr_to_spill) {
+		list_for_each_entry(p, &spill_list, lru)
+			kbase_mem_pool_zero_page(pool, p);
+
 		/* Add new page list to next_pool */
 		kbase_mem_pool_add_list(next_pool, &spill_list, nr_to_spill);
 
 		pool_dbg(pool, "terminate() spilled %zu pages\n", nr_to_spill);
+	}
+
+	list_for_each_entry_safe(p, tmp, &free_list, lru) {
+		list_del_init(&p->lru);
+		kbase_mem_pool_free_page(pool, p);
 	}
 
 	pool_dbg(pool, "terminated\n");
@@ -444,6 +482,21 @@ struct page *kbase_mem_pool_alloc(struct kbase_mem_pool *pool)
 	return NULL;
 }
 
+struct page *kbase_mem_pool_alloc_locked(struct kbase_mem_pool *pool)
+{
+	struct page *p;
+
+	lockdep_assert_held(&pool->pool_lock);
+
+	pool_dbg(pool, "alloc_locked()\n");
+	p = kbase_mem_pool_remove_locked(pool);
+
+	if (p)
+		return p;
+
+	return NULL;
+}
+
 void kbase_mem_pool_free(struct kbase_mem_pool *pool, struct page *p,
 		bool dirty)
 {
@@ -460,6 +513,25 @@ void kbase_mem_pool_free(struct kbase_mem_pool *pool, struct page *p,
 	} else if (next_pool && !kbase_mem_pool_is_full(next_pool)) {
 		/* Spill to next pool */
 		kbase_mem_pool_spill(next_pool, p);
+	} else {
+		/* Free page */
+		kbase_mem_pool_free_page(pool, p);
+	}
+}
+
+void kbase_mem_pool_free_locked(struct kbase_mem_pool *pool, struct page *p,
+		bool dirty)
+{
+	pool_dbg(pool, "free_locked()\n");
+
+	lockdep_assert_held(&pool->pool_lock);
+
+	if (!kbase_mem_pool_is_full(pool)) {
+		/* Add to our own pool */
+		if (dirty)
+			kbase_mem_pool_sync_page(pool, p);
+
+		kbase_mem_pool_add_locked(pool, p);
 	} else {
 		/* Free page */
 		kbase_mem_pool_free_page(pool, p);
@@ -543,12 +615,54 @@ int kbase_mem_pool_alloc_pages(struct kbase_mem_pool *pool, size_t nr_4k_pages,
 
 done:
 	pool_dbg(pool, "alloc_pages(%zu) done\n", i);
-
 	return i;
 
 err_rollback:
 	kbase_mem_pool_free_pages(pool, i, pages, NOT_DIRTY, NOT_RECLAIMED);
 	return err;
+}
+
+int kbase_mem_pool_alloc_pages_locked(struct kbase_mem_pool *pool,
+		size_t nr_4k_pages, struct tagged_addr *pages)
+{
+	struct page *p;
+	size_t i;
+	size_t nr_pages_internal;
+
+	lockdep_assert_held(&pool->pool_lock);
+
+	nr_pages_internal = nr_4k_pages / (1u << (pool->order));
+
+	if (nr_pages_internal * (1u << pool->order) != nr_4k_pages)
+		return -EINVAL;
+
+	pool_dbg(pool, "alloc_pages_locked(4k=%zu):\n", nr_4k_pages);
+	pool_dbg(pool, "alloc_pages_locked(internal=%zu):\n",
+			nr_pages_internal);
+
+	if (kbase_mem_pool_size(pool) < nr_pages_internal) {
+		pool_dbg(pool, "Failed alloc\n");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < nr_pages_internal; i++) {
+		int j;
+
+		p = kbase_mem_pool_remove_locked(pool);
+		if (pool->order) {
+			*pages++ = as_tagged_tag(page_to_phys(p),
+						   HUGE_HEAD | HUGE_PAGE);
+			for (j = 1; j < (1u << pool->order); j++) {
+				*pages++ = as_tagged_tag(page_to_phys(p) +
+							   PAGE_SIZE * j,
+							   HUGE_PAGE);
+			}
+		} else {
+			*pages++ = as_tagged(page_to_phys(p));
+		}
+	}
+
+	return nr_4k_pages;
 }
 
 static void kbase_mem_pool_add_array(struct kbase_mem_pool *pool,
@@ -572,7 +686,7 @@ static void kbase_mem_pool_add_array(struct kbase_mem_pool *pool,
 			continue;
 
 		if (is_huge_head(pages[i]) || !is_huge(pages[i])) {
-			p = phys_to_page(as_phys_addr_t(pages[i]));
+			p = as_page(pages[i]);
 			if (zero)
 				kbase_mem_pool_zero_page(pool, p);
 			else if (sync)
@@ -588,6 +702,48 @@ static void kbase_mem_pool_add_array(struct kbase_mem_pool *pool,
 	kbase_mem_pool_add_list(pool, &new_page_list, nr_to_pool);
 
 	pool_dbg(pool, "add_array(%zu) added %zu pages\n",
+			nr_pages, nr_to_pool);
+}
+
+static void kbase_mem_pool_add_array_locked(struct kbase_mem_pool *pool,
+		size_t nr_pages, struct tagged_addr *pages,
+		bool zero, bool sync)
+{
+	struct page *p;
+	size_t nr_to_pool = 0;
+	LIST_HEAD(new_page_list);
+	size_t i;
+
+	lockdep_assert_held(&pool->pool_lock);
+
+	if (!nr_pages)
+		return;
+
+	pool_dbg(pool, "add_array_locked(%zu, zero=%d, sync=%d):\n",
+			nr_pages, zero, sync);
+
+	/* Zero/sync pages first */
+	for (i = 0; i < nr_pages; i++) {
+		if (unlikely(!as_phys_addr_t(pages[i])))
+			continue;
+
+		if (is_huge_head(pages[i]) || !is_huge(pages[i])) {
+			p = as_page(pages[i]);
+			if (zero)
+				kbase_mem_pool_zero_page(pool, p);
+			else if (sync)
+				kbase_mem_pool_sync_page(pool, p);
+
+			list_add(&p->lru, &new_page_list);
+			nr_to_pool++;
+		}
+		pages[i] = as_tagged(0);
+	}
+
+	/* Add new page list to pool */
+	kbase_mem_pool_add_list_locked(pool, &new_page_list, nr_to_pool);
+
+	pool_dbg(pool, "add_array_locked(%zu) added %zu pages\n",
 			nr_pages, nr_to_pool);
 }
 
@@ -632,11 +788,55 @@ void kbase_mem_pool_free_pages(struct kbase_mem_pool *pool, size_t nr_pages,
 			continue;
 		}
 
-		p = phys_to_page(as_phys_addr_t(pages[i]));
+		p = as_page(pages[i]);
 
 		kbase_mem_pool_free_page(pool, p);
 		pages[i] = as_tagged(0);
 	}
 
 	pool_dbg(pool, "free_pages(%zu) done\n", nr_pages);
+}
+
+
+void kbase_mem_pool_free_pages_locked(struct kbase_mem_pool *pool,
+		size_t nr_pages, struct tagged_addr *pages, bool dirty,
+		bool reclaimed)
+{
+	struct page *p;
+	size_t nr_to_pool;
+	LIST_HEAD(to_pool_list);
+	size_t i = 0;
+
+	lockdep_assert_held(&pool->pool_lock);
+
+	pool_dbg(pool, "free_pages_locked(%zu):\n", nr_pages);
+
+	if (!reclaimed) {
+		/* Add to this pool */
+		nr_to_pool = kbase_mem_pool_capacity(pool);
+		nr_to_pool = min(nr_pages, nr_to_pool);
+
+		kbase_mem_pool_add_array_locked(pool, nr_pages, pages, false,
+				dirty);
+
+		i += nr_to_pool;
+	}
+
+	/* Free any remaining pages to kernel */
+	for (; i < nr_pages; i++) {
+		if (unlikely(!as_phys_addr_t(pages[i])))
+			continue;
+
+		if (is_huge(pages[i]) && !is_huge_head(pages[i])) {
+			pages[i] = as_tagged(0);
+			continue;
+		}
+
+		p = as_page(pages[i]);
+
+		kbase_mem_pool_free_page(pool, p);
+		pages[i] = as_tagged(0);
+	}
+
+	pool_dbg(pool, "free_pages_locked(%zu) done\n", nr_pages);
 }

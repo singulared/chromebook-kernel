@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -92,14 +92,21 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 
 	freq = *target_freq;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_lock();
+#endif
 	opp = devfreq_recommended_opp(dev, &freq, flags);
 	voltage = dev_pm_opp_get_voltage(opp);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_unlock();
+#endif
 	if (IS_ERR_OR_NULL(opp)) {
 		dev_err(dev, "Failed to get opp (%ld)\n", PTR_ERR(opp));
 		return PTR_ERR(opp);
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+	dev_pm_opp_put(opp);
+#endif
 
 	nominal_freq = freq;
 
@@ -141,9 +148,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	}
 #endif
 
-	if (kbdev->pm.backend.ca_current_policy->id ==
-			KBASE_PM_CA_POLICY_ID_DEVFREQ)
-		kbase_devfreq_set_core_mask(kbdev, core_mask);
+	kbase_devfreq_set_core_mask(kbdev, core_mask);
 
 	*target_freq = nominal_freq;
 	kbdev->current_voltage = voltage;
@@ -152,8 +157,6 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	kbdev->current_core_mask = core_mask;
 
 	KBASE_TLSTREAM_AUX_DEVFREQ_TARGET((u64)nominal_freq);
-
-	kbase_pm_reset_dvfs_utilisation(kbdev);
 
 	return err;
 }
@@ -172,12 +175,13 @@ static int
 kbase_devfreq_status(struct device *dev, struct devfreq_dev_status *stat)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
+	struct kbasep_pm_metrics diff;
 
+	kbase_pm_get_dvfs_metrics(kbdev, &kbdev->last_devfreq_metrics, &diff);
+
+	stat->busy_time = diff.time_busy;
+	stat->total_time = diff.time_busy + diff.time_idle;
 	stat->current_frequency = kbdev->current_nominal_freq;
-
-	kbase_pm_get_dvfs_utilisation(kbdev,
-			&stat->total_time, &stat->busy_time);
-
 	stat->private_data = NULL;
 
 	return 0;
@@ -191,20 +195,24 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 	unsigned long freq;
 	struct dev_pm_opp *opp;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_lock();
+#endif
 	count = dev_pm_opp_get_opp_count(kbdev->dev);
-	if (count < 0) {
-		rcu_read_unlock();
-		return count;
-	}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_unlock();
+#endif
+	if (count < 0)
+		return count;
 
 	dp->freq_table = kmalloc_array(count, sizeof(dp->freq_table[0]),
 				GFP_KERNEL);
 	if (!dp->freq_table)
 		return -ENOMEM;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_lock();
+#endif
 	for (i = 0, freq = ULONG_MAX; i < count; i++, freq--) {
 		opp = dev_pm_opp_find_freq_floor(kbdev->dev, &freq);
 		if (IS_ERR(opp))
@@ -215,7 +223,9 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 
 		dp->freq_table[i] = freq;
 	}
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	rcu_read_unlock();
+#endif
 
 	if (count != i)
 		dev_warn(kbdev->dev, "Unable to enumerate all OPPs (%d!=%d\n",
@@ -247,6 +257,7 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 	struct device_node *node;
 	int i = 0;
 	int count;
+	u64 shader_present = kbdev->gpu_props.props.raw_props.shader_present;
 
 	if (!opp_node)
 		return 0;
@@ -271,8 +282,14 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 		if (of_property_read_u64(node, "opp-hz-real", &real_freq))
 			real_freq = opp_freq;
 		if (of_property_read_u64(node, "opp-core-mask", &core_mask))
-			core_mask =
-				kbdev->gpu_props.props.raw_props.shader_present;
+			core_mask = shader_present;
+		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_11056) &&
+				core_mask != shader_present) {
+			dev_warn(kbdev->dev, "Ignoring OPP %llu - Dynamic Core Scaling not supported on this GPU\n",
+					opp_freq);
+			continue;
+		}
+
 		core_count_p = of_get_property(node, "opp-core-count", NULL);
 		if (core_count_p) {
 			u64 remaining_core_mask =
@@ -352,7 +369,7 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 	kbdev->devfreq = devfreq_add_device(kbdev->dev, dp,
 				"simple_ondemand", NULL);
 	if (IS_ERR(kbdev->devfreq)) {
-		kbase_devfreq_term_freq_table(kbdev);
+		kfree(dp->freq_table);
 		return PTR_ERR(kbdev->devfreq);
 	}
 
