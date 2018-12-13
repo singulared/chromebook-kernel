@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2012-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2012-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -73,10 +73,14 @@ int kbase_sync_fence_out_create(struct kbase_jd_atom *katom, int stream_fd)
 	if (!fence)
 		return -ENOMEM;
 
-	/* Take an extra reference to the fence on behalf of the katom.
-	 * This is needed because sync_file_create() will take ownership of
-	 * one of these refs */
+#if (KERNEL_VERSION(4, 9, 67) >= LINUX_VERSION_CODE)
+	/* Take an extra reference to the fence on behalf of the sync_file.
+	 * This is only needed on older kernels where sync_file_create()
+	 * does not take its own reference. This was changed in v4.9.68,
+	 * where sync_file_create() now takes its own reference.
+	 */
 	dma_fence_get(fence);
+#endif
 
 	/* create a sync_file fd representing the fence */
 	sync_file = sync_file_create(fence);
@@ -166,7 +170,9 @@ static void kbase_fence_wait_callback(struct dma_fence *fence,
 	struct kbase_context *kctx = katom->kctx;
 
 	/* Cancel atom if fence is erroneous */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+#if (KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE || \
+	 (KERNEL_VERSION(4, 10, 0) > LINUX_VERSION_CODE && \
+	  KERNEL_VERSION(4, 9, 68) <= LINUX_VERSION_CODE))
 	if (dma_fence_is_signaled(kcb->fence) && kcb->fence->error)
 #else
 	if (dma_fence_is_signaled(kcb->fence) && kcb->fence->status < 0)
@@ -282,7 +288,9 @@ static void kbase_sync_fence_info_get(struct dma_fence *fence,
 	 * 1 : signaled
 	 */
 	if (dma_fence_is_signaled(fence)) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+#if (KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE || \
+	 (KERNEL_VERSION(4, 10, 0) > LINUX_VERSION_CODE && \
+	  KERNEL_VERSION(4, 9, 68) <= LINUX_VERSION_CODE))
 		int status = fence->error;
 #else
 		int status = fence->status;
