@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -19,7 +19,6 @@
  * SPDX-License-Identifier: GPL-2.0
  *
  */
-
 
 
 #include "mali_kbase.h"
@@ -46,33 +45,28 @@
  */
 static inline void page_table_entry_set(u64 *pte, u64 phy)
 {
+#if KERNEL_VERSION(3, 18, 13) <= LINUX_VERSION_CODE
+	WRITE_ONCE(*pte, phy);
+#else
 #ifdef CONFIG_64BIT
+	barrier();
 	*pte = phy;
+	barrier();
 #elif defined(CONFIG_ARM)
-	/*
-	 * In order to prevent the compiler keeping cached copies of
-	 * memory, we have to explicitly say that we have updated
-	 * memory.
-	 *
-	 * Note: We could manually move the data ourselves into R0 and
-	 * R1 by specifying register variables that are explicitly
-	 * given registers assignments, the down side of this is that
-	 * we have to assume cpu endianness.  To avoid this we can use
-	 * the ldrd to read the data from memory into R0 and R1 which
-	 * will respect the cpu endianness, we then use strd to make
-	 * the 64 bit assignment to the page table entry.
-	 */
-	asm volatile("ldrd r0, r1, [%[ptemp]]\n\t"
-			"strd r0, r1, [%[pte]]\n\t"
-			: "=m" (*pte)
-			: [ptemp] "r" (&phy), [pte] "r" (pte), "m" (phy)
-			: "r0", "r1");
+	barrier();
+	asm volatile("ldrd r0, [%1]\n\t"
+		     "strd r0, %0\n\t"
+		     : "=m" (*pte)
+		     : "r" (&phy)
+		     : "r0", "r1");
+	barrier();
 #else
 #error "64-bit atomic write must be implemented for your architecture"
 #endif
+#endif
 }
 
-static void mmu_get_as_setup(struct kbase_context *kctx,
+static void mmu_get_as_setup(struct kbase_mmu_table *mmut,
 		struct kbase_mmu_setup * const setup)
 {
 	/* Set up the required caching policies at the correct indices
@@ -90,7 +84,7 @@ static void mmu_get_as_setup(struct kbase_context *kctx,
 		(AS_MEMATTR_INDEX_OUTER_WA * 8))              |
 		0; /* The other indices are unused for now */
 
-	setup->transtab = ((u64)kctx->pgd &
+	setup->transtab = ((u64)mmut->pgd &
 		((0xFFFFFFFFULL << 32) | AS_TRANSTAB_LPAE_ADDR_SPACE_MASK)) |
 		AS_TRANSTAB_LPAE_ADRMODE_TABLE |
 		AS_TRANSTAB_LPAE_READ_INNER;
@@ -98,16 +92,23 @@ static void mmu_get_as_setup(struct kbase_context *kctx,
 	setup->transcfg = 0;
 }
 
-static void mmu_update(struct kbase_context *kctx)
+static void mmu_update(struct kbase_device *kbdev,
+		struct kbase_mmu_table *mmut,
+		int as_nr)
 {
-	struct kbase_device * const kbdev = kctx->kbdev;
-	struct kbase_as * const as = &kbdev->as[kctx->as_nr];
-	struct kbase_mmu_setup * const current_setup = &as->current_setup;
+	struct kbase_as *as;
+	struct kbase_mmu_setup *current_setup;
 
-	mmu_get_as_setup(kctx, current_setup);
+	if (WARN_ON(as_nr == KBASEP_AS_NR_INVALID))
+		return;
+
+	as = &kbdev->as[as_nr];
+	current_setup = &as->current_setup;
+
+	mmu_get_as_setup(mmut, current_setup);
 
 	/* Apply the address space setting */
-	kbase_mmu_hw_configure(kbdev, as, kctx);
+	kbase_mmu_hw_configure(kbdev, as);
 }
 
 static void mmu_disable_as(struct kbase_device *kbdev, int as_nr)
@@ -118,7 +119,7 @@ static void mmu_disable_as(struct kbase_device *kbdev, int as_nr)
 	current_setup->transtab = AS_TRANSTAB_LPAE_ADRMODE_UNMAPPED;
 
 	/* Apply the address space setting */
-	kbase_mmu_hw_configure(kbdev, as, NULL);
+	kbase_mmu_hw_configure(kbdev, as);
 }
 
 static phys_addr_t pte_to_phy_addr(u64 entry)
@@ -145,9 +146,17 @@ static int pte_is_valid(u64 pte, unsigned int level)
 static u64 get_mmu_flags(unsigned long flags)
 {
 	u64 mmu_flags;
+	unsigned long memattr_idx;
 
-	/* store mem_attr index as 4:2 (macro called ensures 3 bits already) */
-	mmu_flags = KBASE_REG_MEMATTR_VALUE(flags) << 2;
+	memattr_idx = KBASE_REG_MEMATTR_VALUE(flags);
+	if (WARN(memattr_idx == AS_MEMATTR_INDEX_NON_CACHEABLE,
+			"Legacy Mode MMU cannot honor GPU non-cachable memory, will use default instead\n"))
+		memattr_idx = AS_MEMATTR_INDEX_DEFAULT;
+	/* store mem_attr index as 4:2, noting that:
+	 * - macro called above ensures 3 bits already
+	 * - all AS_MEMATTR_INDEX_<...> macros only use 3 bits
+	 */
+	mmu_flags = memattr_idx << 2;
 
 	/* write perm if requested */
 	mmu_flags |= (flags & KBASE_REG_GPU_WR) ? ENTRY_WR_BIT : 0;
@@ -195,7 +204,8 @@ static struct kbase_mmu_mode const lpae_mode = {
 	.pte_is_valid = pte_is_valid,
 	.entry_set_ate = entry_set_ate,
 	.entry_set_pte = entry_set_pte,
-	.entry_invalidate = entry_invalidate
+	.entry_invalidate = entry_invalidate,
+	.flags = 0
 };
 
 struct kbase_mmu_mode const *kbase_mmu_mode_get_lpae(void)

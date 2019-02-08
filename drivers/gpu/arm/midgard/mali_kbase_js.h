@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2011-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -596,6 +596,27 @@ bool kbase_js_is_atom_valid(struct kbase_device *kbdev,
  */
 void kbase_js_set_timeouts(struct kbase_device *kbdev);
 
+/**
+ * kbase_js_set_ctx_priority - set the context priority
+ * @kctx: Context pointer
+ * @new_priority: New priority value for the Context
+ *
+ * The context priority is set to a new value and it is moved to the
+ * pullable/unpullable list as per the new priority.
+ */
+void kbase_js_set_ctx_priority(struct kbase_context *kctx, int new_priority);
+
+
+/**
+ * kbase_js_update_ctx_priority - update the context priority
+ * @kctx: Context pointer
+ *
+ * The context priority gets updated as per the priority of atoms currently in
+ * use for that context, but only if system priority mode for context scheduling
+ * is being used.
+ */
+void kbase_js_update_ctx_priority(struct kbase_context *kctx);
+
 /*
  * Helpers follow
  */
@@ -641,7 +662,8 @@ static inline void kbasep_js_set_submit_allowed(struct kbasep_js_device_data *js
 
 	set_bit = (u16) (1u << kctx->as_nr);
 
-	dev_dbg(kctx->kbdev->dev, "JS: Setting Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	dev_dbg(kctx->kbdev->dev, "JS: Setting Submit Allowed on %p (as=%d)",
+			kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed |= set_bit;
 }
@@ -666,7 +688,8 @@ static inline void kbasep_js_clear_submit_allowed(struct kbasep_js_device_data *
 	clear_bit = (u16) (1u << kctx->as_nr);
 	clear_mask = ~clear_bit;
 
-	dev_dbg(kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)", kctx, kctx->as_nr);
+	dev_dbg(kctx->kbdev->dev, "JS: Clearing Submit Allowed on %p (as=%d)",
+			kctx, kctx->as_nr);
 
 	js_devdata->runpool_irq.submit_allowed &= clear_mask;
 }

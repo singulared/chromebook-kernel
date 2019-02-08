@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -32,15 +32,6 @@
 #include <mali_kbase_dma_fence.h>
 #include <mali_kbase_ctx_sched.h>
 
-/**
- * kbase_create_context() - Create a kernel base context.
- * @kbdev: Kbase device
- * @is_compat: Force creation of a 32-bit context
- *
- * Allocate and init a kernel base context.
- *
- * Return: new kbase context
- */
 struct kbase_context *
 kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 {
@@ -69,9 +60,6 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 		kbase_ctx_flag_set(kctx, KCTX_FORCE_SAME_VA);
 #endif /* !defined(CONFIG_64BIT) */
 
-#ifdef CONFIG_MALI_TRACE_TIMELINE
-	kctx->timeline.owner_tgid = task_tgid_nr(current);
-#endif
 	atomic_set(&kctx->setup_complete, 0);
 	atomic_set(&kctx->setup_in_progress, 0);
 	spin_lock_init(&kctx->mm_update_lock);
@@ -115,11 +103,12 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	if (err)
 		goto free_jd;
 
+
 	atomic_set(&kctx->drain_pending, 0);
 
 	mutex_init(&kctx->reg_lock);
 
-	mutex_init(&kctx->mem_partials_lock);
+	spin_lock_init(&kctx->mem_partials_lock);
 	INIT_LIST_HEAD(&kctx->mem_partials);
 
 	INIT_LIST_HEAD(&kctx->waiting_soft_jobs);
@@ -128,20 +117,9 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	if (err)
 		goto free_event;
 
-	err = kbase_mmu_init(kctx);
+	err = kbase_mmu_init(kbdev, &kctx->mmu, kctx);
 	if (err)
 		goto term_dma_fence;
-
-	do {
-		err = kbase_mem_pool_grow(&kctx->mem_pool,
-				MIDGARD_MMU_BOTTOMLEVEL);
-		if (err)
-			goto pgd_no_mem;
-
-		mutex_lock(&kctx->mmu_lock);
-		kctx->pgd = kbase_mmu_alloc_pgd(kctx);
-		mutex_unlock(&kctx->mmu_lock);
-	} while (!kctx->pgd);
 
 	p = kbase_mem_alloc_page(&kctx->mem_pool);
 	if (!p)
@@ -151,6 +129,7 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 	init_waitqueue_head(&kctx->event_queue);
 
 	kctx->cookies = KBASE_COOKIE_MASK;
+
 
 	/* Make sure page 0 is not used... */
 	err = kbase_region_tracker_init(kctx);
@@ -167,17 +146,13 @@ kbase_create_context(struct kbase_device *kbdev, bool is_compat)
 #ifdef CONFIG_GPU_TRACEPOINTS
 	atomic_set(&kctx->jctx.work_id, 0);
 #endif
-#ifdef CONFIG_MALI_TRACE_TIMELINE
-	atomic_set(&kctx->timeline.jd_atoms_in_flight, 0);
-#endif
 
 	kctx->id = atomic_add_return(1, &(kbdev->ctx_num)) - 1;
 
 	mutex_init(&kctx->vinstr_cli_lock);
 
-	setup_timer(&kctx->soft_job_timeout,
-		    kbasep_soft_job_timeout_worker,
-		    (uintptr_t)kctx);
+	kbase_timer_setup(&kctx->soft_job_timeout,
+			  kbasep_soft_job_timeout_worker);
 
 	return kctx;
 
@@ -190,12 +165,7 @@ no_sticky:
 no_region_tracker:
 	kbase_mem_pool_free(&kctx->mem_pool, p, false);
 no_sink_page:
-	/* VM lock needed for the call to kbase_mmu_free_pgd */
-	kbase_gpu_vm_lock(kctx);
-	kbase_mmu_free_pgd(kctx);
-	kbase_gpu_vm_unlock(kctx);
-pgd_no_mem:
-	kbase_mmu_term(kctx);
+	kbase_mmu_term(kbdev, &kctx->mmu);
 term_dma_fence:
 	kbase_dma_fence_term(kctx);
 free_event:
@@ -217,21 +187,15 @@ out:
 }
 KBASE_EXPORT_SYMBOL(kbase_create_context);
 
-static void kbase_reg_pending_dtor(struct kbase_va_region *reg)
+static void kbase_reg_pending_dtor(struct kbase_device *kbdev,
+		struct kbase_va_region *reg)
 {
-	dev_dbg(reg->kctx->kbdev->dev, "Freeing pending unmapped region\n");
+	dev_dbg(kbdev->dev, "Freeing pending unmapped region\n");
 	kbase_mem_phy_alloc_put(reg->cpu_alloc);
 	kbase_mem_phy_alloc_put(reg->gpu_alloc);
 	kfree(reg);
 }
 
-/**
- * kbase_destroy_context - Destroy a kernel base context.
- * @kctx: Context to destroy
- *
- * Calls kbase_destroy_os_context() to free OS specific structures.
- * Will release all outstanding regions.
- */
 void kbase_destroy_context(struct kbase_context *kctx)
 {
 	struct kbase_device *kbdev;
@@ -252,6 +216,8 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	 * thread. */
 	kbase_pm_context_active(kbdev);
 
+	kbase_mem_pool_mark_dying(&kctx->mem_pool);
+
 	kbase_jd_zap_context(kctx);
 
 #ifdef CONFIG_DEBUG_FS
@@ -262,6 +228,7 @@ void kbase_destroy_context(struct kbase_context *kctx)
 #endif
 
 	kbase_event_cleanup(kctx);
+
 
 	/*
 	 * JIT must be terminated before the code below as it must be called
@@ -275,11 +242,8 @@ void kbase_destroy_context(struct kbase_context *kctx)
 
 	kbase_sticky_resource_term(kctx);
 
-	/* MMU is disabled as part of scheduling out the context */
-	kbase_mmu_free_pgd(kctx);
-
 	/* drop the aliasing sink page now that it can't be mapped anymore */
-	p = phys_to_page(as_phys_addr_t(kctx->aliasing_sink_page));
+	p = as_page(kctx->aliasing_sink_page);
 	kbase_mem_pool_free(&kctx->mem_pool, p, false);
 
 	/* free pending region setups */
@@ -289,7 +253,7 @@ void kbase_destroy_context(struct kbase_context *kctx)
 
 		BUG_ON(!kctx->pending_regions[cookie]);
 
-		kbase_reg_pending_dtor(kctx->pending_regions[cookie]);
+		kbase_reg_pending_dtor(kbdev, kctx->pending_regions[cookie]);
 
 		kctx->pending_regions[cookie] = NULL;
 		pending_regions_to_clean &= ~(1UL << cookie);
@@ -297,6 +261,7 @@ void kbase_destroy_context(struct kbase_context *kctx)
 
 	kbase_region_tracker_term(kctx);
 	kbase_gpu_vm_unlock(kctx);
+
 
 	/* Safe to call this one even when didn't initialize (assuming kctx was sufficiently zeroed) */
 	kbasep_js_kctx_term(kctx);
@@ -311,7 +276,7 @@ void kbase_destroy_context(struct kbase_context *kctx)
 	spin_unlock_irqrestore(&kctx->kbdev->hwaccess_lock, flags);
 	mutex_unlock(&kbdev->mmu_hw_mutex);
 
-	kbase_mmu_term(kctx);
+	kbase_mmu_term(kbdev, &kctx->mmu);
 
 	pages = atomic_read(&kctx->used_pages);
 	if (pages != 0)
@@ -328,13 +293,6 @@ void kbase_destroy_context(struct kbase_context *kctx)
 }
 KBASE_EXPORT_SYMBOL(kbase_destroy_context);
 
-/**
- * kbase_context_set_create_flags - Set creation flags on a context
- * @kctx: Kbase context
- * @flags: Flags to set
- *
- * Return: 0 on success
- */
 int kbase_context_set_create_flags(struct kbase_context *kctx, u32 flags)
 {
 	int err = 0;

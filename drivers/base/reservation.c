@@ -249,16 +249,25 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 		fobj = rcu_dereference(obj->fence);
 		if (fobj) {
 			struct fence **nshared;
+			size_t sz = sizeof(*shared) * fobj->shared_max;
 
-			shared_count = ACCESS_ONCE(fobj->shared_count);
-			nshared = krealloc(shared, sizeof(*shared) * shared_count, GFP_KERNEL);
+			nshared = krealloc(shared, sz,
+					   GFP_NOWAIT | __GFP_NOWARN);
 			if (!nshared) {
+				rcu_read_unlock();
+				nshared = krealloc(shared, sz, GFP_KERNEL);
+				if (nshared) {
+					shared = nshared;
+					continue;
+				}
+
 				ret = -ENOMEM;
-				shared_count = retry = 0;
-				goto unlock;
+				shared_count = 0;
+				break;
 			}
 			shared = nshared;
-			memcpy(shared, fobj->shared, sizeof(*shared) * shared_count);
+			memcpy(shared, fobj->shared, sz);
+			shared_count = fobj->shared_count;
 		} else
 			shared_count = 0;
 		fence_excl = rcu_dereference(obj->fence_excl);

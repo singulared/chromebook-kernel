@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -507,9 +507,9 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
 void kbase_pm_do_poweroff(struct kbase_device *kbdev, bool is_suspend);
 
 #if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
-void kbase_pm_get_dvfs_utilisation(struct kbase_device *kbdev,
-		unsigned long *total, unsigned long *busy);
-void kbase_pm_reset_dvfs_utilisation(struct kbase_device *kbdev);
+void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev,
+			       struct kbasep_pm_metrics *last,
+			       struct kbasep_pm_metrics *diff);
 #endif /* defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS) */
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
@@ -564,5 +564,17 @@ void kbase_pm_cache_snoop_enable(struct kbase_device *kbdev);
  * This function should be called before L2 power off.
  */
 void kbase_pm_cache_snoop_disable(struct kbase_device *kbdev);
+
+#ifdef CONFIG_MALI_DEVFREQ
+/**
+ * kbase_devfreq_set_core_mask - Set devfreq core mask
+ * @kbdev:     Device pointer
+ * @core_mask: New core mask
+ *
+ * This function is used by devfreq to change the available core mask as
+ * required by Dynamic Core Scaling.
+ */
+void kbase_devfreq_set_core_mask(struct kbase_device *kbdev, u64 core_mask);
+#endif
 
 #endif /* _KBASE_BACKEND_PM_INTERNAL_H_ */
