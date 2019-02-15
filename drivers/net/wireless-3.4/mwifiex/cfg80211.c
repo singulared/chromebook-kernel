@@ -1705,8 +1705,10 @@ int mwifiex_register_cfg80211(struct mwifiex_private *priv)
 	wdev->wiphy->max_scan_ssids = 10;
 	wdev->wiphy->max_scan_ie_len = MWIFIEX_MAX_VSIE_LEN;
 	wdev->wiphy->mgmt_stypes = mwifiex_mgmt_stypes;
-	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) |
-				       BIT(NL80211_IFTYPE_ADHOC);
+	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION);
+
+	if (ISSUPP_ADHOC_ENABLED(priv->adapter->fw_cap_info))
+		wdev->wiphy->interface_modes |= BIT(NL80211_IFTYPE_ADHOC);
 
 	wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = &mwifiex_band_2ghz;
 	ht_info = &wdev->wiphy->bands[IEEE80211_BAND_2GHZ]->ht_cap;
