@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -86,6 +86,7 @@ bool kbase_backend_use_ctx(struct kbase_device *kbdev,
  * kbase_backend_use_ctx_sched() - Activate a context.
  * @kbdev:	Device pointer
  * @kctx:	Context pointer
+ * @js:         Job slot to activate context on
  *
  * kbase_gpu_next_job() will pull atoms from the active context.
  *
@@ -99,7 +100,7 @@ bool kbase_backend_use_ctx(struct kbase_device *kbdev,
  *	   not have an address space assigned)
  */
 bool kbase_backend_use_ctx_sched(struct kbase_device *kbdev,
-					struct kbase_context *kctx);
+					struct kbase_context *kctx, int js);
 
 /**
  * kbase_backend_release_ctx_irq - Release a context from the GPU. This will
@@ -159,14 +160,13 @@ void kbase_backend_complete_wq(struct kbase_device *kbdev,
  *                                        any scheduling has taken place.
  * @kbdev:         Device pointer
  * @core_req:      Core requirements of atom
- * @affinity:      Affinity of atom
  * @coreref_state: Coreref state of atom
  *
  * This function should only be called from kbase_jd_done_worker() or
  * js_return_worker().
  */
 void kbase_backend_complete_wq_post_sched(struct kbase_device *kbdev,
-		base_jd_core_req core_req, u64 affinity,
+		base_jd_core_req core_req,
 		enum kbase_atom_coreref_state coreref_state);
 
 /**
@@ -176,17 +176,6 @@ void kbase_backend_complete_wq_post_sched(struct kbase_device *kbdev,
  * @end_timestamp:	Timestamp of reset
  */
 void kbase_backend_reset(struct kbase_device *kbdev, ktime_t *end_timestamp);
-
-/**
- * kbase_backend_inspect_head() - Return the atom currently at the head of slot
- *				  @js
- * @kbdev:	Device pointer
- * @js:		Job slot to inspect
- *
- * Return : Atom currently at the head of slot @js, or NULL
- */
-struct kbase_jd_atom *kbase_backend_inspect_head(struct kbase_device *kbdev,
-					int js);
 
 /**
  * kbase_backend_inspect_tail - Return the atom currently at the tail of slot
@@ -381,6 +370,9 @@ bool kbase_reset_gpu_active(struct kbase_device *kbdev);
 void kbase_job_slot_hardstop(struct kbase_context *kctx, int js,
 				struct kbase_jd_atom *target_katom);
 
+/* Object containing callbacks for enabling/disabling protected mode, used
+ * on GPU which supports protected mode switching natively.
+ */
 extern struct protected_mode_ops kbase_native_protected_ops;
 
 #endif /* _KBASE_HWACCESS_JM_H_ */

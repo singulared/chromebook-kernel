@@ -2920,6 +2920,10 @@ enum nl80211_ap_sme_features {
  * @NL80211_FEATURE_HT_IBSS: This driver supports IBSS with HT datarates.
  * @NL80211_FEATURE_INACTIVITY_TIMER: This driver takes care of freeing up
  *	the connected inactive stations in AP mode.
+ * @NL80211_FEATURE_LOW_PRIORITY_SCAN: This driver supports low priority scan
+ *  ** NOTE: this is only partially plumbed through the system, and only for
+ *     wireless-3.4/mwifiex. This corresponds to CFG80211_SCAN_FLAG_TX_ABORT
+ *     and NL80211_SCAN_FLAG_TX_ABORT, which exist only in wireless-3.4. **
  * @NL80211_FEATURE_NEED_OBSS_SCAN: The driver expects userspace to perform
  *      OBSS scans and generate 20/40 BSS coex reports. This flag is used only
  *      for drivers implementing the CONNECT API, for AUTH/ASSOC it is implied.
@@ -2928,6 +2932,7 @@ enum nl80211_feature_flags {
 	NL80211_FEATURE_SK_TX_STATUS	= 1 << 0,
 	NL80211_FEATURE_HT_IBSS		= 1 << 1,
 	NL80211_FEATURE_INACTIVITY_TIMER = 1 << 2,
+	NL80211_FEATURE_LOW_PRIORITY_SCAN = 1 << 6,
 	NL80211_FEATURE_NEED_OBSS_SCAN   = 1 << 10,
 };
 

@@ -1719,7 +1719,8 @@ int mwifiex_register_cfg80211(struct mwifiex_private *priv)
 
 	wdev->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
 
-	wdev->wiphy->features |= NL80211_FEATURE_NEED_OBSS_SCAN;
+	wdev->wiphy->features |= NL80211_FEATURE_NEED_OBSS_SCAN |
+				 NL80211_FEATURE_LOW_PRIORITY_SCAN;
 
 	wdev->wiphy->probe_resp_offload =
 				    NL80211_PROBE_RESP_OFFLOAD_SUPPORT_WPS |
