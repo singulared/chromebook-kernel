@@ -1,26 +1,30 @@
 /*
  *
- * (C) COPYRIGHT 2014-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 #include "mali_kbase.h"
 #include "mali_kbase_hw.h"
 #include "mali_kbase_mem_linux.h"
 #include "mali_kbase_gator_api.h"
 #include "mali_kbase_gator_hwcnt_names.h"
-#include "mali_kbase_instr.h"
 
 #define MALI_MAX_CORES_PER_GROUP		4
 #define MALI_MAX_NUM_BLOCKS_PER_GROUP	8
@@ -42,7 +46,6 @@ const char * const *kbase_gator_hwcnt_init_names(uint32_t *total_counters)
 {
 	const char * const *hardware_counters;
 	struct kbase_device *kbdev;
-	uint32_t gpu_id;
 	uint32_t product_id;
 	uint32_t count;
 
@@ -54,25 +57,51 @@ const char * const *kbase_gator_hwcnt_init_names(uint32_t *total_counters)
 	if (!kbdev)
 		return NULL;
 
-	gpu_id = kbdev->gpu_props.props.core_props.product_id;
-	product_id = gpu_id & GPU_ID_VERSION_PRODUCT_ID;
-	product_id >>= GPU_ID_VERSION_PRODUCT_ID_SHIFT;
+	product_id = kbdev->gpu_props.props.core_props.product_id;
 
 	if (GPU_ID_IS_NEW_FORMAT(product_id)) {
-		switch (gpu_id & GPU_ID2_PRODUCT_MODEL) {
+		switch (GPU_ID2_MODEL_MATCH_VALUE(product_id)) {
 		case GPU_ID2_PRODUCT_TMIX:
 			hardware_counters = hardware_counters_mali_tMIx;
 			count = ARRAY_SIZE(hardware_counters_mali_tMIx);
 			break;
+		case GPU_ID2_PRODUCT_THEX:
+			hardware_counters = hardware_counters_mali_tHEx;
+			count = ARRAY_SIZE(hardware_counters_mali_tHEx);
+			break;
+		case GPU_ID2_PRODUCT_TSIX:
+			hardware_counters = hardware_counters_mali_tSIx;
+			count = ARRAY_SIZE(hardware_counters_mali_tSIx);
+			break;
+		case GPU_ID2_PRODUCT_TDVX:
+			hardware_counters = hardware_counters_mali_tSIx;
+			count = ARRAY_SIZE(hardware_counters_mali_tSIx);
+			break;
+		case GPU_ID2_PRODUCT_TNOX:
+			hardware_counters = hardware_counters_mali_tNOx;
+			count = ARRAY_SIZE(hardware_counters_mali_tNOx);
+			break;
+		case GPU_ID2_PRODUCT_TGOX:
+			hardware_counters = hardware_counters_mali_tGOx;
+			count = ARRAY_SIZE(hardware_counters_mali_tGOx);
+			break;
+		case GPU_ID2_PRODUCT_TKAX:
+			hardware_counters = hardware_counters_mali_tKAx;
+			count = ARRAY_SIZE(hardware_counters_mali_tKAx);
+			break;
+		case GPU_ID2_PRODUCT_TTRX:
+			hardware_counters = hardware_counters_mali_tTRx;
+			count = ARRAY_SIZE(hardware_counters_mali_tTRx);
+			break;
 		default:
 			hardware_counters = NULL;
 			count = 0;
-			dev_err(kbdev->dev, "Unrecognized gpu ID: %u\n",
-				gpu_id);
+			dev_err(kbdev->dev, "Unrecognized product ID: %u\n",
+				product_id);
 			break;
 		}
 	} else {
-		switch (gpu_id) {
+		switch (product_id) {
 			/* If we are using a Mali-T60x device */
 		case GPU_ID_PI_T60X:
 			hardware_counters = hardware_counters_mali_t60x;
@@ -116,8 +145,8 @@ const char * const *kbase_gator_hwcnt_init_names(uint32_t *total_counters)
 		default:
 			hardware_counters = NULL;
 			count = 0;
-			dev_err(kbdev->dev, "Unrecognized gpu ID: %u\n",
-				gpu_id);
+			dev_err(kbdev->dev, "Unrecognized product ID: %u\n",
+				product_id);
 			break;
 		}
 	}
@@ -145,7 +174,7 @@ KBASE_EXPORT_SYMBOL(kbase_gator_hwcnt_term_names);
 struct kbase_gator_hwcnt_handles *kbase_gator_hwcnt_init(struct kbase_gator_hwcnt_info *in_out_info)
 {
 	struct kbase_gator_hwcnt_handles *hand;
-	struct kbase_uk_hwcnt_reader_setup setup;
+	struct kbase_ioctl_hwcnt_reader_setup setup;
 	uint32_t dump_size = 0, i = 0;
 
 	if (!in_out_info)

@@ -8,6 +8,7 @@
  * Copyright 2007, Michael Wu <flamingice@sourmilk.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
  * Copyright 2016-2017  Intel Deutschland GmbH
+ * Copyright (C) 2018 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -20,6 +21,7 @@
 #include <net/sch_generic.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/random.h>
 #include <net/mac80211.h>
 
 #include "ieee80211_i.h"
@@ -73,7 +75,9 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	bool signal_valid;
 	struct ieee80211_sub_if_data *scan_sdata;
 
-	if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
+	if (rx_status->flag & RX_FLAG_NO_SIGNAL_VAL)
+		bss_meta.signal = 0; /* invalid signal indication */
+	else if (ieee80211_hw_check(&local->hw, SIGNAL_DBM))
 		bss_meta.signal = rx_status->signal * 100;
 	else if (ieee80211_hw_check(&local->hw, SIGNAL_UNSPEC))
 		bss_meta.signal = (rx_status->signal * 100) / local->hw.max_signal;
@@ -91,11 +95,17 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (scan_sdata && scan_sdata->vif.type == NL80211_IFTYPE_STATION &&
 	    scan_sdata->vif.bss_conf.assoc &&
 	    ieee80211_have_rx_timestamp(rx_status)) {
+#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		bss_meta.parent_tsf =
 			ieee80211_calculate_rx_timestamp(local, rx_status,
 							 len + FCS_LEN, 24);
+#endif
+#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		ether_addr_copy(bss_meta.parent_bssid,
 				scan_sdata->vif.bss_conf.bssid);
+#else
+		scan_sdata->vif.bss_conf.bssid = scan_sdata->vif.bss_conf.bssid;
+#endif
 	}
 	rcu_read_unlock();
 
@@ -104,8 +114,7 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	if (!cbss)
 		return NULL;
 	/* In case the signal is invalid update the status */
-	signal_valid = abs(channel->center_freq - cbss->channel->center_freq)
-		<= local->hw.wiphy->max_adj_channel_rssi_comp;
+	signal_valid = channel == cbss->channel;
 	if (!signal_valid)
 		rx_status->flag |= RX_FLAG_NO_SIGNAL_VAL;
 
@@ -189,7 +198,8 @@ static bool ieee80211_scan_accept_presp(struct ieee80211_sub_if_data *sdata,
 	if (!sdata)
 		return false;
 	/* accept broadcast for OCE */
-	if (is_broadcast_ether_addr(da))
+	if (scan_flags & NL80211_SCAN_FLAG_ACCEPT_BCAST_PROBE_RESP &&
+	    is_broadcast_ether_addr(da))
 		return true;
 	if (scan_flags & NL80211_SCAN_FLAG_RANDOM_ADDR)
 		return true;
@@ -290,6 +300,7 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 	struct cfg80211_chan_def chandef;
 	u8 bands_used = 0;
 	int i, ielen, n_chans;
+	u32 flags = 0;
 
 	req = rcu_dereference_protected(local->scan_req,
 					lockdep_is_held(&local->mtx));
@@ -326,20 +337,27 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 	}
 
 	local->hw_scan_req->req.n_channels = n_chans;
-	ieee80211_prepare_scan_chandef(&chandef, req->scan_width);
+	ieee80211_prepare_scan_chandef(&chandef, cfg_scan_req_width(req));
+
+	if (req->flags & NL80211_SCAN_FLAG_MIN_PREQ_CONTENT)
+		flags |= IEEE80211_PROBE_FLAG_MIN_CONTENT;
 
 	ielen = ieee80211_build_preq_ies(local,
 					 (u8 *)local->hw_scan_req->req.ie,
 					 local->hw_scan_ies_bufsize,
 					 &local->hw_scan_req->ies,
 					 req->ie, req->ie_len,
-					 bands_used, req->rates, &chandef);
+					 bands_used, req->rates, &chandef,
+					 flags);
 	local->hw_scan_req->req.ie_len = ielen;
 	local->hw_scan_req->req.no_cck = req->no_cck;
 	ether_addr_copy(local->hw_scan_req->req.mac_addr, req->mac_addr);
 	ether_addr_copy(local->hw_scan_req->req.mac_addr_mask,
 			req->mac_addr_mask);
-	ether_addr_copy(local->hw_scan_req->req.bssid, req->bssid);
+#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
+	ether_addr_copy(local->hw_scan_req->req.bssid,
+			cfg80211_scan_req_bssid(req));
+#endif
 
 	return true;
 }
@@ -525,6 +543,35 @@ void ieee80211_run_deferred_scan(struct ieee80211_local *local)
 				     round_jiffies_relative(0));
 }
 
+static void ieee80211_send_scan_probe_req(struct ieee80211_sub_if_data *sdata,
+					  const u8 *src, const u8 *dst,
+					  const u8 *ssid, size_t ssid_len,
+					  const u8 *ie, size_t ie_len,
+					  u32 ratemask, u32 flags, u32 tx_flags,
+					  struct ieee80211_channel *channel)
+{
+	struct sk_buff *skb;
+	u32 txdata_flags = 0;
+
+	skb = ieee80211_build_probe_req(sdata, src, dst, ratemask, channel,
+					ssid, ssid_len,
+					ie, ie_len, flags);
+
+	if (skb) {
+		if (flags & IEEE80211_PROBE_FLAG_RANDOM_SN) {
+			struct ieee80211_hdr *hdr = (void *)skb->data;
+			u16 sn = get_random_u32();
+
+			txdata_flags |= IEEE80211_TX_NO_SEQNO;
+			hdr->seq_ctrl =
+				cpu_to_le16(IEEE80211_SN_TO_SEQ(sn));
+		}
+		IEEE80211_SKB_CB(skb)->flags |= tx_flags;
+		ieee80211_tx_skb_tid_band(sdata, skb, 7, channel->band,
+					  txdata_flags);
+	}
+}
+
 static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 					    unsigned long *next_delay)
 {
@@ -532,7 +579,7 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 	struct ieee80211_sub_if_data *sdata;
 	struct cfg80211_scan_request *scan_req;
 	enum nl80211_band band = local->hw.conf.chandef.chan->band;
-	u32 tx_flags;
+	u32 flags = 0, tx_flags;
 
 	scan_req = rcu_dereference_protected(local->scan_req,
 					     lockdep_is_held(&local->mtx));
@@ -540,17 +587,22 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 	tx_flags = IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
 	if (scan_req->no_cck)
 		tx_flags |= IEEE80211_TX_CTL_NO_CCK_RATE;
+	if (scan_req->flags & NL80211_SCAN_FLAG_MIN_PREQ_CONTENT)
+		flags |= IEEE80211_PROBE_FLAG_MIN_CONTENT;
+	if (scan_req->flags & NL80211_SCAN_FLAG_RANDOM_SN)
+		flags |= IEEE80211_PROBE_FLAG_RANDOM_SN;
 
 	sdata = rcu_dereference_protected(local->scan_sdata,
 					  lockdep_is_held(&local->mtx));
 
 	for (i = 0; i < scan_req->n_ssids; i++)
-		ieee80211_send_probe_req(
-			sdata, local->scan_addr, scan_req->bssid,
+		ieee80211_send_scan_probe_req(
+			sdata, local->scan_addr,
+			cfg80211_scan_req_bssid(scan_req),
 			scan_req->ssids[i].ssid, scan_req->ssids[i].ssid_len,
 			scan_req->ie, scan_req->ie_len,
-			scan_req->rates[band], false,
-			tx_flags, local->hw.conf.chandef.chan, true);
+			scan_req->rates[band], flags,
+			tx_flags, local->hw.conf.chandef.chan);
 
 	/*
 	 * After sending probe requests, wait for probe responses
@@ -611,10 +663,16 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			req->n_channels * sizeof(req->channels[0]);
 		local->hw_scan_req->req.ie = ies;
 		local->hw_scan_req->req.flags = req->flags;
+#if CFG80211_VERSION >= KERNEL_VERSION(4,7,0)
 		eth_broadcast_addr(local->hw_scan_req->req.bssid);
+#endif
+#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration = req->duration;
+#endif
+#if CFG80211_VERSION > KERNEL_VERSION(4,8,0)
 		local->hw_scan_req->req.duration_mandatory =
 			req->duration_mandatory;
+#endif
 
 		local->hw_scan_band = 0;
 
@@ -797,7 +855,7 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 	local->scan_chandef.chan = chan;
 	local->scan_chandef.center_freq1 = chan->center_freq;
 	local->scan_chandef.center_freq2 = 0;
-	switch (scan_req->scan_width) {
+	switch (cfg_scan_req_width(scan_req)) {
 	case NL80211_BSS_CHAN_WIDTH_5:
 		local->scan_chandef.width = NL80211_CHAN_WIDTH_5;
 		break;
@@ -811,7 +869,7 @@ static void ieee80211_scan_state_set_channel(struct ieee80211_local *local,
 		oper_scan_width = cfg80211_chandef_to_scan_width(
 					&local->_oper_chandef);
 		if (chan == local->_oper_chandef.chan &&
-		    oper_scan_width == scan_req->scan_width)
+		    oper_scan_width == cfg_scan_req_width(scan_req))
 			local->scan_chandef = local->_oper_chandef;
 		else
 			local->scan_chandef.width = NL80211_CHAN_WIDTH_20_NOHT;
@@ -1054,7 +1112,9 @@ int ieee80211_request_ibss_scan(struct ieee80211_sub_if_data *sdata,
 
 	local->int_scan_req->ssids = &local->scan_ssid;
 	local->int_scan_req->n_ssids = 1;
+#if CFG80211_VERSION >= KERNEL_VERSION(3,12,0)
 	local->int_scan_req->scan_width = scan_width;
+#endif
 	memcpy(local->int_scan_req->ssids[0].ssid, ssid, IEEE80211_MAX_SSID_LEN);
 	local->int_scan_req->ssids[0].ssid_len = ssid_len;
 
@@ -1138,6 +1198,7 @@ int __ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 	u32 rate_masks[NUM_NL80211_BANDS] = {};
 	u8 bands_used = 0;
 	u8 *ie;
+	u32 flags = 0;
 
 	iebufsz = local->scan_ies_len + req->ie_len;
 
@@ -1154,17 +1215,21 @@ int __ieee80211_request_sched_scan_start(struct ieee80211_sub_if_data *sdata,
 		}
 	}
 
-	ie = kzalloc(num_bands * iebufsz, GFP_KERNEL);
+	if (req->flags & NL80211_SCAN_FLAG_MIN_PREQ_CONTENT)
+		flags |= IEEE80211_PROBE_FLAG_MIN_CONTENT;
+
+	ie = kcalloc(iebufsz, num_bands, GFP_KERNEL);
 	if (!ie) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ieee80211_prepare_scan_chandef(&chandef, req->scan_width);
+	ieee80211_prepare_scan_chandef(&chandef, cfg_scan_req_width(req));
 
 	ieee80211_build_preq_ies(local, ie, num_bands * iebufsz,
 				 &sched_scan_ies, req->ie,
-				 req->ie_len, bands_used, rate_masks, &chandef);
+				 req->ie_len, bands_used, rate_masks, &chandef,
+				 flags);
 
 	ret = drv_sched_scan_start(local, sdata, req, &sched_scan_ies);
 	if (ret == 0) {

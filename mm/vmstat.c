@@ -753,6 +753,9 @@ const char * const vmstat_text[] = {
 
 	"pgfault",
 	"pgmajfault",
+	"pgmajfault_s",
+	"pgmajfault_a",
+	"pgmajfault_f",
 
 	TEXTS_FOR_ZONES("pgrefill")
 	TEXTS_FOR_ZONES("pgsteal_kswapd")
@@ -774,6 +777,7 @@ const char * const vmstat_text[] = {
 	"allocstall",
 
 	"pgrotated",
+	"oom_kill",
 
 #ifdef CONFIG_NUMA_BALANCING
 	"numa_pte_updates",
@@ -1122,6 +1126,8 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 	all_vm_events(v);
 	v[PGPGIN] /= 2;		/* sectors -> kbytes */
 	v[PGPGOUT] /= 2;
+	/* Add up page faults */
+	v[PGMAJFAULT] = v[PGMAJFAULT_S] + v[PGMAJFAULT_A] + v[PGMAJFAULT_F];
 #endif
 	return (unsigned long *)m->private + *pos;
 }

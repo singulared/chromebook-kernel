@@ -1118,6 +1118,16 @@ mwifiex_cfg80211_assoc(struct mwifiex_private *priv, size_t ssid_len, u8 *ssid,
 	ret = mwifiex_set_encode(priv, NULL, NULL, 0, 0, 1);
 
 	if (mode == NL80211_IFTYPE_ADHOC) {
+		u16 enable = true;
+
+		/* set ibss coalescing_status */
+		ret = mwifiex_send_cmd(
+				priv,
+				HostCmd_CMD_802_11_IBSS_COALESCING_STATUS,
+				HostCmd_ACT_GEN_SET, 0, &enable, true);
+		if (ret)
+			return ret;
+
 		/* "privacy" is set only for ad-hoc mode */
 		if (privacy) {
 			/*
@@ -1695,8 +1705,10 @@ int mwifiex_register_cfg80211(struct mwifiex_private *priv)
 	wdev->wiphy->max_scan_ssids = 10;
 	wdev->wiphy->max_scan_ie_len = MWIFIEX_MAX_VSIE_LEN;
 	wdev->wiphy->mgmt_stypes = mwifiex_mgmt_stypes;
-	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) |
-				       BIT(NL80211_IFTYPE_ADHOC);
+	wdev->wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION);
+
+	if (ISSUPP_ADHOC_ENABLED(priv->adapter->fw_cap_info))
+		wdev->wiphy->interface_modes |= BIT(NL80211_IFTYPE_ADHOC);
 
 	wdev->wiphy->bands[IEEE80211_BAND_2GHZ] = &mwifiex_band_2ghz;
 	ht_info = &wdev->wiphy->bands[IEEE80211_BAND_2GHZ]->ht_cap;
@@ -1719,7 +1731,8 @@ int mwifiex_register_cfg80211(struct mwifiex_private *priv)
 
 	wdev->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
 
-	wdev->wiphy->features |= NL80211_FEATURE_NEED_OBSS_SCAN;
+	wdev->wiphy->features |= NL80211_FEATURE_NEED_OBSS_SCAN |
+				 NL80211_FEATURE_LOW_PRIORITY_SCAN;
 
 	wdev->wiphy->probe_resp_offload =
 				    NL80211_PROBE_RESP_OFFLOAD_SUPPORT_WPS |

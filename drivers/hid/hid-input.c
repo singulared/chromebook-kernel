@@ -808,6 +808,7 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x1b8: map_key_clear(KEY_VIDEO);		break;
 		case 0x1bc: map_key_clear(KEY_MESSENGER);	break;
 		case 0x1bd: map_key_clear(KEY_INFO);		break;
+		case 0x1cb: map_key_clear(KEY_ASSISTANT);	break;
 		case 0x201: map_key_clear(KEY_NEW);		break;
 		case 0x202: map_key_clear(KEY_OPEN);		break;
 		case 0x203: map_key_clear(KEY_CLOSE);		break;
@@ -831,6 +832,7 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x22d: map_key_clear(KEY_ZOOMIN);		break;
 		case 0x22e: map_key_clear(KEY_ZOOMOUT);		break;
 		case 0x22f: map_key_clear(KEY_ZOOMRESET);	break;
+		case 0x232: map_key_clear(KEY_FULL_SCREEN);	break;
 		case 0x233: map_key_clear(KEY_SCROLLUP);	break;
 		case 0x234: map_key_clear(KEY_SCROLLDOWN);	break;
 		case 0x238: map_rel(REL_HWHEEL);		break;
@@ -925,8 +927,31 @@ mapped:
 
 	set_bit(usage->type, input->evbit);
 
-	while (usage->code <= max && test_and_set_bit(usage->code, bit))
-		usage->code = find_next_zero_bit(bit, max + 1, usage->code);
+	/*
+	 * This part is *really* controversial:
+	 * - HID aims at being generic so we should do our best to export
+	 *   all incoming events
+	 * - HID describes what events are, so there is no reason for ABS_X
+	 *   to be mapped to ABS_Y
+	 * - HID is using *_MISC+N as a default value, but nothing prevents
+	 *   *_MISC+N to overwrite a legitimate even, which confuses userspace
+	 *   (for instance ABS_MISC + 7 is ABS_MT_SLOT, which has a different
+	 *   processing)
+	 *
+	 * If devices still want to use this (at their own risk), they will
+	 * have to use the quirk HID_QUIRK_INCREMENT_USAGE_ON_DUPLICATE, but
+	 * the default should be a reliable mapping.
+	 */
+	while (usage->code <= max && test_and_set_bit(usage->code, bit)) {
+		if (device->quirks & HID_QUIRK_INCREMENT_USAGE_ON_DUPLICATE) {
+			usage->code = find_next_zero_bit(bit,
+							 max + 1,
+							 usage->code);
+		} else {
+			device->status |= HID_STAT_DUP_DETECTED;
+			goto ignore;
+		}
+	}
 
 	if (usage->code > max)
 		goto ignore;
@@ -1247,6 +1272,8 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 
 	INIT_LIST_HEAD(&hid->inputs);
 
+	hid->status &= ~HID_STAT_DUP_DETECTED;
+
 	if (!force) {
 		for (i = 0; i < hid->maxcollection; i++) {
 			struct hid_collection *col = &hid->collection[i];
@@ -1305,6 +1332,10 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 		if (input_register_device(hidinput->input))
 			goto out_cleanup;
 	}
+
+	if (hid->status & HID_STAT_DUP_DETECTED)
+		hid_dbg(hid,
+			"Some usages could not be mapped, please use HID_QUIRK_INCREMENT_USAGE_ON_DUPLICATE if this is legitimate.\n");
 
 	return 0;
 

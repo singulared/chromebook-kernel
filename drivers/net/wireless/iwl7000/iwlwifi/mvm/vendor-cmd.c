@@ -8,6 +8,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,6 +61,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *****************************************************************************/
+#if CFG80211_VERSION > KERNEL_VERSION(3, 14, 0)
+
 #include <linux/etherdevice.h>
 #include <net/mac80211.h>
 #include <net/netlink.h>
@@ -72,6 +71,44 @@
 
 #include "iwl-io.h"
 #include "iwl-prph.h"
+
+static LIST_HEAD(device_list);
+static DEFINE_SPINLOCK(device_list_lock);
+
+static int iwl_mvm_netlink_notifier(struct notifier_block *nb,
+				    unsigned long state,
+				    void *_notify)
+{
+	struct netlink_notify *notify = _notify;
+	struct iwl_mvm *mvm;
+
+	if (state != NETLINK_URELEASE || notify->protocol != NETLINK_GENERIC)
+		return NOTIFY_DONE;
+
+	spin_lock_bh(&device_list_lock);
+	list_for_each_entry(mvm, &device_list, list) {
+		if (mvm->csi_portid == netlink_notify_portid(notify))
+			mvm->csi_portid = 0;
+	}
+	spin_unlock_bh(&device_list_lock);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block iwl_mvm_netlink_notifier_block = {
+	.notifier_call = iwl_mvm_netlink_notifier,
+};
+
+void iwl_mvm_vendor_cmd_init(void)
+{
+	WARN_ON(netlink_register_notifier(&iwl_mvm_netlink_notifier_block));
+	spin_lock_init(&device_list_lock);
+}
+
+void iwl_mvm_vendor_cmd_exit(void)
+{
+	netlink_unregister_notifier(&iwl_mvm_netlink_notifier_block);
+}
 
 static const struct nla_policy
 iwl_mvm_vendor_attr_policy[NUM_IWL_MVM_VENDOR_ATTR] = {
@@ -98,21 +135,34 @@ iwl_mvm_vendor_attr_policy[NUM_IWL_MVM_VENDOR_ATTR] = {
 	[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER] = { .type = NLA_STRING },
 	[IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ] = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS] = { .type = NLA_U8 },
-	[IWL_MVM_VENDOR_ATTR_LQM_DURATION] = { .type = NLA_U32 },
-	[IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT] = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM] = { .type = NLA_U32 },
 	[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE] = { .type = NLA_U8 },
 	[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE] = { .type = NLA_U8 },
+	[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM] = { .type = NLA_NESTED },
+	[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM] = { .type = NLA_NESTED },
+	[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES] = { .type = NLA_NESTED },
 };
 
-static int iwl_mvm_parse_vendor_data(struct nlattr **tb,
-				     const void *data, int data_len)
+static struct nlattr **iwl_mvm_parse_vendor_data(const void *data, int data_len)
 {
-	if (!data)
-		return -EINVAL;
+	struct nlattr **tb;
+	int err;
 
-	return nla_parse(tb, MAX_IWL_MVM_VENDOR_ATTR, data, data_len,
-			 iwl_mvm_vendor_attr_policy, NULL);
+	if (!data)
+		return ERR_PTR(-EINVAL);
+
+	tb = kcalloc(MAX_IWL_MVM_VENDOR_ATTR + 1, sizeof(*tb), GFP_KERNEL);
+	if (!tb)
+		return ERR_PTR(-ENOMEM);
+
+	err = nla_parse(tb, MAX_IWL_MVM_VENDOR_ATTR, data, data_len,
+			iwl_mvm_vendor_attr_policy, NULL);
+	if (err) {
+		kfree(tb);
+		return ERR_PTR(err);
+	}
+
+	return tb;
 }
 
 static int iwl_mvm_set_low_latency(struct wiphy *wiphy,
@@ -121,25 +171,27 @@ static int iwl_mvm_set_low_latency(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	int err;
 	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-	struct iwl_mvm_vif *mvmvif;
-	bool prev;
+	bool low_latency;
 
 	if (!vif)
 		return -ENODEV;
 
-	mvmvif = iwl_mvm_vif_from_mac80211(vif);
-
-	err = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (err)
-		return err;
+	if (data) {
+		tb = iwl_mvm_parse_vendor_data(data, data_len);
+		if (IS_ERR(tb))
+			return PTR_ERR(tb);
+		low_latency = tb[IWL_MVM_VENDOR_ATTR_LOW_LATENCY];
+		kfree(tb);
+	} else {
+		low_latency = false;
+	}
 
 	mutex_lock(&mvm->mutex);
-	prev = iwl_mvm_vif_low_latency(mvmvif);
-	mvmvif->low_latency_vcmd = tb[IWL_MVM_VENDOR_ATTR_LOW_LATENCY];
-	err = iwl_mvm_update_low_latency(mvm, vif, prev);
+	err = iwl_mvm_update_low_latency(mvm, vif, low_latency,
+					 LOW_LATENCY_VCMD);
 	mutex_unlock(&mvm->mutex);
 
 	return err;
@@ -174,7 +226,7 @@ static int iwl_mvm_set_country(struct wiphy *wiphy,
 			       const void *data, int data_len)
 {
 	struct ieee80211_regdomain *regd;
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	int retval;
@@ -182,12 +234,14 @@ static int iwl_mvm_set_country(struct wiphy *wiphy,
 	if (!iwl_mvm_is_lar_supported(mvm))
 		return -EOPNOTSUPP;
 
-	retval = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (retval)
-		return retval;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_COUNTRY])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_COUNTRY]) {
+		retval = -EINVAL;
+		goto free;
+	}
 
 	mutex_lock(&mvm->mutex);
 
@@ -206,6 +260,8 @@ static int iwl_mvm_set_country(struct wiphy *wiphy,
 	kfree(regd);
 unlock:
 	mutex_unlock(&mvm->mutex);
+free:
+	kfree(tb);
 	return retval;
 }
 
@@ -213,17 +269,21 @@ static int iwl_vendor_frame_filter_cmd(struct wiphy *wiphy,
 				       struct wireless_dev *wdev,
 				       const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-	int err = iwl_mvm_parse_vendor_data(tb, data, data_len);
 
-	if (err)
-		return err;
 	if (!vif)
 		return -EINVAL;
+
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
+
 	vif->filter_grat_arp_unsol_na =
 		tb[IWL_MVM_VENDOR_ATTR_FILTER_ARP_NA];
 	vif->filter_gtk = tb[IWL_MVM_VENDOR_ATTR_FILTER_GTK];
+
+	kfree(tb);
 
 	return 0;
 }
@@ -233,23 +293,26 @@ static int iwl_vendor_tdls_peer_cache_add(struct wiphy *wiphy,
 					  struct wireless_dev *wdev,
 					  const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_tdls_peer_counter *cnt;
 	u8 *addr;
 	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-	int err = iwl_mvm_parse_vendor_data(tb, data, data_len);
-
-	if (err)
-		return err;
+	int err;
 
 	if (!vif)
 		return -ENODEV;
 
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
+
 	if (vif->type != NL80211_IFTYPE_STATION ||
-	    !tb[IWL_MVM_VENDOR_ATTR_ADDR])
-		return -EINVAL;
+	    !tb[IWL_MVM_VENDOR_ATTR_ADDR]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	mutex_lock(&mvm->mutex);
 	if (mvm->tdls_peer_cache_cnt >= IWL_MVM_TDLS_CNT_MAX_PEERS) {
@@ -281,8 +344,12 @@ static int iwl_vendor_tdls_peer_cache_add(struct wiphy *wiphy,
 	list_add_tail_rcu(&cnt->list, &mvm->tdls_peer_cache_list);
 	mvm->tdls_peer_cache_cnt++;
 
+	err = 0;
+
 out_unlock:
 	mutex_unlock(&mvm->mutex);
+free:
+	kfree(tb);
 	return err;
 }
 
@@ -290,18 +357,21 @@ static int iwl_vendor_tdls_peer_cache_del(struct wiphy *wiphy,
 					  struct wireless_dev *wdev,
 					  const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_tdls_peer_counter *cnt;
 	u8 *addr;
-	int err = iwl_mvm_parse_vendor_data(tb, data, data_len);
+	int err;
 
-	if (err)
-		return err;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_ADDR])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_ADDR]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	addr = nla_data(tb[IWL_MVM_VENDOR_ATTR_ADDR]);
 
@@ -318,10 +388,13 @@ static int iwl_vendor_tdls_peer_cache_del(struct wiphy *wiphy,
 	mvm->tdls_peer_cache_cnt--;
 	list_del_rcu(&cnt->list);
 	kfree_rcu(cnt, rcu_head);
+	err = 0;
 
 out_unlock:
 	rcu_read_unlock();
 	mutex_unlock(&mvm->mutex);
+free:
+	kfree(tb);
 	return err;
 }
 
@@ -329,22 +402,28 @@ static int iwl_vendor_tdls_peer_cache_query(struct wiphy *wiphy,
 					    struct wireless_dev *wdev,
 					    const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_tdls_peer_counter *cnt;
 	struct sk_buff *skb;
 	u32 rx_bytes, tx_bytes;
 	u8 *addr;
-	int err = iwl_mvm_parse_vendor_data(tb, data, data_len);
+	int err;
 
-	if (err)
-		return err;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_ADDR])
+	if (!tb[IWL_MVM_VENDOR_ATTR_ADDR]) {
+		kfree(tb);
 		return -EINVAL;
+	}
 
 	addr = nla_data(tb[IWL_MVM_VENDOR_ATTR_ADDR]);
+
+	/* we can free the tb, the addr pointer is still valid into the msg */
+	kfree(tb);
 
 	rcu_read_lock();
 	cnt = iwl_mvm_tdls_peer_cache_find(mvm, addr);
@@ -359,6 +438,7 @@ static int iwl_vendor_tdls_peer_cache_query(struct wiphy *wiphy,
 		rx_bytes = 0;
 		for (q = 0; q < mvm->trans->num_rx_queues; q++)
 			rx_bytes += cnt->rx[q].bytes;
+		err = 0;
 	}
 	rcu_read_unlock();
 	if (err)
@@ -383,48 +463,63 @@ static int iwl_vendor_set_nic_txpower_limit(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct iwl_dev_tx_power_cmd cmd = {
-		.v3.set_mode = cpu_to_le32(IWL_TX_POWER_MODE_SET_DEVICE),
-		.v3.dev_24 = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
-		.v3.dev_52_low = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
-		.v3.dev_52_high = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
+	union {
+		struct iwl_dev_tx_power_cmd_v4 v4;
+		struct iwl_dev_tx_power_cmd v5;
+	} cmd = {
+		.v5.v3.set_mode = cpu_to_le32(IWL_TX_POWER_MODE_SET_DEVICE),
+		.v5.v3.dev_24 = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
+		.v5.v3.dev_52_low = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
+		.v5.v3.dev_52_high = cpu_to_le16(IWL_DEV_MAX_TX_POWER),
 	};
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	int len = sizeof(cmd);
 	int err;
 
-	err = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (err)
-		return err;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
 	if (tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_24]) {
 		s32 txp = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_24]);
 
-		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER)
-			return -EINVAL;
-		cmd.v3.dev_24 = cpu_to_le16(txp);
+		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER) {
+			err = -EINVAL;
+			goto free;
+		}
+		cmd.v5.v3.dev_24 = cpu_to_le16(txp);
 	}
 
 	if (tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52L]) {
 		s32 txp = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52L]);
 
-		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER)
-			return -EINVAL;
-		cmd.v3.dev_52_low = cpu_to_le16(txp);
+		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER) {
+			err = -EINVAL;
+			goto free;
+		}
+		cmd.v5.v3.dev_52_low = cpu_to_le16(txp);
 	}
 
 	if (tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52H]) {
 		s32 txp = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52H]);
 
-		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER)
-			return -EINVAL;
-		cmd.v3.dev_52_high = cpu_to_le16(txp);
+		if (txp < 0 || txp > IWL_DEV_MAX_TX_POWER) {
+			err = -EINVAL;
+			goto free;
+		}
+		cmd.v5.v3.dev_52_high = cpu_to_le16(txp);
 	}
 
-	mvm->txp_cmd = cmd;
+	mvm->txp_cmd.v5 = cmd.v5;
 
-	if (!fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_TX_POWER_ACK))
-		len = sizeof(cmd.v3);
+	if (fw_has_api(&mvm->fw->ucode_capa,
+		       IWL_UCODE_TLV_API_REDUCE_TX_POWER))
+		len = sizeof(mvm->txp_cmd.v5);
+	else if (fw_has_capa(&mvm->fw->ucode_capa,
+			     IWL_UCODE_TLV_CAPA_TX_POWER_ACK))
+		len = sizeof(mvm->txp_cmd.v4);
+	else
+		len = sizeof(mvm->txp_cmd.v4.v3);
 
 	mutex_lock(&mvm->mutex);
 	err = iwl_mvm_send_cmd_pdu(mvm, REDUCE_TX_POWER_CMD, 0, len, &cmd);
@@ -432,7 +527,10 @@ static int iwl_vendor_set_nic_txpower_limit(struct wiphy *wiphy,
 
 	if (err)
 		IWL_ERR(mvm, "failed to update device TX power: %d\n", err);
-	return 0;
+	err = 0;
+free:
+	kfree(tb);
+	return err;
 }
 
 #ifdef CPTCFG_IWLMVM_P2P_OPPPS_TEST_WA
@@ -448,6 +546,12 @@ static int iwl_mvm_oppps_wa_update_quota(struct iwl_mvm *mvm,
 		mvm->p2p_opps_test_wa_vif = mvmvif;
 	else
 		mvm->p2p_opps_test_wa_vif = NULL;
+
+	if (fw_has_capa(&mvm->fw->ucode_capa,
+			IWL_UCODE_TLV_CAPA_DYNAMIC_QUOTA)) {
+		return -EOPNOTSUPP;
+	}
+
 	return iwl_mvm_update_quotas(mvm, force_update, NULL);
 }
 
@@ -457,15 +561,16 @@ static int iwl_mvm_oppps_wa(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
-	int err = iwl_mvm_parse_vendor_data(tb, data, data_len);
+	struct nlattr **tb;
+	int err;
 	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-
-	if (err)
-		return err;
 
 	if (!vif)
 		return -ENODEV;
+
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
 	mutex_lock(&mvm->mutex);
 	if (vif->type == NL80211_IFTYPE_STATION && vif->p2p) {
@@ -475,6 +580,7 @@ static int iwl_mvm_oppps_wa(struct wiphy *wiphy,
 	}
 	mutex_unlock(&mvm->mutex);
 
+	kfree(tb);
 	return err;
 }
 #endif
@@ -553,24 +659,28 @@ static int iwl_mvm_vendor_rxfilter(struct wiphy *wiphy,
 				   struct wireless_dev *wdev,
 				   const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	enum iwl_mvm_vendor_rxfilter_flags filter, rx_filters, old_rx_filters;
 	enum iwl_mvm_vendor_rxfilter_op op;
 	bool first_set;
 	u32 mask;
-	int retval;
+	int err;
 
-	retval = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (retval)
-		return retval;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_RXFILTER])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_RXFILTER]) {
+		err = -EINVAL;
+		goto free;
+	}
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_RXFILTER_OP])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_RXFILTER_OP]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	filter = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_RXFILTER]);
 	op = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_RXFILTER_OP]);
@@ -578,8 +688,10 @@ static int iwl_mvm_vendor_rxfilter(struct wiphy *wiphy,
 	if (filter != IWL_MVM_VENDOR_RXFILTER_UNICAST &&
 	    filter != IWL_MVM_VENDOR_RXFILTER_BCAST &&
 	    filter != IWL_MVM_VENDOR_RXFILTER_MCAST4 &&
-	    filter != IWL_MVM_VENDOR_RXFILTER_MCAST6)
-		return -EINVAL;
+	    filter != IWL_MVM_VENDOR_RXFILTER_MCAST6) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	rx_filters = mvm->rx_filters & ~IWL_MVM_VENDOR_RXFILTER_EINVAL;
 	switch (op) {
@@ -590,7 +702,8 @@ static int iwl_mvm_vendor_rxfilter(struct wiphy *wiphy,
 		rx_filters |= filter;
 		break;
 	default:
-		return -EINVAL;
+		err = -EINVAL;
+		goto free;
 	}
 
 	first_set = mvm->rx_filters & IWL_MVM_VENDOR_RXFILTER_EINVAL;
@@ -598,8 +711,10 @@ static int iwl_mvm_vendor_rxfilter(struct wiphy *wiphy,
 	/* If first time set - clear EINVAL value */
 	mvm->rx_filters &= ~IWL_MVM_VENDOR_RXFILTER_EINVAL;
 
+	err = 0;
+
 	if (rx_filters == mvm->rx_filters && !first_set)
-		return 0;
+		goto free;
 
 	mutex_lock(&mvm->mutex);
 
@@ -618,7 +733,9 @@ static int iwl_mvm_vendor_rxfilter(struct wiphy *wiphy,
 
 	mutex_unlock(&mvm->mutex);
 
-	return 0;
+free:
+	kfree(tb);
+	return err;
 }
 
 static int iwl_mvm_vendor_dbg_collect(struct wiphy *wiphy,
@@ -627,103 +744,78 @@ static int iwl_mvm_vendor_dbg_collect(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	int err, len = 0;
 	const char *trigger_desc;
 
-	err = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (err)
-		return err;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	trigger_desc = nla_data(tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER]);
 	len = nla_len(tb[IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER]);
 
 	iwl_fw_dbg_collect(&mvm->fwrt, FW_DBG_TRIGGER_USER_EXTENDED,
-			   trigger_desc, len, NULL);
+			   trigger_desc, len);
+	err = 0;
 
-	return 0;
+free:
+	kfree(tb);
+	return err;
 }
 
 static int iwl_mvm_vendor_nan_faw_conf(struct wiphy *wiphy,
 				       struct wireless_dev *wdev,
 				       const void *data, int data_len)
 {
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
+	struct nlattr **tb;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct cfg80211_chan_def def = {};
 	struct ieee80211_channel *chan;
 	u32 freq;
 	u8 slots;
-	int retval;
+	int err;
 
-	retval = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (retval)
-		return retval;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS]) {
+		err = -EINVAL;
+		goto free;
+	}
 
-	if (!tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ])
-		return -EINVAL;
+	if (!tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	freq = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ]);
 	slots = nla_get_u8(tb[IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS]);
 
 	chan = ieee80211_get_channel(wiphy, freq);
-	if (!chan)
-		return -EINVAL;
+	if (!chan) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	cfg80211_chandef_create(&def, chan, NL80211_CHAN_NO_HT);
 
-	if (!cfg80211_chandef_usable(wiphy, &def, IEEE80211_CHAN_DISABLED))
-		return -EINVAL;
+	if (!cfg80211_chandef_usable(wiphy, &def, IEEE80211_CHAN_DISABLED)) {
+		err = -EINVAL;
+		goto free;
+	}
 
-	return iwl_mvm_nan_config_nan_faw_cmd(mvm, &def, slots);
-}
-
-static int iwl_mvm_vendor_link_quality_measurements(struct wiphy *wiphy,
-						    struct wireless_dev *wdev,
-						    const void *data,
-						    int data_len)
-{
-	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-	struct iwl_mvm_vif *mvm_vif = iwl_mvm_vif_from_mac80211(vif);
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
-	u32 duration;
-	u32 timeout;
-	int retval;
-
-	if (!vif)
-		return -ENODEV;
-
-	if (vif->type != NL80211_IFTYPE_STATION || vif->p2p ||
-	    !vif->bss_conf.assoc)
-		return -EINVAL;
-
-	retval = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (retval)
-		return retval;
-
-	if (!tb[IWL_MVM_VENDOR_ATTR_LQM_DURATION] ||
-	    !tb[IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT])
-		return -EINVAL;
-
-	duration = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_LQM_DURATION]);
-	timeout = nla_get_u32(tb[IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT]);
-
-	if (!mvm_vif)
-		return -ENODEV;
-
-	mutex_lock(&mvm_vif->mvm->mutex);
-	retval = iwl_mvm_send_lqm_cmd(vif, LQM_CMD_OPERATION_START_MEASUREMENT,
-				      duration, timeout);
-	mutex_unlock(&mvm_vif->mvm->mutex);
-
-	return retval;
+	err = iwl_mvm_nan_config_nan_faw_cmd(mvm, &def, slots);
+free:
+	kfree(tb);
+	return err;
 }
 
 #ifdef CONFIG_ACPI
@@ -734,29 +826,36 @@ static int iwl_mvm_vendor_set_dynamic_txp_profile(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct nlattr *tb[NUM_IWL_MVM_VENDOR_ATTR];
-	int ret;
+	struct nlattr **tb;
 	u8 chain_a, chain_b;
+	int err;
 
-	ret = iwl_mvm_parse_vendor_data(tb, data, data_len);
-	if (ret)
-		return ret;
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
 
 	if (!tb[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE] ||
-	    !tb[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE])
-		return -EINVAL;
+	    !tb[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE]) {
+		err = -EINVAL;
+		goto free;
+	}
 
 	chain_a = nla_get_u8(tb[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE]);
 	chain_b = nla_get_u8(tb[IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE]);
 
 	if (mvm->sar_chain_a_profile == chain_a &&
-	    mvm->sar_chain_b_profile == chain_b)
-		return 0;
+	    mvm->sar_chain_b_profile == chain_b) {
+		err = 0;
+		goto free;
+	}
 
 	mvm->sar_chain_a_profile = chain_a;
 	mvm->sar_chain_b_profile = chain_b;
 
-	return iwl_mvm_sar_select_profile(mvm, chain_a, chain_b);
+	err = iwl_mvm_sar_select_profile(mvm, chain_a, chain_b);
+free:
+	kfree(tb);
+	return err;
 }
 
 static int iwl_mvm_vendor_get_sar_profile_info(struct wiphy *wiphy,
@@ -770,7 +869,7 @@ static int iwl_mvm_vendor_get_sar_profile_info(struct wiphy *wiphy,
 	int i;
 	u32 n_profiles = 0;
 
-	for (i = 0; i < IWL_MVM_SAR_PROFILE_NUM; i++) {
+	for (i = 0; i < ACPI_SAR_PROFILE_NUM; i++) {
 		if (mvm->sar_profiles[i].enabled)
 			n_profiles++;
 	}
@@ -823,7 +922,7 @@ static int iwl_mvm_vendor_get_geo_profile_info(struct wiphy *wiphy,
 	for (i = 0; i < IWL_MVM_SAR_GEO_NUM_BANDS; i++) {
 		u8 *value;
 		struct nlattr *nl_chain = nla_nest_start(skb, i + 1);
-		int idx = i * IWL_GEO_PER_CHAIN_SIZE;
+		int idx = i * ACPI_GEO_PER_CHAIN_SIZE;
 
 		if (!nl_chain) {
 			kfree_skb(skb);
@@ -843,6 +942,251 @@ out:
 	return cfg80211_vendor_cmd_reply(skb);
 }
 #endif
+
+static const struct nla_policy
+iwl_mvm_vendor_fips_hw_policy[NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW] = {
+	[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY] = { .type = NLA_BINARY },
+	[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE] = { .type = NLA_BINARY },
+	[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD] = { .type = NLA_BINARY },
+	[IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD] = { .type = NLA_BINARY },
+	[IWL_VENDOR_FIPS_TEST_VECTOR_HW_FLAGS] = { .type = NLA_U8 },
+};
+
+static int iwl_mvm_vendor_validate_ccm_vector(struct nlattr **tb)
+{
+	if (!tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY] ||
+	    !tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE] ||
+	    !tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD] ||
+	    nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) !=
+	    FIPS_KEY_LEN_128 ||
+	    nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE]) !=
+	    FIPS_CCM_NONCE_LEN)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int iwl_mvm_vendor_validate_gcm_vector(struct nlattr **tb)
+{
+	if (!tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY] ||
+	    !tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE] ||
+	    !tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD] ||
+	    (nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) !=
+	     FIPS_KEY_LEN_128 &&
+	     nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) !=
+	     FIPS_KEY_LEN_256) ||
+	    nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE]) !=
+	    FIPS_GCM_NONCE_LEN)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int iwl_mvm_vendor_validate_aes_vector(struct nlattr **tb)
+{
+	if (!tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY] ||
+	    (nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) !=
+	     FIPS_KEY_LEN_128 &&
+	     nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) !=
+	     FIPS_KEY_LEN_256))
+		return -EINVAL;
+
+	return 0;
+}
+
+/**
+ * iwl_mvm_vendor_build_vector - build FIPS test vector for AES/CCM/GCM tests
+ *
+ * @cmd_buf: the command buffer is returned by this pointer in case of success.
+ * @vector: test vector attributes.
+ * @flags: specifies which encryption algorithm to use. One of
+ *	&IWL_FIPS_TEST_VECTOR_FLAGS_CCM, &IWL_FIPS_TEST_VECTOR_FLAGS_GCM and
+ *	&IWL_FIPS_TEST_VECTOR_FLAGS_AES.
+ *
+ * This function returns the length of the command buffer (in bytes) in case of
+ * success, or a negative error code on failure.
+ */
+static int iwl_mvm_vendor_build_vector(u8 **cmd_buf, struct nlattr *vector,
+				       u8 flags)
+{
+	struct nlattr *tb[NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW];
+	struct iwl_fips_test_cmd *cmd;
+	int err;
+	int payload_len = 0;
+	u8 *buf;
+
+	err = nla_parse_nested(tb, MAX_IWL_VENDOR_FIPS_TEST_VECTOR_HW,
+			       vector, iwl_mvm_vendor_fips_hw_policy, NULL);
+	if (err)
+		return err;
+
+	switch (flags) {
+	case IWL_FIPS_TEST_VECTOR_FLAGS_CCM:
+		err = iwl_mvm_vendor_validate_ccm_vector(tb);
+		break;
+	case IWL_FIPS_TEST_VECTOR_FLAGS_GCM:
+		err = iwl_mvm_vendor_validate_gcm_vector(tb);
+		break;
+	case IWL_FIPS_TEST_VECTOR_FLAGS_AES:
+		err = iwl_mvm_vendor_validate_aes_vector(tb);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (err)
+		return err;
+
+	if (tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD] &&
+	    nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD]) > FIPS_MAX_AAD_LEN)
+		return -EINVAL;
+
+	if (tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD])
+		payload_len =
+			nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD]);
+
+	buf = kzalloc(sizeof(*cmd) + payload_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	cmd = (void *)buf;
+
+	cmd->flags = cpu_to_le32(flags);
+
+	memcpy(cmd->key, nla_data(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]),
+	       nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]));
+
+	if (nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY]) == FIPS_KEY_LEN_256)
+		cmd->flags |= cpu_to_le32(IWL_FIPS_TEST_VECTOR_FLAGS_KEY_256);
+
+	if (tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE])
+		memcpy(cmd->nonce,
+		       nla_data(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE]),
+		       nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE]));
+
+	if (tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD]) {
+		memcpy(cmd->aad,
+		       nla_data(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD]),
+		       nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD]));
+		cmd->aad_len =
+			cpu_to_le32(nla_len(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD]));
+	}
+
+	if (payload_len) {
+		memcpy(cmd->payload,
+		       nla_data(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD]),
+		       payload_len);
+		cmd->payload_len = cpu_to_le32(payload_len);
+	}
+
+	if (tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_FLAGS]) {
+		u8 hw_flags =
+			nla_get_u8(tb[IWL_VENDOR_FIPS_TEST_VECTOR_HW_FLAGS]);
+
+		if (hw_flags & IWL_VENDOR_FIPS_TEST_VECTOR_FLAGS_ENCRYPT)
+			cmd->flags |=
+				cpu_to_le32(IWL_FIPS_TEST_VECTOR_FLAGS_ENC);
+	}
+
+	*cmd_buf = buf;
+	return sizeof(*cmd) + payload_len;
+}
+
+static int iwl_mvm_vendor_test_fips_send_resp(struct wiphy *wiphy,
+					      struct iwl_fips_test_resp *resp)
+{
+	struct sk_buff *skb;
+	u32 resp_len = le32_to_cpu(resp->len);
+	u32 *status = (void *)(resp->payload + resp_len);
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, sizeof(*resp));
+	if (!skb)
+		return -ENOMEM;
+
+	if ((*status) == IWL_FIPS_TEST_STATUS_SUCCESS &&
+	    nla_put(skb, IWL_MVM_VENDOR_ATTR_FIPS_TEST_RESULT, resp_len,
+		    resp->payload)) {
+		kfree_skb(skb);
+		return -ENOBUFS;
+	}
+
+	return cfg80211_vendor_cmd_reply(skb);
+}
+
+static int iwl_mvm_vendor_test_fips(struct wiphy *wiphy,
+				    struct wireless_dev *wdev,
+				    const void *data, int data_len)
+{
+	struct nlattr **tb;
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	struct iwl_host_cmd hcmd = {
+		.id = iwl_cmd_id(FIPS_TEST_VECTOR_CMD, LEGACY_GROUP, 0),
+		.flags = CMD_WANT_SKB,
+		.dataflags = { IWL_HCMD_DFL_NOCOPY },
+	};
+	struct iwl_rx_packet *pkt;
+	struct iwl_fips_test_resp *resp;
+	struct nlattr *vector;
+	u8 flags;
+	u8 *buf = NULL;
+	int ret;
+
+	tb = iwl_mvm_parse_vendor_data(data, data_len);
+	if (IS_ERR(tb))
+		return PTR_ERR(tb);
+
+	if (tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM]) {
+		vector = tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM];
+		flags = IWL_FIPS_TEST_VECTOR_FLAGS_CCM;
+	} else if (tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM]) {
+		vector = tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM];
+		flags = IWL_FIPS_TEST_VECTOR_FLAGS_GCM;
+	} else if (tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES]) {
+		vector = tb[IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES];
+		flags = IWL_FIPS_TEST_VECTOR_FLAGS_AES;
+	} else {
+		ret = -EINVAL;
+		goto free;
+	}
+
+	ret = iwl_mvm_vendor_build_vector(&buf, vector, flags);
+	if (ret <= 0)
+		goto free;
+
+	hcmd.data[0] = buf;
+	hcmd.len[0] = ret;
+
+	mutex_lock(&mvm->mutex);
+	ret = iwl_mvm_send_cmd(mvm, &hcmd);
+	mutex_unlock(&mvm->mutex);
+
+	if (ret)
+		goto free;
+
+	pkt = hcmd.resp_pkt;
+	resp = (void *)pkt->data;
+
+	iwl_mvm_vendor_test_fips_send_resp(wiphy, resp);
+	iwl_free_resp(&hcmd);
+
+free:
+	kfree(buf);
+	kfree(tb);
+	return ret;
+}
+
+static int iwl_mvm_vendor_csi_register(struct wiphy *wiphy,
+				       struct wireless_dev *wdev,
+				       const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+
+	mvm->csi_portid = cfg80211_vendor_cmd_get_sender(wiphy);
+
+	return 0;
+}
 
 static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 	{
@@ -958,15 +1302,6 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = iwl_mvm_vendor_nan_faw_conf,
 	},
-	{
-		.info = {
-			.vendor_id = INTEL_OUI,
-			.subcmd = IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS,
-		},
-		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-			 WIPHY_VENDOR_CMD_NEED_RUNNING,
-		.doit = iwl_mvm_vendor_link_quality_measurements,
-	},
 #ifdef CONFIG_ACPI
 	{
 		.info = {
@@ -993,40 +1328,79 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 			 WIPHY_VENDOR_CMD_NEED_RUNNING,
 		.doit = iwl_mvm_vendor_get_geo_profile_info,
 	},
+	{
+		.info = {
+			.vendor_id = INTEL_OUI,
+			.subcmd = IWL_MVM_VENDOR_CMD_TEST_FIPS,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = iwl_mvm_vendor_test_fips,
+	},
 #endif
+	{
+		.info = {
+			.vendor_id = INTEL_OUI,
+			.subcmd = IWL_MVM_VENDOR_CMD_CSI_EVENT,
+		},
+		.doit = iwl_mvm_vendor_csi_register,
+	},
 };
 
 enum iwl_mvm_vendor_events_idx {
-#ifdef CPTCFG_IWLMVM_TCM
 	IWL_MVM_VENDOR_EVENT_IDX_TCM,
-#endif
-	IWL_MVM_VENDOR_EVENT_IDX_LQM,
+	IWL_MVM_VENDOR_EVENT_IDX_CSI,
 	NUM_IWL_MVM_VENDOR_EVENT_IDX
 };
 
 static const struct nl80211_vendor_cmd_info
 iwl_mvm_vendor_events[NUM_IWL_MVM_VENDOR_EVENT_IDX] = {
-#ifdef CPTCFG_IWLMVM_TCM
 	[IWL_MVM_VENDOR_EVENT_IDX_TCM] = {
 		.vendor_id = INTEL_OUI,
 		.subcmd = IWL_MVM_VENDOR_CMD_TCM_EVENT,
 	},
-#endif
-	[IWL_MVM_VENDOR_EVENT_IDX_LQM] = {
+	[IWL_MVM_VENDOR_EVENT_IDX_CSI] = {
 		.vendor_id = INTEL_OUI,
-		.subcmd = IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS,
+		.subcmd = IWL_MVM_VENDOR_CMD_CSI_EVENT,
 	},
 };
 
-void iwl_mvm_set_wiphy_vendor_commands(struct wiphy *wiphy)
+void iwl_mvm_vendor_cmds_register(struct iwl_mvm *mvm)
 {
-	wiphy->vendor_commands = iwl_mvm_vendor_commands;
-	wiphy->n_vendor_commands = ARRAY_SIZE(iwl_mvm_vendor_commands);
-	wiphy->vendor_events = iwl_mvm_vendor_events;
-	wiphy->n_vendor_events = ARRAY_SIZE(iwl_mvm_vendor_events);
+	mvm->hw->wiphy->vendor_commands = iwl_mvm_vendor_commands;
+	mvm->hw->wiphy->n_vendor_commands = ARRAY_SIZE(iwl_mvm_vendor_commands);
+	mvm->hw->wiphy->vendor_events = iwl_mvm_vendor_events;
+	mvm->hw->wiphy->n_vendor_events = ARRAY_SIZE(iwl_mvm_vendor_events);
+
+	spin_lock_bh(&device_list_lock);
+	list_add_tail(&mvm->list, &device_list);
+	spin_unlock_bh(&device_list_lock);
 }
 
-#ifdef CPTCFG_IWLMVM_TCM
+void iwl_mvm_vendor_cmds_unregister(struct iwl_mvm *mvm)
+{
+	spin_lock_bh(&device_list_lock);
+	list_del(&mvm->list);
+	spin_unlock_bh(&device_list_lock);
+}
+
+static enum iwl_mvm_vendor_load
+iwl_mvm_get_vendor_load(enum iwl_mvm_traffic_load load)
+{
+	switch (load) {
+	case IWL_MVM_TRAFFIC_HIGH:
+		return IWL_MVM_VENDOR_LOAD_HIGH;
+	case IWL_MVM_TRAFFIC_MEDIUM:
+		return IWL_MVM_VENDOR_LOAD_MEDIUM;
+	case IWL_MVM_TRAFFIC_LOW:
+		return IWL_MVM_VENDOR_LOAD_LOW;
+	default:
+		break;
+	}
+
+	return IWL_MVM_VENDOR_LOAD_LOW;
+}
+
 void iwl_mvm_send_tcm_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 {
 	struct sk_buff *msg =
@@ -1052,7 +1426,7 @@ void iwl_mvm_send_tcm_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 
 	if (nla_put_u8(msg, IWL_MVM_VENDOR_ATTR_LL, iwl_mvm_low_latency(mvm)) ||
 	    nla_put_u8(msg, IWL_MVM_VENDOR_ATTR_LOAD,
-		       mvm->tcm.result.global_load))
+		       iwl_mvm_get_vendor_load(mvm->tcm.result.global_load)))
 		goto nla_put_failure;
 
 	cfg80211_vendor_event(msg, GFP_ATOMIC);
@@ -1061,112 +1435,167 @@ void iwl_mvm_send_tcm_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
  nla_put_failure:
 	kfree_skb(msg);
 }
-#endif
 
-static int iwl_mvm_vendor_send_chandef(struct sk_buff *msg,
-				       const struct cfg80211_chan_def *chandef)
+static void
+iwl_mvm_send_csi_event(struct iwl_mvm *mvm,
+		       void *hdr, unsigned int hdr_len,
+		       void **data, unsigned int *len)
 {
-	if (WARN_ON(!cfg80211_chandef_valid(chandef)))
-		return -EINVAL;
-
-	if (nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_WIPHY_FREQ,
-			chandef->chan->center_freq) ||
-	   nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_CHANNEL_WIDTH,
-		       chandef->width) ||
-	   nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_CENTER_FREQ1,
-		       chandef->center_freq1) ||
-	   (chandef->center_freq2 &&
-	    nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_CENTER_FREQ2,
-			chandef->center_freq2)))
-		return -ENOBUFS;
-
-	return 0;
-}
-
-void iwl_mvm_lqm_notif_iterator(void *_data, u8 *mac,
-				struct ieee80211_vif *vif)
-{
-	struct iwl_link_qual_msrmnt_notif *report = _data;
-	struct iwl_mvm_vif *mvm_vif = iwl_mvm_vif_from_mac80211(vif);
-	struct nlattr *res, *air_time;
+	unsigned int data_len = 0;
 	struct sk_buff *msg;
-	u32 status, num_sta;
+	struct nlattr *dattr;
+	u8 *pos;
 	int i;
 
-	if (mvm_vif->id != le32_to_cpu(report->mac_id))
+	if (!mvm->csi_portid)
 		return;
 
-	mvm_vif->lqm_active = false;
+	for (i = 0; len[i] && data[i]; i++)
+		data_len += len[i];
 
-	msg = cfg80211_vendor_event_alloc(mvm_vif->mvm->hw->wiphy,
-					  ieee80211_vif_to_wdev(vif), 2048,
-					  IWL_MVM_VENDOR_EVENT_IDX_LQM,
-					  GFP_ATOMIC);
+	msg = cfg80211_vendor_event_alloc_ucast(mvm->hw->wiphy, NULL,
+						mvm->csi_portid,
+						100 + hdr_len + data_len,
+						IWL_MVM_VENDOR_EVENT_IDX_CSI,
+						GFP_KERNEL);
+
 	if (!msg)
 		return;
 
-	if (iwl_mvm_vendor_send_chandef(msg, &vif->bss_conf.chandef))
+	if (nla_put(msg, IWL_MVM_VENDOR_ATTR_CSI_HDR, hdr_len, hdr))
 		goto nla_put_failure;
 
-	res = nla_nest_start(msg, IWL_MVM_VENDOR_ATTR_LQM_RESULT);
-	if (!res)
+	dattr = nla_reserve(msg, IWL_MVM_VENDOR_ATTR_CSI_DATA, data_len);
+	if (!dattr)
 		goto nla_put_failure;
 
-	status = le32_to_cpu(report->status);
-
-	switch (status) {
-	case LQM_STATUS_SUCCESS:
-		status = IWL_MVM_VENDOR_LQM_STATUS_SUCCESS;
-		break;
-	case LQM_STATUS_TIMEOUT:
-		status = IWL_MVM_VENDOR_LQM_STATUS_TIMEOUT;
-		break;
-	case LQM_STATUS_ABORT:
-	default:
-		status = IWL_MVM_VENDOR_LQM_STATUS_ABORT;
-		break;
+	pos = nla_data(dattr);
+	for (i = 0; len[i] && data[i]; i++) {
+		memcpy(pos, data[i], len[i]);
+		pos += len[i];
 	}
 
-	if (nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_LQM_MEAS_STATUS,
-			status) ||
-	    nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_LQM_RETRY_LIMIT,
-			le32_to_cpu(report->tx_frame_dropped)) ||
-	    nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_LQM_MEAS_TIME,
-			le32_to_cpu(report->time_in_measurement_window)) ||
-	    nla_put_u32(msg, IWL_MVM_VENDOR_ATTR_LQM_OTHER_STA,
-			le32_to_cpu(report->total_air_time_other_stations)))
-		goto nla_put_failure;
-
-	air_time = nla_nest_start(msg, IWL_MVM_VENDOR_ATTR_LQM_ACTIVE_STA_AIR_TIME);
-	if (!air_time)
-		goto nla_put_failure;
-
-	num_sta = le32_to_cpu(report->number_of_stations);
-	for (i = 0; i < num_sta; i++) {
-		u32 sta_air_time =
-			le32_to_cpu(report->frequent_stations_air_time[i]);
-
-		if (nla_put_u32(msg, i, sta_air_time))
-			goto nla_put_failure;
-	}
-	nla_nest_end(msg, air_time);
-	nla_nest_end(msg, res);
-
-	cfg80211_vendor_event(msg, GFP_ATOMIC);
-
+	cfg80211_vendor_event(msg, GFP_KERNEL);
 	return;
 
-nla_put_failure:
+ nla_put_failure:
 	kfree_skb(msg);
 }
 
-void iwl_mvm_vendor_lqm_notif(struct iwl_mvm *mvm,
+static void iwl_mvm_csi_free_pages(struct iwl_mvm *mvm)
+{
+	int idx;
+
+	for (idx = 0; idx < ARRAY_SIZE(mvm->csi_data_entries); idx++) {
+		if (mvm->csi_data_entries[idx].page) {
+			__free_pages(mvm->csi_data_entries[idx].page,
+				     mvm->csi_data_entries[idx].page_order);
+			memset(&mvm->csi_data_entries[idx], 0,
+			       sizeof(mvm->csi_data_entries[idx]));
+		}
+	}
+}
+
+static void iwl_mvm_csi_steal(struct iwl_mvm *mvm, unsigned int idx,
 			      struct iwl_rx_cmd_buffer *rxb)
 {
-	struct iwl_rx_packet *pkt = rxb_addr(rxb);
-	struct iwl_link_qual_msrmnt_notif *report = (void *)pkt->data;
+	/* firmware is ... confused */
+	if (WARN_ON(mvm->csi_data_entries[idx].page)) {
+		iwl_mvm_csi_free_pages(mvm);
+		return;
+	}
 
-	ieee80211_iterate_active_interfaces_atomic(
-		mvm->hw, IEEE80211_IFACE_ITER_NORMAL,
-		iwl_mvm_lqm_notif_iterator, report);
+	mvm->csi_data_entries[idx].page = rxb_steal_page(rxb);
+	mvm->csi_data_entries[idx].page_order = rxb->_rx_page_order;
+	mvm->csi_data_entries[idx].offset = rxb->_offset;
 }
+
+void iwl_mvm_rx_csi_header(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
+{
+	iwl_mvm_csi_steal(mvm, 0, rxb);
+}
+
+static void iwl_mvm_csi_complete(struct iwl_mvm *mvm)
+{
+	struct iwl_rx_packet *hdr_pkt;
+	struct iwl_csi_data_buffer *hdr_buf = &mvm->csi_data_entries[0];
+	void *data[5] = {};
+	unsigned int len[5] = {};
+	unsigned int csi_hdr_len;
+	void *csi_hdr;
+	int i;
+
+	/*
+	 * Ensure we have the right # of entries, the local data/len
+	 * variables include a terminating entry, csi_data_entries
+	 * instead has one place for the header.
+	 */
+	BUILD_BUG_ON(ARRAY_SIZE(data) < ARRAY_SIZE(mvm->csi_data_entries));
+	BUILD_BUG_ON(ARRAY_SIZE(len) < ARRAY_SIZE(mvm->csi_data_entries));
+
+	/* need at least the header and first fragment */
+	if (WARN_ON(!hdr_buf->page || !mvm->csi_data_entries[1].page)) {
+		iwl_mvm_csi_free_pages(mvm);
+		return;
+	}
+
+	hdr_pkt = (void *)((unsigned long)page_address(hdr_buf->page) +
+			   hdr_buf->offset);
+	csi_hdr = (void *)hdr_pkt->data;
+	csi_hdr_len = iwl_rx_packet_payload_len(hdr_pkt);
+
+	for (i = 1; i < ARRAY_SIZE(mvm->csi_data_entries); i++) {
+		struct iwl_csi_data_buffer *buf = &mvm->csi_data_entries[i];
+		struct iwl_rx_packet *pkt;
+		struct iwl_csi_chunk_notification *chunk;
+		unsigned int chunk_len;
+
+		if (!buf->page)
+			break;
+
+		pkt = (void *)((unsigned long)page_address(buf->page) +
+			       buf->offset);
+		chunk = (void *)pkt->data;
+		chunk_len = iwl_rx_packet_payload_len(pkt);
+
+		if (sizeof(*chunk) + le32_to_cpu(chunk->size) > chunk_len)
+			goto free;
+
+		data[i - 1] = chunk->data;
+		len[i - 1] = le32_to_cpu(chunk->size);
+	}
+
+	iwl_mvm_send_csi_event(mvm, csi_hdr, csi_hdr_len, data, len);
+
+ free:
+	iwl_mvm_csi_free_pages(mvm);
+}
+
+void iwl_mvm_rx_csi_chunk(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
+{
+	struct iwl_rx_packet *pkt = rxb_addr(rxb);
+	struct iwl_csi_chunk_notification *chunk = (void *)pkt->data;
+	int num = le16_get_bits(chunk->ctl, IWL_CSI_CHUNK_CTL_NUM_MASK);
+	int idx = le16_get_bits(chunk->ctl, IWL_CSI_CHUNK_CTL_IDX_MASK) + 1;
+
+	/*
+	 * +1 to get from mask to number
+	 * -1 to account for the header we also store there
+	 */
+	BUILD_BUG_ON(IWL_CSI_CHUNK_CTL_NUM_MASK + 1 >
+		     ARRAY_SIZE(mvm->csi_data_entries) - 1);
+	BUILD_BUG_ON((IWL_CSI_CHUNK_CTL_IDX_MASK >> 2) + 1 >
+		     ARRAY_SIZE(mvm->csi_data_entries) - 1);
+
+	iwl_mvm_csi_steal(mvm, idx, rxb);
+
+	if (num == idx)
+		iwl_mvm_csi_complete(mvm);
+}
+
+#else /* CFG80211_VERSION > KERNEL_VERSION(3, 14, 0) */
+#include "mvm.h"
+
+void iwl_mvm_send_tcm_event(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
+{}
+#endif /* CFG80211_VERSION > KERNEL_VERSION(3, 14, 0) */

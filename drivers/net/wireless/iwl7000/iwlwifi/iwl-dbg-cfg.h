@@ -7,6 +7,7 @@
  *
  * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright (C) 2018-2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -16,11 +17,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -33,6 +29,7 @@
  *
  * Copyright(c) 2013 - 2015 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
+ * Copyright (C) 2018-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,6 +107,7 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(u32, MVM_CALIB_D0_EVENT)
 	IWL_DBG_CFG_NODEF(u32, MVM_CALIB_D3_FLOW)
 	IWL_DBG_CFG_NODEF(u32, MVM_CALIB_D3_EVENT)
+	IWL_DBG_CFG_NODEF(bool, enable_timestamp_marker_cmd)
 #endif
 #if IS_ENABLED(CPTCFG_IWLMVM)
 	IWL_DBG_CFG(u32, MVM_DEFAULT_PS_TX_DATA_TIMEOUT)
@@ -150,14 +148,12 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(bool, MVM_PARSE_NVM)
 	IWL_DBG_CFG(bool, MVM_ADWELL_ENABLE)
 	IWL_DBG_CFG(u16, MVM_ADWELL_MAX_BUDGET)
-#ifdef CPTCFG_IWLMVM_TCM
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_MEDIUM_THRESH)
 	IWL_DBG_CFG(u32, MVM_TCM_LOAD_HIGH_THRESH)
 	IWL_DBG_CFG(u32, MVM_TCM_LOWLAT_ENABLE_THRESH)
 	IWL_DBG_CFG(u32, MVM_UAPSD_NONAGG_PERIOD)
 	IWL_DBG_CFG_RANGE(u8, MVM_UAPSD_NOAGG_LIST_LEN,
 			  1, IWL_MVM_UAPSD_NOAGG_BSSIDS_NUM)
-#endif /* CPTCFG_IWLMVM_TCM */
 	IWL_DBG_CFG(u8, MVM_QUOTA_THRESHOLD)
 	IWL_DBG_CFG(u8, MVM_RS_RSSI_BASED_INIT_RATE)
 	IWL_DBG_CFG(u8, MVM_RS_80_20_FAR_RANGE_TWEAK)
@@ -192,10 +188,17 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG(u16, MVM_RS_TPC_SR_NO_INCREASE)
 	IWL_DBG_CFG(u8, MVM_RS_TPC_TX_POWER_STEP)
 	IWL_DBG_CFG(bool, MVM_ENABLE_EBS)
+	IWL_DBG_CFG_NODEF(u16, MVM_FTM_RESP_TOA_OFFSET)
+	IWL_DBG_CFG_NODEF(u32, MVM_FTM_RESP_VALID)
+	IWL_DBG_CFG_NODEF(u32, MVM_FTM_RESP_FLAGS)
+	IWL_DBG_CFG(u8, MVM_FTM_INITIATOR_ALGO)
+	IWL_DBG_CFG(bool, MVM_FTM_INITIATOR_DYNACK)
+	IWL_DBG_CFG_NODEF(bool, MVM_FTM_INITIATOR_MCSI_ENABLED)
+	IWL_DBG_CFG_NODEF(u16, MVM_FTM_INITIATOR_COMMON_CALIB)
+	IWL_DBG_CFG(bool, MVM_D3_DEBUG)
 	IWL_MVM_MOD_PARAM(int, power_scheme)
 	IWL_MVM_MOD_PARAM(bool, init_dbg)
 	IWL_MVM_MOD_PARAM(bool, tfd_q_hang_detect)
-	IWL_MVM_MOD_PARAM(bool, ftm_resp_asap)
 #endif /* CPTCFG_IWLMVM */
 #ifdef CPTCFG_IWLWIFI_DEVICE_TESTMODE
 	IWL_DBG_CFG_NODEF(u32, dnt_out_mode)
@@ -205,8 +208,6 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_NODEF(u32, dbgm_enable_mode)
 	IWL_DBG_CFG_NODEF(u32, dbgm_mem_power)
 	IWL_DBG_CFG_NODEF(u32, dbg_flags)
-	IWL_DBG_CFG_NODEF(bool, d0_is_usniffer)
-	IWL_DBG_CFG_NODEF(bool, use_upload_ucode)
 	IWL_DBG_CFG_NODEF(u32, dbg_mon_sample_ctl_addr)
 	IWL_DBG_CFG_NODEF(u32, dbg_mon_sample_ctl_val)
 	IWL_DBG_CFG_NODEF(u32, dbg_mon_buff_base_addr_reg_addr)
@@ -253,9 +254,15 @@ struct iwl_dbg_cfg {
 	IWL_DBG_CFG_BIN(hw_address)
 	IWL_DBG_CFG_STR(fw_dbg_conf)
 	IWL_DBG_CFG_STR(nvm_file)
-	IWL_DBG_CFG_NODEF(u8, wakelock_mode)
+	IWL_DBG_CFG_STR(fw_file_pre)
 	IWL_DBG_CFG_NODEF(u32, d0i3_debug)
 	IWL_DBG_CFG_NODEF(u32, valid_ants)
+	IWL_DBG_CFG_NODEF(u32, no_ack_en)
+	IWL_DBG_CFG_NODEF(bool, no_ldpc)
+	IWL_DBG_CFG_NODEF(u16, rx_mcs_80)
+	IWL_DBG_CFG_NODEF(u16, tx_mcs_80)
+	IWL_DBG_CFG_NODEF(u16, rx_mcs_160)
+	IWL_DBG_CFG_NODEF(u16, tx_mcs_160)
 	IWL_DBG_CFG_NODEF(u32, secure_boot_cfg)
 	IWL_MOD_PARAM(u32, uapsd_disable)
 	IWL_MOD_PARAM(bool, d0i3_disable)
@@ -272,6 +279,11 @@ struct iwl_dbg_cfg {
 	IWL_MOD_PARAM(uint, disable_11n)
 	IWL_MOD_PARAM(uint, d0i3_timeout)
 	IWL_DBG_CFG_BIN(he_ppe_thres)
+	IWL_DBG_CFG_NODEF(u8, he_chan_width_dis)
+	IWL_DBG_CFG_NODEF(u32, vht_cap_flip)
+	IWL_DBG_CFG_NODEF(u32, mu_edca)
+	IWL_DBG_CFG_BIN(he_mac_cap)
+	IWL_DBG_CFG_BIN(he_phy_cap)
 #ifdef CPTCFG_IWLWIFI_DEBUG
 	IWL_MOD_PARAM(u32, debug_level)
 #endif /* CPTCFG_IWLWIFI_DEBUG */

@@ -8,6 +8,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018 - 2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018 - 2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -120,10 +117,6 @@
  *	set to %IWL_MVM_VENDOR_GSCAN_REPORT_BUFFER_COMPLETE_RESULTS.
  * @IWL_MVM_VENDOR_CMD_DBG_COLLECT: collect debug data
  * @IWL_MVM_VENDOR_CMD_NAN_FAW_CONF: Configure post NAN further availability.
- * @IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS: Starts Link Quality Measurements.
- *	Must include %IWL_MVM_VENDOR_ATTR_LQM_DURATION and
- *	%IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT. The results will be notified with
- *	this same command.
  * @IWL_MVM_VENDOR_CMD_SET_SAR_PROFILE: set the NIC's tx power limits
  *	according to the specified tx power profiles. In this command
  *	%IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE and
@@ -141,42 +134,63 @@
  *	information. This command provides the user with the following
  *	information: Per band tx power offset for chain A and chain B as well as
  *	maximum allowed tx power on this band.
+ * @IWL_MVM_VENDOR_CMD_TEST_FIPS: request the output of a certain function for
+ *	the specified test vector. The test vector is specified with one of:
+ *	&IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_SHA,
+ *	&IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HMAC, or
+ *	&IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_KDF. Only one test vector shall be
+ *	specified per test command.
+ *	The result output is sent back in &IWL_MVM_VENDOR_ATTR_FIPS_TEST_RESULT
+ *	attribute. In case the function failed to produce an output for the
+ *	requested test vector, &IWL_MVM_VENDOR_ATTR_FIPS_TEST_RESULT is not set.
+ * @IWL_MVM_VENDOR_CMD_FMAC_CONNECT_PARAMS: set fmac specific parameters for
+ *	future connect commands. These parameters will affect all following
+ *	connect commands. To clear previous configuration, send the command with
+ *	no attributes.
+ * @IWL_MVM_VENDOR_CMD_FMAC_CONFIG: set one of the fmac configuration options.
+ *	&IWL_MVM_VENDOR_ATTR_FMAC_CONFIG_STR specifies the configuration string.
+ * @IWL_MVM_VENDOR_CMD_CSI_EVENT: CSI event, use as a command to enable unicast
+ *	reporting to the calling socket
  */
 
 enum iwl_mvm_vendor_cmd {
-	IWL_MVM_VENDOR_CMD_SET_LOW_LATENCY,
-	IWL_MVM_VENDOR_CMD_GET_LOW_LATENCY,
-	IWL_MVM_VENDOR_CMD_TCM_EVENT,
-	IWL_MVM_VENDOR_CMD_LTE_STATE,
-	IWL_MVM_VENDOR_CMD_LTE_COEX_CONFIG_INFO,
-	IWL_MVM_VENDOR_CMD_LTE_COEX_DYNAMIC_INFO,
-	IWL_MVM_VENDOR_CMD_LTE_COEX_SPS_INFO,
-	IWL_MVM_VENDOR_CMD_LTE_COEX_WIFI_RPRTD_CHAN,
-	IWL_MVM_VENDOR_CMD_SET_COUNTRY,
-	IWL_MVM_VENDOR_CMD_PROXY_FRAME_FILTERING,
-	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_ADD,
-	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_DEL,
-	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_QUERY,
-	IWL_MVM_VENDOR_CMD_SET_NIC_TXPOWER_LIMIT,
-	IWL_MVM_VENDOR_CMD_OPPPS_WA,
-	IWL_MVM_VENDOR_CMD_GSCAN_GET_CAPABILITIES,
-	IWL_MVM_VENDOR_CMD_GSCAN_START,
-	IWL_MVM_VENDOR_CMD_GSCAN_STOP,
-	IWL_MVM_VENDOR_CMD_GSCAN_RESULTS_EVENT,
-	IWL_MVM_VENDOR_CMD_GSCAN_SET_BSSID_HOTLIST,
-	IWL_MVM_VENDOR_CMD_GSCAN_SET_SIGNIFICANT_CHANGE,
-	IWL_MVM_VENDOR_CMD_GSCAN_HOTLIST_CHANGE_EVENT,
-	IWL_MVM_VENDOR_CMD_GSCAN_SIGNIFICANT_CHANGE_EVENT,
-	IWL_MVM_VENDOR_CMD_RXFILTER,
-	IWL_MVM_VENDOR_CMD_GSCAN_BEACON_EVENT,
-	IWL_MVM_VENDOR_CMD_DBG_COLLECT,
-	IWL_MVM_VENDOR_CMD_NAN_FAW_CONF,
-	IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS,
-	IWL_MVM_VENDOR_CMD_SET_SAR_PROFILE,
-	IWL_MVM_VENDOR_CMD_GET_SAR_PROFILE_INFO,
-	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_REQUEST,
-	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE,
-	IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE,
+	IWL_MVM_VENDOR_CMD_SET_LOW_LATENCY			= 0x00,
+	IWL_MVM_VENDOR_CMD_GET_LOW_LATENCY			= 0x01,
+	IWL_MVM_VENDOR_CMD_TCM_EVENT				= 0x02,
+	IWL_MVM_VENDOR_CMD_LTE_STATE				= 0x03,
+	IWL_MVM_VENDOR_CMD_LTE_COEX_CONFIG_INFO			= 0x04,
+	IWL_MVM_VENDOR_CMD_LTE_COEX_DYNAMIC_INFO		= 0x05,
+	IWL_MVM_VENDOR_CMD_LTE_COEX_SPS_INFO			= 0x06,
+	IWL_MVM_VENDOR_CMD_LTE_COEX_WIFI_RPRTD_CHAN		= 0x07,
+	IWL_MVM_VENDOR_CMD_SET_COUNTRY				= 0x08,
+	IWL_MVM_VENDOR_CMD_PROXY_FRAME_FILTERING		= 0x09,
+	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_ADD			= 0x0a,
+	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_DEL			= 0x0b,
+	IWL_MVM_VENDOR_CMD_TDLS_PEER_CACHE_QUERY		= 0x0c,
+	IWL_MVM_VENDOR_CMD_SET_NIC_TXPOWER_LIMIT		= 0x0d,
+	IWL_MVM_VENDOR_CMD_OPPPS_WA				= 0x0e,
+	IWL_MVM_VENDOR_CMD_GSCAN_GET_CAPABILITIES		= 0x0f,
+	IWL_MVM_VENDOR_CMD_GSCAN_START				= 0x10,
+	IWL_MVM_VENDOR_CMD_GSCAN_STOP				= 0x11,
+	IWL_MVM_VENDOR_CMD_GSCAN_RESULTS_EVENT			= 0x12,
+	IWL_MVM_VENDOR_CMD_GSCAN_SET_BSSID_HOTLIST		= 0x13,
+	IWL_MVM_VENDOR_CMD_GSCAN_SET_SIGNIFICANT_CHANGE		= 0x14,
+	IWL_MVM_VENDOR_CMD_GSCAN_HOTLIST_CHANGE_EVENT		= 0x15,
+	IWL_MVM_VENDOR_CMD_GSCAN_SIGNIFICANT_CHANGE_EVENT	= 0x16,
+	IWL_MVM_VENDOR_CMD_RXFILTER				= 0x17,
+	IWL_MVM_VENDOR_CMD_GSCAN_BEACON_EVENT			= 0x18,
+	IWL_MVM_VENDOR_CMD_DBG_COLLECT				= 0x19,
+	IWL_MVM_VENDOR_CMD_NAN_FAW_CONF				= 0x1a,
+	/* 0x1b is deprecated */
+	IWL_MVM_VENDOR_CMD_SET_SAR_PROFILE			= 0x1c,
+	IWL_MVM_VENDOR_CMD_GET_SAR_PROFILE_INFO			= 0x1d,
+	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_REQUEST		= 0x1e,
+	IWL_MVM_VENDOR_CMD_NEIGHBOR_REPORT_RESPONSE		= 0x1f,
+	IWL_MVM_VENDOR_CMD_GET_SAR_GEO_PROFILE			= 0x20,
+	IWL_MVM_VENDOR_CMD_TEST_FIPS				= 0x21,
+	IWL_MVM_VENDOR_CMD_FMAC_CONNECT_PARAMS			= 0x22,
+	IWL_MVM_VENDOR_CMD_FMAC_CONFIG				= 0x23,
+	IWL_MVM_VENDOR_CMD_CSI_EVENT				= 0x24,
 };
 
 /**
@@ -442,57 +456,6 @@ enum iwl_mvm_vendor_rxfilter_op {
 	IWL_MVM_VENDOR_RXFILTER_OP_DROP,
 };
 
-/**
- * enum iwl_mvm_vendor_lqm_status - status of a link quality measurement
- * @IWL_MVM_VENDOR_LQM_STATUS_SUCCESS: measurement succeeded for the
- *	requested time
- * @IWL_MVM_VENDOR_LQM_STATUS_TIMEOUT: measurement succeeded but was stopped
- *	earlier than expected because of a timeout
- * @IWL_MVM_VENDOR_LQM_STATUS_UNBOUND: measurement succeeded but was stopped
- *	earlier than expected because of a deassociation
- * @IWL_MVM_VENDOR_LQM_STATUS_ABORT_CHAN_SWITCH: measurement failed because
- *	of a channel switch
- */
-enum iwl_mvm_vendor_lqm_status {
-	IWL_MVM_VENDOR_LQM_STATUS_SUCCESS,
-	IWL_MVM_VENDOR_LQM_STATUS_TIMEOUT,
-	IWL_MVM_VENDOR_LQM_STATUS_ABORT,
-};
-
-/**
- * enum iwl_mvm_vendor_lqm_result - the result of a link quality measurement
- * @IWL_MVM_VENDOR_ATTR_LQM_INVALID: invalid attribute for compatibility
- *	purpose.
- * @IWL_MVM_VENDOR_ATTR_LQM_ACTIVE_STA_AIR_TIME: the air time for the most
- *	active stations during the measurement. This is a nested attribute
- *	which is an array of u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_OTHER_STA: the air time consumed by the stations
- *	not included in %IWL_MVM_VENDOR_ATTR_LQM_ACTIVE_STA_AIR_TIME. This is a
- *	u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_MEAS_TIME: the length (in msec) of the measurement.
- *	This can be shorter than the requested
- *	%IWL_MVM_VENDOR_ATTR_LQM_DURATION in case the measurement was cut
- *	short. This is a u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_RETRY_LIMIT: the number of frames that were dropped
- *	due to retry limit during the measurement. This is a u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_MEAS_STATUS: the measurement status.
- *	One of &enum iwl_mvm_vendor_lqm_status. This is a u32.
- * @NUM_IWL_MVM_VENDOR_LQM_RESULT: num of link quality measurement attributes
- * @MAX_IWL_MVM_VENDOR_LQM_RESULT: highest link quality measurement attribute
- *	number.
- */
-enum iwl_mvm_vendor_lqm_result {
-	IWL_MVM_VENDOR_ATTR_LQM_INVALID,
-	IWL_MVM_VENDOR_ATTR_LQM_ACTIVE_STA_AIR_TIME,
-	IWL_MVM_VENDOR_ATTR_LQM_OTHER_STA,
-	IWL_MVM_VENDOR_ATTR_LQM_MEAS_TIME,
-	IWL_MVM_VENDOR_ATTR_LQM_RETRY_LIMIT,
-	IWL_MVM_VENDOR_ATTR_LQM_MEAS_STATUS,
-
-	NUM_IWL_MVM_VENDOR_LQM_RESULT,
-	MAX_IWL_MVM_VENDOR_LQM_RESULT = NUM_IWL_MVM_VENDOR_LQM_RESULT - 1,
-};
-
 /*
  * enum iwl_mvm_vendor_nr_chan_width - channel width definitions
  *
@@ -585,6 +548,109 @@ enum iwl_vendor_sar_per_chain_geo_table {
 	IWL_VENDOR_SAR_GEO_CHAIN_A_OFFSET,
 	IWL_VENDOR_SAR_GEO_CHAIN_B_OFFSET,
 	IWL_VENDOR_SAR_GEO_MAX_TXP,
+};
+
+/**
+ * enum iwl_vendor_fips_test_vector_sha_type - SHA types for FIPS tests
+ *
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA1: SHA1
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA256: SHA256
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA384: SHA384
+ */
+enum iwl_vendor_fips_test_vector_sha_type {
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA1,
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA256,
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE_SHA384,
+};
+
+/**
+ * enum iwl_vendor_fips_test_vector_sha - test vector for SHA tests
+ *
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_INVALID: attribute number 0 is reserved.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE: which SHA function to use. One of
+ *	&enum iwl_vendor_fips_test_vector_sha_type.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_SHA_MSG: the message to generate the digest for.
+ * @NUM_IWL_VENDOR_FIPS_TEST_VECTOR_SHA: number of SHA test vector attributes.
+ * @MAX_IWL_VENDOR_FIPS_TEST_VECTOR_SHA: highest SHA test vector attribute.
+ */
+enum iwl_vendor_fips_test_vector_sha {
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_INVALID,
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_TYPE,
+	IWL_VENDOR_FIPS_TEST_VECTOR_SHA_MSG,
+
+	NUM_IWL_VENDOR_FIPS_TEST_VECTOR_SHA,
+	MAX_IWL_VENDOR_FIPS_TEST_VECTOR_SHA =
+		NUM_IWL_VENDOR_FIPS_TEST_VECTOR_SHA - 1,
+};
+
+/**
+ * enum iwl_vendor_fips_test_vector_hmac_kdf - test vector for HMAC/KDF tests
+ *
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_INVALID: attribute number 0 is
+ *	reserved.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_TYPE: which HMAC-SHA function to use.
+ *	One of &enum iwl_vendor_fips_test_vector_sha_type.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_KEY: key input for the HMAC-SHA
+ *	function.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_MSG: the message to generate the
+ *	digest for.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_RES_LEN: the requested digest length in
+ *	bytes.
+ * @NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF: number of HMAC/KDF test vector
+ *	attributes.
+ * @MAX_IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF: highest HMAC/KDF test vector
+ *	attribute.
+ */
+enum iwl_vendor_fips_test_vector_hmac_kdf {
+	IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_INVALID,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_TYPE,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_KEY,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_MSG,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF_RES_LEN,
+
+	NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF,
+	MAX_IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF =
+		NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HMAC_KDF - 1,
+};
+
+/**
+ * enum iwl_vendor_fips_test_vector_flags - flags for FIPS HW test vector
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_FLAGS_ENCRYPT: if this is set, the requested
+ *	operation is encryption. Otherwise the requested operation is
+ *	decryption.
+ */
+enum iwl_vendor_fips_test_vector_flags {
+	IWL_VENDOR_FIPS_TEST_VECTOR_FLAGS_ENCRYPT = BIT(0),
+};
+
+/**
+ * enum iwl_vendor_fips_test_vector_hw - test vector for FIPS HW tests
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_INVALID: attribute number 0 is reserved.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY: the key to use for
+ *	encryption/decryption. For CCM, only 128-bit key is supported.
+ *	For AES and GCM, 128-bit and 256-bit keys are supported.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE: for CCM use 13 bytes, for GCM only 12
+ *	bytes. Not valid for AES tests.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD: adata. maximum supported size is 30
+ *	bytes. Not valid for AES tests.
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD: for encryption, this is the
+ *	plaintext to encrypt. For decryption, this is the ciphertext + MIC (8
+ *	bytes of MIC for CCM, 16 bytes for GCM).
+ * @IWL_VENDOR_FIPS_TEST_VECTOR_HW_FLAGS: &enum iwl_vendor_fips_test_vector_flags.
+ * @NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW: number of hw test vector attributes.
+ * @MAX_IWL_VENDOR_FIPS_TEST_VECTOR_HW: highest hw test vector attribute.
+ */
+enum iwl_vendor_fips_test_vector_hw {
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_INVALID,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_KEY,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_NONCE,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_AAD,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_PAYLOAD,
+	IWL_VENDOR_FIPS_TEST_VECTOR_HW_FLAGS,
+
+	NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW,
+	MAX_IWL_VENDOR_FIPS_TEST_VECTOR_HW =
+		NUM_IWL_VENDOR_FIPS_TEST_VECTOR_HW - 1,
 };
 
 /**
@@ -686,27 +752,11 @@ enum iwl_vendor_sar_per_chain_geo_table {
  *	channel, used for anything but 20 MHz bandwidth.
  * @IWL_MVM_VENDOR_ATTR_CENTER_FREQ2: Center frequency of the second part of
  *	the channel, used only for 80+80 MHz bandwidth.
- * @IWL_MVM_VENDOR_ATTR_LQM_DURATION: the duration in msecs of the Link
- *	Quality Measurement. Required for
- *	&IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS. This is a u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT: the maximal time in msecs that the
- *	measurement can take. Required for
- *	&IWL_MVM_VENDOR_CMD_QUALITY_MEASUREMENTS. This is a u32.
- * @IWL_MVM_VENDOR_ATTR_LQM_RESULT: result of the measurement. Nested attribute
- *	see &enum iwl_mvm_vendor_lqm_result.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM: report that scan results
  *	are available when buffer is that much full. In number of scans.
  * @IWL_MVM_VENDOR_ATTR_GSCAN_CACHED_RESULTS: array of gscan cached results.
  *	Each result is a nested attribute of
  *	&enum iwl_mvm_vendor_gscan_cached_scan_res.
- * @IWL_MVM_VENDOR_ATTR_SSID: SSID (binary attribute, 0..32 octets)
- * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI: Flag attribute specifying that the
- *	neighbor request shall query for LCI information.
- * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC: Flag attribute specifying that the
- *	neighbor request shall query for CIVIC information.
- * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT: A list of neighbor APs as received in a
- *	neighbor report frame. Each AP is a nested attribute of
- *	&enum iwl_mvm_vendor_neighbor_report.
  * @IWL_MVM_VENDOR_ATTR_LAST_MSG: Indicates that this message is the last one
  *	in the series of messages. (flag)
  * @IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE: SAR table idx for chain A.
@@ -715,77 +765,125 @@ enum iwl_vendor_sar_per_chain_geo_table {
  *	This is a u8.
  * @IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM: number of enabled SAR profile
  *	This is a u8.
+ * @IWL_MVM_VENDOR_ATTR_SSID: SSID (binary attribute, 0..32 octets)
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI: Flag attribute specifying that the
+ *	neighbor request shall query for LCI information.
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC: Flag attribute specifying that the
+ *	neighbor request shall query for CIVIC information.
+ * @IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT: A list of neighbor APs as received in a
+ *	neighbor report frame. Each AP is a nested attribute of
+ *	&enum iwl_mvm_vendor_neighbor_report.
  * @IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE: geo profile info.
  *	see &enum iwl_vendor_sar_per_chain_geo_table.
- *
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_SHA: data vector for FIPS SHA test.
+ *	&enum iwl_vendor_fips_test_vector_sha.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HMAC: data vector for FIPS HMAC test.
+ *	&enum iwl_vendor_fips_test_vector_hmac_kdf.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_KDF: data vector for FIPS KDF test.
+ *	&enum iwl_vendor_fips_test_vector_hmac_kdf.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_RESULT: FIPS test result. Contains the
+ *	output of the requested function.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES: data vector for FIPS AES HW
+ *	test. &enum iwl_vendor_fips_test_vector_hw.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM: data vector for FIPS CCM HW
+ *	test. &enum iwl_vendor_fips_test_vector_hw.
+ * @IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM: data vector for FIPS GCM HW
+ *	test. &enum iwl_vendor_fips_test_vector_hw.
+ * @IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_BLACKLIST: an array of BSSIDs to
+ *	blacklist. The device shall not try to connect to blacklisted BSSIDs.
+ *	This attribute shall not be set if
+ *	IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_WHITELIST is set.
+ * @IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_WHITELIST: an array of BSSIDs to
+ *	whitelist. The device shall only try to connect to BSSIDs from the list.
+ *	This attribute shall not be set if
+ *	IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_BLACKLIST is set.
+ * @IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_MAX_RETRIES: number of APs to try
+ *	before notifying connection failure.
+ * @IWL_MVM_VENDOR_ATTR_FMAC_CONFIG_STR: a key=value string where key is an
+ *	fmac configuration option.
+ * @IWL_MVM_VENDOR_ATTR_CSI_HDR: CSI header
+ * @IWL_MVM_VENDOR_ATTR_CSI_DATA: CSI data
  */
 enum iwl_mvm_vendor_attr {
-	__IWL_MVM_VENDOR_ATTR_INVALID,
-	IWL_MVM_VENDOR_ATTR_LOW_LATENCY,
-	IWL_MVM_VENDOR_ATTR_VIF_ADDR,
-	IWL_MVM_VENDOR_ATTR_VIF_LL,
-	IWL_MVM_VENDOR_ATTR_LL,
-	IWL_MVM_VENDOR_ATTR_VIF_LOAD,
-	IWL_MVM_VENDOR_ATTR_LOAD,
-	IWL_MVM_VENDOR_ATTR_COUNTRY,
-	IWL_MVM_VENDOR_ATTR_FILTER_ARP_NA,
-	IWL_MVM_VENDOR_ATTR_FILTER_GTK,
-	IWL_MVM_VENDOR_ATTR_ADDR,
-	IWL_MVM_VENDOR_ATTR_TX_BYTES,
-	IWL_MVM_VENDOR_ATTR_RX_BYTES,
-	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_24,
-	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52L,
-	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52H,
-	IWL_MVM_VENDOR_ATTR_OPPPS_WA,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_CACHE_SIZE,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_BUCKETS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_AP_CACHE_PER_SCAN,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_RSSI_SAMPLE_SIZE,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_REPORTING_THRESHOLD,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_HOTLIST_APS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SIGNIFICANT_CHANGE_APS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_BSSID_HISTORY_ENTRIES,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAC_ADDR,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAC_ADDR_MASK,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_AP_PER_SCAN,
-	IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD,
-	IWL_MVM_VENDOR_ATTR_GSCAN_BUCKET_SPECS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_RESULTS_EVENT_TYPE,
-	IWL_MVM_VENDOR_ATTR_GSCAN_RESULTS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_LOST_AP_SAMPLE_SIZE,
-	IWL_MVM_VENDOR_ATTR_GSCAN_AP_LIST,
-	IWL_MVM_VENDOR_ATTR_GSCAN_RSSI_SAMPLE_SIZE,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MIN_BREACHING,
-	IWL_MVM_VENDOR_ATTR_GSCAN_HOTLIST_AP_STATUS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_SIG_CHANGE_RESULTS,
-	IWL_MVM_VENDOR_ATTR_RXFILTER,
-	IWL_MVM_VENDOR_ATTR_RXFILTER_OP,
-	IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER,
-	IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ,
-	IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_HOTLIST_SSIDS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_EPNO_NETWORKS,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_EPNO_NETWORKS_BY_SSID,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_WHITE_LISTED_SSID,
-	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_BLACK_LISTED_SSID,
-	IWL_MVM_VENDOR_ATTR_WIPHY_FREQ,
-	IWL_MVM_VENDOR_ATTR_CHANNEL_WIDTH,
-	IWL_MVM_VENDOR_ATTR_CENTER_FREQ1,
-	IWL_MVM_VENDOR_ATTR_CENTER_FREQ2,
-	IWL_MVM_VENDOR_ATTR_LQM_DURATION,
-	IWL_MVM_VENDOR_ATTR_LQM_TIMEOUT,
-	IWL_MVM_VENDOR_ATTR_LQM_RESULT,
-	IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM,
-	IWL_MVM_VENDOR_ATTR_GSCAN_CACHED_RESULTS,
-	IWL_MVM_VENDOR_ATTR_LAST_MSG,
-	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE,
-	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE,
-	IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM,
-	IWL_MVM_VENDOR_ATTR_SSID,
-	IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI,
-	IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC,
-	IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT,
-	IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE,
+	__IWL_MVM_VENDOR_ATTR_INVALID				= 0x00,
+	IWL_MVM_VENDOR_ATTR_LOW_LATENCY				= 0x01,
+	IWL_MVM_VENDOR_ATTR_VIF_ADDR				= 0x02,
+	IWL_MVM_VENDOR_ATTR_VIF_LL				= 0x03,
+	IWL_MVM_VENDOR_ATTR_LL					= 0x04,
+	IWL_MVM_VENDOR_ATTR_VIF_LOAD				= 0x05,
+	IWL_MVM_VENDOR_ATTR_LOAD				= 0x06,
+	IWL_MVM_VENDOR_ATTR_COUNTRY				= 0x07,
+	IWL_MVM_VENDOR_ATTR_FILTER_ARP_NA			= 0x08,
+	IWL_MVM_VENDOR_ATTR_FILTER_GTK				= 0x09,
+	IWL_MVM_VENDOR_ATTR_ADDR				= 0x0a,
+	IWL_MVM_VENDOR_ATTR_TX_BYTES				= 0x0b,
+	IWL_MVM_VENDOR_ATTR_RX_BYTES				= 0x0c,
+	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_24			= 0x0d,
+	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52L			= 0x0e,
+	IWL_MVM_VENDOR_ATTR_TXP_LIMIT_52H			= 0x0f,
+	IWL_MVM_VENDOR_ATTR_OPPPS_WA				= 0x10,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_CACHE_SIZE		= 0x11,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_BUCKETS		= 0x12,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_AP_CACHE_PER_SCAN		= 0x13,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_RSSI_SAMPLE_SIZE		= 0x14,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SCAN_REPORTING_THRESHOLD	= 0x15,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_HOTLIST_APS		= 0x16,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_SIGNIFICANT_CHANGE_APS	= 0x17,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_BSSID_HISTORY_ENTRIES	= 0x18,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAC_ADDR			= 0x19,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAC_ADDR_MASK			= 0x1a,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_AP_PER_SCAN		= 0x1b,
+	IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD		= 0x1c,
+	IWL_MVM_VENDOR_ATTR_GSCAN_BUCKET_SPECS			= 0x1d,
+	IWL_MVM_VENDOR_ATTR_GSCAN_RESULTS_EVENT_TYPE		= 0x1e,
+	IWL_MVM_VENDOR_ATTR_GSCAN_RESULTS			= 0x1f,
+	IWL_MVM_VENDOR_ATTR_GSCAN_LOST_AP_SAMPLE_SIZE		= 0x20,
+	IWL_MVM_VENDOR_ATTR_GSCAN_AP_LIST			= 0x21,
+	IWL_MVM_VENDOR_ATTR_GSCAN_RSSI_SAMPLE_SIZE		= 0x22,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MIN_BREACHING			= 0x23,
+	IWL_MVM_VENDOR_ATTR_GSCAN_HOTLIST_AP_STATUS		= 0x24,
+	IWL_MVM_VENDOR_ATTR_GSCAN_SIG_CHANGE_RESULTS		= 0x25,
+	IWL_MVM_VENDOR_ATTR_RXFILTER				= 0x26,
+	IWL_MVM_VENDOR_ATTR_RXFILTER_OP				= 0x27,
+	IWL_MVM_VENDOR_ATTR_DBG_COLLECT_TRIGGER			= 0x28,
+	IWL_MVM_VENDOR_ATTR_NAN_FAW_FREQ			= 0x29,
+	IWL_MVM_VENDOR_ATTR_NAN_FAW_SLOTS			= 0x2a,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_HOTLIST_SSIDS		= 0x2b,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_EPNO_NETWORKS		= 0x2c,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_EPNO_NETWORKS_BY_SSID	= 0x2d,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_WHITE_LISTED_SSID	= 0x2e,
+	IWL_MVM_VENDOR_ATTR_GSCAN_MAX_NUM_BLACK_LISTED_SSID	= 0x2f,
+	IWL_MVM_VENDOR_ATTR_WIPHY_FREQ				= 0x30,
+	IWL_MVM_VENDOR_ATTR_CHANNEL_WIDTH			= 0x31,
+	IWL_MVM_VENDOR_ATTR_CENTER_FREQ1			= 0x32,
+	IWL_MVM_VENDOR_ATTR_CENTER_FREQ2			= 0x33,
+	/* 0x34 is deprecated */
+	/* 0x35 is deprecated */
+	/* 0x36 is deprecated */
+	IWL_MVM_VENDOR_ATTR_GSCAN_REPORT_THRESHOLD_NUM		= 0x37,
+	IWL_MVM_VENDOR_ATTR_GSCAN_CACHED_RESULTS		= 0x38,
+	IWL_MVM_VENDOR_ATTR_LAST_MSG				= 0x39,
+	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_A_PROFILE			= 0x3a,
+	IWL_MVM_VENDOR_ATTR_SAR_CHAIN_B_PROFILE			= 0x3b,
+	IWL_MVM_VENDOR_ATTR_SAR_ENABLED_PROFILE_NUM		= 0x3c,
+	IWL_MVM_VENDOR_ATTR_SSID				= 0x3d,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_LCI			= 0x3e,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_CIVIC			= 0x3f,
+	IWL_MVM_VENDOR_ATTR_NEIGHBOR_REPORT			= 0x40,
+	IWL_MVM_VENDOR_ATTR_SAR_GEO_PROFILE			= 0x41,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_SHA		= 0x42,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HMAC		= 0x43,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_KDF		= 0x44,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_RESULT			= 0x45,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_AES		= 0x46,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_CCM		= 0x47,
+	IWL_MVM_VENDOR_ATTR_FIPS_TEST_VECTOR_HW_GCM		= 0x48,
+	IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_BLACKLIST	= 0x49,
+	IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_WHITELIST	= 0x4a,
+	IWL_MVM_VENDOR_ATTR_FMAC_CONNECT_PARAMS_MAX_RETRIES	= 0x4b,
+	IWL_MVM_VENDOR_ATTR_FMAC_CONFIG_STR			= 0x4c,
+	IWL_MVM_VENDOR_ATTR_CSI_HDR				= 0x4d,
+	IWL_MVM_VENDOR_ATTR_CSI_DATA				= 0x4e,
 
 	NUM_IWL_MVM_VENDOR_ATTR,
 	MAX_IWL_MVM_VENDOR_ATTR = NUM_IWL_MVM_VENDOR_ATTR - 1,

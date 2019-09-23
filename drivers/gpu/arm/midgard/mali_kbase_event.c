@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2016,2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 
 
@@ -33,10 +38,8 @@ static struct base_jd_udata kbase_event_process(struct kbase_context *kctx, stru
 
 	data = katom->udata;
 
-	KBASE_TIMELINE_ATOMS_IN_FLIGHT(kctx, atomic_sub_return(1, &kctx->timeline.jd_atoms_in_flight));
-
-	kbase_tlstream_tl_nret_atom_ctx(katom, kctx);
-	kbase_tlstream_tl_del_atom(katom);
+	KBASE_TLSTREAM_TL_NRET_ATOM_CTX(katom, kctx);
+	KBASE_TLSTREAM_TL_DEL_ATOM(katom);
 
 	katom->status = KBASE_JD_ATOM_STATE_UNUSED;
 
@@ -180,7 +183,7 @@ void kbase_event_post(struct kbase_context *ctx, struct kbase_jd_atom *atom)
 		kbase_event_process_noreport(ctx, atom);
 		return;
 	}
-
+	KBASE_TLSTREAM_TL_ATTRIB_ATOM_STATE(atom, TL_ATOM_STATE_POSTED);
 	if (atom->core_req & BASE_JD_REQ_EVENT_COALESCE) {
 		/* Don't report the event until other event(s) have completed */
 		mutex_lock(&ctx->event_mutex);

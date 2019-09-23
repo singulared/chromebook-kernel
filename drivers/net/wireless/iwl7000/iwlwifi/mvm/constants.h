@@ -8,6 +8,7 @@
  * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2015        Intel Deutschland GmbH
+ * Copyright (C) 2018-2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2015        Intel Deutschland GmbH
+ * Copyright (C) 2018-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,10 +65,9 @@
 #define __MVM_CONSTANTS_H
 
 #include <linux/ieee80211.h>
+#include "fw-api.h"
 
-#ifdef CPTCFG_IWLMVM_TCM
 #define IWL_MVM_UAPSD_NOAGG_BSSIDS_NUM		20
-#endif
 
 #ifndef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 #define IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT	(100 * USEC_PER_MSEC)
@@ -113,17 +109,15 @@
 #define IWL_MVM_RS_80_20_FAR_RANGE_TWEAK	1
 #define IWL_MVM_TOF_IS_RESPONDER		0
 #define IWL_MVM_SW_TX_CSUM_OFFLOAD		0
-#define IWL_MVM_HW_CSUM_DISABLE			1
+#define IWL_MVM_HW_CSUM_DISABLE			0
 #define IWL_MVM_PARSE_NVM			0
 #define IWL_MVM_ADWELL_ENABLE			1
 #define IWL_MVM_ADWELL_MAX_BUDGET		0
-#ifdef CPTCFG_IWLMVM_TCM
 #define IWL_MVM_TCM_LOAD_MEDIUM_THRESH		10 /* percentage */
 #define IWL_MVM_TCM_LOAD_HIGH_THRESH		50 /* percentage */
 #define IWL_MVM_TCM_LOWLAT_ENABLE_THRESH	100 /* packets/10 seconds */
 #define IWL_MVM_UAPSD_NONAGG_PERIOD		5000 /* msecs */
 #define IWL_MVM_UAPSD_NOAGG_LIST_LEN		IWL_MVM_UAPSD_NOAGG_BSSIDS_NUM
-#endif /* CPTCFG_IWLMVM_TCM */
 #define IWL_MVM_RS_NUM_TRY_BEFORE_ANT_TOGGLE    1
 #define IWL_MVM_RS_HT_VHT_RETRIES_PER_RATE      2
 #define IWL_MVM_RS_HT_VHT_RETRIES_PER_RATE_TW   1
@@ -155,6 +149,9 @@
 #define IWL_MVM_RS_TPC_SR_NO_INCREASE		85	/* percent */
 #define IWL_MVM_RS_TPC_TX_POWER_STEP		3
 #define IWL_MVM_ENABLE_EBS			1
+#define IWL_MVM_FTM_INITIATOR_ALGO		IWL_TOF_ALGO_TYPE_MAX_LIKE
+#define IWL_MVM_FTM_INITIATOR_DYNACK		true
+#define IWL_MVM_D3_DEBUG			false
 #else /* CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES */
 #define IWL_MVM_DEFAULT_PS_TX_DATA_TIMEOUT	(mvm->trans->dbg_cfg.MVM_DEFAULT_PS_TX_DATA_TIMEOUT)
 #define IWL_MVM_DEFAULT_PS_RX_DATA_TIMEOUT	(mvm->trans->dbg_cfg.MVM_DEFAULT_PS_RX_DATA_TIMEOUT)
@@ -193,13 +190,11 @@
 #define IWL_MVM_PARSE_NVM			(mvm->trans->dbg_cfg.MVM_PARSE_NVM)
 #define IWL_MVM_ADWELL_ENABLE			(mvm->trans->dbg_cfg.MVM_ADWELL_ENABLE)
 #define IWL_MVM_ADWELL_MAX_BUDGET		(mvm->trans->dbg_cfg.MVM_ADWELL_MAX_BUDGET)
-#ifdef CPTCFG_IWLMVM_TCM
 #define IWL_MVM_TCM_LOAD_MEDIUM_THRESH		(mvm->trans->dbg_cfg.MVM_TCM_LOAD_MEDIUM_THRESH)
 #define IWL_MVM_TCM_LOAD_HIGH_THRESH		(mvm->trans->dbg_cfg.MVM_TCM_LOAD_HIGH_THRESH)
 #define IWL_MVM_TCM_LOWLAT_ENABLE_THRESH	(mvm->trans->dbg_cfg.MVM_TCM_LOWLAT_ENABLE_THRESH)
 #define IWL_MVM_UAPSD_NONAGG_PERIOD		(mvm->trans->dbg_cfg.MVM_UAPSD_NONAGG_PERIOD)
 #define IWL_MVM_UAPSD_NOAGG_LIST_LEN		(mvm->trans->dbg_cfg.MVM_UAPSD_NOAGG_LIST_LEN)
-#endif /* CPTCFG_IWLMVM_TCM */
 #define IWL_MVM_QUOTA_THRESHOLD			(mvm->trans->dbg_cfg.MVM_QUOTA_THRESHOLD)
 #define IWL_MVM_RS_RSSI_BASED_INIT_RATE         (mvm->trans->dbg_cfg.MVM_RS_RSSI_BASED_INIT_RATE)
 #define IWL_MVM_RS_80_20_FAR_RANGE_TWEAK	(mvm->trans->dbg_cfg.MVM_RS_80_20_FAR_RANGE_TWEAK)
@@ -234,14 +229,15 @@
 #define IWL_MVM_RS_TPC_SR_NO_INCREASE		(mvm->trans->dbg_cfg.MVM_RS_TPC_SR_NO_INCREASE)
 #define IWL_MVM_RS_TPC_TX_POWER_STEP		(mvm->trans->dbg_cfg.MVM_RS_TPC_TX_POWER_STEP)
 #define IWL_MVM_ENABLE_EBS			(mvm->trans->dbg_cfg.MVM_ENABLE_EBS)
+#define IWL_MVM_FTM_RESP_TOA_OFFSET		(mvm->trans->dbg_cfg.MVM_FTM_RESP_TOA_OFFSET)
+#define IWL_MVM_FTM_RESP_VALID			(mvm->trans->dbg_cfg.MVM_FTM_RESP_VALID)
+#define IWL_MVM_FTM_RESP_FLAGS			(mvm->trans->dbg_cfg.MVM_FTM_RESP_FLAGS)
+#define IWL_MVM_FTM_INITIATOR_ALGO		(mvm->trans->dbg_cfg.MVM_FTM_INITIATOR_ALGO)
+#define IWL_MVM_FTM_INITIATOR_DYNACK		(mvm->trans->dbg_cfg.MVM_FTM_INITIATOR_DYNACK)
+#define IWL_MVM_FTM_INITIATOR_MCSI_ENABLED	(mvm->trans->dbg_cfg.MVM_FTM_INITIATOR_MCSI_ENABLED)
+#define IWL_MVM_FTM_INITIATOR_COMMON_CALIB	(mvm->trans->dbg_cfg.MVM_FTM_INITIATOR_COMMON_CALIB)
+#define IWL_MVM_D3_DEBUG			(mvm->trans->dbg_cfg.MVM_D3_DEBUG)
 
 #endif /* CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES */
-
-/* Default values for the FTM range_request_ext command: */
-#define IWL_MVM_FTM_REQ_EXT_TSF_TIMER_OFFSET_MSEC_DFLT 5
-#define IWL_MVM_FTM_REQ_EXT_MIN_DELTA_FTM_DFLT 0
-#define IWL_MVM_FTM_REQ_EXT_FORMAT_AND_BW20M_DFLT IEEE80211_FTM_FORMAT_BW_HT_20
-#define IWL_MVM_FTM_REQ_EXT_FORMAT_AND_BW40M_DFLT IEEE80211_FTM_FORMAT_BW_HT_40
-#define IWL_MVM_FTM_REQ_EXT_FORMAT_AND_BW80M_DFLT IEEE80211_FTM_FORMAT_BW_VHT_80
 
 #endif /* __MVM_CONSTANTS_H */

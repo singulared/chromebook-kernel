@@ -6,6 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,6 +27,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -142,10 +144,10 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	/* 2GHz is mandatory and nl80211 should make sure it is set.
 	 * Warn and add 2GHz if this happens anyway.
 	 */
-	if (WARN_ON(conf->bands && !(conf->bands & BIT(NL80211_BAND_2GHZ))))
+	if (WARN_ON(ieee80211_nan_bands(conf) && !(ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ))))
 		return -EINVAL;
 
-	conf->bands |= BIT(NL80211_BAND_2GHZ);
+	ieee80211_nan_set_band(conf, NL80211_BAND_2GHZ);
 	cmd = kzalloc(iwl_mvm_nan_cfg_cmd_len(hw), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
@@ -164,7 +166,7 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 	umac_cfg->sta_id = cpu_to_le32(mvm->aux_sta.sta_id);
 	umac_cfg->master_pref = conf->master_pref;
 
-	if (conf->bands & BIT(NL80211_BAND_2GHZ)) {
+	if (ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_2GHZ,
 					NAN_CHANNEL_24)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_24);
@@ -173,10 +175,10 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		}
 
 		tb_cfg->chan24 = NAN_CHANNEL_24;
-		cdw |= conf->cdw_2g;
+		cdw |= nan_conf_cdw_2g(conf);
 	}
 
-	if (conf->bands & BIT(NL80211_BAND_5GHZ)) {
+	if (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)) {
 		if (!iwl_mvm_can_beacon(vif, NL80211_BAND_5GHZ,
 					NAN_CHANNEL_52)) {
 			IWL_ERR(mvm, "Can't beacon on %d\n", NAN_CHANNEL_52);
@@ -185,15 +187,15 @@ int iwl_mvm_start_nan(struct ieee80211_hw *hw,
 		}
 
 		tb_cfg->chan52 = NAN_CHANNEL_52;
-		cdw |= conf->cdw_5g << 3;
+		cdw |= nan_conf_cdw_5g(conf) << 3;
 	}
 
 	tb_cfg->warmup_timer = cpu_to_le32(NAN_WARMUP_TIMEOUT_USEC);
 	tb_cfg->op_bands = 3;
 	nan2_cfg->cdw = cpu_to_le16(cdw);
 
-	if ((conf->bands & BIT(NL80211_BAND_2GHZ)) &&
-	    (conf->bands & BIT(NL80211_BAND_5GHZ)))
+	if ((ieee80211_nan_has_band(conf, NL80211_BAND_2GHZ)) &&
+	    (ieee80211_nan_has_band(conf, NL80211_BAND_5GHZ)))
 		umac_cfg->dual_band = cpu_to_le32(1);
 
 	ret = iwl_mvm_send_cmd_pdu(mvm, iwl_cmd_id(NAN_CONFIG_CMD,
@@ -293,9 +295,11 @@ static void iwl_mvm_copy_filters(struct cfg80211_nan_func_filter *filters,
 
 static inline size_t iwl_mvm_nan_add_func_cmd_len(struct ieee80211_hw *hw)
 {
-	return iwl_mvm_nan_is_ver2(hw) ?
-	       sizeof(struct iwl_nan_add_func_cmd_v2) :
-	       sizeof(struct iwl_nan_add_func_cmd);
+	if (iwl_mvm_nan_is_ver2(hw))
+		return sizeof(struct iwl_nan_add_func_cmd_v2);
+
+	return sizeof(struct iwl_nan_add_func_cmd) -
+		iwl_mvm_chan_info_padding(IWL_MAC80211_GET_MVM(hw));
 }
 
 static inline struct iwl_nan_add_func_common
@@ -310,9 +314,12 @@ static inline struct iwl_nan_add_func_common
 static inline u8 *iwl_mvm_nan_get_add_func_data(struct ieee80211_hw *hw,
 						void *nan_add_func_cmd)
 {
-	return iwl_mvm_nan_is_ver2(hw) ?
-	       ((struct iwl_nan_add_func_cmd_v2 *)nan_add_func_cmd)->data :
-	       ((struct iwl_nan_add_func_cmd *)nan_add_func_cmd)->data;
+	if (iwl_mvm_nan_is_ver2(hw))
+		return ((struct iwl_nan_add_func_cmd_v2 *)
+			nan_add_func_cmd)->data;
+
+	return ((struct iwl_nan_add_func_cmd *)nan_add_func_cmd)->data -
+		iwl_mvm_chan_info_padding(IWL_MAC80211_GET_MVM(hw));
 }
 
 int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
@@ -322,6 +329,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	void *cmd;
 	struct iwl_nan_add_func_common *cmn;
+	struct iwl_nan_add_func_common_tail *tail;
 	struct iwl_host_cmd hcmd = {
 		.id = iwl_cmd_id(NAN_DISCOVERY_FUNC_CMD, NAN_GROUP, 0),
 		.flags = CMD_WANT_SKB,
@@ -366,12 +374,13 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 	hcmd.data[0] = cmd;
 
 	cmn = iwl_mvm_nan_get_add_func_common(hw, cmd);
+	tail = iwl_mvm_chan_info_cmd_tail(mvm, &cmn->faw_ci);
 
 	cmd_data = iwl_mvm_nan_get_add_func_data(hw, cmd);
 	cmn->action = cpu_to_le32(FW_CTXT_ACTION_ADD);
 	cmn->type = iwl_fw_nan_func_type(nan_func->type);
 	cmn->instance_id = nan_func->instance_id;
-	cmn->dw_interval = 1;
+	tail->dw_interval = 1;
 
 	memcpy(&cmn->service_id, nan_func->service_id, sizeof(cmn->service_id));
 
@@ -398,7 +407,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 
 	cmn->flags = cpu_to_le16(flags);
 	cmn->ttl = cpu_to_le32(nan_func->ttl);
-	cmn->serv_info_len = nan_func->serv_spec_info_len;
+	tail->serv_info_len = nan_func->serv_spec_info_len;
 	if (nan_func->serv_spec_info_len)
 		memcpy(cmd_data, nan_func->serv_spec_info,
 		       nan_func->serv_spec_info_len);
@@ -411,7 +420,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		cmn->ttl = cpu_to_le32(1);
 	}
 
-	cmd_data += ALIGN(cmn->serv_info_len, 4);
+	cmd_data += ALIGN(tail->serv_info_len, 4);
 	if (nan_func->srf_bf_len) {
 		u8 srf_ctl = 0;
 
@@ -420,7 +429,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		if (nan_func->srf_include)
 			srf_ctl |= SRF_INCLUDE;
 
-		cmn->srf_len = nan_func->srf_bf_len + 1;
+		tail->srf_len = nan_func->srf_bf_len + 1;
 		memcpy(cmd_data, &srf_ctl, sizeof(srf_ctl));
 		memcpy(cmd_data + 1, nan_func->srf_bf, nan_func->srf_bf_len);
 	} else if (nan_func->srf_num_macs) {
@@ -430,7 +439,7 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		if (nan_func->srf_include)
 			srf_ctl |= SRF_INCLUDE;
 
-		cmn->srf_len = nan_func->srf_num_macs * ETH_ALEN + 1;
+		tail->srf_len = nan_func->srf_num_macs * ETH_ALEN + 1;
 		memcpy(cmd_data, &srf_ctl, sizeof(srf_ctl));
 
 		for (i = 0; i < nan_func->srf_num_macs; i++) {
@@ -439,20 +448,20 @@ int iwl_mvm_add_nan_func(struct ieee80211_hw *hw,
 		}
 	}
 
-	cmd_data += ALIGN(cmn->srf_len, 4);
+	cmd_data += ALIGN(tail->srf_len, 4);
 
 	if (rx_filt_len > 0)
 		iwl_mvm_copy_filters(nan_func->rx_filters,
 				     nan_func->num_rx_filters, cmd_data);
 
-	cmn->rx_filter_len = rx_filt_len;
-	cmd_data += ALIGN(cmn->rx_filter_len, 4);
+	tail->rx_filter_len = rx_filt_len;
+	cmd_data += ALIGN(tail->rx_filter_len, 4);
 
 	if (tx_filt_len > 0)
 		iwl_mvm_copy_filters(nan_func->tx_filters,
 				     nan_func->num_tx_filters, cmd_data);
 
-	cmn->tx_filter_len = tx_filt_len;
+	tail->tx_filter_len = tx_filt_len;
 
 	ret = iwl_mvm_send_cmd(mvm, &hcmd);
 
@@ -551,10 +560,11 @@ static u8 iwl_cfg_nan_func_type(u8 fw_type)
 	}
 }
 
-void iwl_mvm_nan_match(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
+static void iwl_mvm_nan_match_v1(struct iwl_mvm *mvm,
+				 struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
-	struct iwl_nan_disc_evt_notify *ev = (void *)pkt->data;
+	struct iwl_nan_disc_evt_notify_v1 *ev = (void *)pkt->data;
 	struct cfg80211_nan_match_params match = {0};
 	int len = iwl_rx_packet_payload_len(pkt);
 
@@ -590,6 +600,57 @@ void iwl_mvm_nan_match(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
 	match.info_len = ev->service_info_len;
 	ieee80211_nan_func_match(mvm->nan_vif, &match,
 				 GFP_ATOMIC);
+}
+
+static void iwl_mvm_nan_match_v2(struct iwl_mvm *mvm,
+				 struct iwl_rx_cmd_buffer *rxb)
+{
+	struct iwl_rx_packet *pkt = rxb_addr(rxb);
+	struct iwl_nan_disc_evt_notify_v2 *ev = (void *)pkt->data;
+	u32 len = iwl_rx_packet_payload_len(pkt);
+	u32 i = 0;
+
+	if (WARN_ONCE(!mvm->nan_vif, "NAN vif is NULL"))
+		return;
+
+	if (WARN_ONCE(len < sizeof(*ev), "Invalid NAN match event length=%u",
+		      len))
+		return;
+
+	if (WARN_ONCE(len < sizeof(*ev) + le32_to_cpu(ev->match_len) +
+		      le32_to_cpu(ev->avail_attrs_len),
+		      "Bad NAN match event: len=%u, match=%u, attrs=%u\n",
+		      len, ev->match_len, ev->avail_attrs_len))
+		return;
+
+	i = 0;
+	while (i < le32_to_cpu(ev->match_len)) {
+		struct cfg80211_nan_match_params match = {0};
+		struct iwl_nan_disc_info *disc_info =
+			(struct iwl_nan_disc_info *)(((u8 *)(ev + 1)) + i);
+
+		match.type = iwl_cfg_nan_func_type(disc_info->type);
+		match.inst_id = disc_info->instance_id;
+		match.peer_inst_id = disc_info->peer_instance;
+		match.addr = ev->peer_mac_addr;
+		match.info = disc_info->buf;
+		match.info_len = disc_info->service_info_len;
+		ieee80211_nan_func_match(mvm->nan_vif, &match,
+					 GFP_ATOMIC);
+
+		i += ALIGN(sizeof(*disc_info) +
+			   disc_info->service_info_len +
+			   le16_to_cpu(disc_info->sdea_service_info_len) +
+			   le16_to_cpu(disc_info->sec_ctxt_len), 4);
+	}
+}
+
+void iwl_mvm_nan_match(struct iwl_mvm *mvm, struct iwl_rx_cmd_buffer *rxb)
+{
+	if (fw_has_api(&mvm->fw->ucode_capa, IWL_UCODE_TLV_API_NAN_NOTIF_V2))
+		iwl_mvm_nan_match_v2(mvm, rxb);
+	else
+		iwl_mvm_nan_match_v1(mvm, rxb);
 }
 
 void iwl_mvm_nan_de_term_notif(struct iwl_mvm *mvm,
@@ -634,6 +695,8 @@ int iwl_mvm_nan_config_nan_faw_cmd(struct iwl_mvm *mvm,
 				   struct cfg80211_chan_def *chandef, u8 slots)
 {
 	struct iwl_nan_faw_config cmd = {};
+	struct iwl_nan_faw_config_tail *tail =
+		iwl_mvm_chan_info_cmd_tail(mvm, &cmd.faw_ci);
 	struct iwl_mvm_vif *mvmvif;
 	int ret;
 
@@ -645,15 +708,11 @@ int iwl_mvm_nan_config_nan_faw_cmd(struct iwl_mvm *mvm,
 	mvmvif = iwl_mvm_vif_from_mac80211(mvm->nan_vif);
 
 	/* Set the channel info data */
-	cmd.faw_ci.band = (chandef->chan->band == NL80211_BAND_2GHZ ?
-	      PHY_BAND_24 : PHY_BAND_5);
+	iwl_mvm_set_chan_info_chandef(mvm, &cmd.faw_ci, chandef);
 
-	cmd.faw_ci.channel = chandef->chan->hw_value;
-	cmd.faw_ci.width = iwl_mvm_get_channel_width(chandef);
-	cmd.faw_ci.ctrl_pos = iwl_mvm_get_ctrl_pos(chandef);
-	ieee80211_chandef_to_operating_class(chandef, &cmd.op_class);
-	cmd.slots = slots;
-	cmd.type = IWL_NAN_POST_NAN_ATTR_FURTHER_NAN;
+	ieee80211_chandef_to_operating_class(chandef, &tail->op_class);
+	tail->slots = slots;
+	tail->type = IWL_NAN_POST_NAN_ATTR_FURTHER_NAN;
 	cmd.id_n_color = cpu_to_le32(FW_CMD_ID_AND_COLOR(mvmvif->id,
 							 mvmvif->color));
 

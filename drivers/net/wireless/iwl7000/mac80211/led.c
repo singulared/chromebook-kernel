@@ -52,14 +52,21 @@ void ieee80211_free_led_names(struct ieee80211_local *local)
 	kfree(local->radio_led.name);
 }
 
-static void ieee80211_tx_led_activate(struct led_classdev *led_cdev)
+static int ieee80211_tx_led_activate(struct led_classdev *led_cdev)
 {
 	struct ieee80211_local *local = container_of(led_cdev->trigger,
 						     struct ieee80211_local,
 						     tx_led);
 
 	atomic_inc(&local->tx_led_active);
+
+	return 0;
 }
+#if LINUX_VERSION_IS_LESS(4,19,0)
+static void bp_ieee80211_tx_led_activate(struct led_classdev *led_cdev){
+	ieee80211_tx_led_activate(led_cdev);
+}
+#endif
 
 static void ieee80211_tx_led_deactivate(struct led_classdev *led_cdev)
 {
@@ -70,14 +77,21 @@ static void ieee80211_tx_led_deactivate(struct led_classdev *led_cdev)
 	atomic_dec(&local->tx_led_active);
 }
 
-static void ieee80211_rx_led_activate(struct led_classdev *led_cdev)
+static int ieee80211_rx_led_activate(struct led_classdev *led_cdev)
 {
 	struct ieee80211_local *local = container_of(led_cdev->trigger,
 						     struct ieee80211_local,
 						     rx_led);
 
 	atomic_inc(&local->rx_led_active);
+
+	return 0;
 }
+#if LINUX_VERSION_IS_LESS(4,19,0)
+static void bp_ieee80211_rx_led_activate(struct led_classdev *led_cdev){
+	ieee80211_rx_led_activate(led_cdev);
+}
+#endif
 
 static void ieee80211_rx_led_deactivate(struct led_classdev *led_cdev)
 {
@@ -88,14 +102,21 @@ static void ieee80211_rx_led_deactivate(struct led_classdev *led_cdev)
 	atomic_dec(&local->rx_led_active);
 }
 
-static void ieee80211_assoc_led_activate(struct led_classdev *led_cdev)
+static int ieee80211_assoc_led_activate(struct led_classdev *led_cdev)
 {
 	struct ieee80211_local *local = container_of(led_cdev->trigger,
 						     struct ieee80211_local,
 						     assoc_led);
 
 	atomic_inc(&local->assoc_led_active);
+
+	return 0;
 }
+#if LINUX_VERSION_IS_LESS(4,19,0)
+static void bp_ieee80211_assoc_led_activate(struct led_classdev *led_cdev){
+	ieee80211_assoc_led_activate(led_cdev);
+}
+#endif
 
 static void ieee80211_assoc_led_deactivate(struct led_classdev *led_cdev)
 {
@@ -106,14 +127,21 @@ static void ieee80211_assoc_led_deactivate(struct led_classdev *led_cdev)
 	atomic_dec(&local->assoc_led_active);
 }
 
-static void ieee80211_radio_led_activate(struct led_classdev *led_cdev)
+static int ieee80211_radio_led_activate(struct led_classdev *led_cdev)
 {
 	struct ieee80211_local *local = container_of(led_cdev->trigger,
 						     struct ieee80211_local,
 						     radio_led);
 
 	atomic_inc(&local->radio_led_active);
+
+	return 0;
 }
+#if LINUX_VERSION_IS_LESS(4,19,0)
+static void bp_ieee80211_radio_led_activate(struct led_classdev *led_cdev){
+	ieee80211_radio_led_activate(led_cdev);
+}
+#endif
 
 static void ieee80211_radio_led_deactivate(struct led_classdev *led_cdev)
 {
@@ -124,14 +152,21 @@ static void ieee80211_radio_led_deactivate(struct led_classdev *led_cdev)
 	atomic_dec(&local->radio_led_active);
 }
 
-static void ieee80211_tpt_led_activate(struct led_classdev *led_cdev)
+static int ieee80211_tpt_led_activate(struct led_classdev *led_cdev)
 {
 	struct ieee80211_local *local = container_of(led_cdev->trigger,
 						     struct ieee80211_local,
 						     tpt_led);
 
 	atomic_inc(&local->tpt_led_active);
+
+	return 0;
 }
+#if LINUX_VERSION_IS_LESS(4,19,0)
+static void bp_ieee80211_tpt_led_activate(struct led_classdev *led_cdev){
+	ieee80211_tpt_led_activate(led_cdev);
+}
+#endif
 
 static void ieee80211_tpt_led_deactivate(struct led_classdev *led_cdev)
 {
@@ -145,7 +180,11 @@ static void ieee80211_tpt_led_deactivate(struct led_classdev *led_cdev)
 void ieee80211_led_init(struct ieee80211_local *local)
 {
 	atomic_set(&local->rx_led_active, 0);
+#if LINUX_VERSION_IS_GEQ(4,19,0)
 	local->rx_led.activate = ieee80211_rx_led_activate;
+#else
+	local->rx_led.activate = bp_ieee80211_rx_led_activate;
+#endif
 	local->rx_led.deactivate = ieee80211_rx_led_deactivate;
 	if (local->rx_led.name && led_trigger_register(&local->rx_led)) {
 		kfree(local->rx_led.name);
@@ -153,7 +192,11 @@ void ieee80211_led_init(struct ieee80211_local *local)
 	}
 
 	atomic_set(&local->tx_led_active, 0);
+#if LINUX_VERSION_IS_GEQ(4,19,0)
 	local->tx_led.activate = ieee80211_tx_led_activate;
+#else
+	local->tx_led.activate = bp_ieee80211_tx_led_activate;
+#endif
 	local->tx_led.deactivate = ieee80211_tx_led_deactivate;
 	if (local->tx_led.name && led_trigger_register(&local->tx_led)) {
 		kfree(local->tx_led.name);
@@ -161,7 +204,11 @@ void ieee80211_led_init(struct ieee80211_local *local)
 	}
 
 	atomic_set(&local->assoc_led_active, 0);
+#if LINUX_VERSION_IS_GEQ(4,19,0)
 	local->assoc_led.activate = ieee80211_assoc_led_activate;
+#else
+	local->assoc_led.activate = bp_ieee80211_assoc_led_activate;
+#endif
 	local->assoc_led.deactivate = ieee80211_assoc_led_deactivate;
 	if (local->assoc_led.name && led_trigger_register(&local->assoc_led)) {
 		kfree(local->assoc_led.name);
@@ -169,7 +216,11 @@ void ieee80211_led_init(struct ieee80211_local *local)
 	}
 
 	atomic_set(&local->radio_led_active, 0);
+#if LINUX_VERSION_IS_GEQ(4,19,0)
 	local->radio_led.activate = ieee80211_radio_led_activate;
+#else
+	local->radio_led.activate = bp_ieee80211_radio_led_activate;
+#endif
 	local->radio_led.deactivate = ieee80211_radio_led_deactivate;
 	if (local->radio_led.name && led_trigger_register(&local->radio_led)) {
 		kfree(local->radio_led.name);
@@ -178,7 +229,11 @@ void ieee80211_led_init(struct ieee80211_local *local)
 
 	atomic_set(&local->tpt_led_active, 0);
 	if (local->tpt_led_trigger) {
+#if LINUX_VERSION_IS_GEQ(4,19,0)
 		local->tpt_led.activate = ieee80211_tpt_led_activate;
+#else
+		local->tpt_led.activate = bp_ieee80211_tpt_led_activate;
+#endif
 		local->tpt_led.deactivate = ieee80211_tpt_led_deactivate;
 		if (led_trigger_register(&local->tpt_led)) {
 			kfree(local->tpt_led_trigger);
@@ -248,10 +303,10 @@ static unsigned long tpt_trig_traffic(struct ieee80211_local *local,
 	return DIV_ROUND_UP(delta, 1024 / 8);
 }
 
-static void tpt_trig_timer(unsigned long data)
+static void tpt_trig_timer(struct timer_list *t)
 {
-	struct ieee80211_local *local = (void *)data;
-	struct tpt_led_trigger *tpt_trig = local->tpt_led_trigger;
+	struct tpt_led_trigger *tpt_trig = from_timer(tpt_trig, t, timer);
+	struct ieee80211_local *local = tpt_trig->local;
 	struct led_classdev *led_cdev;
 	unsigned long on, off, tpt;
 	int i;
@@ -306,8 +361,9 @@ __ieee80211_create_tpt_led_trigger(struct ieee80211_hw *hw,
 	tpt_trig->blink_table = blink_table;
 	tpt_trig->blink_table_len = blink_table_len;
 	tpt_trig->want = flags;
+	tpt_trig->local = local;
 
-	setup_timer(&tpt_trig->timer, tpt_trig_timer, (unsigned long)local);
+	timer_setup(&tpt_trig->timer, tpt_trig_timer, 0);
 
 	local->tpt_led_trigger = tpt_trig;
 
@@ -326,7 +382,7 @@ static void ieee80211_start_tpt_led_trig(struct ieee80211_local *local)
 	tpt_trig_traffic(local, tpt_trig);
 	tpt_trig->running = true;
 
-	tpt_trig_timer((unsigned long)local);
+	tpt_trig_timer(&tpt_trig->timer);
 	mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
 }
 

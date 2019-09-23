@@ -132,6 +132,7 @@ enum MWIFIEX_802_11_PRIVACY_FILTER {
 #define MWIFIEX_TX_DATA_BUF_SIZE_8K        8192
 
 #define ISSUPP_11NENABLED(FwCapInfo) (FwCapInfo & BIT(11))
+#define ISSUPP_ADHOC_ENABLED(FwCapInfo) (FwCapInfo & BIT(25))
 
 /* dev_cap bitmap
  * BIT

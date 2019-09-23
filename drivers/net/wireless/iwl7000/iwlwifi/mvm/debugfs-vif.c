@@ -8,6 +8,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +62,6 @@
  *
  *****************************************************************************/
 #include "mvm.h"
-#include "fw/api/tof.h"
 #include "debugfs.h"
 
 static void iwl_dbgfs_update_pm(struct iwl_mvm *mvm,
@@ -261,7 +257,10 @@ static ssize_t iwl_dbgfs_mac_params_read(struct file *file,
 	case NL80211_IFTYPE_P2P_DEVICE:
 		pos += scnprintf(buf+pos, bufsz-pos, "type: p2p dev\n");
 		break;
+#if CFG80211_VERSION >= KERNEL_VERSION(4,4,0)
 	case NL80211_IFTYPE_NAN:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 		pos += scnprintf(buf+pos, bufsz-pos, "type: NAN\n");
 		break;
 	default:
@@ -272,10 +271,8 @@ static ssize_t iwl_dbgfs_mac_params_read(struct file *file,
 			 mvmvif->id, mvmvif->color);
 	pos += scnprintf(buf+pos, bufsz-pos, "bssid: %pM\n",
 			 vif->bss_conf.bssid);
-#ifdef CPTCFG_IWLMVM_TCM
 	pos += scnprintf(buf+pos, bufsz-pos, "Load: %d\n",
 			 mvm->tcm.result.load[mvmvif->id]);
-#endif
 	pos += scnprintf(buf+pos, bufsz-pos, "QoS:\n");
 	for (i = 0; i < ARRAY_SIZE(mvmvif->queue_params); i++)
 		pos += scnprintf(buf+pos, bufsz-pos,
@@ -533,886 +530,11 @@ static ssize_t iwl_dbgfs_os_device_timediff_read(struct file *file,
 	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
 }
 
-/* TODO BEFORE UPSTREAMING:
-
-   All these TOF entries have a trigger string that actually sends the
-   command to the firmware.  It shouldn't be like this, all the values
-   should be set at once and end-of-buffer or file-close should be
-   used to send the command.  We must either remove these entries or
-   change them before sending this code upstream.
-*/
-
-static ssize_t iwl_dbgfs_tof_enable_write(struct ieee80211_vif *vif,
-					  char *buf,
-					  size_t count, loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 value;
-	int ret = -EINVAL;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	data = iwl_dbgfs_is_match("tof_disabled=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.tof_cfg.tof_disabled = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("one_sided_disabled=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.tof_cfg.one_sided_disabled = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("is_debug_mode=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.tof_cfg.is_debug_mode = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("is_buf=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.tof_cfg.is_buf_required = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("send_tof_cfg=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value) {
-			ret = iwl_mvm_tof_config_cmd(mvm);
-			goto out;
-		}
-	}
-
-out:
-	mutex_unlock(&mvm->mutex);
-
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_enable_read(struct file *file,
-					 char __user *user_buf,
-					 size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[256];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-	struct iwl_tof_config_cmd *cmd;
-
-	cmd = &mvm->tof_data.tof_cfg;
-
-	mutex_lock(&mvm->mutex);
-
-	pos += scnprintf(buf + pos, bufsz - pos, "tof_disabled = %d\n",
-			 cmd->tof_disabled);
-	pos += scnprintf(buf + pos, bufsz - pos, "one_sided_disabled = %d\n",
-			 cmd->one_sided_disabled);
-	pos += scnprintf(buf + pos, bufsz - pos, "is_debug_mode = %d\n",
-			 cmd->is_debug_mode);
-	pos += scnprintf(buf + pos, bufsz - pos, "is_buf_required = %d\n",
-			 cmd->is_buf_required);
-
-	mutex_unlock(&mvm->mutex);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
-static ssize_t iwl_dbgfs_tof_responder_params_write(struct ieee80211_vif *vif,
-						    char *buf,
-						    size_t count, loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 value;
-	int ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	data = iwl_dbgfs_is_match("channel_num=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.channel_num = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("bandwidth=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.bandwidth = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("rate=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.rate = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("bssid=", buf);
-	if (data) {
-		u8 *mac = mvm->tof_data.responder_cfg.bssid;
-
-		if (!mac_pton(data, mac)) {
-			ret = -EINVAL;
-			goto out;
-		}
-	}
-
-	data = iwl_dbgfs_is_match("toa_offset=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.toa_offset =
-							cpu_to_le16(value);
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("center_freq=", buf);
-	if (data) {
-		struct iwl_tof_responder_config_cmd *cmd =
-			&mvm->tof_data.responder_cfg;
-
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value) {
-			enum nl80211_band band = (cmd->channel_num <= 14) ?
-						   NL80211_BAND_2GHZ :
-						   NL80211_BAND_5GHZ;
-			struct ieee80211_channel chn = {
-				.band = band,
-				.center_freq = ieee80211_channel_to_frequency(
-					cmd->channel_num, band),
-				};
-			struct cfg80211_chan_def chandef = {
-				.chan =  &chn,
-				.center_freq1 =
-					ieee80211_channel_to_frequency(value,
-								       band),
-			};
-
-			cmd->ctrl_ch_position = iwl_mvm_get_ctrl_pos(&chandef);
-		}
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("send_responder_cfg=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value) {
-			ret = iwl_mvm_tof_responder_cmd(mvm, vif);
-			goto out;
-		}
-	}
-
-out:
-	mutex_unlock(&mvm->mutex);
-
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_responder_params_read(struct file *file,
-						   char __user *user_buf,
-						   size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[256];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-	struct iwl_tof_responder_config_cmd *cmd;
-
-	cmd = &mvm->tof_data.responder_cfg;
-
-	mutex_lock(&mvm->mutex);
-
-	pos += scnprintf(buf + pos, bufsz - pos, "bandwidth = %d\n",
-			 cmd->bandwidth);
-	pos += scnprintf(buf + pos, bufsz - pos, "channel_num = %d\n",
-			 cmd->channel_num);
-	pos += scnprintf(buf + pos, bufsz - pos, "ctrl_ch_position = 0x%x\n",
-			 cmd->ctrl_ch_position);
-	pos += scnprintf(buf + pos, bufsz - pos, "bssid = %pM\n",
-			 cmd->bssid);
-	pos += scnprintf(buf + pos, bufsz - pos, "rate = %d\n", cmd->rate);
-	pos += scnprintf(buf + pos, bufsz - pos, "toa_offset = %d\n",
-			 le16_to_cpu(cmd->toa_offset));
-
-	mutex_unlock(&mvm->mutex);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
-static ssize_t iwl_dbgfs_tof_range_request_write(struct ieee80211_vif *vif,
-						 char *buf, size_t count,
-						 loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 value;
-	int ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	/* nesting of range requests is not supported in FW */
-	if (mvm->tof_data.active_request_id != IWL_MVM_TOF_RANGE_REQ_MAX_ID) {
-		IWL_ERR(mvm, "Cannot send range req, already active req %d\n",
-			mvm->tof_data.active_request_id);
-		ret = -EBUSY;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("request_id=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.request_id = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("initiator=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.initiator = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("one_sided_los_disable=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.one_sided_los_disable = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("req_timeout=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.req_timeout = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("report_policy=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.report_policy = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("macaddr_random=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.macaddr_random = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("num_of_ap=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req.num_of_ap = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("macaddr_template=", buf);
-	if (data) {
-		u8 mac[ETH_ALEN];
-
-		if (!mac_pton(data, mac)) {
-			ret = -EINVAL;
-			goto out;
-		}
-		memcpy(mvm->tof_data.range_req.macaddr_template, mac, ETH_ALEN);
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("macaddr_mask=", buf);
-	if (data) {
-		u8 mac[ETH_ALEN];
-
-		if (!mac_pton(data, mac)) {
-			ret = -EINVAL;
-			goto out;
-		}
-		memcpy(mvm->tof_data.range_req.macaddr_mask, mac, ETH_ALEN);
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("ap=", buf);
-	if (data) {
-		struct iwl_tof_range_req_ap_entry ap = {};
-		int size = sizeof(struct iwl_tof_range_req_ap_entry);
-		u16 burst_period;
-		u8 *mac = ap.bssid;
-		unsigned int i;
-
-		if (sscanf(data, "%u %hhd %hhd %hhd"
-			   "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx"
-			   "%hhd %hhd %hd"
-			   "%hhd %hhd %d"
-			   "%hhx %hhd %hhd %hhd",
-			   &i, &ap.channel_num, &ap.bandwidth,
-			   &ap.ctrl_ch_position,
-			   mac, mac + 1, mac + 2, mac + 3, mac + 4, mac + 5,
-			   &ap.measure_type, &ap.num_of_bursts,
-			   &burst_period,
-			   &ap.samples_per_burst, &ap.retries_per_sample,
-			   &ap.tsf_delta, &ap.location_req, &ap.asap_mode,
-			   &ap.enable_dyn_ack, &ap.rssi) != 20) {
-			ret = -EINVAL;
-			goto out;
-		}
-		if (i >= IWL_MVM_TOF_MAX_APS) {
-			IWL_ERR(mvm, "Invalid AP index %d\n", i);
-			ret = -EINVAL;
-			goto out;
-		}
-
-		ap.burst_period = cpu_to_le16(burst_period);
-
-		memcpy(&mvm->tof_data.range_req.ap[i], &ap, size);
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("send_range_request=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value)
-			ret = iwl_mvm_tof_range_request_cmd(mvm);
-		goto out;
-	}
-
-	ret = -EINVAL;
-out:
-	mutex_unlock(&mvm->mutex);
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_range_request_read(struct file *file,
-						char __user *user_buf,
-						size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[512];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-	struct iwl_tof_range_req_cmd *cmd;
-	int i;
-
-	cmd = &mvm->tof_data.range_req;
-
-	mutex_lock(&mvm->mutex);
-
-	pos += scnprintf(buf + pos, bufsz - pos, "request_id= %d\n",
-			 cmd->request_id);
-	pos += scnprintf(buf + pos, bufsz - pos, "initiator= %d\n",
-			 cmd->initiator);
-	pos += scnprintf(buf + pos, bufsz - pos, "one_sided_los_disable = %d\n",
-			 cmd->one_sided_los_disable);
-	pos += scnprintf(buf + pos, bufsz - pos, "req_timeout= %d\n",
-			 cmd->req_timeout);
-	pos += scnprintf(buf + pos, bufsz - pos, "report_policy= %d\n",
-			 cmd->report_policy);
-	pos += scnprintf(buf + pos, bufsz - pos, "macaddr_random= %d\n",
-			 cmd->macaddr_random);
-	pos += scnprintf(buf + pos, bufsz - pos, "macaddr_template= %pM\n",
-			 cmd->macaddr_template);
-	pos += scnprintf(buf + pos, bufsz - pos, "macaddr_mask= %pM\n",
-			 cmd->macaddr_mask);
-	pos += scnprintf(buf + pos, bufsz - pos, "num_of_ap= %d\n",
-			 cmd->num_of_ap);
-	for (i = 0; i < cmd->num_of_ap; i++) {
-		struct iwl_tof_range_req_ap_entry *ap = &cmd->ap[i];
-
-		pos += scnprintf(buf + pos, bufsz - pos,
-				"ap %.2d: channel_num=%hhd bw=%hhd"
-				" control=%hhd bssid=%pM type=%hhd"
-				" num_of_bursts=%hhd burst_period=%hd ftm=%hhd"
-				" retries=%hhd tsf_delta=%d"
-				" tsf_delta_direction=%hhd location_req=0x%hhx "
-				" asap=%hhd enable=%hhd rssi=%hhd\n",
-				i, ap->channel_num, ap->bandwidth,
-				ap->ctrl_ch_position, ap->bssid,
-				ap->measure_type, ap->num_of_bursts,
-				ap->burst_period, ap->samples_per_burst,
-				ap->retries_per_sample, ap->tsf_delta,
-				ap->tsf_delta_direction,
-				ap->location_req, ap->asap_mode,
-				ap->enable_dyn_ack, ap->rssi);
-	}
-
-	mutex_unlock(&mvm->mutex);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
-static ssize_t iwl_dbgfs_tof_range_req_ext_write(struct ieee80211_vif *vif,
-						 char *buf,
-						 size_t count, loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 value;
-	int ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	data = iwl_dbgfs_is_match("tsf_timer_offset_msec=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req_ext.tsf_timer_offset_msec =
-							cpu_to_le16(value);
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("min_delta_ftm=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req_ext.min_delta_ftm = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("ftm_format_and_bw20M=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req_ext.ftm_format_and_bw20M =
-									value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("ftm_format_and_bw40M=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req_ext.ftm_format_and_bw40M =
-									value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("ftm_format_and_bw80M=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.range_req_ext.ftm_format_and_bw80M =
-									value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("send_range_req_ext=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value)
-			ret = iwl_mvm_tof_range_request_ext_cmd(mvm);
-		goto out;
-	}
-
-	ret = -EINVAL;
-out:
-	mutex_unlock(&mvm->mutex);
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_range_req_ext_read(struct file *file,
-						char __user *user_buf,
-						size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[256];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-	struct iwl_tof_range_req_ext_cmd *cmd;
-
-	cmd = &mvm->tof_data.range_req_ext;
-
-	mutex_lock(&mvm->mutex);
-
-	pos += scnprintf(buf + pos, bufsz - pos,
-			 "tsf_timer_offset_msec = %hd\n",
-			 cmd->tsf_timer_offset_msec);
-	pos += scnprintf(buf + pos, bufsz - pos, "min_delta_ftm = %hhd\n",
-			 cmd->min_delta_ftm);
-	pos += scnprintf(buf + pos, bufsz - pos,
-			 "ftm_format_and_bw20M = %hhd\n",
-			 cmd->ftm_format_and_bw20M);
-	pos += scnprintf(buf + pos, bufsz - pos,
-			 "ftm_format_and_bw40M = %hhd\n",
-			 cmd->ftm_format_and_bw40M);
-	pos += scnprintf(buf + pos, bufsz - pos,
-			 "ftm_format_and_bw80M = %hhd\n",
-			 cmd->ftm_format_and_bw80M);
-
-	mutex_unlock(&mvm->mutex);
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
-static ssize_t iwl_dbgfs_tof_range_abort_write(struct ieee80211_vif *vif,
-					       char *buf,
-					       size_t count, loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 value;
-	int abort_id, ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	data = iwl_dbgfs_is_match("abort_id=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0)
-			mvm->tof_data.last_abort_id = value;
-		goto out;
-	}
-
-	data = iwl_dbgfs_is_match("send_range_abort=", buf);
-	if (data) {
-		ret = kstrtou32(data, 10, &value);
-		if (ret == 0 && value) {
-			abort_id = mvm->tof_data.last_abort_id;
-			ret = iwl_mvm_tof_range_abort_cmd(mvm, abort_id);
-			goto out;
-		}
-	}
-
-out:
-	mutex_unlock(&mvm->mutex);
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_range_abort_read(struct file *file,
-					      char __user *user_buf,
-					      size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[32];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-	int last_abort_id;
-
-	mutex_lock(&mvm->mutex);
-	last_abort_id = mvm->tof_data.last_abort_id;
-	mutex_unlock(&mvm->mutex);
-
-	pos += scnprintf(buf + pos, bufsz - pos, "last_abort_id = %d\n",
-			 last_abort_id);
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
-static ssize_t iwl_dbgfs_tof_range_response_read(struct file *file,
-						 char __user *user_buf,
-						 size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char *buf;
-	int pos = 0;
-	const size_t bufsz = sizeof(struct iwl_tof_range_rsp_ntfy) + 256;
-	struct iwl_tof_range_rsp_ntfy *cmd;
-	int i, ret;
-
-	buf = kzalloc(bufsz, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	mutex_lock(&mvm->mutex);
-	cmd = &mvm->tof_data.range_resp;
-
-	pos += scnprintf(buf + pos, bufsz - pos, "request_id = %d\n",
-			 cmd->request_id);
-	pos += scnprintf(buf + pos, bufsz - pos, "status = %d\n",
-			 cmd->request_status);
-	pos += scnprintf(buf + pos, bufsz - pos, "last_in_batch = %d\n",
-			 cmd->last_in_batch);
-	pos += scnprintf(buf + pos, bufsz - pos, "num_of_aps = %d\n",
-			 cmd->num_of_aps);
-	for (i = 0; i < cmd->num_of_aps; i++) {
-		struct iwl_tof_range_rsp_ap_entry_ntfy *ap = &cmd->ap[i];
-
-		pos += scnprintf(buf + pos, bufsz - pos,
-				"ap %.2d: bssid=%pM status=%hhd bw=%hhd"
-				" rtt=%d rtt_var=%d rtt_spread=%d"
-				" rssi=%hhd  rssi_spread=%hhd"
-				" range=%d range_var=%d"
-				" time_stamp=%d\n",
-				i, ap->bssid, ap->measure_status,
-				ap->measure_bw,
-				ap->rtt, ap->rtt_variance, ap->rtt_spread,
-				ap->rssi, ap->rssi_spread, ap->range,
-				ap->range_variance, ap->timestamp);
-	}
-	mutex_unlock(&mvm->mutex);
-
-	ret = simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-	kfree(buf);
-	return ret;
-}
-
-static ssize_t iwl_dbgfs_tof_algo_type_write(struct ieee80211_vif *vif,
-					     char *buf, size_t count,
-					     loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u8 algo_type;
-	int ret;
-
-	ret = kstrtou8(buf, 0, &algo_type);
-	if (ret)
-		return ret;
-
-	if (algo_type >= IWL_TOF_ALGO_TYPE_INVALID)
-		return -EINVAL;
-
-	mvm->tof_data.tof_algo_type = algo_type;
-
-	return count;
-}
-
-static ssize_t iwl_dbgfs_tof_algo_type_read(struct file *file,
-					    char __user *user_buf,
-					    size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[10];
-	int ret;
-
-	ret = scnprintf(buf, sizeof(buf), "%d\n", mvm->tof_data.tof_algo_type);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
-}
-
-static ssize_t iwl_dbgfs_tof_toa_offset_write(struct ieee80211_vif *vif,
-					      char *buf, size_t count,
-					      loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	s16 toa_offset;
-	int ret;
-
-	ret = kstrtos16(buf, 0, &toa_offset);
-	if (ret)
-		return ret;
-
-	mutex_lock(&mvm->mutex);
-
-	mvm->tof_data.responder_cfg.toa_offset = cpu_to_le16(toa_offset);
-	mvm->tof_data.responder_cfg.cmd_valid_fields =
-		cpu_to_le32(IWL_TOF_RESPONDER_CMD_VALID_TOA_OFFSET);
-
-	ret = iwl_mvm_tof_responder_cmd(mvm, vif);
-
-	mutex_unlock(&mvm->mutex);
-
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_toa_offset_read(struct file *file,
-					     char __user *user_buf,
-					     size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[10];
-	int ret;
-
-	ret = scnprintf(buf, sizeof(buf), "%u\n", mvm->tof_data.toa_offset);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
-}
-
-static ssize_t iwl_dbgfs_tof_responder_config_write(
-					struct ieee80211_vif *vif,
-					char *buf, size_t count,
-					loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 cmd_valid_fields;
-	u32 responder_cfg_flags;
-	int ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	data = iwl_dbgfs_is_match("cmd_valid_fields=", buf);
-	if (data) {
-		ret = kstrtou32(data, 0, &cmd_valid_fields);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.cmd_valid_fields =
-				cpu_to_le32(cmd_valid_fields);
-		else
-			goto out;
-	}
-
-	data = iwl_dbgfs_is_match("responder_cfg_flags=", buf);
-	if (data) {
-		ret = kstrtou32(data, 0, &responder_cfg_flags);
-		if (ret == 0)
-			mvm->tof_data.responder_cfg.responder_cfg_flags =
-				cpu_to_le32(responder_cfg_flags);
-		else
-			goto out;
-	}
-
-	data = iwl_dbgfs_is_match("responder_cfg_cmd_send=", buf);
-	if (data) {
-		ret = kstrtou32(data, 0, &responder_cfg_flags);
-		if (ret == 0)
-			ret = iwl_mvm_tof_responder_cmd(mvm, vif);
-	}
-
-out:
-	mutex_unlock(&mvm->mutex);
-
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_responder_config_read(
-					struct file *file,
-					char __user *user_buf,
-					size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[128];
-	int ret;
-
-	ret = scnprintf(buf,
-			sizeof(buf),
-			"responder_cfg_flags=0x%x\ncmd_valid_fields=0x%x\n",
-			mvm->tof_data.responder_cfg.responder_cfg_flags,
-			mvm->tof_data.responder_cfg.cmd_valid_fields);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
-}
-
-static ssize_t iwl_dbgfs_tof_initiator_config_write(
-					      struct ieee80211_vif *vif,
-					      char *buf, size_t count,
-					      loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u32 initiator_cfg_flags;
-	int ret = 0;
-	char *data;
-
-	mutex_lock(&mvm->mutex);
-
-	/* expected string is "initiator_cfg_flags=0x123" */
-	data = iwl_dbgfs_is_match("initiator_cfg_flags=", buf);
-	if (data) {
-		ret = kstrtou32(data, 0, &initiator_cfg_flags);
-		if (ret == 0)
-			mvm->tof_data.range_req.initiator_flags =
-				cpu_to_le32(initiator_cfg_flags);
-	}
-
-	mutex_unlock(&mvm->mutex);
-
-	return ret ?: count;
-}
-
-static ssize_t iwl_dbgfs_tof_initiator_config_read(struct file *file,
-						   char __user *user_buf,
-						   size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[32];
-	int ret;
-
-	ret = scnprintf(buf, sizeof(buf), "initiator_cfg_flags=0x%x\n",
-			mvm->tof_data.range_req.initiator_flags);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, ret);
-}
-
-static ssize_t iwl_dbgfs_tof_enable_dyn_ack_write(struct ieee80211_vif *vif,
-						  char *buf, size_t count,
-						  loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	u8 value;
-	int ret;
-
-	ret = kstrtou8(buf, 0, &value);
-	if (ret)
-		return ret;
-	if (value > 1)
-		return -EINVAL;
-
-	mutex_lock(&mvm->mutex);
-	mvm->tof_data.enable_dyn_ack = value;
-	mutex_unlock(&mvm->mutex);
-
-	return count;
-}
-
-static ssize_t iwl_dbgfs_tof_enable_dyn_ack_read(struct file *file,
-						 char __user *user_buf,
-						 size_t count, loff_t *ppos)
-{
-	struct ieee80211_vif *vif = file->private_data;
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	char buf[32];
-	int pos = 0;
-	const size_t bufsz = sizeof(buf);
-
-	pos += scnprintf(buf + pos, bufsz - pos, "enable_dyn_ack = %d\n",
-			 mvm->tof_data.enable_dyn_ack);
-	return simple_read_from_buffer(user_buf, count, ppos, buf, pos);
-}
-
 static ssize_t iwl_dbgfs_low_latency_write(struct ieee80211_vif *vif, char *buf,
 					   size_t count, loff_t *ppos)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mvm *mvm = mvmvif->mvm;
-	bool prev;
 	u8 value;
 	int ret;
 
@@ -1423,11 +545,42 @@ static ssize_t iwl_dbgfs_low_latency_write(struct ieee80211_vif *vif, char *buf,
 		return -EINVAL;
 
 	mutex_lock(&mvm->mutex);
-	prev = iwl_mvm_vif_low_latency(mvmvif);
-	mvmvif->low_latency_dbgfs = value;
-	iwl_mvm_update_low_latency(mvm, vif, prev);
+	iwl_mvm_update_low_latency(mvm, vif, value, LOW_LATENCY_DEBUGFS);
 	mutex_unlock(&mvm->mutex);
 
+	return count;
+}
+
+static ssize_t
+iwl_dbgfs_low_latency_force_write(struct ieee80211_vif *vif, char *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+	struct iwl_mvm *mvm = mvmvif->mvm;
+	u8 value;
+	int ret;
+
+	ret = kstrtou8(buf, 0, &value);
+	if (ret)
+		return ret;
+
+	if (value > NUM_LOW_LATENCY_FORCE)
+		return -EINVAL;
+
+	mutex_lock(&mvm->mutex);
+	if (value == LOW_LATENCY_FORCE_UNSET) {
+		iwl_mvm_update_low_latency(mvm, vif, false,
+					   LOW_LATENCY_DEBUGFS_FORCE);
+		iwl_mvm_update_low_latency(mvm, vif, false,
+					   LOW_LATENCY_DEBUGFS_FORCE_ENABLE);
+	} else {
+		iwl_mvm_update_low_latency(mvm, vif,
+					   value == LOW_LATENCY_FORCE_ON,
+					   LOW_LATENCY_DEBUGFS_FORCE);
+		iwl_mvm_update_low_latency(mvm, vif, true,
+					   LOW_LATENCY_DEBUGFS_FORCE_ENABLE);
+	}
+	mutex_unlock(&mvm->mutex);
 	return count;
 }
 
@@ -1437,14 +590,25 @@ static ssize_t iwl_dbgfs_low_latency_read(struct file *file,
 {
 	struct ieee80211_vif *vif = file->private_data;
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	char buf[30] = {};
+	char format[] = "traffic=%d\ndbgfs=%d\nvcmd=%d\nvif_type=%d\n"
+			"dbgfs_force_enable=%d\ndbgfs_force=%d\nactual=%d\n";
+
+	/*
+	 * all values in format are boolean so the size of format is enough
+	 * for holding the result string
+	 */
+	char buf[sizeof(format) + 1] = {};
 	int len;
 
-	len = scnprintf(buf, sizeof(buf) - 1,
-			"traffic=%d\ndbgfs=%d\nvcmd=%d\n",
-			mvmvif->low_latency_traffic,
-			mvmvif->low_latency_dbgfs,
-			mvmvif->low_latency_vcmd);
+	len = scnprintf(buf, sizeof(buf) - 1, format,
+			!!(mvmvif->low_latency & LOW_LATENCY_TRAFFIC),
+			!!(mvmvif->low_latency & LOW_LATENCY_DEBUGFS),
+			!!(mvmvif->low_latency & LOW_LATENCY_VCMD),
+			!!(mvmvif->low_latency & LOW_LATENCY_VIF_TYPE),
+			!!(mvmvif->low_latency &
+			   LOW_LATENCY_DEBUGFS_FORCE_ENABLE),
+			!!(mvmvif->low_latency & LOW_LATENCY_DEBUGFS_FORCE),
+			!!(mvmvif->low_latency_actual));
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
 
@@ -1582,89 +746,6 @@ static ssize_t iwl_dbgfs_quota_min_read(struct file *file,
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
 
-static const char * const chanwidths[] = {
-	[NL80211_CHAN_WIDTH_20_NOHT] = "noht",
-	[NL80211_CHAN_WIDTH_20] = "ht20",
-	[NL80211_CHAN_WIDTH_40] = "ht40",
-	[NL80211_CHAN_WIDTH_80] = "vht80",
-	[NL80211_CHAN_WIDTH_80P80] = "vht80p80",
-	[NL80211_CHAN_WIDTH_160] = "vht160",
-};
-
-static bool iwl_mvm_lqm_notif_wait(struct iwl_notif_wait_data *notif_wait,
-				   struct iwl_rx_packet *pkt, void *data)
-{
-	struct ieee80211_vif *vif = data;
-	struct iwl_mvm *mvm =
-		container_of(notif_wait, struct iwl_mvm, notif_wait);
-	struct iwl_link_qual_msrmnt_notif *report = (void *)pkt->data;
-	u32 num_of_stations = le32_to_cpu(report->number_of_stations);
-	int i;
-
-	IWL_INFO(mvm, "LQM report:\n");
-	IWL_INFO(mvm, "\tstatus: %d\n", report->status);
-	IWL_INFO(mvm, "\tmacID: %d\n", le32_to_cpu(report->mac_id));
-	IWL_INFO(mvm, "\ttx_frame_dropped: %d\n",
-		 le32_to_cpu(report->tx_frame_dropped));
-	IWL_INFO(mvm, "\ttime_in_measurement_window: %d us\n",
-		 le32_to_cpu(report->time_in_measurement_window));
-	IWL_INFO(mvm, "\ttotal_air_time_other_stations: %d\n",
-		 le32_to_cpu(report->total_air_time_other_stations));
-	IWL_INFO(mvm, "\tchannel_freq: %d\n",
-		 vif->bss_conf.chandef.center_freq1);
-	IWL_INFO(mvm, "\tchannel_width: %s\n",
-		 chanwidths[vif->bss_conf.chandef.width]);
-	IWL_INFO(mvm, "\tnumber_of_stations: %d\n", num_of_stations);
-	for (i = 0; i < num_of_stations; i++)
-		IWL_INFO(mvm, "\t\tsta[%d]: %d\n", i,
-			 report->frequent_stations_air_time[i]);
-
-	return true;
-}
-
-static ssize_t iwl_dbgfs_lqm_send_cmd_write(struct ieee80211_vif *vif,
-					    char *buf, size_t count,
-					    loff_t *ppos)
-{
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
-	struct iwl_mvm *mvm = mvmvif->mvm;
-	struct iwl_notification_wait wait_lqm_notif;
-	static u16 lqm_notif[] = {
-		WIDE_ID(MAC_CONF_GROUP,
-			LINK_QUALITY_MEASUREMENT_COMPLETE_NOTIF)
-	};
-	int err;
-	u32 duration;
-	u32 timeout;
-
-	if (sscanf(buf, "%d,%d", &duration, &timeout) != 2)
-		return -EINVAL;
-
-	iwl_init_notification_wait(&mvm->notif_wait, &wait_lqm_notif,
-				   lqm_notif, ARRAY_SIZE(lqm_notif),
-				   iwl_mvm_lqm_notif_wait, vif);
-	mutex_lock(&mvm->mutex);
-	err = iwl_mvm_send_lqm_cmd(vif, LQM_CMD_OPERATION_START_MEASUREMENT,
-				   duration, timeout);
-	mutex_unlock(&mvm->mutex);
-
-	if (err) {
-		IWL_ERR(mvm, "Failed to send lqm cmdf(err=%d)\n", err);
-		iwl_remove_notification(&mvm->notif_wait, &wait_lqm_notif);
-		return err;
-	}
-
-	/* wait for 2 * timeout (safety guard) and convert to jiffies*/
-	timeout = msecs_to_jiffies((timeout * 2) / 1000);
-
-	err = iwl_wait_notification(&mvm->notif_wait, &wait_lqm_notif,
-				    timeout);
-	if (err)
-		IWL_ERR(mvm, "Getting lqm notif timed out\n");
-
-	return count;
-}
-
 #define MVM_DEBUGFS_WRITE_FILE_OPS(name, bufsz) \
 	_MVM_DEBUGFS_WRITE_FILE_OPS(name, bufsz, struct ieee80211_vif)
 #define MVM_DEBUGFS_READ_WRITE_FILE_OPS(name, bufsz) \
@@ -1680,21 +761,10 @@ MVM_DEBUGFS_READ_FILE_OPS(tx_pwr_lmt);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(pm_params, 32);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(bf_params, 256);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(low_latency, 10);
+MVM_DEBUGFS_WRITE_FILE_OPS(low_latency_force, 10);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(uapsd_misbehaving, 20);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(rx_phyinfo, 10);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_enable, 32);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_range_request, 512);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_algo_type, 10);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_toa_offset, 10);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_responder_config, 64);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_initiator_config, 64);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_enable_dyn_ack, 8);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_range_req_ext, 32);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_range_abort, 32);
-MVM_DEBUGFS_READ_FILE_OPS(tof_range_response);
-MVM_DEBUGFS_READ_WRITE_FILE_OPS(tof_responder_params, 32);
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(quota_min, 32);
-MVM_DEBUGFS_WRITE_FILE_OPS(lqm_send_cmd, 64);
 MVM_DEBUGFS_READ_FILE_OPS(os_device_timediff);
 
 
@@ -1727,59 +797,20 @@ void iwl_mvm_vif_dbgfs_register(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	if (iwlmvm_mod_params.power_scheme != IWL_POWER_SCHEME_CAM &&
 	    ((vif->type == NL80211_IFTYPE_STATION && !vif->p2p) ||
 	     (vif->type == NL80211_IFTYPE_STATION && vif->p2p)))
-		MVM_DEBUGFS_ADD_FILE_VIF(pm_params, mvmvif->dbgfs_dir, S_IWUSR |
-					 S_IRUSR);
+		MVM_DEBUGFS_ADD_FILE_VIF(pm_params, mvmvif->dbgfs_dir, 0600);
 
-	MVM_DEBUGFS_ADD_FILE_VIF(tx_pwr_lmt, mvmvif->dbgfs_dir, S_IRUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(mac_params, mvmvif->dbgfs_dir, S_IRUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(low_latency, mvmvif->dbgfs_dir,
-				 S_IRUSR | S_IWUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(uapsd_misbehaving, mvmvif->dbgfs_dir,
-				 S_IRUSR | S_IWUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(rx_phyinfo, mvmvif->dbgfs_dir,
-				 S_IRUSR | S_IWUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(quota_min, mvmvif->dbgfs_dir,
-				 S_IRUSR | S_IWUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(lqm_send_cmd, mvmvif->dbgfs_dir, S_IWUSR);
-	MVM_DEBUGFS_ADD_FILE_VIF(os_device_timediff,
-				 mvmvif->dbgfs_dir, S_IRUSR);
+	MVM_DEBUGFS_ADD_FILE_VIF(tx_pwr_lmt, mvmvif->dbgfs_dir, 0400);
+	MVM_DEBUGFS_ADD_FILE_VIF(mac_params, mvmvif->dbgfs_dir, 0400);
+	MVM_DEBUGFS_ADD_FILE_VIF(low_latency, mvmvif->dbgfs_dir, 0600);
+	MVM_DEBUGFS_ADD_FILE_VIF(low_latency_force, mvmvif->dbgfs_dir, 0600);
+	MVM_DEBUGFS_ADD_FILE_VIF(uapsd_misbehaving, mvmvif->dbgfs_dir, 0600);
+	MVM_DEBUGFS_ADD_FILE_VIF(rx_phyinfo, mvmvif->dbgfs_dir, 0600);
+	MVM_DEBUGFS_ADD_FILE_VIF(quota_min, mvmvif->dbgfs_dir, 0600);
+	MVM_DEBUGFS_ADD_FILE_VIF(os_device_timediff, mvmvif->dbgfs_dir, 0400);
 
 	if (vif->type == NL80211_IFTYPE_STATION && !vif->p2p &&
 	    mvmvif == mvm->bf_allowed_vif)
-		MVM_DEBUGFS_ADD_FILE_VIF(bf_params, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-
-	if (fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_TOF_SUPPORT) &&
-	    !vif->p2p && (vif->type != NL80211_IFTYPE_P2P_DEVICE) &&
-	    (vif->type != NL80211_IFTYPE_NAN)) {
-		if (IWL_MVM_TOF_IS_RESPONDER && vif->type == NL80211_IFTYPE_AP)
-			MVM_DEBUGFS_ADD_FILE_VIF(tof_responder_params,
-						 mvmvif->dbgfs_dir,
-						 S_IRUSR | S_IWUSR);
-
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_range_request, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_range_req_ext, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_enable, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_range_abort, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_range_response, mvmvif->dbgfs_dir,
-					 S_IRUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_algo_type, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_toa_offset, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_responder_config,
-					 mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_initiator_config,
-					 mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-		MVM_DEBUGFS_ADD_FILE_VIF(tof_enable_dyn_ack, mvmvif->dbgfs_dir,
-					 S_IRUSR | S_IWUSR);
-	}
+		MVM_DEBUGFS_ADD_FILE_VIF(bf_params, mvmvif->dbgfs_dir, 0600);
 
 	/*
 	 * Create symlink for convenience pointing to interface specific

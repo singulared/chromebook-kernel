@@ -8,6 +8,7 @@
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016        Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -363,10 +360,16 @@
 
 /* FW monitor */
 #define MON_BUFF_SAMPLE_CTL		(0xa03c00)
-#define MON_BUFF_BASE_ADDR		(0xa03c3c)
+#define MON_BUFF_BASE_ADDR		(0xa03c1c)
 #define MON_BUFF_END_ADDR		(0xa03c40)
 #define MON_BUFF_WRPTR			(0xa03c44)
 #define MON_BUFF_CYCLE_CNT		(0xa03c48)
+/* FW monitor family 8000 and on */
+#define MON_BUFF_BASE_ADDR_VER2		(0xa03c1c)
+#define MON_BUFF_END_ADDR_VER2		(0xa03c20)
+#define MON_BUFF_WRPTR_VER2		(0xa03c24)
+#define MON_BUFF_CYCLE_CNT_VER2		(0xa03c28)
+#define MON_BUFF_SHIFT_VER2		(0x8)
 
 #define MON_DMARB_RD_CTL_ADDR		(0xa03c60)
 #define MON_DMARB_RD_DATA_ADDR		(0xa03c5c)
@@ -401,6 +404,7 @@ enum aux_misc_master1_en {
 #define AUX_MISC_MASTER1_SMPHR_STATUS	0xA20800
 #define RSA_ENABLE			0xA24B08
 #define PREG_AUX_BUS_WPROT_0		0xA04CC0
+#define PREG_PRPH_WPROT_0		0xA04CE0
 #define SB_CFG_OVERRIDE_ADDR		0xA26C78
 #define SB_CFG_OVERRIDE_ENABLE		0x8000
 #define SB_CFG_BASE_OVERRIDE		0xA20000
@@ -422,12 +426,6 @@ enum {
 	LMPM_CHICK_EXTENDED_ADDR_SPACE = BIT(0),
 };
 
-/* FW chicken bits */
-#define LMPM_PAGE_PASS_NOTIF			0xA03824
-enum {
-	LMPM_PAGE_PASS_NOTIF_POS = BIT(20),
-};
-
 #define UREG_CHICK		(0xA05C00)
 #define UREG_CHICK_MSI_ENABLE	BIT(24)
 #define UREG_CHICK_MSIX_ENABLE	BIT(25)
@@ -435,4 +433,10 @@ enum {
 #define SD_REG_VER			0xA29600
 #define REG_VER_RF_ID_JF		0x4900
 
+#define HPM_DEBUG			0xA03440
+#define PERSISTENCE_BIT			BIT(12)
+#define PREG_WFPM_ACCESS		BIT(12)
+
+#define UREG_DOORBELL_TO_ISR6		0xA05C04
+#define UREG_DOORBELL_TO_ISR6_NMI_BIT	BIT(0)
 #endif				/* __iwl_prph_h__ */

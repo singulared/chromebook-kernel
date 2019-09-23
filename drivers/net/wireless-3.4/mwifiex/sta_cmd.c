@@ -1067,6 +1067,24 @@ mwifiex_cmd_802_11_subsc_evt(struct mwifiex_private *priv,
 	return 0;
 }
 
+/* This function check if the command is supported by firmware */
+static int mwifiex_is_cmd_supported(struct mwifiex_private *priv, u16 cmd_no)
+{
+	if (!ISSUPP_ADHOC_ENABLED(priv->adapter->fw_cap_info)) {
+		switch (cmd_no) {
+		case HostCmd_CMD_802_11_IBSS_COALESCING_STATUS:
+		case HostCmd_CMD_802_11_AD_HOC_START:
+		case HostCmd_CMD_802_11_AD_HOC_JOIN:
+		case HostCmd_CMD_802_11_AD_HOC_STOP:
+			return -EOPNOTSUPP;
+		default:
+			break;
+		}
+	}
+
+	return 0;
+}
+
 /*
  * This function prepares the commands before sending them to the firmware.
  *
@@ -1079,6 +1097,13 @@ int mwifiex_sta_prepare_cmd(struct mwifiex_private *priv, uint16_t cmd_no,
 {
 	struct host_cmd_ds_command *cmd_ptr = cmd_buf;
 	int ret = 0;
+
+	if (mwifiex_is_cmd_supported(priv, cmd_no)) {
+		dev_err(priv->adapter->dev,
+			"0x%x command not supported by firmware\n",
+			cmd_no);
+			return -EOPNOTSUPP;
+		}
 
 	/* Prepare command */
 	switch (cmd_no) {
@@ -1294,7 +1319,6 @@ int mwifiex_sta_prepare_cmd(struct mwifiex_private *priv, uint16_t cmd_no,
 int mwifiex_sta_init_cmd(struct mwifiex_private *priv, u8 first_sta)
 {
 	int ret;
-	u16 enable = true;
 	struct mwifiex_ds_11n_amsdu_aggr_ctrl amsdu_aggr_ctrl;
 	struct mwifiex_ds_auto_ds auto_ds;
 	enum state_11d_t state_11d;
@@ -1346,13 +1370,6 @@ int mwifiex_sta_init_cmd(struct mwifiex_private *priv, u8 first_sta)
 	/* get tx power */
 	ret = mwifiex_send_cmd(priv, HostCmd_CMD_TXPWR_CFG,
 				     HostCmd_ACT_GEN_GET, 0, NULL, false);
-	if (ret)
-		return -1;
-
-	/* set ibss coalescing_status */
-	ret = mwifiex_send_cmd(priv,
-				     HostCmd_CMD_802_11_IBSS_COALESCING_STATUS,
-				     HostCmd_ACT_GEN_SET, 0, &enable, false);
 	if (ret)
 		return -1;
 

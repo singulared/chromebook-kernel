@@ -18,7 +18,6 @@
 
 static void conf(struct menu *menu);
 static void check_conf(struct menu *menu);
-static void xfgets(char *str, int size, FILE *in);
 
 enum input_mode {
 	oldaskconfig,
@@ -36,7 +35,7 @@ enum input_mode {
 } input_mode = oldaskconfig;
 
 static int indent = 1;
-static int valid_stdin = 1;
+static int tty_stdio;
 static int sync_kconfig;
 static int conf_cnt;
 static char line[128];
@@ -69,14 +68,11 @@ static void strip(char *str)
 		*p-- = 0;
 }
 
-static void check_stdin(void)
+/* Helper function to facilitate fgets() by Jean Sacren. */
+static void xfgets(char *str, int size, FILE *in)
 {
-	if (!valid_stdin) {
-		printf(_("aborted!\n\n"));
-		printf(_("Console input/output is redirected. "));
-		printf(_("Run 'make oldconfig' to update configuration.\n\n"));
-		exit(1);
-	}
+	if (!fgets(str, size, in))
+		fprintf(stderr, "\nError in reading or end of file.\n");
 }
 
 static int conf_askvalue(struct symbol *sym, const char *def)
@@ -103,11 +99,12 @@ static int conf_askvalue(struct symbol *sym, const char *def)
 			printf("%s\n", def);
 			return 0;
 		}
-		check_stdin();
 		/* fall through */
 	case oldaskconfig:
 		fflush(stdout);
 		xfgets(line, 128, stdin);
+		if (!tty_stdio)
+			printf("\n");
 		return 1;
 	default:
 		break;
@@ -303,7 +300,6 @@ static int conf_choice(struct menu *menu)
 				printf("%d\n", cnt);
 				break;
 			}
-			check_stdin();
 			/* fall through */
 		case oldaskconfig:
 			fflush(stdout);
@@ -495,6 +491,8 @@ int main(int ac, char **av)
 	bindtextdomain(PACKAGE, LOCALEDIR);
 	textdomain(PACKAGE);
 
+	tty_stdio = isatty(0) && isatty(1) && isatty(2);
+
 	while ((opt = getopt_long(ac, av, "", long_opts, NULL)) != -1) {
 		input_mode = (enum input_mode)opt;
 		switch (opt) {
@@ -621,7 +619,6 @@ int main(int ac, char **av)
 				return 1;
 			}
 		}
-		valid_stdin = isatty(0) && isatty(1) && isatty(2);
 	}
 
 	switch (input_mode) {
@@ -689,13 +686,4 @@ int main(int ac, char **av)
 		}
 	}
 	return 0;
-}
-
-/*
- * Helper function to facilitate fgets() by Jean Sacren.
- */
-void xfgets(char *str, int size, FILE *in)
-{
-	if (fgets(str, size, in) == NULL)
-		fprintf(stderr, "\nError in reading or end of file.\n");
 }

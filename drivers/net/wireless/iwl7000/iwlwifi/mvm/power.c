@@ -8,6 +8,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,11 +18,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -35,6 +31,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2014 Intel Mobile Communications GmbH
  * Copyright(c) 2015 - 2017 Intel Deutschland GmbH
+ * Copyright (C) 2018 - 2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,6 +81,8 @@ int iwl_mvm_beacon_filter_send_cmd(struct iwl_mvm *mvm,
 				   struct iwl_beacon_filter_cmd *cmd,
 				   u32 flags)
 {
+	u16 len;
+
 	IWL_DEBUG_POWER(mvm, "ba_enable_beacon_abort is: %d\n",
 			le32_to_cpu(cmd->ba_enable_beacon_abort));
 	IWL_DEBUG_POWER(mvm, "ba_escape_timer is: %d\n",
@@ -106,9 +105,23 @@ int iwl_mvm_beacon_filter_send_cmd(struct iwl_mvm *mvm,
 			le32_to_cpu(cmd->bf_temp_fast_filter));
 	IWL_DEBUG_POWER(mvm, "bf_temp_slow_filter is: %d\n",
 			le32_to_cpu(cmd->bf_temp_slow_filter));
+	IWL_DEBUG_POWER(mvm, "bf_threshold_absolute_low is: %d, %d\n",
+			le32_to_cpu(cmd->bf_threshold_absolute_low[0]),
+			le32_to_cpu(cmd->bf_threshold_absolute_low[1]));
+
+	IWL_DEBUG_POWER(mvm, "bf_threshold_absolute_high is: %d, %d\n",
+			le32_to_cpu(cmd->bf_threshold_absolute_high[0]),
+			le32_to_cpu(cmd->bf_threshold_absolute_high[1]));
+
+	if (fw_has_api(&mvm->fw->ucode_capa,
+		       IWL_UCODE_TLV_API_BEACON_FILTER_V4))
+		len = sizeof(struct iwl_beacon_filter_cmd);
+	else
+		len = offsetof(struct iwl_beacon_filter_cmd,
+			       bf_threshold_absolute_low);
 
 	return iwl_mvm_send_cmd_pdu(mvm, REPLY_BEACON_FILTERING_CMD, flags,
-				    sizeof(struct iwl_beacon_filter_cmd), cmd);
+				    len, cmd);
 }
 
 static
@@ -284,7 +297,10 @@ static void iwl_mvm_allow_uapsd_iterator(void *_data, u8 *mac,
 	switch (vif->type) {
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_ADHOC:
+#if CFG80211_VERSION >= KERNEL_VERSION(4,4,0)
 	case NL80211_IFTYPE_NAN:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 		data->allow_uapsd = false;
 		break;
 	case NL80211_IFTYPE_STATION:
@@ -544,6 +560,9 @@ int iwl_mvm_power_update_device(struct iwl_mvm *mvm)
 		cmd.flags &=
 			cpu_to_le16(~DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK);
 #endif
+	if (mvm->ext_clock_valid)
+		cmd.flags |= cpu_to_le16(DEVICE_POWER_FLAGS_32K_CLK_VALID_MSK);
+
 	IWL_DEBUG_POWER(mvm,
 			"Sending device power command with flags = 0x%X\n",
 			cmd.flags);
@@ -626,7 +645,10 @@ static void iwl_mvm_power_get_vifs_iterator(void *_data, u8 *mac,
 
 	switch (ieee80211_vif_type_p2p(vif)) {
 	case NL80211_IFTYPE_P2P_DEVICE:
+#if CFG80211_VERSION >= KERNEL_VERSION(4,4,0)
 	case NL80211_IFTYPE_NAN:
+		/* keep code in case of fall-through (spatch generated) */
+#endif
 		break;
 
 	case NL80211_IFTYPE_P2P_GO:

@@ -1,21 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2011-2014, 2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2011-2014, 2016-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
-
-#ifdef CONFIG_MALI_PLATFORM_FAKE
 
 #include <linux/errno.h>
 #include <linux/export.h>
@@ -74,7 +77,7 @@ static void kbasep_config_parse_io_resources(const struct kbase_io_resources *io
 }
 #endif /* CONFIG_OF */
 
-int kbase_platform_fake_register(void)
+int kbase_platform_register(void)
 {
 	struct kbase_platform_config *config;
 #ifndef CONFIG_OF
@@ -111,14 +114,11 @@ int kbase_platform_fake_register(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(kbase_platform_fake_register);
+EXPORT_SYMBOL(kbase_platform_register);
 
-void kbase_platform_fake_unregister(void)
+void kbase_platform_unregister(void)
 {
 	if (mali_device)
 		platform_device_unregister(mali_device);
 }
-EXPORT_SYMBOL(kbase_platform_fake_unregister);
-
-#endif /* CONFIG_MALI_PLATFORM_FAKE */
-
+EXPORT_SYMBOL(kbase_platform_unregister);

@@ -6,6 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2018        Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -15,11 +16,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
  *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
@@ -31,6 +27,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
+ * Copyright(c) 2018        Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -76,16 +73,20 @@
 static inline int iwl_xvt_user_send_notif(struct iwl_xvt *xvt, u32 cmd,
 					  void *data, u32 size, gfp_t flags)
 {
+	int err;
 	IWL_DEBUG_INFO(xvt, "send user notification: cmd=0x%x, size=%d\n",
 		       cmd, size);
-	return iwl_tm_gnl_send_msg(xvt->trans, cmd, false, data, size, flags);
+	err = iwl_tm_gnl_send_msg(xvt->trans, cmd, false, data, size, flags);
+
+	WARN_ONCE(err, "failed to send notification to user, err %d\n", err);
+	return err;
 }
 
 void iwl_xvt_send_user_rx_notif(struct iwl_xvt *xvt,
 				struct iwl_rx_cmd_buffer *rxb);
 
-int iwl_xvt_user_cmd_execute(struct iwl_op_mode *op_mode, u32 cmd,
+int iwl_xvt_user_cmd_execute(struct iwl_testmode *testmode, u32 cmd,
 			     struct iwl_tm_data *data_in,
-			     struct iwl_tm_data *data_out);
+			     struct iwl_tm_data *data_out, bool *supported_cmd);
 
 #endif

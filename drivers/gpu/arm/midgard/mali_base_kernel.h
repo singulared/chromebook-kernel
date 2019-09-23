@@ -1,46 +1,33 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
 
 
 
-
-
-/**
- * @file
+/*
  * Base structures shared with the kernel.
  */
 
 #ifndef _BASE_KERNEL_H_
 #define _BASE_KERNEL_H_
-
-#ifndef __user
-#define __user
-#endif
-
-/* Support UK6 IOCTLS */
-#define BASE_LEGACY_UK6_SUPPORT 1
-
-/* Support UK7 IOCTLS */
-/* NB: To support UK6 we also need to support UK7 */
-#define BASE_LEGACY_UK7_SUPPORT 1
-
-/* Support UK8 IOCTLS */
-#define BASE_LEGACY_UK8_SUPPORT 1
-
-/* Support UK9 IOCTLS */
-#define BASE_LEGACY_UK9_SUPPORT 1
 
 typedef struct base_mem_handle {
 	struct {
@@ -60,17 +47,11 @@ typedef struct base_mem_handle {
  */
 #define BASE_JD_ATOM_COUNT              256
 
-#define BASEP_JD_SEM_PER_WORD_LOG2      5
-#define BASEP_JD_SEM_PER_WORD           (1 << BASEP_JD_SEM_PER_WORD_LOG2)
-#define BASEP_JD_SEM_WORD_NR(x)         ((x) >> BASEP_JD_SEM_PER_WORD_LOG2)
-#define BASEP_JD_SEM_MASK_IN_WORD(x)    (1 << ((x) & (BASEP_JD_SEM_PER_WORD - 1)))
-#define BASEP_JD_SEM_ARRAY_SIZE         BASEP_JD_SEM_WORD_NR(BASE_JD_ATOM_COUNT)
-
 /* Set/reset values for a software event */
 #define BASE_JD_SOFT_EVENT_SET             ((unsigned char)1)
 #define BASE_JD_SOFT_EVENT_RESET           ((unsigned char)0)
 
-#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
+#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 4
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
@@ -82,24 +63,19 @@ typedef struct base_mem_handle {
 #error assert macro not defined!
 #endif
 
-#if defined PAGE_MASK
+#if defined(PAGE_MASK) && defined(PAGE_SHIFT)
+#define LOCAL_PAGE_SHIFT PAGE_SHIFT
 #define LOCAL_PAGE_LSB ~PAGE_MASK
 #else
 #include <osu/mali_osu.h>
 
 #if defined OSU_CONFIG_CPU_PAGE_SIZE_LOG2
+#define LOCAL_PAGE_SHIFT OSU_CONFIG_CPU_PAGE_SIZE_LOG2
 #define LOCAL_PAGE_LSB ((1ul << OSU_CONFIG_CPU_PAGE_SIZE_LOG2) - 1)
 #else
 #error Failed to find page size
 #endif
 #endif
-
-/** 32/64-bit neutral way to represent pointers */
-typedef union kbase_pointer {
-	void __user *value;	  /**< client should store their pointers here */
-	u32 compat_value; /**< 64-bit kernels should fetch value here when handling 32-bit clients */
-	u64 sizer;	  /**< Force 64-bit storage for all clients regardless */
-} kbase_pointer;
 
 /**
  * @addtogroup base_user_api User-side Base APIs
@@ -112,104 +88,176 @@ typedef union kbase_pointer {
  */
 
 /**
- * @brief Memory allocation, access/hint flags
+ * typedef base_mem_alloc_flags - Memory allocation, access/hint flags.
  *
  * A combination of MEM_PROT/MEM_HINT flags must be passed to each allocator
  * in order to determine the best cache policy. Some combinations are
- * of course invalid (eg @c MEM_PROT_CPU_WR | @c MEM_HINT_CPU_RD),
- * which defines a @a write-only region on the CPU side, which is
+ * of course invalid (e.g. MEM_PROT_CPU_WR | MEM_HINT_CPU_RD),
+ * which defines a write-only region on the CPU side, which is
  * heavily read by the CPU...
  * Other flags are only meaningful to a particular allocator.
  * More flags can be added to this list, as long as they don't clash
- * (see ::BASE_MEM_FLAGS_NR_BITS for the number of the first free bit).
+ * (see BASE_MEM_FLAGS_NR_BITS for the number of the first free bit).
  */
 typedef u32 base_mem_alloc_flags;
 
-/**
- * @brief Memory allocation, access/hint flags
+/* Memory allocation, access/hint flags.
  *
- * See ::base_mem_alloc_flags.
- *
+ * See base_mem_alloc_flags.
  */
-enum {
+
 /* IN */
-	BASE_MEM_PROT_CPU_RD = (1U << 0),      /**< Read access CPU side */
-	BASE_MEM_PROT_CPU_WR = (1U << 1),      /**< Write access CPU side */
-	BASE_MEM_PROT_GPU_RD = (1U << 2),      /**< Read access GPU side */
-	BASE_MEM_PROT_GPU_WR = (1U << 3),      /**< Write access GPU side */
-	BASE_MEM_PROT_GPU_EX = (1U << 4),      /**< Execute allowed on the GPU
-						    side */
+/* Read access CPU side
+ */
+#define BASE_MEM_PROT_CPU_RD ((base_mem_alloc_flags)1 << 0)
 
-	/* BASE_MEM_HINT flags have been removed, but their values are reserved
-	 * for backwards compatibility with older user-space drivers. The values
-	 * can be re-used once support for r5p0 user-space drivers is removed,
-	 * presumably in r7p0.
-	 *
-	 * RESERVED: (1U << 5)
-	 * RESERVED: (1U << 6)
-	 * RESERVED: (1U << 7)
-	 * RESERVED: (1U << 8)
-	 */
+/* Write access CPU side
+ */
+#define BASE_MEM_PROT_CPU_WR ((base_mem_alloc_flags)1 << 1)
 
-	BASE_MEM_GROW_ON_GPF = (1U << 9),      /**< Grow backing store on GPU
-						    Page Fault */
+/* Read access GPU side
+ */
+#define BASE_MEM_PROT_GPU_RD ((base_mem_alloc_flags)1 << 2)
 
-	BASE_MEM_COHERENT_SYSTEM = (1U << 10), /**< Page coherence Outer
-						    shareable, if available */
-	BASE_MEM_COHERENT_LOCAL = (1U << 11),  /**< Page coherence Inner
-						    shareable */
-	BASE_MEM_CACHED_CPU = (1U << 12),      /**< Should be cached on the
-						    CPU */
+/* Write access GPU side
+ */
+#define BASE_MEM_PROT_GPU_WR ((base_mem_alloc_flags)1 << 3)
+
+/* Execute allowed on the GPU side
+ */
+#define BASE_MEM_PROT_GPU_EX ((base_mem_alloc_flags)1 << 4)
+
+/* Will be permanently mapped in kernel space.
+ * Flag is only allowed on allocations originating from kbase.
+ */
+#define BASE_MEM_PERMANENT_KERNEL_MAPPING ((base_mem_alloc_flags)1 << 5)
+
+/* The allocation will completely reside within the same 4GB chunk in the GPU
+ * virtual space.
+ * Since this flag is primarily required only for the TLS memory which will
+ * not be used to contain executable code and also not used for Tiler heap,
+ * it can't be used along with BASE_MEM_PROT_GPU_EX and TILER_ALIGN_TOP flags.
+ */
+#define BASE_MEM_GPU_VA_SAME_4GB_PAGE ((base_mem_alloc_flags)1 << 6)
+
+#define BASE_MEM_RESERVED_BIT_7 ((base_mem_alloc_flags)1 << 7)
+#define BASE_MEM_RESERVED_BIT_8 ((base_mem_alloc_flags)1 << 8)
+
+/* Grow backing store on GPU Page Fault
+ */
+#define BASE_MEM_GROW_ON_GPF ((base_mem_alloc_flags)1 << 9)
+
+/* Page coherence Outer shareable, if available
+ */
+#define BASE_MEM_COHERENT_SYSTEM ((base_mem_alloc_flags)1 << 10)
+
+/* Page coherence Inner shareable
+ */
+#define BASE_MEM_COHERENT_LOCAL ((base_mem_alloc_flags)1 << 11)
+
+/* Should be cached on the CPU
+ */
+#define BASE_MEM_CACHED_CPU ((base_mem_alloc_flags)1 << 12)
 
 /* IN/OUT */
-	BASE_MEM_SAME_VA = (1U << 13), /**< Must have same VA on both the GPU
-					    and the CPU */
-/* OUT */
-	BASE_MEM_NEED_MMAP = (1U << 14), /**< Must call mmap to aquire a GPU
-					     address for the alloc */
-/* IN */
-	BASE_MEM_COHERENT_SYSTEM_REQUIRED = (1U << 15), /**< Page coherence
-					     Outer shareable, required. */
-	BASE_MEM_SECURE = (1U << 16),          /**< Secure memory */
-	BASE_MEM_DONT_NEED = (1U << 17),       /**< Not needed physical
-						    memory */
-	BASE_MEM_IMPORT_SHARED = (1U << 18),   /**< Must use shared CPU/GPU zone
-						    (SAME_VA zone) but doesn't
-						    require the addresses to
-						    be the same */
-};
-
-/**
- * @brief Number of bits used as flags for base memory management
- *
- * Must be kept in sync with the ::base_mem_alloc_flags flags
+/* Must have same VA on both the GPU and the CPU
  */
-#define BASE_MEM_FLAGS_NR_BITS 19
+#define BASE_MEM_SAME_VA ((base_mem_alloc_flags)1 << 13)
+
+/* OUT */
+/* Must call mmap to acquire a GPU address for the alloc
+ */
+#define BASE_MEM_NEED_MMAP ((base_mem_alloc_flags)1 << 14)
+
+/* IN */
+/* Page coherence Outer shareable, required.
+ */
+#define BASE_MEM_COHERENT_SYSTEM_REQUIRED ((base_mem_alloc_flags)1 << 15)
+
+/* Secure memory
+ */
+#define BASE_MEM_SECURE ((base_mem_alloc_flags)1 << 16)
+
+/* Not needed physical memory
+ */
+#define BASE_MEM_DONT_NEED ((base_mem_alloc_flags)1 << 17)
+
+/* Must use shared CPU/GPU zone (SAME_VA zone) but doesn't require the
+ * addresses to be the same
+ */
+#define BASE_MEM_IMPORT_SHARED ((base_mem_alloc_flags)1 << 18)
 
 /**
-  * A mask for all output bits, excluding IN/OUT bits.
-  */
+ * Bit 19 is reserved.
+ *
+ * Do not remove, use the next unreserved bit for new flags
+ */
+#define BASE_MEM_RESERVED_BIT_19 ((base_mem_alloc_flags)1 << 19)
+#define BASE_MEM_MAYBE_RESERVED_BIT_19 BASE_MEM_RESERVED_BIT_19
+
+/**
+ * Memory starting from the end of the initial commit is aligned to 'extent'
+ * pages, where 'extent' must be a power of 2 and no more than
+ * BASE_MEM_TILER_ALIGN_TOP_EXTENT_MAX_PAGES
+ */
+#define BASE_MEM_TILER_ALIGN_TOP ((base_mem_alloc_flags)1 << 20)
+
+/* Should be uncached on the GPU, will work only for GPUs using AARCH64 mmu mode.
+ * Some components within the GPU might only be able to access memory that is
+ * GPU cacheable. Refer to the specific GPU implementation for more details.
+ * The 3 shareability flags will be ignored for GPU uncached memory.
+ * If used while importing USER_BUFFER type memory, then the import will fail
+ * if the memory is not aligned to GPU and CPU cache line width.
+ */
+#define BASE_MEM_UNCACHED_GPU ((base_mem_alloc_flags)1 << 21)
+
+/* Number of bits used as flags for base memory management
+ *
+ * Must be kept in sync with the base_mem_alloc_flags flags
+ */
+#define BASE_MEM_FLAGS_NR_BITS 22
+
+/* A mask for all output bits, excluding IN/OUT bits.
+ */
 #define BASE_MEM_FLAGS_OUTPUT_MASK BASE_MEM_NEED_MMAP
 
-/**
-  * A mask for all input bits, including IN/OUT bits.
-  */
+/* A mask for all input bits, including IN/OUT bits.
+ */
 #define BASE_MEM_FLAGS_INPUT_MASK \
 	(((1 << BASE_MEM_FLAGS_NR_BITS) - 1) & ~BASE_MEM_FLAGS_OUTPUT_MASK)
 
-/**
- * A mask for all the flags which are modifiable via the base_mem_set_flags
+/* A mask for all the flags which are modifiable via the base_mem_set_flags
  * interface.
  */
 #define BASE_MEM_FLAGS_MODIFIABLE \
 	(BASE_MEM_DONT_NEED | BASE_MEM_COHERENT_SYSTEM | \
 	 BASE_MEM_COHERENT_LOCAL)
 
+
+/* A mask of all currently reserved flags
+ */
+#define BASE_MEM_FLAGS_RESERVED \
+	(BASE_MEM_RESERVED_BIT_7 | BASE_MEM_RESERVED_BIT_8 | \
+		BASE_MEM_MAYBE_RESERVED_BIT_19)
+
+/* A mask of all the flags which are only valid for allocations within kbase,
+ * and may not be passed from user space.
+ */
+#define BASE_MEM_FLAGS_KERNEL_ONLY (BASE_MEM_PERMANENT_KERNEL_MAPPING)
+
+/* A mask of all the flags that can be returned via the base_mem_get_flags()
+ * interface.
+ */
+#define BASE_MEM_FLAGS_QUERYABLE \
+	(BASE_MEM_FLAGS_INPUT_MASK & ~(BASE_MEM_SAME_VA | \
+		BASE_MEM_COHERENT_SYSTEM_REQUIRED | BASE_MEM_DONT_NEED | \
+		BASE_MEM_IMPORT_SHARED | BASE_MEM_FLAGS_RESERVED | \
+		BASE_MEM_FLAGS_KERNEL_ONLY))
+
 /**
  * enum base_mem_import_type - Memory types supported by @a base_mem_import
  *
  * @BASE_MEM_IMPORT_TYPE_INVALID: Invalid type
- * @BASE_MEM_IMPORT_TYPE_UMP: UMP import. Handle type is ump_secure_id.
  * @BASE_MEM_IMPORT_TYPE_UMM: UMM import. Handle type is a file descriptor (int)
  * @BASE_MEM_IMPORT_TYPE_USER_BUFFER: User buffer import. Handle is a
  * base_mem_import_user_buffer
@@ -224,7 +272,9 @@ enum {
  */
 typedef enum base_mem_import_type {
 	BASE_MEM_IMPORT_TYPE_INVALID = 0,
-	BASE_MEM_IMPORT_TYPE_UMP = 1,
+	/**
+	 * Import type with value 1 is deprecated.
+	 */
 	BASE_MEM_IMPORT_TYPE_UMM = 2,
 	BASE_MEM_IMPORT_TYPE_USER_BUFFER = 3
 } base_mem_import_type;
@@ -232,14 +282,14 @@ typedef enum base_mem_import_type {
 /**
  * struct base_mem_import_user_buffer - Handle of an imported user buffer
  *
- * @ptr:	kbase_pointer to imported user buffer
+ * @ptr:	address of imported user buffer
  * @length:	length of imported user buffer in bytes
  *
  * This structure is used to represent a handle of an imported user buffer.
  */
 
 struct base_mem_import_user_buffer {
-	kbase_pointer ptr;
+	u64 ptr;
 	u64 length;
 };
 
@@ -270,17 +320,32 @@ struct base_mem_import_user_buffer {
 #define BASE_MEM_TRACE_BUFFER_HANDLE           (2ull  << 12)
 #define BASE_MEM_MAP_TRACKING_HANDLE           (3ull  << 12)
 #define BASEP_MEM_WRITE_ALLOC_PAGES_HANDLE     (4ull  << 12)
-/* reserved handles ..-64<<PAGE_SHIFT> for future special handles */
+/* reserved handles ..-48<<PAGE_SHIFT> for future special handles */
 #define BASE_MEM_COOKIE_BASE                   (64ul  << 12)
 #define BASE_MEM_FIRST_FREE_ADDRESS            ((BITS_PER_LONG << 12) + \
 						BASE_MEM_COOKIE_BASE)
 
 /* Mask to detect 4GB boundary alignment */
 #define BASE_MEM_MASK_4GB  0xfffff000UL
+/* Mask to detect 4GB boundary (in page units) alignment */
+#define BASE_MEM_PFN_MASK_4GB  (BASE_MEM_MASK_4GB >> LOCAL_PAGE_SHIFT)
 
+/**
+ * Limit on the 'extent' parameter for an allocation with the
+ * BASE_MEM_TILER_ALIGN_TOP flag set
+ *
+ * This is the same as the maximum limit for a Buffer Descriptor's chunk size
+ */
+#define BASE_MEM_TILER_ALIGN_TOP_EXTENT_MAX_PAGES_LOG2 \
+		(21u - (LOCAL_PAGE_SHIFT))
+#define BASE_MEM_TILER_ALIGN_TOP_EXTENT_MAX_PAGES \
+		(1ull << (BASE_MEM_TILER_ALIGN_TOP_EXTENT_MAX_PAGES_LOG2))
 
 /* Bit mask of cookies used for for memory allocation setup */
 #define KBASE_COOKIE_MASK  ~1UL /* bit 0 is reserved */
+
+/* Maximum size allowed in a single KBASE_IOCTL_MEM_ALLOC call */
+#define KBASE_MEM_ALLOC_MAX_SIZE ((8ull << 30) >> PAGE_SHIFT) /* 8 GB */
 
 
 /**
@@ -288,9 +353,7 @@ struct base_mem_import_user_buffer {
  */
 typedef enum base_backing_threshold_status {
 	BASE_BACKING_THRESHOLD_OK = 0,			    /**< Resize successful */
-	BASE_BACKING_THRESHOLD_ERROR_NOT_GROWABLE = -1,	    /**< Not a growable tmem object */
 	BASE_BACKING_THRESHOLD_ERROR_OOM = -2,		    /**< Increase failed due to an out-of-memory condition */
-	BASE_BACKING_THRESHOLD_ERROR_MAPPED = -3,	    /**< Resize attempted on buffer while it was mapped, which is not permitted */
 	BASE_BACKING_THRESHOLD_ERROR_INVALID_ARGUMENTS = -4 /**< Invalid arguments (not tmem, illegal size request, etc.) */
 } base_backing_threshold_status;
 
@@ -358,7 +421,7 @@ typedef struct base_fence {
 /**
  * @brief Per-job data
  *
- * This structure is used to store per-job data, and is completly unused
+ * This structure is used to store per-job data, and is completely unused
  * by the Base driver. It can be used to store things such as callback
  * function pointer, data to handle job completion. It is guaranteed to be
  * untouched by the Base driver.
@@ -395,6 +458,13 @@ struct base_mem_aliasing_info {
 };
 
 /**
+ * Similar to BASE_MEM_TILER_ALIGN_TOP, memory starting from the end of the
+ * initial commit is aligned to 'extent' pages, where 'extent' must be a power
+ * of 2 and no more than BASE_MEM_TILER_ALIGN_TOP_EXTENT_MAX_PAGES
+ */
+#define BASE_JIT_ALLOC_MEM_TILER_ALIGN_TOP  (1 << 0)
+
+/**
  * struct base_jit_alloc_info - Structure which describes a JIT allocation
  *                              request.
  * @gpu_alloc_addr:             The GPU virtual address to write the JIT
@@ -407,6 +477,18 @@ struct base_mem_aliasing_info {
  * @id:                         Unique ID provided by the caller, this is used
  *                              to pair allocation and free requests.
  *                              Zero is not a valid value.
+ * @bin_id:                     The JIT allocation bin, used in conjunction with
+ *                              @max_allocations to limit the number of each
+ *                              type of JIT allocation.
+ * @max_allocations:            The maximum number of allocations allowed within
+ *                              the bin specified by @bin_id. Should be the same
+ *                              for all JIT allocations within the same bin.
+ * @flags:                      flags specifying the special requirements for
+ *                              the JIT allocation.
+ * @padding:                    Expansion space - should be initialised to zero
+ * @usage_id:                   A hint about which allocation should be reused.
+ *                              The kernel should attempt to use a previous
+ *                              allocation with the same usage_id
  */
 struct base_jit_alloc_info {
 	u64 gpu_alloc_addr;
@@ -414,6 +496,11 @@ struct base_jit_alloc_info {
 	u64 commit_pages;
 	u64 extent;
 	u8 id;
+	u8 bin_id;
+	u8 max_allocations;
+	u8 flags;
+	u8 padding[2];
+	u16 usage_id;
 };
 
 /**
@@ -442,11 +529,20 @@ typedef u8 base_jd_dep_type;
  * Special case is ::BASE_JD_REQ_DEP, which is used to express complex
  * dependencies, and that doesn't execute anything on the hardware.
  */
-typedef u16 base_jd_core_req;
+typedef u32 base_jd_core_req;
 
 /* Requirements that come from the HW */
-#define BASE_JD_REQ_DEP 0	    /**< No requirement, dependency only */
-#define BASE_JD_REQ_FS  (1U << 0)   /**< Requires fragment shaders */
+
+/**
+ * No requirement, dependency only
+ */
+#define BASE_JD_REQ_DEP ((base_jd_core_req)0)
+
+/**
+ * Requires fragment shaders
+ */
+#define BASE_JD_REQ_FS  ((base_jd_core_req)1 << 0)
+
 /**
  * Requires compute shaders
  * This covers any of the following Midgard Job types:
@@ -458,15 +554,15 @@ typedef u16 base_jd_core_req;
  * job is specifically just the "Compute Shader" job type, and not the "Vertex
  * Shader" nor the "Geometry Shader" job type.
  */
-#define BASE_JD_REQ_CS  (1U << 1)
-#define BASE_JD_REQ_T   (1U << 2)   /**< Requires tiling */
-#define BASE_JD_REQ_CF  (1U << 3)   /**< Requires cache flushes */
-#define BASE_JD_REQ_V   (1U << 4)   /**< Requires value writeback */
+#define BASE_JD_REQ_CS  ((base_jd_core_req)1 << 1)
+#define BASE_JD_REQ_T   ((base_jd_core_req)1 << 2)   /**< Requires tiling */
+#define BASE_JD_REQ_CF  ((base_jd_core_req)1 << 3)   /**< Requires cache flushes */
+#define BASE_JD_REQ_V   ((base_jd_core_req)1 << 4)   /**< Requires value writeback */
 
 /* SW-only requirements - the HW does not expose these as part of the job slot capabilities */
 
 /* Requires fragment job with AFBC encoding */
-#define BASE_JD_REQ_FS_AFBC  (1U << 13)
+#define BASE_JD_REQ_FS_AFBC  ((base_jd_core_req)1 << 13)
 
 /**
  * SW-only requirement: coalesce completion events.
@@ -476,20 +572,20 @@ typedef u16 base_jd_core_req;
  *
  * This bit may not be used in combination with BASE_JD_REQ_EXTERNAL_RESOURCES.
  */
-#define BASE_JD_REQ_EVENT_COALESCE (1U << 5)
+#define BASE_JD_REQ_EVENT_COALESCE ((base_jd_core_req)1 << 5)
 
 /**
  * SW Only requirement: the job chain requires a coherent core group. We don't
  * mind which coherent core group is used.
  */
-#define BASE_JD_REQ_COHERENT_GROUP  (1U << 6)
+#define BASE_JD_REQ_COHERENT_GROUP  ((base_jd_core_req)1 << 6)
 
 /**
  * SW Only requirement: The performance counters should be enabled only when
  * they are needed, to reduce power consumption.
  */
 
-#define BASE_JD_REQ_PERMON               (1U << 7)
+#define BASE_JD_REQ_PERMON               ((base_jd_core_req)1 << 7)
 
 /**
  * SW Only requirement: External resources are referenced by this atom.
@@ -498,15 +594,16 @@ typedef u16 base_jd_core_req;
  * The first pre_dep object must be configured for the external resouces to use,
  * the second pre_dep object can be used to create other dependencies.
  *
- * This bit may not be used in combination with BASE_JD_REQ_EVENT_COALESCE.
+ * This bit may not be used in combination with BASE_JD_REQ_EVENT_COALESCE and
+ * BASE_JD_REQ_SOFT_EVENT_WAIT.
  */
-#define BASE_JD_REQ_EXTERNAL_RESOURCES   (1U << 8)
+#define BASE_JD_REQ_EXTERNAL_RESOURCES   ((base_jd_core_req)1 << 8)
 
 /**
  * SW Only requirement: Software defined job. Jobs with this bit set will not be submitted
  * to the hardware but will cause some action to happen within the driver
  */
-#define BASE_JD_REQ_SOFT_JOB        (1U << 9)
+#define BASE_JD_REQ_SOFT_JOB        ((base_jd_core_req)1 << 9)
 
 #define BASE_JD_REQ_SOFT_DUMP_CPU_GPU_TIME      (BASE_JD_REQ_SOFT_JOB | 0x1)
 #define BASE_JD_REQ_SOFT_FENCE_TRIGGER          (BASE_JD_REQ_SOFT_JOB | 0x2)
@@ -515,7 +612,7 @@ typedef u16 base_jd_core_req;
 /**
  * SW Only requirement : Replay job.
  *
- * If the preceeding job fails, the replay job will cause the jobs specified in
+ * If the preceding job fails, the replay job will cause the jobs specified in
  * the list of base_jd_replay_payload pointed to by the jc pointer to be
  * replayed.
  *
@@ -526,10 +623,10 @@ typedef u16 base_jd_core_req;
  * The replayed jobs will require a number of atom IDs. If there are not enough
  * free atom IDs then the replay job will fail.
  *
- * If the preceeding job does not fail, then the replay job is returned as
+ * If the preceding job does not fail, then the replay job is returned as
  * completed.
  *
- * The replayed jobs will never be returned to userspace. The preceeding failed
+ * The replayed jobs will never be returned to userspace. The preceding failed
  * job will be returned to userspace as failed; the status of this job should
  * be ignored. Completion should be determined by the status of the replay soft
  * job.
@@ -567,9 +664,10 @@ typedef u16 base_jd_core_req;
 /**
  * SW only requirement: Just In Time allocation
  *
- * This job requests a JIT allocation based on the request in the
- * @base_jit_alloc_info structure which is passed via the jc element of
- * the atom.
+ * This job requests a single or multiple JIT allocations through a list
+ * of @base_jit_alloc_info structure which is passed via the jc element of
+ * the atom. The number of @base_jit_alloc_info structures present in the
+ * list is passed via the nr_extres element of the atom
  *
  * It should be noted that the id entry in @base_jit_alloc_info must not
  * be reused until it has been released via @BASE_JD_REQ_SOFT_JIT_FREE.
@@ -583,9 +681,9 @@ typedef u16 base_jd_core_req;
 /**
  * SW only requirement: Just In Time free
  *
- * This job requests a JIT allocation created by @BASE_JD_REQ_SOFT_JIT_ALLOC
- * to be freed. The ID of the JIT allocation is passed via the jc element of
- * the atom.
+ * This job requests a single or multiple JIT allocations created by
+ * @BASE_JD_REQ_SOFT_JIT_ALLOC to be freed. The ID list of the JIT
+ * allocations is passed via the jc element of the atom.
  *
  * The job will complete immediately.
  */
@@ -618,86 +716,103 @@ typedef u16 base_jd_core_req;
  * In contrast to @ref BASE_JD_REQ_CS, this does \b not indicate that the Job
  * Chain contains 'Geometry Shader' or 'Vertex Shader' jobs.
  */
-#define BASE_JD_REQ_ONLY_COMPUTE    (1U << 10)
+#define BASE_JD_REQ_ONLY_COMPUTE    ((base_jd_core_req)1 << 10)
 
 /**
  * HW Requirement: Use the base_jd_atom::device_nr field to specify a
  * particular core group
  *
- * If both BASE_JD_REQ_COHERENT_GROUP and this flag are set, this flag takes priority
+ * If both @ref BASE_JD_REQ_COHERENT_GROUP and this flag are set, this flag takes priority
  *
- * This is only guaranteed to work for BASE_JD_REQ_ONLY_COMPUTE atoms.
+ * This is only guaranteed to work for @ref BASE_JD_REQ_ONLY_COMPUTE atoms.
  *
  * If the core availability policy is keeping the required core group turned off, then
- * the job will fail with a BASE_JD_EVENT_PM_EVENT error code.
+ * the job will fail with a @ref BASE_JD_EVENT_PM_EVENT error code.
  */
-#define BASE_JD_REQ_SPECIFIC_COHERENT_GROUP (1U << 11)
+#define BASE_JD_REQ_SPECIFIC_COHERENT_GROUP ((base_jd_core_req)1 << 11)
 
 /**
  * SW Flag: If this bit is set then the successful completion of this atom
  * will not cause an event to be sent to userspace
  */
-#define BASE_JD_REQ_EVENT_ONLY_ON_FAILURE   (1U << 12)
+#define BASE_JD_REQ_EVENT_ONLY_ON_FAILURE   ((base_jd_core_req)1 << 12)
 
 /**
  * SW Flag: If this bit is set then completion of this atom will not cause an
  * event to be sent to userspace, whether successful or not.
  */
-#define BASEP_JD_REQ_EVENT_NEVER (1U << 14)
+#define BASEP_JD_REQ_EVENT_NEVER ((base_jd_core_req)1 << 14)
 
 /**
- * These requirement bits are currently unused in base_jd_core_req (currently a u16)
+ * SW Flag: Skip GPU cache clean and invalidation before starting a GPU job.
+ *
+ * If this bit is set then the GPU's cache will not be cleaned and invalidated
+ * until a GPU job starts which does not have this bit set or a job completes
+ * which does not have the @ref BASE_JD_REQ_SKIP_CACHE_END bit set. Do not use if
+ * the CPU may have written to memory addressed by the job since the last job
+ * without this bit set was submitted.
  */
+#define BASE_JD_REQ_SKIP_CACHE_START ((base_jd_core_req)1 << 15)
 
-#define BASEP_JD_REQ_RESERVED (1U << 15)
+/**
+ * SW Flag: Skip GPU cache clean and invalidation after a GPU job completes.
+ *
+ * If this bit is set then the GPU's cache will not be cleaned and invalidated
+ * until a GPU job completes which does not have this bit set or a job starts
+ * which does not have the @ref BASE_JD_REQ_SKIP_CACHE_START bti set. Do not use if
+ * the CPU may read from or partially overwrite memory addressed by the job
+ * before the next job without this bit set completes.
+ */
+#define BASE_JD_REQ_SKIP_CACHE_END ((base_jd_core_req)1 << 16)
+
+/**
+ * These requirement bits are currently unused in base_jd_core_req
+ */
+#define BASEP_JD_REQ_RESERVED \
+	(~(BASE_JD_REQ_ATOM_TYPE | BASE_JD_REQ_EXTERNAL_RESOURCES | \
+	BASE_JD_REQ_EVENT_ONLY_ON_FAILURE | BASEP_JD_REQ_EVENT_NEVER | \
+	BASE_JD_REQ_EVENT_COALESCE | \
+	BASE_JD_REQ_COHERENT_GROUP | BASE_JD_REQ_SPECIFIC_COHERENT_GROUP | \
+	BASE_JD_REQ_FS_AFBC | BASE_JD_REQ_PERMON | \
+	BASE_JD_REQ_SKIP_CACHE_START | BASE_JD_REQ_SKIP_CACHE_END))
 
 /**
  * Mask of all bits in base_jd_core_req that control the type of the atom.
  *
  * This allows dependency only atoms to have flags set
  */
-#define BASEP_JD_REQ_ATOM_TYPE (~(BASEP_JD_REQ_RESERVED |\
-				BASE_JD_REQ_EVENT_ONLY_ON_FAILURE |\
-				BASE_JD_REQ_EXTERNAL_RESOURCES |\
-				BASEP_JD_REQ_EVENT_NEVER |\
-				BASE_JD_REQ_EVENT_COALESCE))
+#define BASE_JD_REQ_ATOM_TYPE \
+	(BASE_JD_REQ_FS | BASE_JD_REQ_CS | BASE_JD_REQ_T | BASE_JD_REQ_CF | \
+	BASE_JD_REQ_V | BASE_JD_REQ_SOFT_JOB | BASE_JD_REQ_ONLY_COMPUTE)
 
 /**
- * @brief States to model state machine processed by kbasep_js_job_check_ref_cores(), which
- * handles retaining cores for power management and affinity management.
+ * Mask of all bits in base_jd_core_req that control the type of a soft job.
+ */
+#define BASE_JD_REQ_SOFT_JOB_TYPE (BASE_JD_REQ_SOFT_JOB | 0x1f)
+
+/*
+ * Returns non-zero value if core requirements passed define a soft job or
+ * a dependency only job.
+ */
+#define BASE_JD_REQ_SOFT_JOB_OR_DEP(core_req) \
+	((core_req & BASE_JD_REQ_SOFT_JOB) || \
+	(core_req & BASE_JD_REQ_ATOM_TYPE) == BASE_JD_REQ_DEP)
+
+/**
+ * enum kbase_atom_coreref_state - States to model state machine processed by
+ * kbasep_js_job_check_ref_cores(), which handles retaining cores for power
+ * management.
  *
- * The state @ref KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY prevents an attack
- * where lots of atoms could be submitted before powerup, and each has an
- * affinity chosen that causes other atoms to have an affinity
- * violation. Whilst the affinity was not causing violations at the time it
- * was chosen, it could cause violations thereafter. For example, 1000 jobs
- * could have had their affinity chosen during the powerup time, so any of
- * those 1000 jobs could cause an affinity violation later on.
- *
- * The attack would otherwise occur because other atoms/contexts have to wait for:
- * -# the currently running atoms (which are causing the violation) to
- * finish
- * -# and, the atoms that had their affinity chosen during powerup to
- * finish. These are run preferrentially because they don't cause a
- * violation, but instead continue to cause the violation in others.
- * -# or, the attacker is scheduled out (which might not happen for just 2
- * contexts)
- *
- * By re-choosing the affinity (which is designed to avoid violations at the
- * time it's chosen), we break condition (2) of the wait, which minimizes the
- * problem to just waiting for current jobs to finish (which can be bounded if
- * the Job Scheduling Policy has a timer).
+ * @KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED: Starting state: Cores must be
+ * requested.
+ * @KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES: Cores requested, but
+ * waiting for them to be powered
+ * @KBASE_ATOM_COREREF_STATE_READY: Cores are powered, atom can be submitted to
+ * HW
  */
 enum kbase_atom_coreref_state {
-	/** Starting state: No affinity chosen, and cores must be requested. kbase_jd_atom::affinity==0 */
 	KBASE_ATOM_COREREF_STATE_NO_CORES_REQUESTED,
-	/** Cores requested, but waiting for them to be powered. Requested cores given by kbase_jd_atom::affinity */
 	KBASE_ATOM_COREREF_STATE_WAITING_FOR_REQUESTED_CORES,
-	/** Cores given by kbase_jd_atom::affinity are powered, but affinity might be out-of-date, so must recheck */
-	KBASE_ATOM_COREREF_STATE_RECHECK_AFFINITY,
-	/** Cores given by kbase_jd_atom::affinity are powered, and affinity is up-to-date, but must check for violations */
-	KBASE_ATOM_COREREF_STATE_CHECK_AFFINITY_VIOLATIONS,
-	/** Cores are powered, kbase_jd_atom::affinity up-to-date, no affinity violations: atom can be submitted to HW */
 	KBASE_ATOM_COREREF_STATE_READY
 };
 
@@ -764,34 +879,27 @@ struct base_dependency {
 	base_jd_dep_type dependency_type;    /**< Dependency type */
 };
 
+/* This structure has changed since UK 10.2 for which base_jd_core_req was a u16 value.
+ * In order to keep the size of the structure same, padding field has been adjusted
+ * accordingly and core_req field of a u32 type (to which UK 10.3 base_jd_core_req defines)
+ * is added at the end of the structure. Place in the structure previously occupied by u16 core_req
+ * is kept but renamed to compat_core_req and as such it can be used in ioctl call for job submission
+ * as long as UK 10.2 legacy is supported. Once when this support ends, this field can be left
+ * for possible future use. */
 typedef struct base_jd_atom_v2 {
 	u64 jc;			    /**< job-chain GPU address */
 	struct base_jd_udata udata;		    /**< user data */
-	kbase_pointer extres_list;	    /**< list of external resources */
-	u16 nr_extres;			    /**< nr of external resources */
-	base_jd_core_req core_req;	    /**< core requirements */
+	u64 extres_list;	    /**< list of external resources */
+	u16 nr_extres;			    /**< nr of external resources or JIT allocations */
+	u16 compat_core_req;	            /**< core requirements which correspond to the legacy support for UK 10.2 */
 	struct base_dependency pre_dep[2];  /**< pre-dependencies, one need to use SETTER function to assign this field,
 	this is done in order to reduce possibility of improper assigment of a dependency field */
 	base_atom_id atom_number;	    /**< unique number to identify the atom */
 	base_jd_prio prio;                  /**< Atom priority. Refer to @ref base_jd_prio for more details */
 	u8 device_nr;			    /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
-	u8 padding[5];
+	u8 padding[1];
+	base_jd_core_req core_req;          /**< core requirements */
 } base_jd_atom_v2;
-
-#ifdef BASE_LEGACY_UK6_SUPPORT
-struct base_jd_atom_v2_uk6 {
-	u64 jc;			    /**< job-chain GPU address */
-	struct base_jd_udata udata;		    /**< user data */
-	kbase_pointer extres_list;	    /**< list of external resources */
-	u16 nr_extres;			    /**< nr of external resources */
-	base_jd_core_req core_req;	    /**< core requirements */
-	base_atom_id pre_dep[2]; /**< pre-dependencies */
-	base_atom_id atom_number;	    /**< unique number to identify the atom */
-	base_jd_prio prio;		    /**< priority - smaller is higher priority */
-	u8 device_nr;			    /**< coregroup when BASE_JD_REQ_SPECIFIC_COHERENT_GROUP specified */
-	u8 padding[7];
-};
-#endif
 
 typedef enum base_external_resource_access {
 	BASE_EXT_RES_ACCESS_SHARED,
@@ -876,13 +984,21 @@ static inline void base_jd_atom_dep_copy(struct base_dependency *dep,
  * be set to trigger when a GPU job has finished.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit_bag and @a base_jd_submit_bag has returned.
+ * has been submitted to @ref base_jd_submit and @ref base_jd_submit
+ * has returned.
  *
  * @a fence must be a valid fence set up with @a base_fence_init.
  * Calling this function with a uninitialized fence results in undefined behavior.
  *
  * @param[out] atom A pre-allocated atom to configure as a fence trigger SW atom
  * @param[in] fence The base fence object to trigger.
+ *
+ * @pre @p fence must reference a @ref base_fence successfully initialized by
+ *      calling @ref base_fence_init.
+ * @pre @p fence was @e not initialized by calling @ref base_fence_import, nor
+ *      is it associated with a fence-trigger job that was already submitted
+ *      by calling @ref base_jd_submit.
+ * @post @p atom can be submitted by calling @ref base_jd_submit.
  */
 static inline void base_jd_fence_trigger_setup_v2(struct base_jd_atom_v2 *atom, struct base_fence *fence)
 {
@@ -905,13 +1021,17 @@ static inline void base_jd_fence_trigger_setup_v2(struct base_jd_atom_v2 *atom, 
  * be set to block a GPU job until it has been triggered.
  *
  * The base fence object must not be terminated until the atom
- * has been submitted to @a base_jd_submit_bag and @a base_jd_submit_bag has returned.
- *
- * @a fence must be a valid fence set up with @a base_fence_init or @a base_fence_import.
- * Calling this function with a uninitialized fence results in undefined behavior.
+ * has been submitted to @ref base_jd_submit and
+ * @ref base_jd_submit has returned.
  *
  * @param[out] atom A pre-allocated atom to configure as a fence wait SW atom
  * @param[in] fence The base fence object to wait on
+ *
+ * @pre @p fence must reference a @ref base_fence successfully initialized by
+ *      calling @ref base_fence_import, or it must be associated with a
+ *      fence-trigger job that was already submitted by calling
+ *      @ref base_jd_submit.
+ * @post @p atom can be submitted by calling @ref base_jd_submit.
  */
 static inline void base_jd_fence_wait_setup_v2(struct base_jd_atom_v2 *atom, struct base_fence *fence)
 {
@@ -1110,22 +1230,15 @@ typedef struct base_jd_event_v2 {
 } base_jd_event_v2;
 
 /**
- * Padding required to ensure that the @ref struct base_dump_cpu_gpu_counters structure fills
- * a full cache line.
- */
-
-#define BASE_CPU_GPU_CACHE_LINE_PADDING (36)
-
-
-/**
  * @brief Structure for BASE_JD_REQ_SOFT_DUMP_CPU_GPU_COUNTERS jobs.
  *
- * This structure is stored into the memory pointed to by the @c jc field of @ref base_jd_atom.
+ * This structure is stored into the memory pointed to by the @c jc field
+ * of @ref base_jd_atom.
  *
- * This structure must be padded to ensure that it will occupy whole cache lines. This is to avoid
- * cases where access to pages containing the structure is shared between cached and un-cached
- * memory regions, which would cause memory corruption.  Here we set the structure size to be 64 bytes
- * which is the cache line for ARM A15 processors.
+ * It must not occupy the same CPU cache line(s) as any neighboring data.
+ * This is to avoid cases where access to pages containing the structure
+ * is shared between cached and un-cached memory regions, which would
+ * cause memory corruption.
  */
 
 typedef struct base_dump_cpu_gpu_counters {
@@ -1133,10 +1246,8 @@ typedef struct base_dump_cpu_gpu_counters {
 	u64 cycle_counter;
 	u64 sec;
 	u32 usec;
-	u8 padding[BASE_CPU_GPU_CACHE_LINE_PADDING];
+	u8 padding[36];
 } base_dump_cpu_gpu_counters;
-
-
 
 /** @} end group base_user_api_job_dispatch */
 
@@ -1176,7 +1287,7 @@ typedef struct base_dump_cpu_gpu_counters {
  * has been configured correctly with the right set of Platform Config
  * Compile-time Properties.
  *
- * As a consistant guide across the entire DDK, the choice for dynamic or
+ * As a consistent guide across the entire DDK, the choice for dynamic or
  * compile-time should consider the following, in order:
  * -# Can the code be written so that it doesn't need to know the
  * implementation limits at all?
@@ -1218,105 +1329,15 @@ typedef struct base_dump_cpu_gpu_counters {
  * Architecture, but is <b>necessary for OpenCL's clGetDeviceInfo() function</b>.
  *
  * The GPU properties are obtained by a call to
- * _mali_base_get_gpu_props(). This simply returns a pointer to a const
+ * base_get_gpu_props(). This simply returns a pointer to a const
  * base_gpu_props structure. It is constant for the life of a base
- * context. Multiple calls to _mali_base_get_gpu_props() to a base context
+ * context. Multiple calls to base_get_gpu_props() to a base context
  * return the same pointer to a constant structure. This avoids cache pollution
  * of the common data.
  *
  * This pointer must not be freed, because it does not point to the start of a
  * region allocated by the memory allocator; instead, just close the @ref
  * base_context.
- *
- *
- * @section sec_base_user_api_gpuprops_config Platform Config Compile-time Properties
- *
- * The Platform Config File sets up gpu properties that are specific to a
- * certain platform. Properties that are 'Implementation Defined' in the
- * Midgard Architecture spec are placed here.
- *
- * @note Reference configurations are provided for Midgard Implementations, such as
- * the Mali-T600 family. The customer need not repeat this information, and can select one of
- * these reference configurations. For example, VA_BITS, PA_BITS and the
- * maximum number of samples per pixel might vary between Midgard Implementations, but
- * \b not for platforms using the Mali-T604. This information is placed in
- * the reference configuration files.
- *
- * The System Integrator creates the following structure:
- * - platform_XYZ
- * - platform_XYZ/plat
- * - platform_XYZ/plat/plat_config.h
- *
- * They then edit plat_config.h, using the example plat_config.h files as a
- * guide.
- *
- * At the very least, the customer must set @ref CONFIG_GPU_CORE_TYPE, and will
- * receive a helpful \#error message if they do not do this correctly. This
- * selects the Reference Configuration for the Midgard Implementation. The rationale
- * behind this decision (against asking the customer to write \#include
- * <gpus/mali_t600.h> in their plat_config.h) is as follows:
- * - This mechanism 'looks' like a regular config file (such as Linux's
- * .config)
- * - It is difficult to get wrong in a way that will produce strange build
- * errors:
- *  - They need not know where the mali_t600.h, other_midg_gpu.h etc. files are stored - and
- *  so they won't accidentally pick another file with 'mali_t600' in its name
- *  - When the build doesn't work, the System Integrator may think the DDK is
- *  doesn't work, and attempt to fix it themselves:
- *   - For the @ref CONFIG_GPU_CORE_TYPE mechanism, the only way to get past the
- *   error is to set @ref CONFIG_GPU_CORE_TYPE, and this is what the \#error tells
- *   you.
- *   - For a \#include mechanism, checks must still be made elsewhere, which the
- *   System Integrator may try working around by setting \#defines (such as
- *   VA_BITS) themselves in their plat_config.h. In the  worst case, they may
- *   set the prevention-mechanism \#define of
- *   "A_CORRECT_MIDGARD_CORE_WAS_CHOSEN".
- *   - In this case, they would believe they are on the right track, because
- *   the build progresses with their fix, but with errors elsewhere.
- *
- * However, there is nothing to prevent the customer using \#include to organize
- * their own configurations files hierarchically.
- *
- * The mechanism for the header file processing is as follows:
- *
- * @dot
-   digraph plat_config_mechanism {
-	   rankdir=BT
-	   size="6,6"
-
-       "mali_base.h";
-	   "gpu/mali_gpu.h";
-
-	   node [ shape=box ];
-	   {
-	       rank = same; ordering = out;
-
-		   "gpu/mali_gpu_props.h";
-		   "base/midg_gpus/mali_t600.h";
-		   "base/midg_gpus/other_midg_gpu.h";
-	   }
-	   { rank = same; "plat/plat_config.h"; }
-	   {
-	       rank = same;
-		   "gpu/mali_gpu.h" [ shape=box ];
-		   gpu_chooser [ label="" style="invisible" width=0 height=0 fixedsize=true ];
-		   select_gpu [ label="Mali-T600 | Other\n(select_gpu.h)" shape=polygon,sides=4,distortion=0.25 width=3.3 height=0.99 fixedsize=true ] ;
-	   }
-	   node [ shape=box ];
-	   { rank = same; "plat/plat_config.h"; }
-	   { rank = same; "mali_base.h"; }
-
-	   "mali_base.h" -> "gpu/mali_gpu.h" -> "gpu/mali_gpu_props.h";
-	   "mali_base.h" -> "plat/plat_config.h" ;
-	   "mali_base.h" -> select_gpu ;
-
-	   "plat/plat_config.h" -> gpu_chooser [style="dotted,bold" dir=none weight=4] ;
-	   gpu_chooser -> select_gpu [style="dotted,bold"] ;
-
-	   select_gpu -> "base/midg_gpus/mali_t600.h" ;
-	   select_gpu -> "base/midg_gpus/other_midg_gpu.h" ;
-   }
-   @enddot
  *
  *
  * @section sec_base_user_api_gpuprops_kernel Kernel Operation
@@ -1341,9 +1362,9 @@ typedef struct base_dump_cpu_gpu_counters {
  * population count, since faulty cores may be disabled during production,
  * producing a non-contiguous mask.
  *
- * The memory requirements for this algoirthm can be determined either by a u64
+ * The memory requirements for this algorithm can be determined either by a u64
  * population count on the L2_PRESENT mask (a LUT helper already is
- * requried for the above), or simple assumption that there can be no more than
+ * required for the above), or simple assumption that there can be no more than
  * 16 coherent groups, since core groups are typically 4 cores.
  */
 
@@ -1357,7 +1378,7 @@ typedef struct base_dump_cpu_gpu_counters {
  * @{
  */
 
-#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 3
+#define BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS 4
 
 #define BASE_MAX_COHERENT_GROUPS 16
 
@@ -1369,9 +1390,9 @@ struct mali_base_gpu_core_props {
 
 	/**
 	 * Status of the GPU release.
-     * No defined values, but starts at 0 and increases by one for each release
-     * status (alpha, beta, EAC, etc.).
-     * 4 bit values (0-15).
+	 * No defined values, but starts at 0 and increases by one for each
+	 * release status (alpha, beta, EAC, etc.).
+	 * 4 bit values (0-15).
 	 */
 	u16 version_status;
 
@@ -1389,19 +1410,10 @@ struct mali_base_gpu_core_props {
 
 	u16 padding;
 
-	/**
-	 * @usecase GPU clock speed is not specified in the Midgard Architecture, but is
-	 * <b>necessary for OpenCL's clGetDeviceInfo() function</b>.
-	 */
-	u32 gpu_speed_mhz;
-
-	/**
-	 * @usecase GPU clock max/min speed is required for computing best/worst case
-	 * in tasks as job scheduling ant irq_throttling. (It is not specified in the
-	 *  Midgard Architecture).
+	/* The maximum GPU frequency. Reported to applications by
+	 * clGetDeviceInfo()
 	 */
 	u32 gpu_freq_khz_max;
-	u32 gpu_freq_khz_min;
 
 	/**
 	 * Size of the shader program counter, in bits.
@@ -1428,6 +1440,11 @@ struct mali_base_gpu_core_props {
 	 * client will not be expecting to allocate anywhere near this value.
 	 */
 	u64 gpu_available_memory_size;
+
+	/**
+	 * The number of execution engines.
+	 */
+	u8 num_exec_engines;
 };
 
 /**
@@ -1458,7 +1475,10 @@ struct mali_base_gpu_thread_props {
 	u8  max_task_queue;         /* Max. tasks [1..255] which may be sent to a core before it becomes blocked. */
 	u8  max_thread_group_split; /* Max. allowed value [1..15] of the Thread Group Split field. */
 	u8  impl_tech;              /* 0 = Not specified, 1 = Silicon, 2 = FPGA, 3 = SW Model/Emulation */
-	u8  padding[7];
+	u8  padding[3];
+	u32 tls_alloc;              /* Number of threads per core that TLS must
+				     * be allocated for
+				     */
 };
 
 /**
@@ -1537,10 +1557,10 @@ struct gpu_raw_gpu_props {
 	u64 shader_present;
 	u64 tiler_present;
 	u64 l2_present;
-	u64 unused_1; /* keep for backward compatibility */
+	u64 stack_present;
 
 	u32 l2_features;
-	u32 suspend_size; /* API 8.2+ */
+	u32 core_features;
 	u32 mem_features;
 	u32 mmu_features;
 
@@ -1549,7 +1569,7 @@ struct gpu_raw_gpu_props {
 	u32 js_present;
 	u32 js_features[GPU_MAX_JOB_SLOTS];
 	u32 tiler_features;
-	u32 texture_features[3];
+	u32 texture_features[BASE_GPU_NUM_TEXTURE_FEATURES_REGISTERS];
 
 	u32 gpu_id;
 
@@ -1563,18 +1583,20 @@ struct gpu_raw_gpu_props {
 	 * available modes as exposed in the coherency_features register.
 	 */
 	u32 coherency_mode;
+
+	u32 thread_tls_alloc;
 };
 
 /**
- * Return structure for _mali_base_get_gpu_props().
+ * Return structure for base_get_gpu_props().
  *
- * NOTE: the raw_props member in this datastructure contains the register
+ * NOTE: the raw_props member in this data structure contains the register
  * values from which the value of the other members are derived. The derived
  * members exist to allow for efficient access and/or shielding the details
  * of the layout of the registers.
  *
  */
-typedef struct mali_base_gpu_props {
+typedef struct base_gpu_props {
 	struct mali_base_gpu_core_props core_props;
 	struct mali_base_gpu_l2_cache_props l2_props;
 	u64 unused_1; /* keep for backwards compatibility */
@@ -1598,41 +1620,46 @@ typedef struct mali_base_gpu_props {
  */
 
 /**
- * \enum base_context_create_flags
- *
  * Flags to pass to ::base_context_init.
  * Flags can be ORed together to enable multiple things.
  *
- * These share the same space as @ref basep_context_private_flags, and so must
+ * These share the same space as BASEP_CONTEXT_FLAG_*, and so must
  * not collide with them.
  */
-enum base_context_create_flags {
-	/** No flags set */
-	BASE_CONTEXT_CREATE_FLAG_NONE = 0,
+typedef u32 base_context_create_flags;
 
-	/** Base context is embedded in a cctx object (flag used for CINSTR software counter macros) */
-	BASE_CONTEXT_CCTX_EMBEDDED = (1u << 0),
+/** No flags set */
+#define BASE_CONTEXT_CREATE_FLAG_NONE ((base_context_create_flags)0)
 
-	/** Base context is a 'System Monitor' context for Hardware counters.
-	 *
-	 * One important side effect of this is that job submission is disabled. */
-	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED = (1u << 1)
-};
+/** Base context is embedded in a cctx object (flag used for CINSTR
+ * software counter macros)
+ */
+#define BASE_CONTEXT_CCTX_EMBEDDED ((base_context_create_flags)1 << 0)
+
+/** Base context is a 'System Monitor' context for Hardware counters.
+ *
+ * One important side effect of this is that job submission is disabled.
+ */
+#define BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED \
+	((base_context_create_flags)1 << 1)
+
 
 /**
- * Bitpattern describing the ::base_context_create_flags that can be passed to base_context_init()
+ * Bitpattern describing the ::base_context_create_flags that can be
+ * passed to base_context_init()
  */
 #define BASE_CONTEXT_CREATE_ALLOWED_FLAGS \
-	(((u32)BASE_CONTEXT_CCTX_EMBEDDED) | \
-	  ((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED))
+	(BASE_CONTEXT_CCTX_EMBEDDED | \
+	 BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED)
 
 /**
- * Bitpattern describing the ::base_context_create_flags that can be passed to the kernel
+ * Bitpattern describing the ::base_context_create_flags that can be
+ * passed to the kernel
  */
 #define BASE_CONTEXT_CREATE_KERNEL_FLAGS \
-	((u32)BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED)
+	BASE_CONTEXT_SYSTEM_MONITOR_SUBMIT_DISABLED
 
-/**
+/*
  * Private flags used on the base context
  *
  * These start at bit 31, and run down to zero.
@@ -1640,10 +1667,8 @@ enum base_context_create_flags {
  * They share the same space as @ref base_context_create_flags, and so must
  * not collide with them.
  */
-enum basep_context_private_flags {
-	/** Private flag tracking whether job descriptor dumping is disabled */
-	BASEP_CONTEXT_FLAG_JOB_DUMP_DISABLED = (1 << 31)
-};
+/** Private flag tracking whether job descriptor dumping is disabled */
+#define BASEP_CONTEXT_FLAG_JOB_DUMP_DISABLED ((u32)(1 << 31))
 
 /** @} end group base_user_api_core */
 
@@ -1716,8 +1741,6 @@ typedef struct base_jd_replay_payload {
 	 * Core requirements for the fragment job chain
 	 */
 	base_jd_core_req fragment_core_req;
-
-	u8 padding[4];
 } base_jd_replay_payload;
 
 /**
@@ -1747,5 +1770,17 @@ typedef struct base_jd_replay_jc {
 typedef struct base_profiling_controls {
 	u32 profiling_controls[FBDUMP_CONTROL_MAX];
 } base_profiling_controls;
+
+/* Enable additional tracepoints for latency measurements (TL_ATOM_READY,
+ * TL_ATOM_DONE, TL_ATOM_PRIO_CHANGE, TL_ATOM_EVENT_POST) */
+#define BASE_TLSTREAM_ENABLE_LATENCY_TRACEPOINTS (1 << 0)
+
+/* Indicate that job dumping is enabled. This could affect certain timers
+ * to account for the performance impact. */
+#define BASE_TLSTREAM_JOB_DUMPING_ENABLED (1 << 1)
+
+#define BASE_TLSTREAM_FLAGS_MASK (BASE_TLSTREAM_ENABLE_LATENCY_TRACEPOINTS | \
+		BASE_TLSTREAM_JOB_DUMPING_ENABLED)
+
 
 #endif				/* _BASE_KERNEL_H_ */

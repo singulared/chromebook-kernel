@@ -6,6 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -26,6 +27,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -86,7 +88,8 @@ enum iwl_nan_subcmd_ids {
 
 	/**
 	 * @NAN_DISCOVERY_EVENT_NOTIF:
-	 * &struct iwl_nan_disc_evt_notify
+	 * &struct iwl_nan_disc_evt_notify_v1 or
+	 * &struct iwl_nan_disc_evt_notify_v2
 	 */
 	NAN_DISCOVERY_EVENT_NOTIF = 0xFD,
 
@@ -235,6 +238,26 @@ enum iwl_fw_nan_func_flags {
 };
 
 /**
+ * struct iwl_nan_add_func_common_tail - tail of iwl_nan_add_func_common for
+ *	alignment with various channel info sizes
+ *
+ * @faw_attrtype: further availability bitmap
+ * @serv_info_len: length of service specific information
+ * @srf_len: length of the srf
+ * @rx_filter_len: length of rx filter
+ * @tx_filter_len: length of tx filter
+ * @dw_interval: awake dw interval
+ */
+struct iwl_nan_add_func_common_tail {
+	u8 faw_attrtype;
+	u8 serv_info_len;
+	u8 srf_len;
+	u8 rx_filter_len;
+	u8 tx_filter_len;
+	u8 dw_interval;
+} __packed;
+
+/**
  * struct iwl_nan_add_func_common - NAN add/remove function, common part
  *
  * @action: one of the FW_CTXT_ACTION_ADD/REMOVE
@@ -248,12 +271,7 @@ enum iwl_fw_nan_func_flags {
  * @reserved1: reserved
  * @ttl: ttl in DW's or 0 for infinite
  * @faw_ci: &struct iwl_fw_channel_info for further availability
- * @faw_attrtype: further availability bitmap
- * @serv_info_len: length of service specific information
- * @srf_len: length of the srf
- * @rx_filter_len: length of rx filter
- * @tx_filter_len: length of tx filter
- * @dw_interval: awake dw interval
+ * @tail: command tail
  */
 struct iwl_nan_add_func_common {
 	__le32 action;
@@ -267,12 +285,8 @@ struct iwl_nan_add_func_common {
 	__le16 reserved1;
 	__le32 ttl;
 	struct iwl_fw_channel_info faw_ci;
-	u8 faw_attrtype;
-	u8 serv_info_len;
-	u8 srf_len;
-	u8 rx_filter_len;
-	u8 tx_filter_len;
-	u8 dw_interval;
+	struct iwl_nan_add_func_common_tail tail;
+
 } __packed; /* NAN_DISCO_FUNC_FIXED_CMD_API_S_VER_1 */
 
 /**
@@ -329,8 +343,40 @@ struct iwl_nan_add_func_res {
 	__le16 reserved;
 } __packed; /* NAN_DISCO_FUNC_CMD_API_S_VER_1 */
 
+/* Shared key cipher suite with CCMP with a 128 bit TK */
+#define IWL_NAN_DE_FUNC_CS_SK_CCM_128 BIT(0)
+
+/* Shared key cipher suite with GCMP with a 256 bit TK */
+#define IWL_NAN_DE_FUNC_CS_SK_GCM_256 BIT(1)
+
 /**
- * struct iwl_nan_disc_evt_notify - NaN discovery event
+ * enum iwl_nan_de_func_sdea_flags - NAN func SDEA flags
+ * @IWL_NAN_DE_FUNC_SDEA_FSD_REQ: Further Service Discovery (FSD) is required
+ *     for the service
+ * @IWL_NAN_DE_FUNC_SDEA_FSD_GAS: GAS is used for FSD
+ * @IWL_NAN_DE_FUNC_SDEA_DP_REQ: Data path required for the service
+ * @IWL_NAN_DE_FUNC_SDEA_DP_MCAST: If data path is required, the type is
+ *     multicast
+ * @IWL_NAN_DE_FUNC_SDEA_DP_MCAST_M_TO_M:if multicast data path is required then
+ *     it is many to many
+ * @IWL_NAN_DE_FUNC_SDEA_QOS_REQ: QoS is required for the service
+ * @IWL_NAN_DE_FUNC_SDEA_SEC_REQ: Security is required for the service
+ * @IWL_NAN_DE_FUNC_SDEA_RANGIGN_REQ: Ranging is required prior to subscription
+ *     to the service
+ */
+enum iwl_nan_de_func_sdea_flags {
+	IWL_NAN_DE_FUNC_SDEA_FSD_REQ = BIT(0),
+	IWL_NAN_DE_FUNC_SDEA_FSD_GAS = BIT(1),
+	IWL_NAN_DE_FUNC_SDEA_DP_REQ = BIT(2),
+	IWL_NAN_DE_FUNC_SDEA_DP_MCAST = BIT(3),
+	IWL_NAN_DE_FUNC_SDEA_DP_MCAST_M_TO_M = BIT(4),
+	IWL_NAN_DE_FUNC_SDEA_QOS_REQ = BIT(5),
+	IWL_NAN_DE_FUNC_SDEA_SEC_REQ = BIT(6),
+	IWL_NAN_DE_FUNC_SDEA_RANGIGN_REQ = BIT(7),
+};
+
+/**
+ * struct iwl_nan_disc_evt_notify_v1 - NaN discovery event
  *
  * @peer_mac_addr: peer address
  * @reserved1: reserved
@@ -341,7 +387,7 @@ struct iwl_nan_add_func_res {
  * @attrs_len: additional peer attributes length
  * @buf: service specific information followed by attributes
  */
-struct iwl_nan_disc_evt_notify {
+struct iwl_nan_disc_evt_notify_v1 {
 	u8 peer_mac_addr[6];
 	__le16 reserved1;
 	u8 type;
@@ -351,6 +397,70 @@ struct iwl_nan_disc_evt_notify {
 	__le32 attrs_len;
 	u8 buf[0];
 } __packed; /* NAN_DISCO_EVENT_NTFY_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_sec_ctxt_info - NaN security context information
+ *
+ * @type: the security context type
+ * @reserved: for alignment
+ * @len: the length of the security context
+ * @buf: security context data
+ */
+struct iwl_nan_sec_ctxt_info {
+	u8 type;
+	u8 reserved;
+	__le16 len;
+	u8 buf[0];
+} __packed; /* NAN_DISCO_SEC_CTXT_ID_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_disc_info - NaN match information
+ *
+ * @type: Type of matching function
+ * @instance_id: local matching instance id
+ * @peer_instance: peer matching instance id
+ * @service_info_len: service specific information length
+ * @sdea_control: bit mask of &enum iwl_nan_de_func_sdea_flags_
+ * @sdea_service_info_len: sdea service specific information length
+ * @sec_ctxt_len: security context information length
+ * @cipher_suite_ids: bit mask of cipher suite IDs
+ * @sdea_update_indicator: update indicator from the sdea attribute
+ * @buf: service specific information followed by sdea service specific
+ *     information and by security context information which encapsulates 0 or
+ *     more iwl_nan_sec_ctxt_info entries.
+ */
+struct iwl_nan_disc_info {
+	u8 type;
+	u8 instance_id;
+	u8 peer_instance;
+	u8 service_info_len;
+	__le16 sdea_control;
+	__le16 sdea_service_info_len;
+	__le16 sec_ctxt_len;
+	u8 cipher_suite_ids;
+	u8 sdea_update_indicator;
+	u8 buf[0];
+} __packed; /* NAN_DISCO_INFO_API_S_VER_1 */
+
+/**
+ * struct iwl_nan_disc_evt_notify_v2 - NaN discovery information
+ *
+ * @peer_mac_addr: peer address
+ * @reserved1: reserved
+ * @match_len: Length of the match data
+ * @avail_attrs_len: Length of the availability attributes associated with the
+ *     peer
+ * @buf: aggregation of matches, each starting on a dword aligned address,
+ *     followed by the peer availability attributes, which also start on a
+ *     dword aligned address.
+ */
+struct iwl_nan_disc_evt_notify_v2 {
+	u8 peer_mac_addr[6];
+	__le16 reserved1;
+	__le32 match_len;
+	__le32 avail_attrs_len;
+	u8 buf[0];
+} __packed; /* NAN_DISCO_EVENT_NTFY_API_S_VER_2 */
 
 /* NAN function termination reasons */
 enum iwl_fw_nan_de_term_reason {
@@ -387,22 +497,32 @@ enum iwl_fw_config_flags {
 };
 
 /**
- * struct iwl_nan_faw_config - NAN further availability configuration command
+ * struct iwl_nan_faw_config_tail - tail fo iwl_nan_faw_config for various
+ *	channel info structs
  *
- * @id_n_color: id and color of the mac used for further availability
- * @faw_ci: channel to be available on
  * @type: type of post NAN availability (enum %iwl_fw_post_nan_type)
  * @slots: number of 16TU slots to be available on (should be < 32)
  * @flags: NAN_FAW_FLAG_*
  * @op_class: operating class which corresponds to faw_ci
  */
-struct iwl_nan_faw_config {
-	__le32 id_n_color;
-	struct iwl_fw_channel_info faw_ci;
+struct iwl_nan_faw_config_tail {
 	u8 type;
 	u8 slots;
 	u8 flags;
 	u8 op_class;
+} __packed;
+
+/**
+ * struct iwl_nan_faw_config - NAN further availability configuration command
+ *
+ * @id_n_color: id and color of the mac used for further availability
+ * @faw_ci: channel to be available on
+ * @tail: command tail
+ */
+struct iwl_nan_faw_config {
+	__le32 id_n_color;
+	struct iwl_fw_channel_info faw_ci;
+	struct iwl_nan_faw_config_tail tail;
 } __packed; /* _NAN_DISCO_FAW_CMD_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_nan_h__ */

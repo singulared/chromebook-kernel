@@ -4,7 +4,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2007-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2015  Intel Mobile Communications GmbH
- * Copyright(c) 2017 Intel Deutschland GmbH
+ * Copyright (C) 2018 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -165,6 +165,7 @@ typedef unsigned __bitwise ieee80211_tx_result;
 #define TX_DROP		((__force ieee80211_tx_result) 1u)
 #define TX_QUEUED	((__force ieee80211_tx_result) 2u)
 
+#define IEEE80211_TX_NO_SEQNO		BIT(0)
 #define IEEE80211_TX_UNICAST		BIT(1)
 #define IEEE80211_TX_PS_BUFFERED	BIT(2)
 
@@ -376,6 +377,7 @@ struct ieee80211_mgd_auth_data {
 	u8 key[WLAN_KEY_LEN_WEP104];
 	u8 key_len, key_idx;
 	bool done;
+	bool peer_confirmed;
 	bool timeout_started;
 
 	u16 sae_trans, sae_status;
@@ -498,6 +500,7 @@ struct ieee80211_if_managed {
 	unsigned int uapsd_max_sp_len;
 
 	int wmm_last_param_set;
+	int mu_edca_last_param_set;
 
 	u8 use_4addr;
 
@@ -582,9 +585,6 @@ struct ieee80211_if_ibss {
 
 	struct ieee80211_ht_cap ht_capa; /* configured ht-cap over-rides */
 	struct ieee80211_ht_cap ht_capa_mask; /* Valid parts of ht_capa */
-
-	spinlock_t incomplete_lock;
-	struct list_head incomplete_stations;
 
 	enum {
 		IEEE80211_IBSS_MLME_SEARCH,
@@ -817,6 +817,7 @@ enum txq_info_flags {
 	IEEE80211_TXQ_STOP,
 	IEEE80211_TXQ_AMPDU,
 	IEEE80211_TXQ_NO_AMSDU,
+	IEEE80211_TXQ_STOP_NETIF_TX,
 };
 
 /**
@@ -901,6 +902,7 @@ struct ieee80211_sub_if_data {
 	u16 sequence_number;
 	__be16 control_port_protocol;
 	bool control_port_no_encrypt;
+	bool control_port_over_nl80211;
 	int encrypt_headroom;
 
 	atomic_t num_tx_queued;
@@ -1033,17 +1035,6 @@ ieee80211_vif_get_shift(struct ieee80211_vif *vif)
 	return shift;
 }
 
-struct ieee80211_rx_agg {
-	u8 addr[ETH_ALEN];
-	u16 tid;
-};
-
-enum sdata_queue_type {
-	IEEE80211_SDATA_QUEUE_TYPE_FRAME	= 0,
-	IEEE80211_SDATA_QUEUE_RX_AGG_START	= 3,
-	IEEE80211_SDATA_QUEUE_RX_AGG_STOP	= 4,
-};
-
 enum {
 	IEEE80211_RX_MSG	= 1,
 	IEEE80211_TX_STATUS_MSG	= 2,
@@ -1070,6 +1061,7 @@ struct tpt_led_trigger {
 	const struct ieee80211_tpt_blink *blink_table;
 	unsigned int blink_table_len;
 	struct timer_list timer;
+	struct ieee80211_local *local;
 	unsigned long prev_traffic;
 	unsigned long tx_bytes, rx_bytes;
 	unsigned int active, want;
@@ -1124,11 +1116,30 @@ enum mac80211_scan_state {
 	SCAN_ABORT,
 };
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
+/* private copy of a cfg80211 structure */
+struct cfg80211_registered_device {
+	struct list_head list;
+
+	/*
+	 * the driver requests the regulatory core to set this regulatory
+	 * domain as the wiphy's. Only used for %REGULATORY_WIPHY_SELF_MANAGED
+	 * devices using the regulatory_set_wiphy_regd() API
+	 */
+	const struct ieee80211_regdomain *requested_regd;
+};
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
+
 struct ieee80211_local {
 	/* embed the driver visible part.
 	 * don't cast (use the static inlines below), but we keep
 	 * it first anyway so they become a no-op */
 	struct ieee80211_hw hw;
+
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
+	/* used for internal mac80211 LAR implementation */
+	struct cfg80211_registered_device rdev;
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
 
 	struct fq fq;
 	struct codel_vars *cvars;
@@ -1206,6 +1217,9 @@ struct ieee80211_local {
 	/* number of RX chains the hardware has */
 	u8 rx_chains;
 
+	/* bitmap of which sbands were copied */
+	u8 sband_allocated;
+
 	int tx_headroom; /* required headroom for hardware/radiotap */
 
 	/* Tasklet and skb queue to process calls from IRQ mode. All frames
@@ -1234,6 +1248,7 @@ struct ieee80211_local {
 
 	struct sk_buff_head pending[IEEE80211_MAX_QUEUES];
 	struct tasklet_struct tx_pending_tasklet;
+	struct tasklet_struct wake_txqs_tasklet;
 
 	atomic_t agg_queue_stop[IEEE80211_MAX_QUEUES];
 
@@ -1402,7 +1417,7 @@ struct ieee80211_local {
 		struct rcu_head rcu_head;
 		unsigned int num_oui;
 		unsigned int oui[];
-	} *uapsd_black_list;
+	} __rcu *uapsd_black_list;
 };
 
 static inline struct ieee80211_sub_if_data *
@@ -1446,6 +1461,7 @@ struct ieee80211_csa_ie {
 	u8 ttl;
 	u16 pre_value;
 	u16 reason_code;
+	u32 max_switch_time;
 };
 
 /* Parsed Information Elements */
@@ -1475,6 +1491,7 @@ struct ieee802_11_elems {
 	const u8 *he_cap;
 	const struct ieee80211_he_operation *he_operation;
 	const struct ieee80211_mu_edca_param_set *mu_edca_param_set;
+	const u8 *uora_element;
 	const u8 *mesh_id;
 	const u8 *peering;
 	const __le16 *awake_window;
@@ -1485,13 +1502,14 @@ struct ieee802_11_elems {
 	const struct ieee80211_channel_sw_ie *ch_switch_ie;
 	const struct ieee80211_ext_chansw_ie *ext_chansw_ie;
 	const struct ieee80211_wide_bw_chansw_ie *wide_bw_chansw_ie;
+	const u8 *max_channel_switch_time;
 	const u8 *country_elem;
 	const u8 *pwr_constr_elem;
 	const u8 *cisco_dtpc_elem;
 	const struct ieee80211_timeout_interval_ie *timeout_int;
 	const u8 *opmode_notif;
 	const struct ieee80211_sec_chan_offs_ie *sec_chan_offs;
-	const struct ieee80211_mesh_chansw_params_ie *mesh_chansw_params_ie;
+	struct ieee80211_mesh_chansw_params_ie *mesh_chansw_params_ie;
 	const struct ieee80211_bss_max_idle_period_ie *max_idle_period_ie;
 
 	/* length of them, respectively */
@@ -1713,7 +1731,10 @@ void ieee80211_iface_exit(void);
 int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 		     unsigned char name_assign_type,
 		     struct wireless_dev **new_wdev, enum nl80211_iftype type,
-		     struct vif_params *params);
+#if CFG80211_VERSION < KERNEL_VERSION(4,12,0)
+		     u32 flags,
+#endif
+struct vif_params *params);
 int ieee80211_if_change_type(struct ieee80211_sub_if_data *sdata,
 			     enum nl80211_iftype type);
 void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata);
@@ -1759,6 +1780,9 @@ void ieee80211_check_fast_xmit(struct sta_info *sta);
 void ieee80211_check_fast_xmit_all(struct ieee80211_local *local);
 void ieee80211_check_fast_xmit_iface(struct ieee80211_sub_if_data *sdata);
 void ieee80211_clear_fast_xmit(struct sta_info *sta);
+int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
+			      const u8 *buf, size_t len,
+			      const u8 *dest, __be16 proto, bool unencrypted);
 
 /* HT */
 void ieee80211_apply_htcap_overrides(struct ieee80211_sub_if_data *sdata,
@@ -1782,10 +1806,10 @@ void ___ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 				     u16 initiator, u16 reason, bool stop);
 void __ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 				    u16 initiator, u16 reason, bool stop);
-void __ieee80211_start_rx_ba_session(struct sta_info *sta,
-				     u8 dialog_token, u16 timeout,
-				     u16 start_seq_num, u16 ba_policy, u16 tid,
-				     u16 buf_size, bool tx, bool auto_seq);
+void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
+				      u8 dialog_token, u16 timeout,
+				      u16 start_seq_num, u16 ba_policy, u16 tid,
+				      u16 buf_size, bool tx, bool auto_seq);
 void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta,
 					 enum ieee80211_agg_stop_reason reason);
 void ieee80211_process_delba(struct ieee80211_sub_if_data *sdata,
@@ -1813,6 +1837,8 @@ void ieee80211_tx_ba_session_handle_start(struct sta_info *sta, int tid);
 void ieee80211_release_reorder_timeout(struct sta_info *sta, int tid);
 
 u8 ieee80211_mcs_to_chains(const struct ieee80211_mcs_info *mcs);
+enum nl80211_smps_mode
+ieee80211_smps_mode_to_smps_mode(enum ieee80211_smps_mode smps);
 
 /* VHT */
 void
@@ -1839,6 +1865,15 @@ void ieee80211_apply_vhtcap_overrides(struct ieee80211_sub_if_data *sdata,
 				      struct ieee80211_sta_vht_cap *vht_cap);
 void ieee80211_get_vht_mask_from_cap(__le16 vht_cap,
 				     u16 vht_mask[NL80211_VHT_NSS_MAX]);
+enum nl80211_chan_width
+ieee80211_sta_rx_bw_to_chan_width(struct sta_info *sta);
+
+/* HE */
+void
+ieee80211_he_cap_ie_to_sta_he_cap(struct ieee80211_sub_if_data *sdata,
+				  struct ieee80211_supported_band *sband,
+				  const u8 *he_cap_ie, u8 he_cap_len,
+				  struct sta_info *sta);
 
 /* HE */
 void
@@ -1897,22 +1932,26 @@ extern const void *const mac80211_wiphy_privid; /* for wiphy privid */
 int ieee80211_frame_duration(enum nl80211_band band, size_t len,
 			     int rate, int erp, int short_preamble,
 			     int shift);
+void ieee80211_regulatory_limit_wmm_params(struct ieee80211_sub_if_data *sdata,
+					   struct ieee80211_tx_queue_params *qparam,
+					   int ac);
 void ieee80211_set_wmm_default(struct ieee80211_sub_if_data *sdata,
 			       bool bss_notify, bool enable_qos);
 void ieee80211_xmit(struct ieee80211_sub_if_data *sdata,
-		    struct sta_info *sta, struct sk_buff *skb);
+		    struct sta_info *sta, struct sk_buff *skb,
+		    u32 txdata_flags);
 
 void __ieee80211_tx_skb_tid_band(struct ieee80211_sub_if_data *sdata,
 				 struct sk_buff *skb, int tid,
-				 enum nl80211_band band);
+				 enum nl80211_band band, u32 txdata_flags);
 
 static inline void
 ieee80211_tx_skb_tid_band(struct ieee80211_sub_if_data *sdata,
 			  struct sk_buff *skb, int tid,
-			  enum nl80211_band band)
+			  enum nl80211_band band, u32 txdata_flags)
 {
 	rcu_read_lock();
-	__ieee80211_tx_skb_tid_band(sdata, skb, tid, band);
+	__ieee80211_tx_skb_tid_band(sdata, skb, tid, band, txdata_flags);
 	rcu_read_unlock();
 }
 
@@ -1930,7 +1969,7 @@ static inline void ieee80211_tx_skb_tid(struct ieee80211_sub_if_data *sdata,
 	}
 
 	__ieee80211_tx_skb_tid_band(sdata, skb, tid,
-				    chanctx_conf->def.chan->band);
+				    chanctx_conf->def.chan->band, 0);
 	rcu_read_unlock();
 }
 
@@ -1961,7 +2000,7 @@ static inline int ieee80211_ac_from_tid(int tid)
 
 void ieee80211_dynamic_ps_enable_work(struct work_struct *work);
 void ieee80211_dynamic_ps_disable_work(struct work_struct *work);
-void ieee80211_dynamic_ps_timer(unsigned long data);
+void ieee80211_dynamic_ps_timer(struct timer_list *t);
 void ieee80211_send_nullfunc(struct ieee80211_local *local,
 			     struct ieee80211_sub_if_data *sdata,
 			     bool powersave);
@@ -1969,7 +2008,10 @@ void ieee80211_sta_rx_notify(struct ieee80211_sub_if_data *sdata,
 			     struct ieee80211_hdr *hdr);
 void ieee80211_sta_tx_notify(struct ieee80211_sub_if_data *sdata,
 			     struct ieee80211_hdr *hdr, bool ack, u16 tx_time);
-
+void ieee80211_mlme_send_probe_req(struct ieee80211_sub_if_data *sdata,
+				   const u8 *src, const u8 *dst,
+				   const u8 *ssid, size_t ssid_len,
+				   struct ieee80211_channel *channel);
 void ieee80211_wake_queues_by_reason(struct ieee80211_hw *hw,
 				     unsigned long queues,
 				     enum queue_stop_reason reason,
@@ -2032,12 +2074,20 @@ static inline bool ieee80211_can_run_worker(struct ieee80211_local *local)
 }
 
 int ieee80211_txq_setup_flows(struct ieee80211_local *local);
+void ieee80211_txq_set_params(struct ieee80211_local *local);
 void ieee80211_txq_teardown_flows(struct ieee80211_local *local);
 void ieee80211_txq_init(struct ieee80211_sub_if_data *sdata,
 			struct sta_info *sta,
 			struct txq_info *txq, int tid);
 void ieee80211_txq_purge(struct ieee80211_local *local,
 			 struct txq_info *txqi);
+void ieee80211_txq_remove_vlan(struct ieee80211_local *local,
+			       struct ieee80211_sub_if_data *sdata);
+#if CFG80211_VERSION >= KERNEL_VERSION(4,18,0)
+void ieee80211_fill_txq_stats(struct cfg80211_txq_stats *txqstats,
+			      struct txq_info *txqi);
+#endif /* CFG80211_VERSION >= KERNEL_VERSION(4,18,0) */
+void ieee80211_wake_txqs(unsigned long data);
 void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 			 u16 transaction, u16 auth_alg, u16 status,
 			 const u8 *extra, size_t extra_len, const u8 *bssid,
@@ -2046,26 +2096,27 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 void ieee80211_send_deauth_disassoc(struct ieee80211_sub_if_data *sdata,
 				    const u8 *bssid, u16 stype, u16 reason,
 				    bool send_frame, u8 *frame_buf);
+
+enum {
+	IEEE80211_PROBE_FLAG_DIRECTED		= BIT(0),
+	IEEE80211_PROBE_FLAG_MIN_CONTENT	= BIT(1),
+	IEEE80211_PROBE_FLAG_RANDOM_SN		= BIT(2),
+};
+
 int ieee80211_build_preq_ies(struct ieee80211_local *local, u8 *buffer,
 			     size_t buffer_len,
 			     struct ieee80211_scan_ies *ie_desc,
 			     const u8 *ie, size_t ie_len,
 			     u8 bands_used, u32 *rate_masks,
-			     struct cfg80211_chan_def *chandef);
+			     struct cfg80211_chan_def *chandef,
+			     u32 flags);
 struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 					  const u8 *src, const u8 *dst,
 					  u32 ratemask,
 					  struct ieee80211_channel *chan,
 					  const u8 *ssid, size_t ssid_len,
 					  const u8 *ie, size_t ie_len,
-					  bool directed);
-void ieee80211_send_probe_req(struct ieee80211_sub_if_data *sdata,
-			      const u8 *src, const u8 *dst,
-			      const u8 *ssid, size_t ssid_len,
-			      const u8 *ie, size_t ie_len,
-			      u32 ratemask, bool directed, u32 tx_flags,
-			      struct ieee80211_channel *channel, bool scan);
-
+					  u32 flags);
 u32 ieee80211_sta_get_rates(struct ieee80211_sub_if_data *sdata,
 			    struct ieee802_11_elems *elems,
 			    enum nl80211_band band, u32 *basic_rates);
@@ -2105,7 +2156,9 @@ u8 *ieee80211_add_wmm_info_ie(u8 *buf, u8 qosinfo);
 /* channel management */
 bool ieee80211_chandef_ht_oper(const struct ieee80211_ht_operation *ht_oper,
 			       struct cfg80211_chan_def *chandef);
-bool ieee80211_chandef_vht_oper(const struct ieee80211_vht_operation *oper,
+bool ieee80211_chandef_vht_oper(struct ieee80211_hw *hw,
+				const struct ieee80211_vht_operation *oper,
+				const struct ieee80211_ht_operation *htop,
 				struct cfg80211_chan_def *chandef);
 u32 ieee80211_chandef_downgrade(struct cfg80211_chan_def *c);
 
@@ -2165,14 +2218,26 @@ enum nl80211_chan_width ieee80211_get_sta_bw(struct ieee80211_sta *sta);
 void ieee80211_recalc_chanctx_chantype(struct ieee80211_local *local,
 				       struct ieee80211_chanctx *ctx);
 
+#if CFG80211_VERSION < KERNEL_VERSION(4,0,0)
+/* LAR private implementation */
+void intel_regulatory_deregister(struct ieee80211_local *local);
+void intel_regulatory_register(struct ieee80211_local *local);
+#endif /* CFG80211_VERSION < KERNEL_VERSION(4,0,0) */
+
 /* TDLS */
 int ieee80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
-			const u8 *peer, u8 action_code, u8 dialog_token,
-			u16 status_code, u32 peer_capability,
-			bool initiator, const u8 *extra_ies,
+			const_since_3_16 u8 *peer, u8 action_code, u8 dialog_token,
+			u16 status_code,
+#if CFG80211_VERSION >= KERNEL_VERSION(3,15,0)
+			u32 peer_capability,
+#endif
+#if CFG80211_VERSION >= KERNEL_VERSION(3,17,0)
+			bool initiator,
+#endif
+			const u8 *extra_ies,
 			size_t extra_ies_len);
 int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
-			const u8 *peer, enum nl80211_tdls_operation oper);
+			const_since_3_16 u8 *peer, enum nl80211_tdls_operation oper);
 void ieee80211_tdls_peer_del_work(struct work_struct *wk);
 int ieee80211_tdls_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 				  const u8 *addr, u8 oper_class,

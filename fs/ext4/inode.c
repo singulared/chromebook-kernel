@@ -3554,6 +3554,7 @@ int ext4_can_truncate(struct inode *inode)
 
 int ext4_punch_hole(struct file *file, loff_t offset, loff_t length)
 {
+#if 0
 	struct inode *inode = file->f_path.dentry->d_inode;
 	if (!S_ISREG(inode->i_mode))
 		return -EOPNOTSUPP;
@@ -3569,6 +3570,12 @@ int ext4_punch_hole(struct file *file, loff_t offset, loff_t length)
 	}
 
 	return ext4_ext_punch_hole(file, offset, length);
+#else
+	/*
+	 * Disabled as per b/28760453
+	 */
+	return -EOPNOTSUPP;
+#endif
 }
 
 /*
@@ -3879,6 +3886,12 @@ struct inode *ext4_iget(struct super_block *sb, unsigned long ino)
 	if (ret < 0)
 		goto bad_inode;
 	raw_inode = ext4_raw_inode(&iloc);
+
+	if ((ino == EXT4_ROOT_INO) && (raw_inode->i_links_count == 0)) {
+		EXT4_ERROR_INODE(inode, "root inode unallocated");
+		ret = -EIO;
+		goto bad_inode;
+	}
 
 	if (EXT4_INODE_SIZE(inode->i_sb) > EXT4_GOOD_OLD_INODE_SIZE) {
 		ei->i_extra_isize = le16_to_cpu(raw_inode->i_extra_isize);

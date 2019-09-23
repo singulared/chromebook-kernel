@@ -8,6 +8,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -30,6 +31,7 @@
  * Copyright(c) 2012 - 2014 Intel Corporation. All rights reserved.
  * Copyright(c) 2013 - 2015 Intel Mobile Communications GmbH
  * Copyright(c) 2016 - 2017 Intel Deutschland GmbH
+ * Copyright(c) 2018        Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,11 +79,13 @@
  * @DATA_PATH_GROUP: data path group, uses command IDs from
  *	&enum iwl_data_path_subcmd_ids
  * @NAN_GROUP: NAN group, uses command IDs from &enum iwl_nan_subcmd_ids
- * @TOF_GROUP: TOF group, uses command IDs from &enum iwl_tof_subcmd_ids
+ * @LOCATION_GROUP: location group, uses command IDs from
+ *	&enum iwl_location_subcmd_ids
  * @PROT_OFFLOAD_GROUP: protocol offload group, uses command IDs from
  *	&enum iwl_prot_offload_subcmd_ids
  * @REGULATORY_AND_NVM_GROUP: regulatory/NVM group, uses command IDs from
  *	&enum iwl_regulatory_and_nvm_subcmd_ids
+ * @XVT_GROUP: XVT group, uses command IDs from &enum iwl_xvt_subcmd_ids
  * @DEBUG_GROUP: Debug group, uses command IDs from &enum iwl_debug_cmds
  */
 enum iwl_mvm_command_groups {
@@ -92,9 +96,10 @@ enum iwl_mvm_command_groups {
 	PHY_OPS_GROUP = 0x4,
 	DATA_PATH_GROUP = 0x5,
 	NAN_GROUP = 0x7,
-	TOF_GROUP = 0x8,
+	LOCATION_GROUP = 0x8,
 	PROT_OFFLOAD_GROUP = 0xb,
 	REGULATORY_AND_NVM_GROUP = 0xc,
+	XVT_GROUP = 0xe,
 	DEBUG_GROUP = 0xf,
 };
 
@@ -193,7 +198,8 @@ enum iwl_legacy_cmds {
 	FW_GET_ITEM_CMD = 0x1a,
 
 	/**
-	 * @TX_CMD: uses &struct iwl_tx_cmd or &struct iwl_tx_cmd_gen2,
+	 * @TX_CMD: uses &struct iwl_tx_cmd or &struct iwl_tx_cmd_gen2 or
+	 *	&struct iwl_tx_cmd_gen3,
 	 *	response in &struct iwl_mvm_tx_resp or
 	 *	&struct iwl_mvm_tx_resp_v3
 	 */
@@ -215,7 +221,7 @@ enum iwl_legacy_cmds {
 	/**
 	 * @SCD_QUEUE_CFG: &struct iwl_scd_txq_cfg_cmd for older hardware,
 	 *	&struct iwl_tx_queue_cfg_cmd with &struct iwl_tx_queue_cfg_rsp
-	 *	for newer (A000) hardware.
+	 *	for newer (22000) hardware.
 	 */
 	SCD_QUEUE_CFG = 0x1d,
 
@@ -280,6 +286,11 @@ enum iwl_legacy_cmds {
 	 * command is &struct iwl_nonqos_seq_query_cmd
 	 */
 	NON_QOS_TX_COUNTER_CMD = 0x2d,
+
+	/**
+	 * @FIPS_TEST_VECTOR_CMD: command is &struct iwl_fips_test_cmd
+	 */
+	FIPS_TEST_VECTOR_CMD = 0x3b,
 
 	/**
 	 * @LEDS_CMD: command is &struct iwl_led_cmd
@@ -413,7 +424,7 @@ enum iwl_legacy_cmds {
 	 * one of &struct iwl_statistics_cmd,
 	 * &struct iwl_notif_statistics_v11,
 	 * &struct iwl_notif_statistics_v10,
-	 * &struct iwl_notif_statistics_cdb
+	 * &struct iwl_notif_statistics
 	 */
 	STATISTICS_CMD = 0x9c,
 
@@ -421,7 +432,7 @@ enum iwl_legacy_cmds {
 	 * @STATISTICS_NOTIFICATION:
 	 * one of &struct iwl_notif_statistics_v10,
 	 * &struct iwl_notif_statistics_v11,
-	 * &struct iwl_notif_statistics_cdb
+	 * &struct iwl_notif_statistics
 	 */
 	STATISTICS_NOTIFICATION = 0x9d,
 
@@ -434,7 +445,8 @@ enum iwl_legacy_cmds {
 
 	/**
 	 * @REDUCE_TX_POWER_CMD:
-	 * &struct iwl_dev_tx_power_cmd_v3 or &struct iwl_dev_tx_power_cmd
+	 * &struct iwl_dev_tx_power_cmd_v3 or &struct iwl_dev_tx_power_cmd_v4
+	 * or &struct iwl_dev_tx_power_cmd
 	 */
 	REDUCE_TX_POWER_CMD = 0x9f,
 
@@ -503,6 +515,7 @@ enum iwl_legacy_cmds {
 
 	/**
 	 * @MARKER_CMD: trace marker command, uses &struct iwl_mvm_marker
+	 * with &struct iwl_mvm_marker_rsp
 	 */
 	MARKER_CMD = 0xcb,
 
@@ -651,11 +664,20 @@ enum iwl_system_subcmd_ids {
 	INIT_EXTENDED_CFG_CMD = 0x03,
 
 	/**
-	 * @FSEQ_VER_MISMATCH_NTF: Notification about fseq version
-	 *	mismatch during init.  The format is specified in
-	 *	&struct iwl_fseq_ver_mismatch_ntf.
+	 * @FW_ERROR_RECOVERY_CMD: &struct iwl_fw_error_recovery_cmd
 	 */
-	FSEQ_VER_MISMATCH_NTF = 0xFF,
+	FW_ERROR_RECOVERY_CMD = 0x7,
+};
+
+/**
+ * enum iwl_xvt_subcmd_ids - XVT group command IDs
+ */
+enum iwl_xvt_subcmd_ids {
+	/**
+	 * @IQ_CALIB_CONFIG_NOTIF : Notification about IQ calibration finished
+	 * Handled by user space component
+	 */
+	IQ_CALIB_CONFIG_NOTIF = 0xFF,
 };
 
 #endif /* __iwl_fw_api_commands_h__ */

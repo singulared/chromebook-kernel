@@ -1,19 +1,24 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2015,2018 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
  * of such GNU licence.
  *
- * A copy of the licence is included with the program, and can also be obtained
- * from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- * Boston, MA  02110-1301, USA.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, you can access it online at
+ * http://www.gnu.org/licenses/gpl-2.0.html.
+ *
+ * SPDX-License-Identifier: GPL-2.0
  *
  */
-
-
 
 #ifndef _KBASE_BACKEND_TIME_H_
 #define _KBASE_BACKEND_TIME_H_
@@ -31,7 +36,7 @@ void kbase_backend_get_gpu_time(struct kbase_device *kbdev, u64 *cycle_counter,
 
 /**
  * kbase_wait_write_flush() -  Wait for GPU write flush
- * @kctx:	Context pointer
+ * @kbdev:	Kbase device
  *
  * Wait 1000 GPU clock cycles. This delay is known to give the GPU time to flush
  * its write buffer.
@@ -42,11 +47,11 @@ void kbase_backend_get_gpu_time(struct kbase_device *kbdev, u64 *cycle_counter,
  * This function is only in use for BASE_HW_ISSUE_6367
  */
 #ifdef CONFIG_MALI_NO_MALI
-static inline void kbase_wait_write_flush(struct kbase_context *kctx)
+static inline void kbase_wait_write_flush(struct kbase_device *kbdev)
 {
 }
 #else
-void kbase_wait_write_flush(struct kbase_context *kctx);
+void kbase_wait_write_flush(struct kbase_device *kbdev);
 #endif
 
 #endif /* _KBASE_BACKEND_TIME_H_ */
